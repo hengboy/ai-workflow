@@ -1,24 +1,76 @@
 import { describe, expect, it } from 'vitest';
 import { join } from 'node:path';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { install, uninstall } from '../../src/install/index.js';
+import { activateProfile, getActiveProfile, install, uninstall } from '../../src/install/index.js';
 import { exists } from '../../src/utils/fs.js';
 import { temporary } from '../helpers.js';
 
 describe('host installation', () => {
+  it('activates an existing profile and reinstalls every host agent with native model settings', async () => {
+    const home = await temporary('ai-workflow-profile-activate-');
+    await install(['codex', 'claude', 'opencode'], { home });
+    await mkdir(join(home, '.config/ai-workflow/profiles'), { recursive: true });
+    await writeFile(join(home, '.config/ai-workflow/profiles/team.yaml'), `
+version: 1.0.0
+agents:
+  backend:
+    codex: { model: gpt-5.6, reasoning_effort: high }
+    claude: { model: opus, reasoning_effort: max }
+    opencode: { model: openai/gpt-5.6-terra, reasoning_effort: medium }
+`);
+
+    await activateProfile('team', { home });
+
+    expect(await getActiveProfile(home)).toBe('team');
+    const codex = await readFile(join(home, '.codex/agents/backend.toml'), 'utf8');
+    expect(codex).toContain('model = "gpt-5.6"');
+    expect(codex).toContain('model_reasoning_effort = "high"');
+    const claude = await readFile(join(home, '.claude/skills/ai-workflow/agents/backend.md'), 'utf8');
+    expect(claude).not.toContain('model: gpt-5.6');
+    expect(claude).toContain('model: "opus"');
+    expect(claude).toContain('effort: "max"');
+    const opencode = await readFile(join(home, '.config/opencode/agents/backend.md'), 'utf8');
+    expect(opencode).toContain('model: "openai/gpt-5.6-terra"');
+    expect(opencode).toContain('reasoningEffort: "medium"');
+  });
+  it('rejects a missing profile without changing the active profile or installed agents', async () => {
+    const home = await temporary('ai-workflow-profile-missing-');
+    await install(['codex'], { home });
+    const before = await readFile(join(home, '.codex/agents/backend.toml'), 'utf8');
+
+    await expect(activateProfile('missing', { home })).rejects.toThrow(/does not exist/);
+
+    expect(await getActiveProfile(home)).toBeUndefined();
+    expect(await readFile(join(home, '.codex/agents/backend.toml'), 'utf8')).toBe(before);
+  });
+  it('replaces the single active profile when another existing profile is enabled', async () => {
+    const home = await temporary('ai-workflow-profile-switch-');
+    const directory = join(home, '.config/ai-workflow/profiles');
+    await mkdir(directory, { recursive: true });
+    await writeFile(join(directory, 'first.yaml'), 'version: 1.0.0\nagents:\n  backend:\n    codex: { model: first, reasoning_effort: low }\n');
+    await writeFile(join(directory, 'second.yaml'), 'version: 1.0.0\nagents:\n  backend:\n    codex: { model: second, reasoning_effort: high }\n');
+    await install(['codex'], { home });
+
+    await activateProfile('first', { home });
+    await activateProfile('second', { home });
+
+    expect(await getActiveProfile(home)).toBe('second');
+    expect(await readFile(join(home, '.codex/agents/backend.toml'), 'utf8')).toContain('model = "second"');
+  });
   it('installs all hosts in a temporary HOME and precisely uninstalls owned files', async () => { const home = await temporary('ai-workflow-home-'); await mkdir(join(home, '.agents/plugins'), { recursive: true }); await writeFile(join(home, '.agents/plugins/marketplace.json'), JSON.stringify({ plugins: [{ name: 'keep', version: '1' }], setting: true })); await mkdir(join(home, '.codex/agents'), { recursive: true }); await writeFile(join(home, '.codex/agents/unrelated.md'), 'keep'); await install(['codex', 'claude', 'opencode'], { home }); expect(await exists(join(home, '.codex/plugins/ai-workflow/.codex-plugin/plugin.json'))).toBe(true); expect(await exists(join(home, '.codex/plugins/ai-workflow/skills/planning/SKILL.md'))).toBe(true); expect(await exists(join(home, '.codex/plugins/ai-workflow/skills/git-message/SKILL.md'))).toBe(true); expect(await exists(join(home, '.claude/skills/ai-workflow/skills/planning/SKILL.md'))).toBe(true); expect(await exists(join(home, '.claude/skills/ai-workflow/skills/git-message/SKILL.md'))).toBe(true); expect(await exists(join(home, '.config/opencode/skills/ai-workflow-planning/SKILL.md'))).toBe(true); expect(await exists(join(home, '.config/opencode/skills/ai-workflow-git-message/SKILL.md'))).toBe(true); const skill = await readFile(join(home, '.codex/plugins/ai-workflow/skills/planning/SKILL.md'), 'utf8'); expect(skill).toContain('## Clarification loop'); await uninstall(['codex', 'claude', 'opencode'], { home }); expect(await exists(join(home, '.codex/agents/unrelated.md'))).toBe(true); const marketplace = JSON.parse(await readFile(join(home, '.agents/plugins/marketplace.json'), 'utf8')) as { plugins: Array<{ name: string }>; setting: boolean }; expect(marketplace.plugins.some((plugin) => plugin.name === 'keep')).toBe(true); expect(marketplace.plugins.some((plugin) => plugin.name === 'ai-workflow')).toBe(false); expect(marketplace.setting).toBe(true); });
   it('installs agents without a product prefix and emits valid host frontmatter', async () => {
     const home = await temporary('ai-workflow-agent-format-');
     await install(['codex', 'claude', 'opencode'], { home });
 
-    expect(await exists(join(home, '.codex/agents/backend.md'))).toBe(true);
-    expect(await exists(join(home, '.codex/agents/ai-workflow-backend.md'))).toBe(false);
+    expect(await exists(join(home, '.codex/agents/backend.toml'))).toBe(true);
+    expect(await exists(join(home, '.codex/agents/ai-workflow-backend.toml'))).toBe(false);
     expect(await exists(join(home, '.claude/skills/ai-workflow/agents/backend.md'))).toBe(true);
     expect(await exists(join(home, '.config/opencode/agents/task-worker.md'))).toBe(true);
     expect(await exists(join(home, '.config/opencode/agents/ai-workflow-task-worker.md'))).toBe(false);
 
-    const codex = await readFile(join(home, '.codex/agents/backend.md'), 'utf8');
-    expect(codex).toContain('tools: [read, edit, shell]');
+    const codex = await readFile(join(home, '.codex/agents/backend.toml'), 'utf8');
+    expect(codex).toContain('name = "backend"');
+    expect(codex).toContain('developer_instructions =');
     const claude = await readFile(join(home, '.claude/skills/ai-workflow/agents/backend.md'), 'utf8');
     expect(claude).toContain('allowed-tools: [read, edit, shell]');
     const opencode = await readFile(join(home, '.config/opencode/agents/backend.md'), 'utf8');
