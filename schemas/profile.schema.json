@@ -1,0 +1,40 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://ai-workflow.local/schemas/profile.schema.json",
+  "title": "Profile",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "agents"],
+  "properties": {
+    "version": { "const": "1.0.0" },
+    "agents": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {
+        "enum": ["backend", "file-explorer", "frontend", "git-operator", "spec-review", "standards-review", "task-worker", "test"]
+      },
+      "additionalProperties": { "$ref": "#/definitions/agent" }
+    }
+  },
+  "definitions": {
+    "agent": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "codex": { "$ref": "#/definitions/model" },
+        "claude": { "$ref": "#/definitions/model" },
+        "opencode": { "$ref": "#/definitions/model" }
+      }
+    },
+    "model": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["model", "reasoning_effort"],
+      "properties": {
+        "model": { "type": "string", "minLength": 1 },
+        "reasoning_effort": { "enum": ["low", "medium", "high", "xhigh", "max", "ultra"] }
+      }
+    }
+  }
+}
