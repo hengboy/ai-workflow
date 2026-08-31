@@ -17,7 +17,26 @@ describe('profile CLI', () => {
 
     const { stdout } = await exec('pnpm', ['exec', 'tsx', 'src/cli.ts', 'profile', 'activate', 'local', '--home', home]);
 
-    expect(JSON.parse(stdout)).toEqual({ active_profile: 'local', hosts: ['codex'] });
+    const report = JSON.parse(stdout) as {
+      active_profile: string;
+      installations: Array<{
+        host: string;
+        agents_directory: string;
+        agents: Array<{ name: string; path: string; model?: string; reasoning_effort?: string }>;
+      }>;
+    };
+    expect(report.active_profile).toBe('local');
+    expect(report.installations).toHaveLength(1);
+    expect(report.installations[0]).toMatchObject({
+      host: 'codex',
+      agents_directory: join(home, '.codex/agents')
+    });
+    expect(report.installations[0]?.agents.find((agent) => agent.name === 'test')).toEqual({
+      name: 'test',
+      path: join(home, '.codex/agents/test.toml'),
+      model: 'gpt-5.6-terra',
+      reasoning_effort: 'medium'
+    });
     expect(await readFile(join(home, '.config/ai-workflow/active-profile'), 'utf8')).toBe('local\n');
   });
 });

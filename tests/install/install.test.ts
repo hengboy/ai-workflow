@@ -19,9 +19,22 @@ agents:
     opencode: { model: openai/gpt-5.6-terra, reasoning_effort: medium }
 `);
 
-    await activateProfile('team', { home });
+    const report = await activateProfile('team', { home });
 
     expect(await getActiveProfile(home)).toBe('team');
+    expect(report.active_profile).toBe('team');
+    expect(report.installations.map((installation) => installation.host)).toEqual(['codex', 'claude', 'opencode']);
+    expect(report.installations.map((installation) => installation.agents_directory)).toEqual([
+      join(home, '.codex/agents'),
+      join(home, '.claude/skills/ai-workflow/agents'),
+      join(home, '.config/opencode/agents')
+    ]);
+    expect(report.installations.every((installation) => installation.agents.length === 8)).toBe(true);
+    expect(report.installations[0]?.agents.find((agent) => agent.name === 'backend')).toMatchObject({
+      path: join(home, '.codex/agents/backend.toml'),
+      model: 'gpt-5.6',
+      reasoning_effort: 'high'
+    });
     const codex = await readFile(join(home, '.codex/agents/backend.toml'), 'utf8');
     expect(codex).toContain('model = "gpt-5.6"');
     expect(codex).toContain('model_reasoning_effort = "high"');
@@ -80,7 +93,7 @@ agents:
 
     expect(await exists(join(home, '.codex/agents/backend.toml'))).toBe(false);
   });
-  it('installs all hosts in a temporary HOME and precisely uninstalls owned files', async () => { const home = await temporary('ai-workflow-home-'); await mkdir(join(home, '.agents/plugins'), { recursive: true }); await writeFile(join(home, '.agents/plugins/marketplace.json'), JSON.stringify({ plugins: [{ name: 'keep', version: '1' }], setting: true })); await mkdir(join(home, '.codex/agents'), { recursive: true }); await writeFile(join(home, '.codex/agents/unrelated.md'), 'keep'); await install(['codex', 'claude', 'opencode'], { home }); expect(await exists(join(home, '.codex/plugins/ai-workflow/.codex-plugin/plugin.json'))).toBe(true); expect(await exists(join(home, '.codex/plugins/ai-workflow/skills/planning/SKILL.md'))).toBe(true); expect(await exists(join(home, '.codex/plugins/ai-workflow/skills/git-message/SKILL.md'))).toBe(true); expect(await exists(join(home, '.claude/skills/ai-workflow/skills/planning/SKILL.md'))).toBe(true); expect(await exists(join(home, '.claude/skills/ai-workflow/skills/git-message/SKILL.md'))).toBe(true); expect(await exists(join(home, '.config/opencode/skills/ai-workflow-planning/SKILL.md'))).toBe(true); expect(await exists(join(home, '.config/opencode/skills/ai-workflow-git-message/SKILL.md'))).toBe(true); const skill = await readFile(join(home, '.codex/plugins/ai-workflow/skills/planning/SKILL.md'), 'utf8'); expect(skill).toContain('## Clarification loop'); await uninstall(['codex', 'claude', 'opencode'], { home }); expect(await exists(join(home, '.codex/agents/unrelated.md'))).toBe(true); const marketplace = JSON.parse(await readFile(join(home, '.agents/plugins/marketplace.json'), 'utf8')) as { plugins: Array<{ name: string }>; setting: boolean }; expect(marketplace.plugins.some((plugin) => plugin.name === 'keep')).toBe(true); expect(marketplace.plugins.some((plugin) => plugin.name === 'ai-workflow')).toBe(false); expect(marketplace.setting).toBe(true); });
+  it('installs all hosts in a temporary HOME and precisely uninstalls owned files', async () => { const home = await temporary('ai-workflow-home-'); await mkdir(join(home, '.agents/plugins'), { recursive: true }); await writeFile(join(home, '.agents/plugins/marketplace.json'), JSON.stringify({ plugins: [{ name: 'keep', version: '1' }], setting: true })); await mkdir(join(home, '.codex/agents'), { recursive: true }); await writeFile(join(home, '.codex/agents/unrelated.md'), 'keep'); await install(['codex', 'claude', 'opencode'], { home }); expect(await exists(join(home, '.codex/plugins/ai-workflow/.codex-plugin/plugin.json'))).toBe(true); expect(await exists(join(home, '.codex/plugins/ai-workflow/skills/planning/SKILL.md'))).toBe(true); expect(await exists(join(home, '.codex/plugins/ai-workflow/skills/git-message/SKILL.md'))).toBe(true); expect(await exists(join(home, '.codex/plugins/ai-workflow/skills/switch-profile/SKILL.md'))).toBe(true); expect(await exists(join(home, '.claude/skills/ai-workflow/skills/planning/SKILL.md'))).toBe(true); expect(await exists(join(home, '.claude/skills/ai-workflow/skills/git-message/SKILL.md'))).toBe(true); expect(await exists(join(home, '.claude/skills/ai-workflow/skills/switch-profile/SKILL.md'))).toBe(true); expect(await exists(join(home, '.config/opencode/skills/ai-workflow-planning/SKILL.md'))).toBe(true); expect(await exists(join(home, '.config/opencode/skills/ai-workflow-git-message/SKILL.md'))).toBe(true); expect(await exists(join(home, '.config/opencode/skills/ai-workflow-switch-profile/SKILL.md'))).toBe(true); const skill = await readFile(join(home, '.codex/plugins/ai-workflow/skills/planning/SKILL.md'), 'utf8'); expect(skill).toContain('## Clarification loop'); await uninstall(['codex', 'claude', 'opencode'], { home }); expect(await exists(join(home, '.codex/agents/unrelated.md'))).toBe(true); const marketplace = JSON.parse(await readFile(join(home, '.agents/plugins/marketplace.json'), 'utf8')) as { plugins: Array<{ name: string }>; setting: boolean }; expect(marketplace.plugins.some((plugin) => plugin.name === 'keep')).toBe(true); expect(marketplace.plugins.some((plugin) => plugin.name === 'ai-workflow')).toBe(false); expect(marketplace.setting).toBe(true); });
   it('installs agents without a product prefix and emits valid host frontmatter', async () => {
     const home = await temporary('ai-workflow-agent-format-');
     await install(['codex', 'claude', 'opencode'], { home });

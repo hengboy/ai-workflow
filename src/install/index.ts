@@ -1,5 +1,5 @@
 import { homedir } from 'node:os';
-import { dirname, join, relative, resolve } from 'node:path';
+import { basename, dirname, extname, join, relative, resolve } from 'node:path';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { atomicDirectory, atomicWrite, exists, readJson, writeJson } from '../utils/fs.js';
 import { sha256 } from '../utils/hash.js';
@@ -9,6 +9,22 @@ import type { Host } from '../workflow/types.js';
 
 interface ManifestFile { path: string; digest: string; kind: 'file' | 'directory' }
 interface InstallManifest { version: string; installed_at: string; hosts: Partial<Record<Host, ManifestFile[]>> }
+export interface AgentInstallation {
+  name: string;
+  path: string;
+  model?: string;
+  reasoning_effort?: string;
+}
+export interface HostInstallation {
+  host: Host;
+  agents_directory: string;
+  agents: AgentInstallation[];
+}
+export interface ProfileActivationReport {
+  active_profile: string;
+  hosts: Host[];
+  installations: HostInstallation[];
+}
 const manifestRelative = '.config/ai-workflow/install-manifest.json';
 const activeProfileRelative = '.config/ai-workflow/active-profile';
 
@@ -68,12 +84,30 @@ export async function getActiveProfile(home: string): Promise<string | undefined
   const name = (await readFile(path, 'utf8')).trim(); return name || undefined;
 }
 
-export async function activateProfile(name: string, options: { home?: string; version?: string } = {}): Promise<{ active_profile: string; hosts: Host[] }> {
+function profileInstallations(home: string, hosts: Host[], manifest: InstallManifest, profile: Profile): HostInstallation[] {
+  return hosts.map((host) => {
+    const agentsDirectory = roots(home, host).agents;
+    const agents = (manifest.hosts[host] ?? []).flatMap((file): AgentInstallation[] => {
+      const path = resolve(home, file.path);
+      if (file.kind !== 'file' || dirname(path) !== agentsDirectory) return [];
+      const agentName = basename(path, extname(path));
+      const settings = profile.agents[agentName]?.[host];
+      return [{
+        name: agentName,
+        path,
+        ...(settings ? { model: settings.model, reasoning_effort: settings.reasoning_effort } : {})
+      }];
+    });
+    return { host, agents_directory: agentsDirectory, agents };
+  });
+}
+
+export async function activateProfile(name: string, options: { home?: string; version?: string } = {}): Promise<ProfileActivationReport> {
   const home = resolve(options.home ?? homedir()); const profile = await loadProfile(home, name); const manifest = await readManifest(home);
   const hosts = (Object.keys(manifest.hosts) as Host[]).filter((host) => ['codex', 'claude', 'opencode'].includes(host));
-  if (hosts.length) await install(hosts, { home, version: options.version ?? manifest.version, profile });
+  const installed = hosts.length ? await install(hosts, { home, version: options.version ?? manifest.version, profile }) : manifest;
   await atomicWrite(join(home, activeProfileRelative), `${name}\n`);
-  return { active_profile: name, hosts };
+  return { active_profile: name, hosts, installations: profileInstallations(home, hosts, installed, profile) };
 }
 
 export async function uninstall(hosts: Host[], options: { home?: string } = {}): Promise<InstallManifest> {

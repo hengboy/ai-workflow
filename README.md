@@ -35,7 +35,7 @@ ai-workflow context validate --project .
 
 ## Profiles
 
-Store profiles at `~/.config/ai-workflow/profiles/<name>.yaml`, then activate one with `ai-workflow profile activate <name>`. Activation only accepts an existing, valid profile, records it as the single active profile and immediately reinstalls agents for every host already managed by ai-workflow. Later `install` or upgrade commands automatically reuse that active profile.
+Store profiles at `~/.config/ai-workflow/profiles/<name>.yaml`, then activate one with `ai-workflow profile activate <name>` or the installed `$switch-profile` skill. Activation only accepts an existing, valid profile, records it as the single active profile and immediately reinstalls agents for every host already managed by ai-workflow. Its JSON report lists each host, agents directory, installed agent path and explicit profile model settings. Later `install` or upgrade commands automatically reuse that active profile.
 
 Each agent can choose a different model and reasoning effort for each host. Missing host entries inherit that host's normal defaults.
 
