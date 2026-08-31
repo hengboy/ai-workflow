@@ -33,8 +33,13 @@ async function mergeMarketplace(home: string, version: string): Promise<Manifest
 
 export async function install(hosts: Host[], options: { home?: string; version?: string } = {}): Promise<InstallManifest> {
   const home = resolve(options.home ?? homedir()); const version = options.version ?? '0.1.0'; const manifest = await readManifest(home);
+  if (hosts.includes('codex')) {
+    const marketplace = join(home, '.agents/plugins/marketplace.json');
+    if (await exists(marketplace)) { const parsed = JSON.parse(await readFile(marketplace, 'utf8')) as unknown; if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('marketplace.json must be an object'); }
+  }
+  const renderedHosts = new Map<Host, Awaited<ReturnType<typeof renderHost>>>(); for (const host of hosts) renderedHosts.set(host, await renderHost(host, version));
   for (const host of hosts) {
-    const rendered = await renderHost(host, version); const target = roots(home, host); const owned: ManifestFile[] = [];
+    const rendered = renderedHosts.get(host); if (!rendered) throw new Error(`Missing rendered host: ${host}`); const target = roots(home, host); const owned: ManifestFile[] = [];
     if (target.plugin) { await atomicDirectory(target.plugin, (temporary) => writeRendered(temporary, rendered.plugin)); owned.push({ path: relative(home, target.plugin), digest: sha256(JSON.stringify(rendered.plugin)), kind: 'directory' }); }
     if (target.skills) for (const file of rendered.plugin.filter((item) => item.relativePath.endsWith('SKILL.md'))) { const parts = file.relativePath.split('/'); const skill = parts.at(-2) ?? ''; const path = join(target.skills, `ai-workflow-${skill}`); await atomicDirectory(path, (temporary) => writeRendered(temporary, [{ ...file, relativePath: 'SKILL.md' }])); owned.push({ path: relative(home, path), digest: sha256(file.contents), kind: 'directory' }); }
     for (const file of rendered.agents) { const path = join(target.agents, `ai-workflow-${file.relativePath}`); await atomicWrite(path, file.contents); owned.push({ path: relative(home, path), digest: sha256(file.contents), kind: 'file' }); }
@@ -62,8 +67,8 @@ export async function initializeProject(project: string): Promise<string[]> {
   const root = resolve(project); const created: string[] = [];
   const templates = ['AGENTS.md', 'MEMORY.md', 'navigation.md', 'config.yaml'];
   const targets = templates.map((name) => ({ source: join('templates/project', name), target: name === 'navigation.md' ? '.ai-workflow/index/navigation.md' : name === 'config.yaml' ? '.ai-workflow/config.yaml' : name }));
-  const conflicts = [] as string[]; for (const item of targets) if (await exists(join(root, item.target))) conflicts.push(item.target);
-  if (conflicts.length) throw new Error(`Initialization conflicts; no files written. Merge these templates manually: ${conflicts.join(', ')}`);
+  const conflicts: Array<{ target: string; contents: string }> = []; for (const item of targets) if (await exists(join(root, item.target))) conflicts.push({ target: item.target, contents: await readFile(new URL(`../../${item.source}`, import.meta.url), 'utf8') });
+  if (conflicts.length) throw new Error(`Initialization conflicts; no files written. Merge these templates manually:\n${conflicts.map((item) => `${item.target}\n--- proposed ---\n${item.contents}`).join('\n')}`);
   for (const item of targets) { const contents = await readFile(new URL(`../../${item.source}`, import.meta.url), 'utf8'); await atomicWrite(join(root, item.target), contents); created.push(item.target); }
   const ignorePath = join(root, '.gitignore'); const ignore = await exists(ignorePath) ? await readFile(ignorePath, 'utf8') : ''; const additions = ['.ai-workflow/runs/', '*.log'].filter((line) => !ignore.split(/\r?\n/).includes(line)); if (additions.length) { await atomicWrite(ignorePath, `${ignore.trimEnd()}${ignore ? '\n' : ''}${additions.join('\n')}\n`); created.push('.gitignore'); }
   return created;
