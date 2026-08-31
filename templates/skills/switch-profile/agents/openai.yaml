@@ -1,0 +1,4 @@
+interface:
+  display_name: "Switch Profile"
+  short_description: "Activate a profile and reinstall managed host agents."
+  default_prompt: "Use $switch-profile to activate the requested ai-workflow profile."

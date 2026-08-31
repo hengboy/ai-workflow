@@ -1,0 +1,4 @@
+interface:
+  display_name: "Coding Workflow"
+  short_description: "Generate, approve, and execute a frozen plan DAG."
+  default_prompt: "Use $coding to generate and execute a verified workflow from the frozen plan."

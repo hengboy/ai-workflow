@@ -82,6 +82,8 @@ Write to `.ai-workflow/plans/<YYYYMMDD-english-slug>/`:
 - `spec.md`: goal, non-goals, scenarios, continuous REQ/AC, Given/When/Then evidence, RED criteria, boundary counterexamples and validation layers.
 - `plan.md`: every REQ/AC mapping, implementation order, exact or bounded read/write paths, checks, compatibility, rollback and responsible native role.
 
+Before drafting, read [the specification template](references/spec.md) and [the implementation plan template](references/plan.md). Preserve their contracts while replacing the illustrative example content with the approved requirements and repository-specific evidence.
+
 Both frontmatters contain `plan_id`, `status: frozen`, `created_at`, nullable `supersedes`, REQ count, AC count and a content digest. A changed frozen requirement creates a new plan ID; never edit a frozen plan in place.
 
 ## Completion checklist

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Plan to Tasks"
+  short_description: "Split a frozen plan into executable task files."
+  default_prompt: "Use $plan-to-tasks to preview and create tasks from the confirmed frozen plan."

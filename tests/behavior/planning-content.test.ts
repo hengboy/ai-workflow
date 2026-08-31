@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
+import { parse } from 'yaml';
 import { packagePath } from '../../src/utils/schema.js';
 describe('native prompt contracts', () => {
   it('gives each skill structured gates and completion checks', async () => { for (const name of ['planning', 'plan-to-tasks', 'coding']) { const text = await readFile(packagePath('templates', 'skills', name, 'SKILL.md'), 'utf8'); expect(text).toMatch(/## Outcome/); expect(text).toMatch(/## .*checklist/i); expect(text.split('\n').length).toBeGreaterThan(50); } });
@@ -39,5 +40,36 @@ describe('native prompt contracts', () => {
     const tasks = await readFile(packagePath('templates', 'skills', 'plan-to-tasks', 'SKILL.md'), 'utf8');
     expect(tasks).toMatch(/delegate.*Git Operator.*task files/is);
     expect(tasks).toMatch(/automatic local commit/i);
+  });
+  it('keeps skill metadata and example templates inside their owning skill', async () => {
+    const skillRoot = packagePath('templates', 'skills');
+    const skills = (await readdir(skillRoot, { withFileTypes: true }))
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name)
+      .sort();
+
+    expect(skills).toEqual(['coding', 'git-message', 'plan-to-tasks', 'planning', 'switch-profile']);
+    for (const skill of skills) {
+      const metadata = parse(await readFile(join(skillRoot, skill, 'agents', 'openai.yaml'), 'utf8')) as {
+        interface?: { display_name?: string; short_description?: string; default_prompt?: string };
+      };
+      expect(metadata.interface?.display_name).toBeTruthy();
+      expect(metadata.interface?.short_description?.length).toBeGreaterThanOrEqual(25);
+      expect(metadata.interface?.short_description?.length).toBeLessThanOrEqual(64);
+      expect(metadata.interface?.default_prompt).toContain(`$${skill}`);
+    }
+
+    const templates = [
+      ['planning', 'spec.md', '# Specification'],
+      ['planning', 'plan.md', '# Implementation Plan'],
+      ['plan-to-tasks', 'task.md', '# Task'],
+      ['git-message', 'commit-message.md', '# Commit Message']
+    ] as const;
+    for (const [skill, file, title] of templates) {
+      const contents = await readFile(join(skillRoot, skill, 'references', file), 'utf8');
+      expect(contents).toContain(title);
+      expect(contents).toMatch(/## Example/i);
+      expect(await readFile(join(skillRoot, skill, 'SKILL.md'), 'utf8')).toContain(`references/${file}`);
+    }
   });
 });

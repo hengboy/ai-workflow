@@ -30,6 +30,8 @@ The Chinese summary must describe the delivered result, not the work process. Ke
 
 Use `!` and a `BREAKING CHANGE:` footer for a breaking change. Add a Chinese body only when it materially clarifies motivation, compatibility, or validation; keep the subject sufficient on its own.
 
+Read [the commit message template](references/commit-message.md) when a body or breaking-change footer is needed. Replace its illustrative example with claims supported by the authorized diff and reported validation.
+
 ## Selection procedure
 
 1. Compare the requested outcome with the actual changed paths and diff.

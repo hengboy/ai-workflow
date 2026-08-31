@@ -1,0 +1,4 @@
+interface:
+  display_name: "Planning"
+  short_description: "Turn a product idea into a frozen spec and plan."
+  default_prompt: "Use $planning to clarify this request and create a reviewed specification and plan."

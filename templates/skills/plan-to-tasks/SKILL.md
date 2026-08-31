@@ -70,6 +70,8 @@ After approval, atomically add `tasks/task-001-short-slug.md` files. Frontmatter
 - `write_scope`;
 - `test_commands`.
 
+Read [the task template](references/task.md) before drafting. Preserve its frontmatter and body contract while replacing the illustrative example with the approved task's actual scope and evidence.
+
 The body states the outcome, implementation notes justified by the plan, negative cases, test evidence and completion definition. Do not modify `spec.md` or `plan.md`.
 
 After writing, re-read every task file and repeat the coverage, dependency, acyclicity and scope checks against the frozen spec/plan. Then delegate Git Operator to create one automatic local commit containing exactly the newly created task files. Provide the approved task graph, exact task-file paths and completed validation evidence; Git Operator must use `$git-message` before committing.

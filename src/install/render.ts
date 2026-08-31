@@ -45,16 +45,23 @@ function agentFrontmatterFor(host: Host, source: string, settings: { model: stri
   return host === 'opencode' ? rendered.replace(/^---\n/, `---\nhidden: true\n${configuration}`) : rendered.replace(/^---\n/, `---\n${configuration}`);
 }
 
-async function markdownFiles(root: string): Promise<string[]> {
+async function filesRecursively(root: string): Promise<string[]> {
   const names = await readdir(root, { withFileTypes: true }); const result: string[] = [];
-  for (const name of names) { const path = join(root, name.name); if (name.isDirectory()) result.push(...await markdownFiles(path)); else if (name.name.endsWith('.md')) result.push(path); }
+  for (const name of names) { const path = join(root, name.name); if (name.isDirectory()) result.push(...await filesRecursively(path)); else result.push(path); }
   return result;
+}
+
+async function markdownFiles(root: string): Promise<string[]> {
+  return (await filesRecursively(root)).filter((path) => path.endsWith('.md'));
 }
 
 export async function renderHost(host: Host, version: string, profile?: Profile): Promise<{ plugin: RenderedFile[]; agents: RenderedFile[] }> {
   const skillRoot = packagePath('templates', 'skills'); const agentRoot = packagePath('templates', 'agents');
   const plugin: RenderedFile[] = []; const agents: RenderedFile[] = [];
-  for (const path of await markdownFiles(skillRoot)) plugin.push({ relativePath: `skills/${relative(skillRoot, path)}`, contents: frontmatterFor(host, await readFile(path, 'utf8')) });
+  for (const path of await filesRecursively(skillRoot)) {
+    const contents = await readFile(path, 'utf8');
+    plugin.push({ relativePath: `skills/${relative(skillRoot, path)}`, contents: path.endsWith('.md') ? frontmatterFor(host, contents) : contents });
+  }
   for (const path of await markdownFiles(agentRoot)) {
     const name = basename(path, '.md'); const extension = host === 'codex' ? '.toml' : '.md';
     agents.push({ relativePath: `${name}${extension}`, contents: agentFrontmatterFor(host, await readFile(path, 'utf8'), profile?.agents[name]?.[host]) });

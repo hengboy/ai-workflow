@@ -70,7 +70,21 @@ export async function install(hosts: Host[], options: { home?: string; version?:
   for (const host of hosts) {
     const rendered = renderedHosts.get(host); if (!rendered) throw new Error(`Missing rendered host: ${host}`); const target = roots(home, host); const owned: ManifestFile[] = [];
     if (target.plugin) { await atomicDirectory(target.plugin, (temporary) => writeRendered(temporary, rendered.plugin)); owned.push({ path: relative(home, target.plugin), digest: sha256(JSON.stringify(rendered.plugin)), kind: 'directory' }); }
-    if (target.skills) for (const file of rendered.plugin.filter((item) => item.relativePath.endsWith('SKILL.md'))) { const parts = file.relativePath.split('/'); const skill = parts.at(-2) ?? ''; const path = join(target.skills, skill); await atomicDirectory(path, (temporary) => writeRendered(temporary, [{ ...file, relativePath: 'SKILL.md' }])); owned.push({ path: relative(home, path), digest: sha256(file.contents), kind: 'directory' }); }
+    if (target.skills) {
+      const skills = new Map<string, RenderedFile[]>();
+      for (const file of rendered.plugin) {
+        const match = /^skills\/([^/]+)\/(.+)$/.exec(file.relativePath);
+        if (!match?.[1] || !match[2]) continue;
+        const files = skills.get(match[1]) ?? [];
+        files.push({ ...file, relativePath: match[2] });
+        skills.set(match[1], files);
+      }
+      for (const [skill, files] of skills) {
+        const path = join(target.skills, skill);
+        await atomicDirectory(path, (temporary) => writeRendered(temporary, files));
+        owned.push({ path: relative(home, path), digest: sha256(JSON.stringify(files)), kind: 'directory' });
+      }
+    }
     for (const file of rendered.agents) { const path = join(target.agents, file.relativePath); await atomicWrite(path, file.contents); owned.push({ path: relative(home, path), digest: sha256(file.contents), kind: 'file' }); }
     if (host === 'codex') owned.push(await mergeMarketplace(home, version));
     await removeStaleOwnedFiles(home, manifest.hosts[host] ?? [], owned);

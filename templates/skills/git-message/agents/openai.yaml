@@ -1,0 +1,4 @@
+interface:
+  display_name: "Git Message"
+  short_description: "Draft a verified Conventional Commit message."
+  default_prompt: "Use $git-message to draft a precise commit message for the authorized changes."
