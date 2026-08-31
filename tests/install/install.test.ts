@@ -93,7 +93,7 @@ agents:
 
     expect(await exists(join(home, '.codex/agents/backend.toml'))).toBe(false);
   });
-  it('installs all hosts in a temporary HOME and precisely uninstalls owned files', async () => { const home = await temporary('ai-workflow-home-'); await mkdir(join(home, '.agents/plugins'), { recursive: true }); await writeFile(join(home, '.agents/plugins/marketplace.json'), JSON.stringify({ plugins: [{ name: 'keep', version: '1' }], setting: true })); await mkdir(join(home, '.codex/agents'), { recursive: true }); await writeFile(join(home, '.codex/agents/unrelated.md'), 'keep'); await install(['codex', 'claude', 'opencode'], { home }); expect(await exists(join(home, '.codex/plugins/ai-workflow/.codex-plugin/plugin.json'))).toBe(true); expect(await exists(join(home, '.codex/plugins/ai-workflow/skills/planning/SKILL.md'))).toBe(true); expect(await exists(join(home, '.codex/plugins/ai-workflow/skills/git-message/SKILL.md'))).toBe(true); expect(await exists(join(home, '.codex/plugins/ai-workflow/skills/switch-profile/SKILL.md'))).toBe(true); expect(await exists(join(home, '.claude/skills/ai-workflow/skills/planning/SKILL.md'))).toBe(true); expect(await exists(join(home, '.claude/skills/ai-workflow/skills/git-message/SKILL.md'))).toBe(true); expect(await exists(join(home, '.claude/skills/ai-workflow/skills/switch-profile/SKILL.md'))).toBe(true); expect(await exists(join(home, '.config/opencode/skills/ai-workflow-planning/SKILL.md'))).toBe(true); expect(await exists(join(home, '.config/opencode/skills/ai-workflow-git-message/SKILL.md'))).toBe(true); expect(await exists(join(home, '.config/opencode/skills/ai-workflow-switch-profile/SKILL.md'))).toBe(true); const skill = await readFile(join(home, '.codex/plugins/ai-workflow/skills/planning/SKILL.md'), 'utf8'); expect(skill).toContain('## Clarification loop'); await uninstall(['codex', 'claude', 'opencode'], { home }); expect(await exists(join(home, '.codex/agents/unrelated.md'))).toBe(true); const marketplace = JSON.parse(await readFile(join(home, '.agents/plugins/marketplace.json'), 'utf8')) as { plugins: Array<{ name: string }>; setting: boolean }; expect(marketplace.plugins.some((plugin) => plugin.name === 'keep')).toBe(true); expect(marketplace.plugins.some((plugin) => plugin.name === 'ai-workflow')).toBe(false); expect(marketplace.setting).toBe(true); });
+  it('installs all hosts in a temporary HOME and precisely uninstalls owned files', async () => { const home = await temporary('ai-workflow-home-'); await mkdir(join(home, '.agents/plugins'), { recursive: true }); await writeFile(join(home, '.agents/plugins/marketplace.json'), JSON.stringify({ plugins: [{ name: 'keep', version: '1' }], setting: true })); await mkdir(join(home, '.codex/agents'), { recursive: true }); await writeFile(join(home, '.codex/agents/unrelated.md'), 'keep'); await install(['codex', 'claude', 'opencode'], { home }); expect(await exists(join(home, '.codex/plugins/ai-workflow/.codex-plugin/plugin.json'))).toBe(true); expect(await exists(join(home, '.codex/plugins/ai-workflow/skills/planning/SKILL.md'))).toBe(true); expect(await exists(join(home, '.codex/plugins/ai-workflow/skills/git-message/SKILL.md'))).toBe(true); expect(await exists(join(home, '.codex/plugins/ai-workflow/skills/switch-profile/SKILL.md'))).toBe(true); expect(await exists(join(home, '.claude/skills/ai-workflow/skills/planning/SKILL.md'))).toBe(true); expect(await exists(join(home, '.claude/skills/ai-workflow/skills/git-message/SKILL.md'))).toBe(true); expect(await exists(join(home, '.claude/skills/ai-workflow/skills/switch-profile/SKILL.md'))).toBe(true); expect(await exists(join(home, '.config/opencode/skills/planning/SKILL.md'))).toBe(true); expect(await exists(join(home, '.config/opencode/skills/git-message/SKILL.md'))).toBe(true); expect(await exists(join(home, '.config/opencode/skills/switch-profile/SKILL.md'))).toBe(true); expect(await exists(join(home, '.config/opencode/skills/ai-workflow-git-message/SKILL.md'))).toBe(false); const skill = await readFile(join(home, '.codex/plugins/ai-workflow/skills/planning/SKILL.md'), 'utf8'); expect(skill).toContain('## Clarification loop'); await uninstall(['codex', 'claude', 'opencode'], { home }); expect(await exists(join(home, '.codex/agents/unrelated.md'))).toBe(true); const marketplace = JSON.parse(await readFile(join(home, '.agents/plugins/marketplace.json'), 'utf8')) as { plugins: Array<{ name: string }>; setting: boolean }; expect(marketplace.plugins.some((plugin) => plugin.name === 'keep')).toBe(true); expect(marketplace.plugins.some((plugin) => plugin.name === 'ai-workflow')).toBe(false); expect(marketplace.setting).toBe(true); });
   it('installs agents without a product prefix and emits valid host frontmatter', async () => {
     const home = await temporary('ai-workflow-agent-format-');
     await install(['codex', 'claude', 'opencode'], { home });
@@ -132,6 +132,27 @@ agents:
 
     expect(await exists(legacy)).toBe(false);
     expect(await exists(join(home, '.config/opencode/agents/task-worker.md'))).toBe(true);
+    expect(await exists(unrelated)).toBe(true);
+  });
+  it('removes previously managed prefixed skill directories during an upgrade', async () => {
+    const home = await temporary('ai-workflow-skill-upgrade-');
+    const legacy = join(home, '.config/opencode/skills/ai-workflow-git-message');
+    const unrelated = join(home, '.config/opencode/skills/ai-workflow-unrelated');
+    await mkdir(legacy, { recursive: true });
+    await writeFile(join(legacy, 'SKILL.md'), 'legacy managed skill');
+    await mkdir(unrelated, { recursive: true });
+    await writeFile(join(unrelated, 'SKILL.md'), 'keep');
+    await mkdir(join(home, '.config/ai-workflow'), { recursive: true });
+    await writeFile(join(home, '.config/ai-workflow/install-manifest.json'), JSON.stringify({
+      version: '0.1.0',
+      installed_at: new Date(0).toISOString(),
+      hosts: { opencode: [{ path: '.config/opencode/skills/ai-workflow-git-message', digest: 'old', kind: 'directory' }] }
+    }));
+
+    await install(['opencode'], { home, version: '0.2.0' });
+
+    expect(await exists(legacy)).toBe(false);
+    expect(await exists(join(home, '.config/opencode/skills/git-message/SKILL.md'))).toBe(true);
     expect(await exists(unrelated)).toBe(true);
   });
   it('overwrites only managed host directories on upgrade', async () => { const home = await temporary(); await install(['codex'], { home, version: '0.1.0' }); await writeFile(join(home, '.codex/plugins/ai-workflow/stale.txt'), 'old'); await install(['codex'], { home, version: '0.2.0' }); expect(await exists(join(home, '.codex/plugins/ai-workflow/stale.txt'))).toBe(false); expect(await readFile(join(home, '.codex/plugins/ai-workflow/.codex-plugin/plugin.json'), 'utf8')).toContain('0.2.0'); });
