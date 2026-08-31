@@ -11,7 +11,8 @@ import { formatSchemaErrors, schemaValidator } from '../utils/schema.js';
 export function receiptPath(workflowPath: string): string { return join(dirname(workflowPath), 'approval.receipt.json'); }
 async function baselineDigest(project: string, receipt: string): Promise<string> {
   const baseline = await gitBaseline(project); const ignored = relative(project, receipt).replaceAll('\\', '/');
-  return objectDigest({ ...baseline, status: baseline.status.split(/\r?\n/).filter((line) => line && !line.endsWith(ignored)).sort() });
+  const status = baseline.status.split(/\r?\n/).filter(Boolean).map((line) => line.slice(3).trim()).filter((entry) => entry !== ignored && !entry.startsWith('ai-workflow/') && !entry.startsWith('.ai-workflow/')).sort();
+  return objectDigest({ branch: baseline.branch, head: baseline.head, status });
 }
 export async function approveWorkflow(workflowPath: string, project = process.cwd()): Promise<ApprovalReceipt> {
   const workflow = JSON.parse(await readFile(workflowPath, 'utf8')) as Workflow;
