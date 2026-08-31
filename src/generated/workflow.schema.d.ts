@@ -18,10 +18,7 @@ export interface Workflow {
     push_allowed: false;
     rebase_allowed: false;
   };
-  /**
-   * @minItems 1
-   */
-  phases: [string, ...string[]];
+  phases: unknown[];
   /**
    * @minItems 1
    */
