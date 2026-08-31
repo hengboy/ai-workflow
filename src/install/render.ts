@@ -8,7 +8,15 @@ export interface RenderedFile { relativePath: string; contents: string }
 function frontmatterFor(host: Host, source: string): string {
   if (host === 'codex') return source;
   if (host === 'claude') return source.replace(/^tools: \[(.*)]$/m, 'allowed-tools: [$1]');
-  return source.replace(/^tools: \[(.*)]$/m, 'permission:\n  tools: [$1]');
+  return source.replace(/^tools: \[(.*)]$/m, (_match, tools: string) => {
+    const permissions = tools.split(',').map((tool) => tool.trim()).filter(Boolean).flatMap((tool) => {
+      const key = tool === 'shell' ? 'bash' : tool;
+      // OpenCode models search as a combination of filename and content queries.
+      if (key === 'search') return [['glob', 'allow'], ['grep', 'allow'], ['list', 'allow']];
+      return [[key, 'allow']];
+    });
+    return `permission:\n${permissions.map(([key, action]) => `  ${key}: ${action}`).join('\n')}`;
+  });
 }
 
 async function markdownFiles(root: string): Promise<string[]> {

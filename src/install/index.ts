@@ -31,6 +31,16 @@ async function mergeMarketplace(home: string, version: string): Promise<Manifest
   content.plugins = [...retained, { name: 'ai-workflow', source: { source: 'local', path: './.codex/plugins/ai-workflow' }, policy: { installation: 'INSTALLED_BY_DEFAULT', authentication: 'ON_INSTALL' }, category: 'Productivity', version }]; await writeJson(path, content); return { path: relative(home, path), digest: sha256(await readFile(path)), kind: 'file' };
 }
 
+async function removeStaleOwnedFiles(home: string, previous: ManifestFile[], current: ManifestFile[]): Promise<void> {
+  const retained = new Set(current.map((file) => file.path));
+  for (const file of previous) {
+    if (retained.has(file.path) || file.path === '.agents/plugins/marketplace.json') continue;
+    const path = resolve(home, file.path);
+    if (!path.startsWith(`${home}/`)) throw new Error(`Unsafe manifest path: ${file.path}`);
+    await rm(path, { recursive: file.kind === 'directory', force: true });
+  }
+}
+
 export async function install(hosts: Host[], options: { home?: string; version?: string } = {}): Promise<InstallManifest> {
   const home = resolve(options.home ?? homedir()); const version = options.version ?? '0.1.0'; const manifest = await readManifest(home);
   if (hosts.includes('codex')) {
@@ -42,8 +52,9 @@ export async function install(hosts: Host[], options: { home?: string; version?:
     const rendered = renderedHosts.get(host); if (!rendered) throw new Error(`Missing rendered host: ${host}`); const target = roots(home, host); const owned: ManifestFile[] = [];
     if (target.plugin) { await atomicDirectory(target.plugin, (temporary) => writeRendered(temporary, rendered.plugin)); owned.push({ path: relative(home, target.plugin), digest: sha256(JSON.stringify(rendered.plugin)), kind: 'directory' }); }
     if (target.skills) for (const file of rendered.plugin.filter((item) => item.relativePath.endsWith('SKILL.md'))) { const parts = file.relativePath.split('/'); const skill = parts.at(-2) ?? ''; const path = join(target.skills, `ai-workflow-${skill}`); await atomicDirectory(path, (temporary) => writeRendered(temporary, [{ ...file, relativePath: 'SKILL.md' }])); owned.push({ path: relative(home, path), digest: sha256(file.contents), kind: 'directory' }); }
-    for (const file of rendered.agents) { const path = join(target.agents, `ai-workflow-${file.relativePath}`); await atomicWrite(path, file.contents); owned.push({ path: relative(home, path), digest: sha256(file.contents), kind: 'file' }); }
+    for (const file of rendered.agents) { const path = join(target.agents, file.relativePath); await atomicWrite(path, file.contents); owned.push({ path: relative(home, path), digest: sha256(file.contents), kind: 'file' }); }
     if (host === 'codex') owned.push(await mergeMarketplace(home, version));
+    await removeStaleOwnedFiles(home, manifest.hosts[host] ?? [], owned);
     manifest.hosts[host] = owned;
   }
   manifest.version = version; manifest.installed_at = new Date().toISOString(); await writeJson(join(home, manifestRelative), manifest); return manifest;
