@@ -31,6 +31,8 @@ Ask exactly one highest-priority question per turn. Pick the unanswered item who
 - invalid inputs, failures, cancellation and recovery;
 - validation layers and what must fail before implementation (RED).
 
+Format every clarification prompt as a numbered requirement question. Start each question with `问题 N：` (for example, `问题 1：...`, then `问题 2：...`) and increase N monotonically across the entire clarification loop, including across turns; never reset or reuse a question number. Number its options `1、2、3、4` in display order. Every option must include a short explanation of its consequences or trade-offs. Mark the recommended option prominently (for example, `**推荐：1、...**`) and explain why it is recommended. Never present an unexplained or unnumbered option.
+
 Do not bundle unrelated questions. Reflect the answer into the working inventory and surface contradictions immediately.
 
 ## Requirement quality checklist
@@ -63,9 +65,9 @@ Material user changes invalidate the preview and require a new complete preview.
 After approval:
 
 1. Draft both documents in memory.
-2. Ask Spec Review to check coverage, testability, contradictions, read/write bounds, sequencing, rollback and role assignment.
-3. Treat any error finding as a failed gate. Revise the draft, show the full changed inventory and obtain renewed user approval.
-4. Only after a PASS, write the two frozen files atomically.
+2. Ask Spec Review exactly once to check coverage, testability, contradictions, read/write bounds, sequencing, rollback and role assignment.
+3. Treat any error finding as a failed gate. Revise the draft, show the full changed inventory and obtain renewed user approval; after that repair, continue to the next step without invoking Spec Review again.
+4. Only after the single review has passed (or its findings have been repaired and accepted) write the two frozen files atomically.
 
 The planning primary agent owns document writes. Spec Review is read-only.
 
@@ -81,7 +83,7 @@ Both frontmatters contain `plan_id`, `status: frozen`, `created_at`, nullable `s
 ## Completion checklist
 
 - The user approved the final full inventory.
-- Spec Review passed the exact written content.
+- Spec Review ran exactly once; it either passed or all of its findings were repaired and included in the user's final approval.
 - Both files share the same plan ID and counts.
 - Digests match the frozen content.
 - No task, workflow, run or code file was created.

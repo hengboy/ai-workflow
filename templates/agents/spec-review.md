@@ -22,7 +22,7 @@ Check:
 - plan steps cover every REQ/AC with bounded paths, validation and roles;
 - sequence/dependencies make the plan executable.
 
-Any unclear, contradictory, untestable or uncovered item fails the draft gate. Cite the exact identifier and required clarification.
+Any unclear, contradictory, untestable or uncovered item fails the draft gate. Cite the exact identifier and required clarification. The planning primary agent may repair the findings, but must not invoke Spec Review a second time.
 
 ## Coding review mode
 

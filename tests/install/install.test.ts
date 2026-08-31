@@ -22,6 +22,7 @@ describe('host installation', () => {
     const claude = await readFile(join(home, '.claude/skills/ai-workflow/agents/backend.md'), 'utf8');
     expect(claude).toContain('allowed-tools: [read, edit, shell]');
     const opencode = await readFile(join(home, '.config/opencode/agents/backend.md'), 'utf8');
+    expect(opencode).toContain('hidden: true');
     expect(opencode).toContain('permission:\n  read: allow\n  edit: allow\n  bash: allow');
     expect(opencode).not.toContain('tools:');
   });
