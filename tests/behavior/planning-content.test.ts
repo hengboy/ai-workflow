@@ -23,4 +23,21 @@ describe('native prompt contracts', () => {
     const reviewer = await readFile(packagePath('templates', 'agents', 'spec-review.md'), 'utf8');
     expect(reviewer).toMatch(/must not invoke Spec Review a second time/i);
   });
+  it('installs a message-only commit skill and routes every Git Operator commit through it', async () => {
+    const messageSkill = await readFile(packagePath('templates', 'skills', 'git-message', 'SKILL.md'), 'utf8');
+    expect(messageSkill).toMatch(/^name: git-message$/m);
+    expect(messageSkill).toMatch(/Conventional Commits/i);
+    expect(messageSkill).toMatch(/must not run any Git mutation/i);
+
+    const operator = await readFile(packagePath('templates', 'agents', 'git-operator.md'), 'utf8');
+    expect(operator).toMatch(/before every direct commit.*invoke.*\$git-message/is);
+
+    const planning = await readFile(packagePath('templates', 'skills', 'planning', 'SKILL.md'), 'utf8');
+    expect(planning).toMatch(/delegate.*Git Operator.*spec\.md.*plan\.md/is);
+    expect(planning).toMatch(/automatic local commit/i);
+
+    const tasks = await readFile(packagePath('templates', 'skills', 'plan-to-tasks', 'SKILL.md'), 'utf8');
+    expect(tasks).toMatch(/delegate.*Git Operator.*task files/is);
+    expect(tasks).toMatch(/automatic local commit/i);
+  });
 });

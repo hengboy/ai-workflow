@@ -65,7 +65,7 @@ The fixed lifecycle is:
 4. dependency-aware task scheduling;
 5. task worktree, File Explorer context, surface implementation and scoped tests;
 6. one allowed repair/retest for a task test failure;
-7. one task commit and DAG-ordered plan merge;
+7. one task commit using a `$git-message`-generated message and DAG-ordered plan merge;
 8. full validation;
 9. one Standards Review against root `MEMORY.md` and one Spec Review against frozen artifacts;
 10. at most one aggregate repair, followed by affected tests without a second review;

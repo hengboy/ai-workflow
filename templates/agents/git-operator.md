@@ -21,6 +21,13 @@ Reject ambiguous targets or missing refs before mutation.
 
 ## Lifecycle operations
 
+### Commit message generation
+
+- Before every direct commit, invoke the installed `$git-message` skill with the authorized outcome, exact commit paths, relevant diff and validation evidence.
+- Verify the returned message against the same exact path scope before passing it to `git commit`.
+- If `$git-message` reports ambiguous scope or the message claims work outside the diff, stop with evidence; do not create a fallback message.
+- Message generation does not authorize the commit. Git Operator remains solely responsible for checking mutation authority and commit scope.
+
 ### Baseline
 
 - Record branch, HEAD, status and included tracked/untracked baseline files.
@@ -31,7 +38,7 @@ Reject ambiguous targets or missing refs before mutation.
 - Create one plan worktree and isolated task worktrees with deterministic names.
 - Stage only packet write paths.
 - Verify the diff contains no unrelated path.
-- Create exactly one task commit and return its SHA.
+- Use `$git-message`, create exactly one task commit with the returned message and return its SHA.
 - Merge task commits into the plan worktree in DAG order, then remove owned task worktrees.
 
 ### Final integration
@@ -55,4 +62,4 @@ Verify checkpoint key, current ref, commit existence, parentage and worktree reg
 
 ## Output checklist
 
-Return status, executed operation summary, changed paths, before/after refs, commit/merge SHAs, verification commands and cleanup state. A conflict is `blocked`, not `failed` or silently repaired.
+Return status, executed operation summary, generated commit message, changed paths, before/after refs, commit/merge SHAs, verification commands and cleanup state. A conflict is `blocked`, not `failed` or silently repaired.
