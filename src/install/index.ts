@@ -4,11 +4,13 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { atomicDirectory, atomicWrite, exists, readJson, writeJson } from '../utils/fs.js';
 import { sha256 } from '../utils/hash.js';
 import { renderHost, type RenderedFile } from './render.js';
+import { loadProfile, type Profile } from '../profile/index.js';
 import type { Host } from '../workflow/types.js';
 
 interface ManifestFile { path: string; digest: string; kind: 'file' | 'directory' }
 interface InstallManifest { version: string; installed_at: string; hosts: Partial<Record<Host, ManifestFile[]>> }
 const manifestRelative = '.config/ai-workflow/install-manifest.json';
+const activeProfileRelative = '.config/ai-workflow/active-profile';
 
 function roots(home: string, host: Host): { plugin?: string; skills?: string; agents: string } {
   if (host === 'codex') return { plugin: join(home, '.codex/plugins/ai-workflow'), agents: join(home, '.codex/agents') };
@@ -41,13 +43,14 @@ async function removeStaleOwnedFiles(home: string, previous: ManifestFile[], cur
   }
 }
 
-export async function install(hosts: Host[], options: { home?: string; version?: string } = {}): Promise<InstallManifest> {
+export async function install(hosts: Host[], options: { home?: string; version?: string; profile?: Profile } = {}): Promise<InstallManifest> {
   const home = resolve(options.home ?? homedir()); const version = options.version ?? '0.1.0'; const manifest = await readManifest(home);
+  const activeName = options.profile ? undefined : await getActiveProfile(home); const profile = options.profile ?? (activeName ? await loadProfile(home, activeName) : undefined);
   if (hosts.includes('codex')) {
     const marketplace = join(home, '.agents/plugins/marketplace.json');
     if (await exists(marketplace)) { const parsed = JSON.parse(await readFile(marketplace, 'utf8')) as unknown; if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('marketplace.json must be an object'); }
   }
-  const renderedHosts = new Map<Host, Awaited<ReturnType<typeof renderHost>>>(); for (const host of hosts) renderedHosts.set(host, await renderHost(host, version));
+  const renderedHosts = new Map<Host, Awaited<ReturnType<typeof renderHost>>>(); for (const host of hosts) renderedHosts.set(host, await renderHost(host, version, profile));
   for (const host of hosts) {
     const rendered = renderedHosts.get(host); if (!rendered) throw new Error(`Missing rendered host: ${host}`); const target = roots(home, host); const owned: ManifestFile[] = [];
     if (target.plugin) { await atomicDirectory(target.plugin, (temporary) => writeRendered(temporary, rendered.plugin)); owned.push({ path: relative(home, target.plugin), digest: sha256(JSON.stringify(rendered.plugin)), kind: 'directory' }); }
@@ -58,6 +61,19 @@ export async function install(hosts: Host[], options: { home?: string; version?:
     manifest.hosts[host] = owned;
   }
   manifest.version = version; manifest.installed_at = new Date().toISOString(); await writeJson(join(home, manifestRelative), manifest); return manifest;
+}
+
+export async function getActiveProfile(home: string): Promise<string | undefined> {
+  const path = join(resolve(home), activeProfileRelative); if (!(await exists(path))) return undefined;
+  const name = (await readFile(path, 'utf8')).trim(); return name || undefined;
+}
+
+export async function activateProfile(name: string, options: { home?: string; version?: string } = {}): Promise<{ active_profile: string; hosts: Host[] }> {
+  const home = resolve(options.home ?? homedir()); const profile = await loadProfile(home, name); const manifest = await readManifest(home);
+  const hosts = (Object.keys(manifest.hosts) as Host[]).filter((host) => ['codex', 'claude', 'opencode'].includes(host));
+  if (hosts.length) await install(hosts, { home, version: options.version ?? manifest.version, profile });
+  await atomicWrite(join(home, activeProfileRelative), `${name}\n`);
+  return { active_profile: name, hosts };
 }
 
 export async function uninstall(hosts: Host[], options: { home?: string } = {}): Promise<InstallManifest> {
