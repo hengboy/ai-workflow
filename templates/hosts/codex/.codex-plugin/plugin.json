@@ -1,0 +1,6 @@
+{
+  "name": "ai-workflow",
+  "version": "{{version}}",
+  "description": "Portable planning and coding workflow skills",
+  "skills": "./skills/"
+}

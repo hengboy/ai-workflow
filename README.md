@@ -1,0 +1,37 @@
+# ai-workflow
+
+A self-contained macOS/Node.js 22 CLI that installs the same native planning, task-splitting and coding guidance for Codex, Claude Code and OpenCode. Planning uses only host-native skills and agents. Coding runs through a local, versioned JSON DAG with explicit approval, checkpoints, role/scope enforcement and Git worktrees.
+
+The product does not execute, depend on or provide compatibility for external workflow frameworks. It calls exactly one selected host CLI per run and never calls model-provider APIs directly.
+
+## Development
+
+```sh
+corepack enable
+pnpm install
+pnpm check
+pnpm exec tsx src/cli.ts --help
+```
+
+Node 22 is the supported baseline. Newer Node versions may be used for development but do not replace Node 22 smoke verification.
+
+## CLI overview
+
+```sh
+ai-workflow install --host codex|claude|opencode|all
+ai-workflow uninstall --host codex|claude|opencode|all
+ai-workflow init /path/to/project
+ai-workflow workflow generate --plan ai-workflow/plans/<planId> --host codex
+ai-workflow workflow validate <workflow.json>
+ai-workflow workflow explain <workflow.json>
+ai-workflow workflow approve <workflow.json>
+ai-workflow run start --workflow <workflow.json> --host codex --project .
+ai-workflow run status|resume|cancel|cleanup <runId> --project .
+ai-workflow context validate --project .
+```
+
+`workflow generate --adjustments-stdin` reads a structured adjustment document from stdin. Natural-language feedback is converted to that schema by the installed coding skill; the CLI deliberately refuses unbounded natural-language mutation.
+
+## Optional real-host smoke
+
+After logging into each local CLI, initialize a disposable Git repository, create a frozen plan, install into a temporary HOME, generate/approve a workflow and invoke one no-write node with the corresponding host. Never run this smoke against a working project or real HOME. Automated tests use fake host CLIs and temporary repositories.

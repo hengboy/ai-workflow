@@ -1,0 +1,15 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://ai-workflow.local/schemas/receipt.schema.json",
+  "title": "ApprovalReceipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["receipt_version", "workflow_digest", "plan_id", "host", "approved_at"],
+  "properties": {
+    "receipt_version": { "const": "1.0.0" },
+    "workflow_digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "plan_id": { "type": "string" },
+    "host": { "enum": ["codex", "claude", "opencode"] },
+    "approved_at": { "type": "string", "format": "date-time" }
+  }
+}

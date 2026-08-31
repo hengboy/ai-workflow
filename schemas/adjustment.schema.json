@@ -1,0 +1,43 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://ai-workflow.local/schemas/adjustment.schema.json",
+  "title": "WorkflowAdjustment",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "operations"],
+  "properties": {
+    "version": { "const": "1.0.0" },
+    "operations": {
+      "type": "array",
+      "maxItems": 100,
+      "items": {
+        "oneOf": [
+          {
+            "type": "object", "additionalProperties": false,
+            "required": ["op", "value"],
+            "properties": { "op": { "const": "set-concurrency" }, "value": { "type": "integer", "minimum": 1, "maximum": 3 } }
+          },
+          {
+            "type": "object", "additionalProperties": false,
+            "required": ["op", "node", "value"],
+            "properties": {
+              "op": { "enum": ["set-role", "set-retry", "set-failure-policy"] },
+              "node": { "type": "string" },
+              "value": { "type": ["string", "integer"] }
+            }
+          },
+          {
+            "type": "object", "additionalProperties": false,
+            "required": ["op", "node", "dependency"],
+            "properties": { "op": { "enum": ["add-dependency", "remove-dependency"] }, "node": { "type": "string" }, "dependency": { "type": "string" } }
+          },
+          {
+            "type": "object", "additionalProperties": false,
+            "required": ["op", "gate"],
+            "properties": { "op": { "enum": ["add-gate", "remove-gate"] }, "gate": { "type": "object" } }
+          }
+        ]
+      }
+    }
+  }
+}

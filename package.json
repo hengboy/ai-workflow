@@ -1,0 +1,37 @@
+{
+  "name": "ai-workflow",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "bin": { "ai-workflow": "./dist/cli.js" },
+  "files": ["dist", "schemas", "templates"],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:unit": "vitest run tests/unit",
+    "test:integration": "vitest run tests/integration tests/install tests/behavior",
+    "types:generate": "json2ts -i schemas -o src/generated --bannerComment '/* Generated from authoritative JSON Schemas. Do not edit. */'",
+    "check": "pnpm types:generate && pnpm typecheck && pnpm lint && pnpm test && pnpm build",
+    "dev": "tsx src/cli.ts"
+  },
+  "dependencies": {
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1",
+    "commander": "^14.0.0",
+    "yaml": "^2.8.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.34.0",
+    "@types/node": "^22.17.2",
+    "eslint": "^9.34.0",
+    "json-schema-to-typescript": "^15.0.4",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2",
+    "typescript-eslint": "^8.41.0",
+    "vitest": "^3.2.4"
+  },
+  "packageManager": "pnpm@10.15.0"
+}
