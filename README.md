@@ -21,7 +21,7 @@ Node 22 is the supported baseline. Newer Node versions may be used for developme
 ai-workflow install --host codex|claude|opencode|all
 ai-workflow uninstall --host codex|claude|opencode|all
 ai-workflow init /path/to/project
-ai-workflow workflow generate --plan ai-workflow/plans/<planId> --host codex
+ai-workflow workflow generate --plan .ai-workflow/plans/<planId> --host codex
 ai-workflow workflow validate <workflow.json>
 ai-workflow workflow explain <workflow.json>
 ai-workflow workflow approve <workflow.json>

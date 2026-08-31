@@ -8,7 +8,7 @@ describe('core utilities', () => {
   it('creates stable digests regardless of property order', () => expect(objectDigest({ b: 2, a: 1 })).toBe(objectDigest({ a: 1, b: 2 })));
   it('round trips YAML frontmatter', () => { const value = parseMarkdown(renderMarkdown({ id: 'task-001' }, '# Body')); expect(value.attributes.id).toBe('task-001'); expect(value.body).toContain('# Body'); });
   it('enforces state transitions', () => { expect(() => assertTransition('executing', 'validating')).not.toThrow(); expect(() => assertTransition('complete', 'executing')).toThrow(); });
-  it('enforces roles, scopes and screenshot directory', () => { expect(validateRoleCommand('backend', 'git commit -m x')).toMatch(/Git Operator/); expect(validateRoleCommand('backend', 'rg foo')).toMatch(/File Explorer/); const node = { write_scope: ['src'] } as never; expect(validateChangedPaths(node, ['other/x.ts'], 'ai-workflow/plans/x/screenshot')).toHaveLength(1); });
+  it('enforces roles, scopes and screenshot directory', () => { expect(validateRoleCommand('backend', 'git commit -m x')).toMatch(/Git Operator/); expect(validateRoleCommand('backend', 'rg foo')).toMatch(/File Explorer/); const node = { write_scope: ['src'] } as never; expect(validateChangedPaths(node, ['other/x.ts'], '.ai-workflow/plans/x/screenshot')).toHaveLength(1); });
   it('redacts common secrets', () => expect(redact('authorization: Bearer secret-value ghp_abcdefghijklmnop')).not.toContain('abcdefghijklmnop'));
   it('serializes JSON canonically', () => expect(stableJson({ z: [2, 1], a: true })).toBe('{"a":true,"z":[2,1]}'));
 });

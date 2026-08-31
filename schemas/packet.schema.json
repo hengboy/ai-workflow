@@ -16,7 +16,7 @@
     "read_paths": { "type": "array", "uniqueItems": true, "items": { "type": "string" } },
     "write_paths": { "type": "array", "uniqueItems": true, "items": { "type": "string" } },
     "evidence": { "type": "array", "items": { "type": "string" } },
-    "screenshot_dir": { "type": "string", "pattern": "^ai-workflow/plans/.+/screenshot/?$" },
+    "screenshot_dir": { "type": "string", "pattern": "^\\.ai-workflow/plans/.+/screenshot/?$" },
     "allowed_commands": { "type": "array", "uniqueItems": true, "items": { "type": "string" } },
     "timeout_ms": { "type": "integer", "minimum": 1000, "maximum": 3600000 },
     "result_schema": { "const": "schemas/result.schema.json" }

@@ -77,7 +77,7 @@ The automatic local commit is part of successful planning completion and does no
 
 ## Document contract
 
-Write to `ai-workflow/plans/<YYYYMMDD-english-slug>/`:
+Write to `.ai-workflow/plans/<YYYYMMDD-english-slug>/`:
 
 - `spec.md`: goal, non-goals, scenarios, continuous REQ/AC, Given/When/Then evidence, RED criteria, boundary counterexamples and validation layers.
 - `plan.md`: every REQ/AC mapping, implementation order, exact or bounded read/write paths, checks, compatibility, rollback and responsible native role.
