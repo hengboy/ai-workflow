@@ -4,6 +4,7 @@ import type { AgentResult } from '../generated/result.schema.js';
 import type { Host } from '../workflow/types.js';
 import { formatSchemaErrors, schemaValidator } from '../utils/schema.js';
 import { redact } from '../security/policy.js';
+import { packagePath } from '../utils/schema.js';
 
 const commands: Record<Host, { command: string; args: string[] }> = {
   codex: { command: 'codex', args: ['exec', '--json', '--output-schema', 'schemas/result.schema.json', '-'] },
@@ -14,7 +15,7 @@ const commands: Record<Host, { command: string; args: string[] }> = {
 export interface ProcessOptions { executable?: string; args?: string[]; signal?: AbortSignal; maxOutputBytes?: number }
 
 export async function invokeHost(host: Host, prompt: string, packet: AgentPacket, options: ProcessOptions = {}): Promise<AgentResult> {
-  const command = options.executable ?? commands[host].command; const args = options.args ?? commands[host].args;
+  const command = options.executable ?? commands[host].command; const defaultArgs = commands[host].args.map((arg) => arg.includes('schemas/result.schema.json') ? packagePath('schemas', 'result.schema.json') : arg); const args = options.args ?? defaultArgs;
   const output = await new Promise<string>((resolve, reject) => {
     const timeoutController = new AbortController(); const timeout = setTimeout(() => timeoutController.abort(), packet.timeout_ms); const signal = options.signal ? AbortSignal.any([options.signal, timeoutController.signal]) : timeoutController.signal;
     const child = spawn(command, args, { cwd: packet.cwd, stdio: ['pipe', 'pipe', 'pipe'], signal, env: { ...process.env, AI_WORKFLOW_HOST: host } });
