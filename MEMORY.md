@@ -7,6 +7,7 @@
 ## Boundaries
 
 - `src/install`: host rendering, atomic install/uninstall and project initialization.
+- `src/profile`: profile YAML discovery and authoritative schema validation.
 - `src/workflow`: frozen-plan parsing, workflow generation, validation, explanation and approval.
 - `src/runtime`: persistent state machine, scheduling, checkpoints and lifecycle commands.
 - `src/adapters`: one-host-per-run CLI process protocol.

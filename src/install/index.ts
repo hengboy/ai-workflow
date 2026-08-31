@@ -45,11 +45,12 @@ async function removeStaleOwnedFiles(home: string, previous: ManifestFile[], cur
 
 export async function install(hosts: Host[], options: { home?: string; version?: string; profile?: Profile } = {}): Promise<InstallManifest> {
   const home = resolve(options.home ?? homedir()); const version = options.version ?? '0.1.0'; const manifest = await readManifest(home);
+  const activeName = options.profile ? undefined : await getActiveProfile(home); const profile = options.profile ?? (activeName ? await loadProfile(home, activeName) : undefined);
   if (hosts.includes('codex')) {
     const marketplace = join(home, '.agents/plugins/marketplace.json');
     if (await exists(marketplace)) { const parsed = JSON.parse(await readFile(marketplace, 'utf8')) as unknown; if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('marketplace.json must be an object'); }
   }
-  const renderedHosts = new Map<Host, Awaited<ReturnType<typeof renderHost>>>(); for (const host of hosts) renderedHosts.set(host, await renderHost(host, version, options.profile));
+  const renderedHosts = new Map<Host, Awaited<ReturnType<typeof renderHost>>>(); for (const host of hosts) renderedHosts.set(host, await renderHost(host, version, profile));
   for (const host of hosts) {
     const rendered = renderedHosts.get(host); if (!rendered) throw new Error(`Missing rendered host: ${host}`); const target = roots(home, host); const owned: ManifestFile[] = [];
     if (target.plugin) { await atomicDirectory(target.plugin, (temporary) => writeRendered(temporary, rendered.plugin)); owned.push({ path: relative(home, target.plugin), digest: sha256(JSON.stringify(rendered.plugin)), kind: 'directory' }); }

@@ -20,6 +20,7 @@ Node 22 is the supported baseline. Newer Node versions may be used for developme
 ```sh
 ai-workflow install --host codex|claude|opencode|all
 ai-workflow uninstall --host codex|claude|opencode|all
+ai-workflow profile activate <name>
 ai-workflow init /path/to/project
 ai-workflow workflow generate --plan .ai-workflow/plans/<planId> --host codex
 ai-workflow workflow validate <workflow.json>
@@ -31,6 +32,33 @@ ai-workflow context validate --project .
 ```
 
 `workflow generate --adjustments-stdin` reads a structured adjustment document from stdin. Natural-language feedback is converted to that schema by the installed coding skill; the CLI deliberately refuses unbounded natural-language mutation.
+
+## Profiles
+
+Store profiles at `~/.config/ai-workflow/profiles/<name>.yaml`, then activate one with `ai-workflow profile activate <name>`. Activation only accepts an existing, valid profile, records it as the single active profile and immediately reinstalls agents for every host already managed by ai-workflow. Later `install` or upgrade commands automatically reuse that active profile.
+
+Each agent can choose a different model and reasoning effort for each host. Missing host entries inherit that host's normal defaults.
+
+```yaml
+version: 1.0.0
+agents:
+  backend:
+    codex:
+      model: gpt-5.6
+      reasoning_effort: high
+    claude:
+      model: opus
+      reasoning_effort: max
+    opencode:
+      model: openai/gpt-5.6-terra
+      reasoning_effort: medium
+  file-explorer:
+    codex:
+      model: gpt-5.6-luna
+      reasoning_effort: low
+```
+
+Supported reasoning values are `low`, `medium`, `high`, `xhigh`, `max` and `ultra`. The installer converts the shared `reasoning_effort` field to each host's native agent configuration.
 
 ## Optional real-host smoke
 
