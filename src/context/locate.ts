@@ -1,7 +1,8 @@
 import { readFile } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { exists } from '../utils/fs.js';
 import { formatSchemaErrors, schemaValidator } from '../utils/schema.js';
+import { type FallbackPacket, type FallbackStatus, type FallbackTarget } from './fallback.js';
 import { type NavigationFeature, type NavigationIndex } from './navigation.js';
 import { verifyNavigation } from './validate.js';
 
@@ -11,6 +12,8 @@ export interface LocateOptions {
   task?: string;
   verify?: boolean;
   depth?: number;
+  roots?: string[];
+  maintenanceAuthorized?: boolean;
 }
 
 interface LocateHit {
@@ -26,21 +29,40 @@ interface LocateHit {
   fallback_required: false;
 }
 
+interface LocateFallback {
+  status: FallbackStatus;
+  resolution_mode: 'index';
+  reason: string;
+  fallback: FallbackPacket;
+  fallback_required: true;
+}
+
 type LocateResult = LocateHit
-  | { status: 'missing_index'; resolution_mode: 'index'; fallback_required: true }
-  | { status: 'miss'; resolution_mode: 'index'; fallback_required: true }
-  | { status: 'invalid'; resolution_mode: 'index'; reason: string; fallback_required: true }
-  | { status: 'stale'; resolution_mode: 'index'; reason: string; fallback_required: true }
+  | LocateFallback
   | { status: 'ambiguous'; resolution_mode: 'index'; candidates: string[]; fallback_required: false }
   | { status: 'blocked'; resolution_mode: 'index'; reason: string; fallback_required: false };
 
-async function loadIndex(project: string): Promise<NavigationIndex | LocateResult> {
+function targetFor(options: LocateOptions): FallbackTarget {
+  return { ...(options.feature ? { feature: options.feature } : {}), ...(options.symbol ? { symbol: options.symbol } : {}), ...(options.task ? { task: options.task } : {}) };
+}
+
+function fallback(options: LocateOptions, status: FallbackStatus, reason: string, knownPaths: string[] = [], knownSymbols: string[] = [], moduleRoots: string[] = options.roots ?? []): LocateFallback {
+  const target = targetFor(options);
+  const query = target.feature ?? target.symbol ?? target.task ?? 'requested context';
+  return {
+    status, resolution_mode: 'index', reason,
+    fallback: { status, target, reason, known_paths: knownPaths, known_symbols: knownSymbols, module_roots: moduleRoots, maintenance_authorized: options.maintenanceAuthorized ?? false, question: `Which files and symbols satisfy ${query}?` },
+    fallback_required: true
+  };
+}
+
+async function loadIndex(project: string, options: LocateOptions): Promise<NavigationIndex | LocateResult> {
   const root = resolve(project); const jsonPath = join(root, '.ai-workflow/index/navigation.json');
-  if (!(await exists(jsonPath))) return { status: 'missing_index', resolution_mode: 'index', fallback_required: true };
+  if (!(await exists(jsonPath))) return fallback(options, 'missing_index', 'Missing .ai-workflow/index/navigation.json');
   let index: NavigationIndex;
-  try { index = JSON.parse(await readFile(jsonPath, 'utf8')) as NavigationIndex; } catch { return { status: 'invalid', resolution_mode: 'index', reason: 'navigation.json is not valid JSON', fallback_required: true }; }
+  try { index = JSON.parse(await readFile(jsonPath, 'utf8')) as NavigationIndex; } catch { return fallback(options, 'invalid', 'navigation.json is not valid JSON'); }
   const validator = await schemaValidator('navigation.schema.json');
-  if (!validator(index)) return { status: 'invalid', resolution_mode: 'index', reason: formatSchemaErrors(validator.errors), fallback_required: true };
+  if (!validator(index)) return fallback(options, 'invalid', formatSchemaErrors(validator.errors));
   return index;
 }
 
@@ -102,30 +124,31 @@ export async function locateContext(project: string, options: LocateOptions): Pr
   if (queries.length !== 1) return { status: 'blocked', resolution_mode: 'index', reason: 'Specify exactly one of --feature, --symbol, or --task', fallback_required: false };
   const depth = options.depth ?? 1;
   if (!Number.isSafeInteger(depth) || depth < 0) return { status: 'blocked', resolution_mode: 'index', reason: '--depth must be a non-negative integer', fallback_required: false };
-  const loaded = await loadIndex(project);
+  const loaded = await loadIndex(project, options);
   if (!('features' in loaded)) return loaded;
   const matches = candidatesFor(options, loaded);
-  if (!matches.length) return { status: 'miss', resolution_mode: 'index', fallback_required: true };
+  if (!matches.length) return fallback(options, 'miss', 'No indexed feature matches the requested target');
   let features: NavigationFeature[];
   if (options.symbol && !options.symbol.includes('#')) {
     const symbols = [...new Set(matches as string[])].sort();
     if (symbols.length > 1) return { status: 'ambiguous', resolution_mode: 'index', candidates: symbols, fallback_required: false };
     const [symbol] = symbols;
     const feature = loaded.features.find((candidate) => candidate.symbols.some((entry) => `${entry.file}#${entry.name}` === symbol));
-    if (!feature) return { status: 'miss', resolution_mode: 'index', fallback_required: true };
+    if (!feature) return fallback(options, 'miss', 'No indexed feature matches the requested target');
     features = [feature];
   } else {
     features = matches as NavigationFeature[];
   }
   if (features.length > 1) return { status: 'ambiguous', resolution_mode: 'index', candidates: features.map((feature) => feature.id).sort(), fallback_required: false };
   const feature = features[0];
-  if (!feature) return { status: 'miss', resolution_mode: 'index', fallback_required: true };
+  if (!feature) return fallback(options, 'miss', 'No indexed feature matches the requested target');
   if (options.verify) {
     const validation = await verifyNavigation(project, feature.id);
-    if (!validation.valid) return {
-      status: validation.errors.some((error) => error.startsWith('Navigation index is stale') || error.includes('expected an exact regular file')) ? 'stale' : 'invalid',
-      resolution_mode: 'index', reason: validation.errors[0] ?? 'Navigation index validation failed', fallback_required: true
-    };
+    if (!validation.valid) {
+      const status = validation.errors.some((error) => error.startsWith('Navigation index is stale') || error.includes('expected an exact regular file')) ? 'stale' : 'invalid';
+      const knownPaths = [...new Set([...feature.entries, ...feature.related_files, ...feature.tests])];
+      return fallback(options, status, validation.errors[0] ?? 'Navigation index validation failed', knownPaths, feature.symbols.map((symbol) => `${symbol.file}#${symbol.name}`), [...new Set(knownPaths.map((path) => dirname(path)))]);
+    }
   }
   return hit(loaded, feature, depth);
 }

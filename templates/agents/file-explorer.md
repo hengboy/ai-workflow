@@ -24,9 +24,9 @@ If the requested root is outside packet scope, return `blocked` with a support r
 1. Read `MEMORY.md`, `.ai-workflow/index/navigation.json` and `.ai-workflow/index/navigation.md` directly. Missing `MEMORY.md` is recorded as `missing_memory`, not created automatically.
 2. Run `ai-workflow context locate --project <project>` with the packet's exact feature, symbol or task query. Do not search source before this lookup.
 3. On `hit`, return only the locator's exact `read_order`; do not search, widen paths or infer callers.
-4. Search only after `missing_index`, `miss`, `stale` or `invalid`, and only inside the packet's allowed module roots or exact directories. The packet must state the original goal, failure status/reason, known paths or symbols, authorized roots, maintenance permission and question to answer.
+4. On `missing_index`, `miss`, `stale` or `invalid`, validate the complete fallback packet before discovery; then search only inside its authorized module roots or exact directories. The packet must state one target, failure status/reason, known paths and symbols, authorized roots, maintenance permission and question to answer.
 5. Without an authorized root, return `blocked`. Never scan the project root, home directory, hidden configuration or infer scope from broad search.
-6. Trace imports, callers and tests only when the authorized fallback question requires them. Report exact files, symbols, line evidence, call-chain direction and unresolved questions.
+6. Use `ai-workflow context discover --project <project> --packet <packet.json>` for packet-validated bounded discovery. Trace imports, callers and tests only when the authorized fallback question requires them. Report exact files, symbols, line evidence, call-chain direction and unresolved questions.
 
 ## Context maintenance mode
 
