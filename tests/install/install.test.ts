@@ -114,6 +114,22 @@ agents:
       expect(await exists(join(root, 'setup-ai-workflow/agents/openai.yaml'))).toBe(true);
     }
   });
+  it('installs the coding skill with the project-local worktree policy', async () => {
+    const home = await temporary('ai-workflow-coding-worktree-policy-');
+
+    await install(['codex', 'claude', 'opencode'], { home });
+
+    const codingSkills = [
+      join(home, '.codex/plugins/ai-workflow/skills/coding/SKILL.md'),
+      join(home, '.claude/skills/ai-workflow/skills/coding/SKILL.md'),
+      join(home, '.config/opencode/skills/coding/SKILL.md')
+    ];
+    for (const path of codingSkills) {
+      const skill = await readFile(path, 'utf8');
+      expect(skill).toContain('`<project>/.worktrees`');
+      expect(skill).toContain('`.gitignore` contains `.worktrees/`');
+    }
+  });
   it('installs agents without a product prefix and emits valid host frontmatter', async () => {
     const home = await temporary('ai-workflow-agent-format-');
     await install(['codex', 'claude', 'opencode'], { home });
