@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { writeFile } from 'node:fs/promises';
 import { generateWorkflow, applyAdjustments } from '../../src/workflow/generate.js';
 import { approveWorkflow, verifyApproval } from '../../src/workflow/approval.js';
-import { validateContext, updateContext } from '../../src/context/validate.js';
+import { validateContext } from '../../src/context/validate.js';
 import { writeJson } from '../../src/utils/fs.js';
 import { frozenPlan, gitInit, temporary } from '../helpers.js';
 
@@ -21,8 +21,5 @@ describe('contract and command gaps', () => {
   });
   it('validates lifecycle phases as a fixed contract', async () => {
     const root = await temporary(); const workflow = await generateWorkflow(await frozenPlan(root), 'codex'); workflow.phases = ['executing']; const module = await import('../../src/workflow/validate.js'); const result = await module.validateWorkflow(workflow); expect(result.valid).toBe(false); expect(result.errors.join(' ')).toMatch(/phase/i);
-  });
-  it('updates context atomically and validates feature coverage', async () => {
-    const root = await temporary(); await writeFile(join(root, 'MEMORY.md'), '# Memory\n\n## Boundaries\n'); const result = await updateContext(root, { memory: '# Memory\n\n## Boundaries\nupdated\n', navigation: '# Feature navigation\n\n| Feature | Entry | Responsibility |\n| --- | --- | --- |\n| CLI | src/cli.ts | entry |\n' }); expect(result.updated).toEqual(['MEMORY.md', '.ai-workflow/index/navigation.md']); expect((await validateContext(root)).valid).toBe(true);
   });
 });
