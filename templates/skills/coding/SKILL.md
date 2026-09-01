@@ -21,7 +21,7 @@ Do not silently repair documents. Return to planning or task splitting when requ
 
 ## Navigation-first context
 
-Before implementation, directly read `MEMORY.md`, `.ai-workflow/index/navigation.json` and `.ai-workflow/index/navigation.md`. For every known task feature, run `ai-workflow context locate --project <project> --feature <id> --verify` and read only the returned exact `read_order`. Do not search source, traverse the repository or widen a packet `read_scope`. If locate returns `missing_index`, `miss`, `stale` or `invalid`, request File Explorer with the precise failure and authorized module roots; without such roots the run is blocked. Packets must use fixed context plus exact locator paths; `read_scope` must not contain `src/`, `tests/` or the project root.
+Before implementation, directly read `MEMORY.md`, `.ai-workflow/index/navigation.json` and `.ai-workflow/index/navigation.md`. For every known task feature, run `ai-workflow context locate --project <absolute-project-root> --feature <id> --verify` and read only the returned exact `read_order`. `<absolute-project-root>` is the normalized project directory path, never its directory name. Do not search source, traverse the repository or widen a packet `read_scope`. If locate returns `missing_index`, `miss`, `stale` or `invalid`, request File Explorer with the precise failure and authorized module roots; without such roots the run is blocked. Packets must use fixed context plus exact locator paths; `read_scope` must not contain `src/`, `tests/` or the project root.
 
 ## Candidate generation
 

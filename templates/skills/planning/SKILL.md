@@ -20,7 +20,7 @@ If the project root or goal is missing, ask for that information before drafting
 
 ## Navigation-first context
 
-Before repository context work, directly read `MEMORY.md`, `.ai-workflow/index/navigation.json` and `.ai-workflow/index/navigation.md`. Treat absent `MEMORY.md` as a recorded legal state. For a known feature run `ai-workflow context locate --project <project> --feature <id> --verify`, then read only its exact `read_order`. Do not search the repository. If locate returns `missing_index`, `miss`, `stale` or `invalid`, request File Explorer with the original goal, status/reason and authorized module roots. Keep each task `read_scope` to fixed context plus exact locator paths; it must not contain `src/`, `tests/` or the project root.
+Before repository context work, directly read `MEMORY.md`, `.ai-workflow/index/navigation.json` and `.ai-workflow/index/navigation.md`. Treat absent `MEMORY.md` as a recorded legal state. For a known feature run `ai-workflow context locate --project <absolute-project-root> --feature <id> --verify`, then read only its exact `read_order`. `<absolute-project-root>` is the normalized project directory path, never its directory name. Do not search the repository. If locate returns `missing_index`, `miss`, `stale` or `invalid`, request File Explorer with the original goal, status/reason and authorized module roots. Keep each task `read_scope` to fixed context plus exact locator paths; it must not contain `src/`, `tests/` or the project root.
 
 ## Clarification loop
 

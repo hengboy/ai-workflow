@@ -20,7 +20,7 @@ Stop and report the exact defect if any precondition fails. Never repair or rewr
 
 ## Navigation-first context
 
-Directly read `MEMORY.md`, `.ai-workflow/index/navigation.json` and `.ai-workflow/index/navigation.md`, then resolve known affected features through `ai-workflow context locate --project <project> --feature <id> --verify`. Record that feature as `feature` and its exact locator `read_order` as `locator_read_order` in every task. Construct `read_scope` from fixed context plus exactly that recorded locator order. Do not search; `read_scope` must not use `src/`, `tests/` or the project root. When the locator returns `missing_index`, `miss`, `stale` or `invalid`, request File Explorer with authorized module roots and use only its returned exact paths.
+Directly read `MEMORY.md`, `.ai-workflow/index/navigation.json` and `.ai-workflow/index/navigation.md`, then resolve known affected features through `ai-workflow context locate --project <absolute-project-root> --feature <id> --verify`. `<absolute-project-root>` is the normalized project directory path, never its directory name. Record that feature as `feature` and its exact locator `read_order` as `locator_read_order` in every task. Construct `read_scope` from fixed context plus exactly that recorded locator order. Do not search; `read_scope` must not use `src/`, `tests/` or the project root. When the locator returns `missing_index`, `miss`, `stale` or `invalid`, request File Explorer with authorized module roots and use only its returned exact paths.
 
 ## Decomposition rules
 

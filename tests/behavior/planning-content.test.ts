@@ -108,4 +108,17 @@ describe('native prompt contracts', () => {
       expect(text).toMatch(/must not.*(?:src\/|tests\/|project root)|不得.*(?:src\/|tests\/|项目根)/is);
     }
   });
+  it('documents --project as a project root path with relative and absolute examples', async () => {
+    const readme = await readFile(packagePath('README.md'), 'utf8');
+    expect(readme).toContain('`--project .` (project root directory path)');
+    expect(readme).toContain('`--project /path/to/project`');
+    expect(readme).toContain('exact ID then exact alias');
+    expect(readme).toContain('qualified `file#symbol` name');
+
+    for (const path of ['templates/skills/planning/SKILL.md', 'templates/skills/plan-to-tasks/SKILL.md', 'templates/skills/coding/SKILL.md', 'templates/agents/file-explorer.md']) {
+      const template = await readFile(packagePath(path), 'utf8');
+      expect(template).toMatch(/--project <absolute-project-root>/i);
+      expect(template).not.toMatch(/--project <project>/i);
+    }
+  });
 });
