@@ -88,4 +88,42 @@ describe('navigation index contract', () => {
     expect(result.valid).toBe(false);
     expect(result.errors).toContain('workflow-parsing read_scope must include tests/unit/navigation-contract.test.ts');
   });
+
+  it('rejects a read scope containing a file outside the feature read order', async () => {
+    const project = await projectWithNavigation({
+      ...navigation,
+      features: [{ ...navigation.features[0], read_scope: ['src/workflow/parse.ts', 'tests/unit/navigation-contract.test.ts', 'src/workflow/extra.ts'] }]
+    });
+    await writeFile(join(project, 'src/workflow/extra.ts'), 'export function extra(): void {}\n');
+
+    const result = await validateContext(project);
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain('workflow-parsing read_scope has unneeded path src/workflow/extra.ts');
+  });
+
+  it('marks the index stale when a declared module root contains an unclassified TypeScript file', async () => {
+    const project = await projectWithNavigation(navigation);
+    await writeFile(join(project, 'src/workflow/unclassified.ts'), 'export function newEntry(): void {}\n');
+
+    const result = await validateContext(project);
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain('Navigation index is stale: unclassified module file src/workflow/unclassified.ts');
+  });
+
+  it('rejects a duplicated entry unless both features explicitly share it', async () => {
+    const project = await projectWithNavigation({
+      ...navigation,
+      features: [
+        navigation.features[0],
+        { ...navigation.features[0], id: 'workflow-copy', name: 'workflow copy' }
+      ]
+    });
+
+    const result = await validateContext(project);
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain('src/workflow/parse.ts is an illegal duplicate entry');
+  });
 });

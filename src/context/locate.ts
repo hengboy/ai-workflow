@@ -44,10 +44,14 @@ async function loadIndex(project: string): Promise<NavigationIndex | LocateResul
 
 function candidatesFor(options: LocateOptions, index: NavigationIndex): NavigationFeature[] | string[] {
   if (options.feature) {
-    const ids = index.features.filter((feature) => feature.id === options.feature);
-    return ids.length ? ids : index.features.filter((feature) => feature.aliases.includes(options.feature!));
+    const requested = options.feature;
+    const ids = index.features.filter((feature) => feature.id === requested);
+    return ids.length ? ids : index.features.filter((feature) => feature.aliases.includes(requested));
   }
-  if (options.task) return index.features.filter((feature) => feature.id === options.task || feature.aliases.includes(options.task!));
+  if (options.task) {
+    const requested = options.task;
+    return index.features.filter((feature) => feature.id === requested || feature.aliases.includes(requested));
+  }
   if (!options.symbol) return [];
   const qualified = options.symbol.includes('#');
   const matches = index.features.flatMap((feature) => feature.symbols
@@ -73,10 +77,20 @@ export async function locateContext(project: string, options: LocateOptions): Pr
   if (!('features' in loaded)) return loaded;
   const matches = candidatesFor(options, loaded);
   if (!matches.length) return { status: 'miss', resolution_mode: 'index', fallback_required: true };
-  if (options.symbol && !options.symbol.includes('#')) return { status: 'ambiguous', resolution_mode: 'index', candidates: [...new Set(matches as string[])].sort(), fallback_required: false };
-  const features = matches as NavigationFeature[];
+  let features: NavigationFeature[];
+  if (options.symbol && !options.symbol.includes('#')) {
+    const symbols = [...new Set(matches as string[])].sort();
+    if (symbols.length > 1) return { status: 'ambiguous', resolution_mode: 'index', candidates: symbols, fallback_required: false };
+    const [symbol] = symbols;
+    const feature = loaded.features.find((candidate) => candidate.symbols.some((entry) => `${entry.file}#${entry.name}` === symbol));
+    if (!feature) return { status: 'miss', resolution_mode: 'index', fallback_required: true };
+    features = [feature];
+  } else {
+    features = matches as NavigationFeature[];
+  }
   if (features.length > 1) return { status: 'ambiguous', resolution_mode: 'index', candidates: features.map((feature) => feature.id).sort(), fallback_required: false };
-  const feature = features[0]!;
+  const feature = features[0];
+  if (!feature) return { status: 'miss', resolution_mode: 'index', fallback_required: true };
   if (options.verify) {
     const validation = await verifyNavigation(project, feature.id);
     if (!validation.valid) return {

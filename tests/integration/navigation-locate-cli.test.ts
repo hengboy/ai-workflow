@@ -75,6 +75,22 @@ describe('context locate CLI', () => {
     });
   });
 
+  it('resolves a bare symbol when the index has one candidate', async () => {
+    const project = await projectWithNavigation();
+
+    await expect(locate(project, '--symbol', 'readPlan')).resolves.toMatchObject({
+      status: 'hit', feature: 'workflow-parsing', symbols: ['src/workflow/parse.ts#readPlan'], fallback_required: false
+    });
+  });
+
+  it('verifies a single bare symbol against its exact indexed feature', async () => {
+    const project = await projectWithNavigation(navigation(), 'export function parsePlan(): void {}\n');
+
+    await expect(locate(project, '--symbol', 'readPlan', '--verify')).resolves.toEqual({
+      status: 'stale', resolution_mode: 'index', reason: 'Navigation index is stale: src/workflow/parse.ts no longer contains readPlan', fallback_required: true
+    });
+  });
+
   it('reports a missing navigation index without discovery', async () => {
     const project = await temporary('ai-workflow-navigation-missing-');
 
@@ -98,6 +114,15 @@ describe('context locate CLI', () => {
 
     await expect(locate(project, '--feature', 'workflow-parsing', '--verify')).resolves.toEqual({
       status: 'stale', resolution_mode: 'index', reason: 'src/workflow/missing.ts: expected an exact regular file', fallback_required: true
+    });
+  });
+
+  it('reports stale verification when the Markdown review view drifts from JSON', async () => {
+    const project = await projectWithNavigation();
+    await writeFile(join(project, '.ai-workflow/index/navigation.md'), 'drifted\n');
+
+    await expect(locate(project, '--feature', 'workflow-parsing', '--verify')).resolves.toEqual({
+      status: 'stale', resolution_mode: 'index', reason: 'Navigation index is stale: navigation.md does not match navigation.json', fallback_required: true
     });
   });
 });

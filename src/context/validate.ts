@@ -1,4 +1,4 @@
-import { lstat, readFile, realpath } from 'node:fs/promises';
+import { lstat, readdir, readFile, realpath } from 'node:fs/promises';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import ts from 'typescript';
 import { atomicWrite, exists } from '../utils/fs.js';
@@ -8,7 +8,7 @@ import { renderNavigation, type NavigationIndex, type NavigationModuleRoot } fro
 export interface ContextValidation { valid: boolean; errors: string[] }
 
 function isExactPath(path: string): boolean {
-  return path.length > 0 && !isAbsolute(path) && !path.endsWith('/') && !path.split('/').some((segment) => segment === '.' || segment === '..' || segment.length === 0) && !/[?*\[\]{}$<>]/.test(path);
+  return path.length > 0 && !isAbsolute(path) && !path.endsWith('/') && !path.split('/').some((segment) => segment === '.' || segment === '..' || segment.length === 0) && !/[?*[\]{}$<>]/.test(path);
 }
 
 function isWithin(root: string, target: string): boolean {
@@ -27,6 +27,16 @@ async function validateFile(project: string, realProject: string, path: string, 
   } catch {
     errors.push(`${path}: expected an exact regular file`);
   }
+}
+
+async function typeScriptFiles(project: string, directory: string): Promise<string[]> {
+  const files: string[] = [];
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    const path = join(directory, entry.name);
+    if (entry.isDirectory()) files.push(...await typeScriptFiles(project, path));
+    else if (entry.isFile() && (entry.name.endsWith('.ts') || entry.name.endsWith('.tsx'))) files.push(relative(project, path));
+  }
+  return files;
 }
 
 function rootFor(index: NavigationIndex, path: string): NavigationModuleRoot | undefined {
@@ -87,6 +97,42 @@ async function validateSemantics(project: string, index: NavigationIndex, featur
   }
 }
 
+async function validateModuleCoverage(project: string, index: NavigationIndex, errors: string[]): Promise<void> {
+  const registered = new Set(index.features.flatMap((feature) => [...feature.entries, ...feature.related_files, ...feature.symbols.map((symbol) => symbol.file)]));
+  for (const moduleRoot of index.module_roots) {
+    const path = join(project, moduleRoot.path);
+    try {
+      if (!(await lstat(path)).isDirectory()) { errors.push(`${moduleRoot.path}: expected a concrete module root directory`); continue; }
+      const real = await realpath(path);
+      if (!isWithin(await realpath(project), real)) { errors.push(`${moduleRoot.path}: module root symlink escapes project`); continue; }
+      const hasFeature = index.features.some((feature) => feature.module_root === moduleRoot.id);
+      if (!hasFeature) errors.push(`${moduleRoot.id}: module root has no feature`);
+      for (const file of await typeScriptFiles(project, path)) {
+        const owner = rootFor(index, file);
+        if (owner?.id === moduleRoot.id && !registered.has(file)) errors.push(`Navigation index is stale: unclassified module file ${file}`);
+      }
+    } catch {
+      errors.push(`${moduleRoot.path}: expected a concrete module root directory`);
+    }
+  }
+}
+
+function validateIndexRelationships(index: NavigationIndex, errors: string[]): void {
+  const ids = new Set<string>();
+  const entries = new Map<string, NavigationIndex['features']>();
+  for (const feature of index.features) {
+    if (ids.has(feature.id)) errors.push(`Duplicate feature id: ${feature.id}`);
+    ids.add(feature.id);
+    for (const entry of feature.entries) entries.set(entry, [...(entries.get(entry) ?? []), feature]);
+  }
+  for (const feature of index.features) for (const dependency of feature.depends_on) if (!ids.has(dependency)) errors.push(`${feature.id} depends on unknown feature ${dependency}`);
+  for (const [entry, features] of entries) {
+    if (features.length < 2) continue;
+    const symbols = features.flatMap((feature) => feature.symbols.filter((symbol) => symbol.file === entry).map((symbol) => symbol.name));
+    if (!features.every((feature) => feature.shared_entry) || new Set(symbols).size !== symbols.length) errors.push(`${entry} is an illegal duplicate entry`);
+  }
+}
+
 async function validateIndex(project: string, featureIds?: Set<string>): Promise<{ errors: string[]; index?: NavigationIndex }> {
   const root = resolve(project); const realRoot = await realpath(root); const memoryPath = join(root, 'MEMORY.md'); const jsonPath = join(root, '.ai-workflow/index/navigation.json'); const markdownPath = join(root, '.ai-workflow/index/navigation.md'); const errors: string[] = [];
   if (await exists(memoryPath) && !/^#\s+/m.test(await readFile(memoryPath, 'utf8'))) errors.push('MEMORY.md needs a title');
@@ -100,17 +146,22 @@ async function validateIndex(project: string, featureIds?: Set<string>): Promise
   if (!validator(index)) errors.push(formatSchemaErrors(validator.errors));
   const raw = index as unknown as { features?: Array<Record<string, unknown>> };
   for (const feature of raw.features ?? []) if ('write_scope' in feature) errors.push('Navigation features cannot declare write_scope');
+  validateIndexRelationships(index, errors);
   if (errors.length) return { errors };
 
   const features = featureIds ? index.features.filter((feature) => featureIds.has(feature.id)) : index.features;
   for (const rootEntry of index.module_roots) {
     if (!isExactPath(rootEntry.path)) errors.push(`${rootEntry.path}: expected a concrete module root`);
   }
+  for (const feature of features) if (!index.module_roots.some((rootEntry) => rootEntry.id === feature.module_root)) errors.push(`${feature.id}: unknown module root ${feature.module_root}`);
   for (const feature of features) {
     for (const path of [...feature.entries, ...feature.related_files, ...feature.tests, ...feature.read_scope, ...feature.symbols.map((symbol) => symbol.file)]) await validateFile(root, realRoot, path, errors);
-    for (const path of [...feature.entries, ...feature.related_files, ...feature.tests]) if (!feature.read_scope.includes(path)) errors.push(`${feature.id} read_scope must include ${path}`);
+    const readOrder = new Set([...feature.entries, ...feature.related_files, ...feature.tests]);
+    for (const path of readOrder) if (!feature.read_scope.includes(path)) errors.push(`${feature.id} read_scope must include ${path}`);
+    for (const path of feature.read_scope) if (!readOrder.has(path)) errors.push(`${feature.id} read_scope has unneeded path ${path}`);
   }
   if (!errors.length) await validateSemantics(root, index, features, errors);
+  if (!errors.length && !featureIds) await validateModuleCoverage(root, index, errors);
   return errors.length ? { errors } : { errors, index };
 }
 
@@ -124,7 +175,10 @@ export async function validateContext(project: string): Promise<ContextValidatio
 
 export async function verifyNavigation(project: string, featureId: string): Promise<ContextValidation> {
   const result = await validateIndex(project, new Set([featureId]));
-  return { valid: Boolean(result.index), errors: result.errors };
+  if (!result.index) return { valid: false, errors: result.errors };
+  const markdown = await readFile(join(resolve(project), '.ai-workflow/index/navigation.md'), 'utf8');
+  if (markdown !== renderNavigation(result.index)) result.errors.push('Navigation index is stale: navigation.md does not match navigation.json');
+  return { valid: result.errors.length === 0, errors: result.errors };
 }
 
 export async function refreshContext(project: string): Promise<{ updated: string[] }> {

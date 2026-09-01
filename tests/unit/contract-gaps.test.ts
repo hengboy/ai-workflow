@@ -3,7 +3,6 @@ import { join } from 'node:path';
 import { writeFile } from 'node:fs/promises';
 import { generateWorkflow, applyAdjustments } from '../../src/workflow/generate.js';
 import { approveWorkflow, verifyApproval } from '../../src/workflow/approval.js';
-import { validateContext } from '../../src/context/validate.js';
 import { writeJson } from '../../src/utils/fs.js';
 import { frozenPlan, gitInit, temporary } from '../helpers.js';
 
