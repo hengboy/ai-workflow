@@ -18,7 +18,7 @@ const navigation: NavigationIndex = {
       { file: 'src/workflow/digest.ts', name: 'digestPlan', kind: 'function', visibility: 'public' }
     ],
     related_files: ['src/workflow/digest.ts'], tests: ['tests/unit/frozen-protocol.test.ts'], depends_on: [],
-    relations: [{ kind: 'calls', from: 'src/workflow/parse.ts#readPlan', to: 'src/workflow/digest.ts#digestPlan' }],
+    relations: [{ kind: 'imports', from: 'src/workflow/parse.ts#readPlan', to: 'src/workflow/digest.ts#digestPlan' }],
     owner_role: 'frontend', responsibility: 'frozen-plan validation',
     read_scope: ['src/workflow/parse.ts', 'src/workflow/digest.ts', 'tests/unit/frozen-protocol.test.ts'], shared_entry: false
   }]

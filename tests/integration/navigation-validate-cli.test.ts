@@ -45,7 +45,13 @@ describe('context validate CLI', () => {
     }
 
     expect(JSON.parse(feature.stdout)).toEqual({ valid: true, errors: [] });
-    expect(JSON.parse(allOutput)).toEqual({ valid: false, errors: ['Navigation index is stale: unclassified module file src/workflow/unclassified.ts'] });
+    expect(JSON.parse(allOutput)).toEqual({
+      valid: false,
+      errors: [
+        'Navigation index is stale: unclassified module file src/workflow/unclassified.ts',
+        'Navigation index is stale: added symbol src/workflow/unclassified.ts#newEntry'
+      ]
+    });
   });
 
   it('rejects an unknown feature instead of treating an empty selection as valid', async () => {

@@ -1,5 +1,5 @@
 import { lstat, readdir, readFile, realpath, writeFile } from 'node:fs/promises';
-import { extname, isAbsolute, join, relative, resolve } from 'node:path';
+import { dirname, extname, isAbsolute, join, relative, resolve } from 'node:path';
 import ts from 'typescript';
 import { atomicDirectory, exists } from '../utils/fs.js';
 import { formatSchemaErrors, schemaValidator } from '../utils/schema.js';
@@ -48,6 +48,11 @@ async function typeScriptFiles(project: string, directory: string): Promise<stri
   return files;
 }
 
+interface ParsedSymbol { file: string; name: string; kind: string }
+interface ParsedRelation { kind: 'imports'; from: string; to: string }
+interface ParsedModuleRoot { symbols: ParsedSymbol[]; relations: ParsedRelation[] }
+type LanguageParser = (project: string, root: NavigationModuleRoot) => Promise<ParsedModuleRoot>;
+
 function rootFor(index: NavigationIndex, path: string): NavigationModuleRoot | undefined {
   return index.module_roots.filter((root) => path.startsWith(`${root.path}/`)).sort((left, right) => right.path.length - left.path.length)[0];
 }
@@ -72,6 +77,63 @@ function declarations(source: ts.SourceFile): Map<string, Array<{ kind: string; 
   }
   return result;
 }
+
+function symbolKey(symbol: { file: string; name: string; kind: string }): string {
+  return `${symbol.file}#${symbol.name}#${symbol.kind}`;
+}
+
+function relationKey(relation: { kind: string; from: string; to: string }): string {
+  return `${relation.kind} ${relation.from} -> ${relation.to}`;
+}
+
+function directImports(file: string, source: ts.SourceFile, files: Set<string>): Map<string, { file: string; name: string }> {
+  const bindings = new Map<string, { file: string; name: string }>();
+  for (const statement of source.statements) {
+    if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier) || !statement.importClause?.namedBindings || !ts.isNamedImports(statement.importClause.namedBindings)) continue;
+    const specifier = statement.moduleSpecifier.text;
+    if (!specifier.startsWith('.')) continue;
+    const base = join(dirname(file), specifier).replace(/\\/g, '/').replace(/\.(?:js|jsx|mjs|cjs|ts|tsx)$/, '');
+    const target = [`${base}.ts`, `${base}.tsx`, `${base}/index.ts`, `${base}/index.tsx`].find((candidate) => files.has(candidate));
+    if (!target) continue;
+    for (const imported of statement.importClause.namedBindings.elements) bindings.set(imported.name.text, { file: target, name: imported.propertyName?.text ?? imported.name.text });
+  }
+  return bindings;
+}
+
+function importedBindingsIn(node: ts.Node, bindings: Map<string, { file: string; name: string }>): Array<{ file: string; name: string }> {
+  const result = new Map<string, { file: string; name: string }>();
+  const visit = (current: ts.Node): void => {
+    if (ts.isIdentifier(current)) {
+      const binding = bindings.get(current.text);
+      if (binding) result.set(`${binding.file}#${binding.name}`, binding);
+    }
+    ts.forEachChild(current, visit);
+  };
+  visit(node);
+  return [...result.values()];
+}
+
+async function parseTypeScriptModuleRoot(project: string, root: NavigationModuleRoot): Promise<ParsedModuleRoot> {
+  const files = await typeScriptFiles(project, join(project, root.path));
+  const fileSet = new Set(files);
+  const symbols: ParsedSymbol[] = [];
+  const relations: ParsedRelation[] = [];
+  for (const file of files) {
+    const source = ts.createSourceFile(file, await readFile(join(project, file), 'utf8'), ts.ScriptTarget.Latest, true);
+    const imports = directImports(file, source, fileSet);
+    for (const [name, candidates] of declarations(source)) for (const candidate of candidates) if (candidate.exported) symbols.push({ file, name, kind: candidate.kind });
+    for (const statement of source.statements) {
+      const declared = declarations(ts.createSourceFile(file, statement.getText(source), ts.ScriptTarget.Latest, true));
+      for (const [name, candidates] of declared) for (const candidate of candidates) if (candidate.exported) {
+        const from = `${file}#${name}`;
+        for (const target of importedBindingsIn(statement, imports)) relations.push({ kind: 'imports', from, to: `${target.file}#${target.name}` });
+      }
+    }
+  }
+  return { symbols, relations: [...new Map(relations.map((relation) => [relationKey(relation), relation])).values()] };
+}
+
+const languageParsers: Record<string, LanguageParser> = { typescript: parseTypeScriptModuleRoot };
 
 function relationReference(value: string): { file: string; name: string } | undefined {
   const separator = value.lastIndexOf('#');
@@ -106,6 +168,38 @@ async function validateSemantics(project: string, index: NavigationIndex, featur
   }
 }
 
+async function validateFullSemantics(project: string, index: NavigationIndex, errors: string[]): Promise<void> {
+  for (const root of index.module_roots) {
+    const parser = languageParsers[root.language];
+    if (!parser) { errors.push(`Unsupported navigation language parser: ${root.language}`); continue; }
+    const parsed = await parser(project, root);
+    const indexedSymbols = index.features.flatMap((feature) => feature.symbols.filter((symbol) => symbol.visibility === 'public' && rootFor(index, symbol.file)?.id === root.id));
+    const actualSymbols = new Map(parsed.symbols.map((symbol) => [symbolKey(symbol), symbol]));
+    const expectedSymbols = new Map(indexedSymbols.map((symbol) => [symbolKey(symbol), symbol]));
+    for (const [key, symbol] of actualSymbols) if (!expectedSymbols.has(key)) errors.push(`Navigation index is stale: added symbol ${symbol.file}#${symbol.name}`);
+    for (const [key, symbol] of expectedSymbols) if (!actualSymbols.has(key)) errors.push(`Navigation index is stale: removed symbol ${symbol.file}#${symbol.name}`);
+    const indexedRelations = index.features.flatMap((feature) => feature.relations.filter((relation) => rootFor(index, relation.from.slice(0, relation.from.lastIndexOf('#')))?.id === root.id));
+    const actualRelations = new Set(parsed.relations.map(relationKey));
+    const expectedRelations = new Set(indexedRelations.map(relationKey));
+    for (const relation of [...actualRelations, ...expectedRelations]) if (!actualRelations.has(relation) || !expectedRelations.has(relation)) errors.push(`Navigation index is stale: relation change ${relation}`);
+  }
+}
+
+async function validateModuleRoots(project: string, index: NavigationIndex, roots: NavigationModuleRoot[], errors: string[]): Promise<void> {
+  const realProject = await realpath(project);
+  for (const moduleRoot of roots) {
+    const path = join(project, moduleRoot.path);
+    try {
+      const info = await lstat(path);
+      const real = await realpath(path);
+      if (!isWithin(realProject, real)) { errors.push(`${moduleRoot.path}: module root symlink escapes project`); continue; }
+      if (!info.isDirectory()) errors.push(`${moduleRoot.path}: expected a concrete module root directory`);
+    } catch {
+      errors.push(`${moduleRoot.path}: expected a concrete module root directory`);
+    }
+  }
+}
+
 async function validateModuleCoverage(project: string, index: NavigationIndex, errors: string[]): Promise<void> {
   const registered = new Set(index.features.flatMap((feature) => [...feature.entries, ...feature.related_files, ...feature.symbols.map((symbol) => symbol.file)]));
   for (const moduleRoot of index.module_roots) {
@@ -115,7 +209,7 @@ async function validateModuleCoverage(project: string, index: NavigationIndex, e
       const real = await realpath(path);
       if (!isWithin(await realpath(project), real)) { errors.push(`${moduleRoot.path}: module root symlink escapes project`); continue; }
       const hasFeature = index.features.some((feature) => feature.module_root === moduleRoot.id);
-      if (!hasFeature) errors.push(`${moduleRoot.id}: module root has no feature`);
+      if (!hasFeature) errors.push(`${moduleRoot.id}: featureless module root`);
       for (const file of await typeScriptFiles(project, path)) {
         const owner = rootFor(index, file);
         if (owner?.id === moduleRoot.id && !registered.has(file)) errors.push(`Navigation index is stale: unclassified module file ${file}`);
@@ -177,9 +271,16 @@ async function validateIndex(project: string, featureIds?: Set<string>, supplied
     const readOrder = new Set([...feature.entries, ...feature.related_files, ...feature.tests]);
     for (const path of readOrder) if (!feature.read_scope.includes(path)) errors.push(`${feature.id} read_scope must include ${path}`);
     for (const path of feature.read_scope) if (!readOrder.has(path)) errors.push(`${feature.id} read_scope has unneeded path ${path}`);
+    const moduleRoot = index.module_roots.find((rootEntry) => rootEntry.id === feature.module_root);
+    if (moduleRoot && feature.owner_role !== moduleRoot.owner_role) errors.push(`${feature.id}: owner mismatch for module root ${moduleRoot.id}`);
   }
-  if (!errors.length) await validateSemantics(root, index, features, errors);
-  if (!errors.length && !featureIds) await validateModuleCoverage(root, index, errors);
+  if (featureIds) {
+    if (!errors.length) await validateSemantics(root, index, features, errors);
+    await validateModuleRoots(root, index, index.module_roots.filter((moduleRoot) => features.some((feature) => feature.module_root === moduleRoot.id)), errors);
+  } else {
+    await validateModuleCoverage(root, index, errors);
+    if (!errors.some((error) => error.includes('expected a concrete module root directory') || error.includes('module root symlink escapes project'))) await validateFullSemantics(root, index, errors);
+  }
   return errors.length ? { errors } : { errors, index };
 }
 
