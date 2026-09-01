@@ -111,6 +111,7 @@ agents:
       expect(await exists(join(root, 'planning/references/spec.md'))).toBe(true);
       expect(await exists(join(root, 'planning/references/plan.md'))).toBe(true);
       expect(await exists(join(root, 'switch-profile/agents/openai.yaml'))).toBe(true);
+      expect(await exists(join(root, 'manage-ai-workflow/agents/openai.yaml'))).toBe(true);
     }
   });
   it('installs agents without a product prefix and emits valid host frontmatter', async () => {

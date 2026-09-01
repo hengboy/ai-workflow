@@ -6,7 +6,7 @@ import type { Host, Workflow } from './workflow/types.js';
 import { generateWorkflow, applyAdjustments, explainWorkflow } from './workflow/generate.js';
 import { validateWorkflow } from './workflow/validate.js';
 import { approveWorkflow } from './workflow/approval.js';
-import { activateProfile, install, uninstall, initializeProject } from './install/index.js';
+import { activateProfile, install, uninstall, initializeProject, updateProject } from './install/index.js';
 import { writeJson } from './utils/fs.js';
 import { formatSchemaErrors, schemaValidator } from './utils/schema.js';
 import { createNavigationCandidate, refreshContext, validateContext, verifyNavigation } from './context/validate.js';
@@ -25,6 +25,7 @@ const program = new Command().name('ai-workflow').description('Self-contained na
 program.command('install').requiredOption('--host <host>').option('--home <path>').action(async ({ host, home }: { host: string; home?: string }) => print(await install(hostList(host), { ...(home ? { home } : {}) })));
 program.command('uninstall').requiredOption('--host <host>').option('--home <path>').action(async ({ host, home }: { host: string; home?: string }) => print(await uninstall(hostList(host), { ...(home ? { home } : {}) })));
 program.command('init').argument('<project>').action(async (project: string) => print({ created: await initializeProject(project) }));
+program.command('update').argument('<project>').action(async (project: string) => print(await updateProject(project)));
 const profile = program.command('profile');
 profile.command('activate').argument('<name>').option('--home <path>').action(async (name: string, { home }: { home?: string }) => print(await activateProfile(name, { ...(home ? { home } : {}) })));
 

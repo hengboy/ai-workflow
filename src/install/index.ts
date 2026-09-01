@@ -9,6 +9,7 @@ import type { Host } from '../workflow/types.js';
 
 interface ManifestFile { path: string; digest: string; kind: 'file' | 'directory' }
 interface InstallManifest { version: string; installed_at: string; hosts: Partial<Record<Host, ManifestFile[]>> }
+interface ProjectManifest { version: 1; files: Record<string, string> }
 export interface AgentInstallation {
   name: string;
   path: string;
@@ -27,6 +28,14 @@ export interface ProfileActivationReport {
 }
 const manifestRelative = '.config/ai-workflow/install-manifest.json';
 const activeProfileRelative = '.config/ai-workflow/active-profile';
+const projectManifestRelative = '.ai-workflow/project-manifest.json';
+const projectTemplates = ['AGENTS.md', 'MEMORY.md', 'navigation.json', 'navigation.md', 'config.yaml'] as const;
+function projectTargets(): Array<{ source: string; target: string }> {
+  return projectTemplates.map((name) => ({ source: join('templates/project', name), target: name === 'navigation.json' || name === 'navigation.md' ? `.ai-workflow/index/${name}` : name === 'config.yaml' ? '.ai-workflow/config.yaml' : name }));
+}
+async function projectTemplateContents(): Promise<Array<{ target: string; contents: string }>> {
+  return Promise.all(projectTargets().map(async ({ source, target }) => ({ target, contents: await readFile(new URL(`../../${source}`, import.meta.url), 'utf8') })));
+}
 
 function roots(home: string, host: Host): { plugin?: string; skills?: string; agents: string } {
   if (host === 'codex') return { plugin: join(home, '.codex/plugins/ai-workflow'), agents: join(home, '.codex/agents') };
@@ -140,11 +149,29 @@ export async function uninstall(hosts: Host[], options: { home?: string } = {}):
 
 export async function initializeProject(project: string): Promise<string[]> {
   const root = resolve(project); const created: string[] = [];
-  const templates = ['AGENTS.md', 'MEMORY.md', 'navigation.json', 'navigation.md', 'config.yaml'];
-  const targets = templates.map((name) => ({ source: join('templates/project', name), target: name === 'navigation.json' || name === 'navigation.md' ? `.ai-workflow/index/${name}` : name === 'config.yaml' ? '.ai-workflow/config.yaml' : name }));
-  const conflicts: Array<{ target: string; contents: string }> = []; for (const item of targets) if (await exists(join(root, item.target))) conflicts.push({ target: item.target, contents: await readFile(new URL(`../../${item.source}`, import.meta.url), 'utf8') });
+  const templates = await projectTemplateContents();
+  const conflicts: Array<{ target: string; contents: string }> = []; for (const item of templates) if (await exists(join(root, item.target))) conflicts.push(item);
   if (conflicts.length) throw new Error(`Initialization conflicts; no files written. Merge these templates manually:\n${conflicts.map((item) => `${item.target}\n--- proposed ---\n${item.contents}`).join('\n')}`);
-  for (const item of targets) { const contents = await readFile(new URL(`../../${item.source}`, import.meta.url), 'utf8'); await atomicWrite(join(root, item.target), contents); created.push(item.target); }
+  for (const item of templates) { await atomicWrite(join(root, item.target), item.contents); created.push(item.target); }
   const ignorePath = join(root, '.gitignore'); const ignore = await exists(ignorePath) ? await readFile(ignorePath, 'utf8') : ''; const additions = ['.ai-workflow/runs/', '*.log'].filter((line) => !ignore.split(/\r?\n/).includes(line)); if (additions.length) { await atomicWrite(ignorePath, `${ignore.trimEnd()}${ignore ? '\n' : ''}${additions.join('\n')}\n`); created.push('.gitignore'); }
+  await writeJson(join(root, projectManifestRelative), { version: 1, files: Object.fromEntries(templates.map((item) => [item.target, sha256(item.contents)])) } satisfies ProjectManifest);
+  created.push(projectManifestRelative);
   return created;
+}
+
+export async function updateProject(project: string): Promise<{ updated: string[]; skipped: string[]; unchanged: string[] }> {
+  const root = resolve(project); const manifestPath = join(root, projectManifestRelative);
+  if (!(await exists(manifestPath))) throw new Error(`Project update requires ${projectManifestRelative}; initialize a new project or merge the current templates manually.`);
+  const manifest = await readJson<ProjectManifest>(manifestPath);
+  if (manifest.version !== 1) throw new Error(`Unsupported project manifest version: ${String(manifest.version)}`);
+  const updated: string[] = []; const skipped: string[] = []; const unchanged: string[] = [];
+  for (const template of await projectTemplateContents()) {
+    const path = join(root, template.target); const expected = manifest.files[template.target];
+    if (!expected || !(await exists(path)) || sha256(await readFile(path)) !== expected) { skipped.push(template.target); continue; }
+    const digest = sha256(template.contents);
+    if (expected === digest) { unchanged.push(template.target); continue; }
+    await atomicWrite(path, template.contents); manifest.files[template.target] = digest; updated.push(template.target);
+  }
+  await writeJson(manifestPath, manifest);
+  return { updated, skipped, unchanged };
 }
