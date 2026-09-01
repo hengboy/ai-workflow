@@ -1,4 +1,4 @@
 # Feature navigation
 
-| Feature | Entry | Responsibility |
-| --- | --- | --- |
+| Feature | Entries | Public Symbols | Related Files | Tests | Read Scope | Owner | Responsibility |
+| --- | --- | --- | --- | --- | --- | --- | --- |

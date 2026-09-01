@@ -90,4 +90,22 @@ describe('native prompt contracts', () => {
       expect(contents).toMatch(/plan validate/);
     }
   });
+  it('installs navigation-first context contracts for discovery and lifecycle skills', async () => {
+    const navigation = await readFile(packagePath('templates', 'project', 'navigation.md'), 'utf8');
+    expect(navigation).toMatch(/Entries.*Public Symbols.*Read Scope/i);
+
+    const explorer = await readFile(packagePath('templates', 'agents', 'file-explorer.md'), 'utf8');
+    expect(explorer).toMatch(/missing_index.*miss.*stale.*invalid/is);
+    expect(explorer).toMatch(/authorized module roots|allowed module roots/i);
+    expect(explorer).toMatch(/navigation\.json/i);
+    expect(explorer).toMatch(/context refresh/i);
+
+    for (const skill of ['planning', 'plan-to-tasks', 'coding']) {
+      const text = await readFile(packagePath('templates', 'skills', skill, 'SKILL.md'), 'utf8');
+      expect(text).toMatch(/context locate/i);
+      expect(text).toMatch(/navigation\.json/i);
+      expect(text).toMatch(/read_scope/i);
+      expect(text).toMatch(/must not.*(?:src\/|tests\/|project root)|不得.*(?:src\/|tests\/|项目根)/is);
+    }
+  });
 });
