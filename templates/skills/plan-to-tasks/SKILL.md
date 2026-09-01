@@ -18,6 +18,10 @@ Convert one frozen spec/plan pair into an approved, immutable task DAG that codi
 
 Stop and report the exact defect if any precondition fails. Never repair or rewrite frozen inputs.
 
+## Navigation-first context
+
+Directly read `MEMORY.md`, `.ai-workflow/index/navigation.json` and `.ai-workflow/index/navigation.md`, then resolve known affected features through `ai-workflow context locate --project <project> --feature <id> --verify`. Construct each task `read_scope` from fixed context plus the exact locator `read_order`. Do not search; `read_scope` must not use `src/`, `tests/` or the project root. When the locator returns `missing_index`, `miss`, `stale` or `invalid`, request File Explorer with authorized module roots and use only its returned exact paths.
+
 ## Decomposition rules
 
 - Prefer independently testable vertical outcomes over file-by-file chores.
@@ -28,6 +32,7 @@ Stop and report the exact defect if any precondition fails. Never repair or rewr
 - Make read scopes bounded and write scopes exact enough for filesystem enforcement.
 - Ask File Explorer for exact paths when an entry, call chain or dependency is unknown.
 - Never use `.`, project root, `**`, an unresolved placeholder or a broad directory with unclear ownership as write scope.
+- Never use `src/`, `tests/` or the project root as read scope; read scope is fixed context plus exact locator paths.
 - Force tasks with overlapping write scopes into dependency order.
 - Put frontend and backend validation commands on their responsible tasks; add an integration task only when cross-stack behavior requires it.
 

@@ -18,6 +18,10 @@ Turn an idea into an explicitly confirmed, independently reviewable `spec.md` an
 
 If the project root or goal is missing, ask for that information before drafting.
 
+## Navigation-first context
+
+Before repository context work, directly read `MEMORY.md`, `.ai-workflow/index/navigation.json` and `.ai-workflow/index/navigation.md`. Treat absent `MEMORY.md` as a recorded legal state. For a known feature run `ai-workflow context locate --project <project> --feature <id> --verify`, then read only its exact `read_order`. Do not search the repository. If locate returns `missing_index`, `miss`, `stale` or `invalid`, request File Explorer with the original goal, status/reason and authorized module roots. Keep each task `read_scope` to fixed context plus exact locator paths; it must not contain `src/`, `tests/` or the project root.
+
 ## Clarification loop
 
 Ask exactly one highest-priority question per turn. Pick the unanswered item whose ambiguity would change the most downstream work:

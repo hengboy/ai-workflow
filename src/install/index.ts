@@ -140,8 +140,8 @@ export async function uninstall(hosts: Host[], options: { home?: string } = {}):
 
 export async function initializeProject(project: string): Promise<string[]> {
   const root = resolve(project); const created: string[] = [];
-  const templates = ['AGENTS.md', 'MEMORY.md', 'navigation.md', 'config.yaml'];
-  const targets = templates.map((name) => ({ source: join('templates/project', name), target: name === 'navigation.md' ? '.ai-workflow/index/navigation.md' : name === 'config.yaml' ? '.ai-workflow/config.yaml' : name }));
+  const templates = ['AGENTS.md', 'MEMORY.md', 'navigation.json', 'navigation.md', 'config.yaml'];
+  const targets = templates.map((name) => ({ source: join('templates/project', name), target: name === 'navigation.json' || name === 'navigation.md' ? `.ai-workflow/index/${name}` : name === 'config.yaml' ? '.ai-workflow/config.yaml' : name }));
   const conflicts: Array<{ target: string; contents: string }> = []; for (const item of targets) if (await exists(join(root, item.target))) conflicts.push({ target: item.target, contents: await readFile(new URL(`../../${item.source}`, import.meta.url), 'utf8') });
   if (conflicts.length) throw new Error(`Initialization conflicts; no files written. Merge these templates manually:\n${conflicts.map((item) => `${item.target}\n--- proposed ---\n${item.contents}`).join('\n')}`);
   for (const item of targets) { const contents = await readFile(new URL(`../../${item.source}`, import.meta.url), 'utf8'); await atomicWrite(join(root, item.target), contents); created.push(item.target); }

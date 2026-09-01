@@ -1,0 +1,79 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://ai-workflow.local/schemas/navigation.schema.json",
+  "title": "NavigationIndex",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "module_roots", "features"],
+  "properties": {
+    "version": { "const": 1 },
+    "module_roots": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/moduleRoot" }
+    },
+    "features": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/feature" }
+    }
+  },
+  "definitions": {
+    "role": {
+      "enum": ["file-explorer", "git-operator", "task-worker", "backend", "frontend", "test", "standards-review", "spec-review"]
+    },
+    "moduleRoot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "path", "owner_role", "responsibility", "language", "entry_kinds"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "path": { "type": "string", "minLength": 1 },
+        "owner_role": { "$ref": "#/definitions/role" },
+        "responsibility": { "type": "string", "minLength": 1 },
+        "language": { "type": "string", "minLength": 1 },
+        "entry_kinds": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "minLength": 1 } }
+      }
+    },
+    "symbol": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["file", "name", "kind", "visibility"],
+      "properties": {
+        "file": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "kind": { "type": "string", "minLength": 1 },
+        "visibility": { "enum": ["public", "private"] }
+      }
+    },
+    "relation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "from", "to"],
+      "properties": {
+        "kind": { "type": "string", "minLength": 1 },
+        "from": { "type": "string", "minLength": 1 },
+        "to": { "type": "string", "minLength": 1 }
+      }
+    },
+    "feature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "aliases", "module_root", "entries", "symbols", "related_files", "tests", "depends_on", "relations", "owner_role", "responsibility", "read_scope", "shared_entry"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "aliases": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
+        "module_root": { "type": "string", "minLength": 1 },
+        "entries": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
+        "symbols": { "type": "array", "items": { "$ref": "#/definitions/symbol" } },
+        "related_files": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
+        "tests": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
+        "depends_on": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
+        "relations": { "type": "array", "items": { "$ref": "#/definitions/relation" } },
+        "owner_role": { "$ref": "#/definitions/role" },
+        "responsibility": { "type": "string", "minLength": 1 },
+        "read_scope": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
+        "shared_entry": { "type": "boolean" }
+      }
+    }
+  }
+}

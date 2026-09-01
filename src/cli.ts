@@ -9,7 +9,8 @@ import { approveWorkflow } from './workflow/approval.js';
 import { activateProfile, install, uninstall, initializeProject } from './install/index.js';
 import { writeJson } from './utils/fs.js';
 import { formatSchemaErrors, schemaValidator } from './utils/schema.js';
-import { validateContext, updateContext } from './context/validate.js';
+import { refreshContext, validateContext, verifyNavigation } from './context/validate.js';
+import { locateContext } from './context/locate.js';
 import { cancelRun, cleanupRun, resumeRun, startRun } from './runtime/runner.js';
 import { loadRun } from './runtime/store.js';
 import { readPlan } from './workflow/parse.js';
@@ -41,8 +42,9 @@ plan.command('validate').requiredOption('--plan <directory>').action(async ({ pl
   print({ valid: true, plan_id: document.planId, digests: { spec: document.specDigest, plan: document.planDigest, combined: document.digest } });
 });
 
-const context = program.command('context'); context.command('validate').requiredOption('--project <project>').action(async ({ project }: { project: string }) => { const result = await validateContext(resolve(project)); print(result); if (!result.valid) process.exitCode = 1; });
-context.command('update').requiredOption('--project <project>').requiredOption('--memory <file>').requiredOption('--navigation <file>').action(async ({ project, memory, navigation }: { project: string; memory: string; navigation: string }) => print(await updateContext(resolve(project), { memory: await readFile(resolve(memory), 'utf8'), navigation: await readFile(resolve(navigation), 'utf8') })));
+const context = program.command('context'); context.command('validate').requiredOption('--project <project>').option('--feature <id>').option('--all').action(async ({ project, feature, all }: { project: string; feature?: string; all?: boolean }) => { if (feature && all) throw new Error('Use either --feature or --all'); const result = feature ? await verifyNavigation(resolve(project), feature) : await validateContext(resolve(project)); print(result); if (!result.valid) process.exitCode = 1; });
+context.command('refresh').requiredOption('--project <project>').requiredOption('--write').action(async ({ project }: { project: string }) => print(await refreshContext(resolve(project))));
+context.command('locate').requiredOption('--project <project>').option('--feature <id>').option('--symbol <symbol>').option('--task <id>').option('--verify').action(async (options: { project: string; feature?: string; symbol?: string; task?: string; verify?: boolean }) => print(await locateContext(resolve(options.project), options)));
 const run = program.command('run');
 run.command('start').requiredOption('--workflow <path>').requiredOption('--host <host>').option('--project <project>').action(async (options: { workflow: string; host: string; project?: string }) => print(await startRun({ workflowPath: options.workflow, host: options.host, ...(options.project ? { project: options.project } : {}) })));
 run.command('status').argument('<runId>').option('--project <project>', '.').action(async (runId: string, { project }: { project: string }) => print(await loadRun(resolve(project), runId)));

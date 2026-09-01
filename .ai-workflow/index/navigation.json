@@ -1,0 +1,737 @@
+{
+  "version": 1,
+  "module_roots": [
+    {
+      "id": "src",
+      "path": "src",
+      "owner_role": "file-explorer",
+      "responsibility": "top-level CLI feature only",
+      "language": "typescript",
+      "entry_kinds": [
+        "cli"
+      ]
+    },
+    {
+      "id": "install",
+      "path": "src/install",
+      "owner_role": "task-worker",
+      "responsibility": "host installation and project initialization",
+      "language": "typescript",
+      "entry_kinds": [
+        "exported-symbol"
+      ]
+    },
+    {
+      "id": "workflow",
+      "path": "src/workflow",
+      "owner_role": "task-worker",
+      "responsibility": "plan parsing, workflow generation, validation and approval",
+      "language": "typescript",
+      "entry_kinds": [
+        "exported-symbol"
+      ]
+    },
+    {
+      "id": "runtime",
+      "path": "src/runtime",
+      "owner_role": "backend",
+      "responsibility": "workflow run lifecycle and persistence",
+      "language": "typescript",
+      "entry_kinds": [
+        "exported-symbol"
+      ]
+    },
+    {
+      "id": "adapters",
+      "path": "src/adapters",
+      "owner_role": "backend",
+      "responsibility": "native host process adapters",
+      "language": "typescript",
+      "entry_kinds": [
+        "exported-symbol"
+      ]
+    },
+    {
+      "id": "security",
+      "path": "src/security",
+      "owner_role": "standards-review",
+      "responsibility": "role command and changed-path policy enforcement",
+      "language": "typescript",
+      "entry_kinds": [
+        "exported-symbol"
+      ]
+    },
+    {
+      "id": "git",
+      "path": "src/git",
+      "owner_role": "git-operator",
+      "responsibility": "Git worktree, branch and integration operations",
+      "language": "typescript",
+      "entry_kinds": [
+        "exported-symbol"
+      ]
+    },
+    {
+      "id": "context",
+      "path": "src/context",
+      "owner_role": "file-explorer",
+      "responsibility": "navigation index validation, rendering and lookup",
+      "language": "typescript",
+      "entry_kinds": [
+        "exported-symbol"
+      ]
+    },
+    {
+      "id": "profile",
+      "path": "src/profile",
+      "owner_role": "task-worker",
+      "responsibility": "profile loading and activation data",
+      "language": "typescript",
+      "entry_kinds": [
+        "exported-symbol"
+      ]
+    },
+    {
+      "id": "utils",
+      "path": "src/utils",
+      "owner_role": "backend",
+      "responsibility": "shared filesystem, path, markdown, hashing and schema utilities",
+      "language": "typescript",
+      "entry_kinds": [
+        "exported-symbol"
+      ]
+    },
+    {
+      "id": "generated",
+      "path": "src/generated",
+      "owner_role": "standards-review",
+      "responsibility": "generated TypeScript declarations from authoritative schemas",
+      "language": "typescript",
+      "entry_kinds": [
+        "generated-declaration"
+      ]
+    }
+  ],
+  "features": [
+    {
+      "id": "cli",
+      "name": "CLI",
+      "aliases": [
+        "command line"
+      ],
+      "module_root": "src",
+      "entries": [
+        "src/cli.ts"
+      ],
+      "symbols": [],
+      "related_files": [],
+      "tests": [
+        "tests/integration/navigation-refresh-cli.test.ts",
+        "tests/integration/profile-cli.test.ts"
+      ],
+      "depends_on": [
+        "install",
+        "workflow",
+        "context-navigation",
+        "runtime",
+        "profile-loading"
+      ],
+      "relations": [],
+      "owner_role": "task-worker",
+      "responsibility": "top-level command registration and dispatch",
+      "read_scope": [
+        "src/cli.ts",
+        "tests/integration/navigation-refresh-cli.test.ts",
+        "tests/integration/profile-cli.test.ts"
+      ],
+      "shared_entry": true
+    },
+    {
+      "id": "install",
+      "name": "Installation",
+      "aliases": [
+        "host installation",
+        "project init"
+      ],
+      "module_root": "install",
+      "entries": [
+        "src/install/index.ts",
+        "src/install/render.ts"
+      ],
+      "symbols": [
+        {
+          "file": "src/install/index.ts",
+          "name": "install",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/install/index.ts",
+          "name": "initializeProject",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/install/render.ts",
+          "name": "renderHost",
+          "kind": "function",
+          "visibility": "public"
+        }
+      ],
+      "related_files": [],
+      "tests": [
+        "tests/integration/profile-cli.test.ts"
+      ],
+      "depends_on": [
+        "profile-loading"
+      ],
+      "relations": [],
+      "owner_role": "task-worker",
+      "responsibility": "install and remove host integrations and initialize projects",
+      "read_scope": [
+        "src/install/index.ts",
+        "src/install/render.ts",
+        "tests/integration/profile-cli.test.ts"
+      ],
+      "shared_entry": false
+    },
+    {
+      "id": "workflow",
+      "name": "Workflow",
+      "aliases": [
+        "plan",
+        "DAG"
+      ],
+      "module_root": "workflow",
+      "entries": [
+        "src/workflow/parse.ts",
+        "src/workflow/digest.ts",
+        "src/workflow/generate.ts",
+        "src/workflow/validate.ts",
+        "src/workflow/approval.ts",
+        "src/workflow/types.ts"
+      ],
+      "symbols": [
+        {
+          "file": "src/workflow/parse.ts",
+          "name": "readPlan",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workflow/generate.ts",
+          "name": "generateWorkflow",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workflow/generate.ts",
+          "name": "applyAdjustments",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workflow/validate.ts",
+          "name": "validateWorkflow",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workflow/approval.ts",
+          "name": "approveWorkflow",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workflow/types.ts",
+          "name": "PlanDocument",
+          "kind": "interface",
+          "visibility": "public"
+        }
+      ],
+      "related_files": [],
+      "tests": [
+        "tests/unit/frozen-protocol.test.ts",
+        "tests/integration/runtime.test.ts",
+        "tests/integration/gates-checkpoint.test.ts"
+      ],
+      "depends_on": [
+        "shared-utilities",
+        "generated-schemas"
+      ],
+      "relations": [],
+      "owner_role": "task-worker",
+      "responsibility": "parse frozen plans and produce validated approved workflows",
+      "read_scope": [
+        "src/workflow/parse.ts",
+        "src/workflow/digest.ts",
+        "src/workflow/generate.ts",
+        "src/workflow/validate.ts",
+        "src/workflow/approval.ts",
+        "src/workflow/types.ts",
+        "tests/unit/frozen-protocol.test.ts",
+        "tests/integration/runtime.test.ts",
+        "tests/integration/gates-checkpoint.test.ts"
+      ],
+      "shared_entry": false
+    },
+    {
+      "id": "runtime",
+      "name": "Runtime",
+      "aliases": [
+        "run lifecycle",
+        "checkpoint"
+      ],
+      "module_root": "runtime",
+      "entries": [
+        "src/runtime/runner.ts",
+        "src/runtime/store.ts",
+        "src/runtime/state.ts"
+      ],
+      "symbols": [
+        {
+          "file": "src/runtime/runner.ts",
+          "name": "startRun",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/runner.ts",
+          "name": "resumeRun",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/store.ts",
+          "name": "RunRecord",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/state.ts",
+          "name": "assertTransition",
+          "kind": "function",
+          "visibility": "public"
+        }
+      ],
+      "related_files": [],
+      "tests": [
+        "tests/integration/runtime.test.ts",
+        "tests/integration/gates-checkpoint.test.ts"
+      ],
+      "depends_on": [
+        "workflow",
+        "git",
+        "security"
+      ],
+      "relations": [],
+      "owner_role": "backend",
+      "responsibility": "start, resume, cancel, checkpoint and clean up runs",
+      "read_scope": [
+        "src/runtime/runner.ts",
+        "src/runtime/store.ts",
+        "src/runtime/state.ts",
+        "tests/integration/runtime.test.ts",
+        "tests/integration/gates-checkpoint.test.ts"
+      ],
+      "shared_entry": false
+    },
+    {
+      "id": "adapters",
+      "name": "Adapters",
+      "aliases": [
+        "host adapter",
+        "process"
+      ],
+      "module_root": "adapters",
+      "entries": [
+        "src/adapters/process.ts"
+      ],
+      "symbols": [
+        {
+          "file": "src/adapters/process.ts",
+          "name": "ProcessOptions",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/adapters/process.ts",
+          "name": "invokeHost",
+          "kind": "function",
+          "visibility": "public"
+        }
+      ],
+      "related_files": [],
+      "tests": [
+        "tests/integration/adapter.test.ts"
+      ],
+      "depends_on": [
+        "generated-schemas"
+      ],
+      "relations": [],
+      "owner_role": "backend",
+      "responsibility": "invoke configured native hosts and parse result envelopes",
+      "read_scope": [
+        "src/adapters/process.ts",
+        "tests/integration/adapter.test.ts"
+      ],
+      "shared_entry": false
+    },
+    {
+      "id": "security",
+      "name": "Security Policy",
+      "aliases": [
+        "policy",
+        "scope validation"
+      ],
+      "module_root": "security",
+      "entries": [
+        "src/security/policy.ts"
+      ],
+      "symbols": [
+        {
+          "file": "src/security/policy.ts",
+          "name": "validateRoleCommand",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/security/policy.ts",
+          "name": "validateChangedPaths",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/security/policy.ts",
+          "name": "snapshotChanges",
+          "kind": "function",
+          "visibility": "public"
+        }
+      ],
+      "related_files": [],
+      "tests": [],
+      "depends_on": [
+        "shared-utilities"
+      ],
+      "relations": [],
+      "owner_role": "standards-review",
+      "responsibility": "enforce commands, scopes and redaction rules",
+      "read_scope": [
+        "src/security/policy.ts"
+      ],
+      "shared_entry": false
+    },
+    {
+      "id": "git",
+      "name": "Git Operations",
+      "aliases": [
+        "worktree",
+        "integration"
+      ],
+      "module_root": "git",
+      "entries": [
+        "src/git/operator.ts"
+      ],
+      "symbols": [
+        {
+          "file": "src/git/operator.ts",
+          "name": "git",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/git/operator.ts",
+          "name": "gitBaseline",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/git/operator.ts",
+          "name": "createPlanWorktree",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/git/operator.ts",
+          "name": "commitTask",
+          "kind": "function",
+          "visibility": "public"
+        }
+      ],
+      "related_files": [],
+      "tests": [
+        "tests/integration/git.test.ts",
+        "tests/integration/git-lifecycle.test.ts"
+      ],
+      "depends_on": [],
+      "relations": [],
+      "owner_role": "git-operator",
+      "responsibility": "control repository baselines, worktrees, commits and merges",
+      "read_scope": [
+        "src/git/operator.ts",
+        "tests/integration/git.test.ts",
+        "tests/integration/git-lifecycle.test.ts"
+      ],
+      "shared_entry": false
+    },
+    {
+      "id": "context-navigation",
+      "name": "Context Navigation",
+      "aliases": [
+        "navigation index",
+        "context locate"
+      ],
+      "module_root": "context",
+      "entries": [
+        "src/context/navigation.ts",
+        "src/context/validate.ts",
+        "src/context/locate.ts",
+        "src/context/fallback.ts"
+      ],
+      "symbols": [
+        {
+          "file": "src/context/navigation.ts",
+          "name": "renderNavigation",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/context/validate.ts",
+          "name": "validateContext",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/context/validate.ts",
+          "name": "refreshContext",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/context/locate.ts",
+          "name": "locateContext",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/context/fallback.ts",
+          "name": "FallbackPacket",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/context/fallback.ts",
+          "name": "FallbackAuthorization",
+          "kind": "type",
+          "visibility": "public"
+        },
+        {
+          "file": "src/context/fallback.ts",
+          "name": "authorizeFallback",
+          "kind": "function",
+          "visibility": "public"
+        }
+      ],
+      "related_files": [],
+      "tests": [
+        "tests/unit/navigation-contract.test.ts",
+        "tests/unit/navigation-semantic.test.ts",
+        "tests/integration/initial-navigation-index.test.ts",
+        "tests/integration/navigation-refresh-cli.test.ts",
+        "tests/integration/navigation-locate-cli.test.ts",
+        "tests/unit/navigation-fallback.test.ts",
+        "tests/integration/navigation-validate-cli.test.ts"
+      ],
+      "depends_on": [
+        "shared-utilities",
+        "generated-schemas"
+      ],
+      "relations": [],
+      "owner_role": "file-explorer",
+      "responsibility": "maintain and query exact source navigation metadata",
+      "read_scope": [
+        "src/context/navigation.ts",
+        "src/context/validate.ts",
+        "src/context/locate.ts",
+        "src/context/fallback.ts",
+        "tests/unit/navigation-contract.test.ts",
+        "tests/unit/navigation-semantic.test.ts",
+        "tests/integration/initial-navigation-index.test.ts",
+        "tests/integration/navigation-refresh-cli.test.ts",
+        "tests/integration/navigation-locate-cli.test.ts",
+        "tests/unit/navigation-fallback.test.ts",
+        "tests/integration/navigation-validate-cli.test.ts"
+      ],
+      "shared_entry": false
+    },
+    {
+      "id": "profile-loading",
+      "name": "Profile Loading",
+      "aliases": [
+        "profiles",
+        "active profile"
+      ],
+      "module_root": "profile",
+      "entries": [
+        "src/profile/index.ts"
+      ],
+      "symbols": [
+        {
+          "file": "src/profile/index.ts",
+          "name": "profilePath",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/profile/index.ts",
+          "name": "loadProfile",
+          "kind": "function",
+          "visibility": "public"
+        }
+      ],
+      "related_files": [],
+      "tests": [
+        "tests/integration/profile-cli.test.ts"
+      ],
+      "depends_on": [
+        "shared-utilities",
+        "generated-schemas"
+      ],
+      "relations": [],
+      "owner_role": "task-worker",
+      "responsibility": "resolve and load named host profiles",
+      "read_scope": [
+        "src/profile/index.ts",
+        "tests/integration/profile-cli.test.ts"
+      ],
+      "shared_entry": false
+    },
+    {
+      "id": "shared-utilities",
+      "name": "Shared Utilities",
+      "aliases": [
+        "filesystem",
+        "paths",
+        "hashing",
+        "frontmatter"
+      ],
+      "module_root": "utils",
+      "entries": [
+        "src/utils/frontmatter.ts",
+        "src/utils/paths.ts",
+        "src/utils/hash.ts",
+        "src/utils/fs.ts",
+        "src/utils/schema.ts"
+      ],
+      "symbols": [
+        {
+          "file": "src/utils/frontmatter.ts",
+          "name": "parseMarkdown",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/utils/paths.ts",
+          "name": "normalizeScope",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/utils/hash.ts",
+          "name": "objectDigest",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/utils/fs.ts",
+          "name": "atomicWrite",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/utils/schema.ts",
+          "name": "schemaValidator",
+          "kind": "function",
+          "visibility": "public"
+        }
+      ],
+      "related_files": [],
+      "tests": [
+        "tests/unit/utils.test.ts"
+      ],
+      "depends_on": [],
+      "relations": [],
+      "owner_role": "backend",
+      "responsibility": "reusable parsing, path, digest, filesystem and schema helpers",
+      "read_scope": [
+        "src/utils/frontmatter.ts",
+        "src/utils/paths.ts",
+        "src/utils/hash.ts",
+        "src/utils/fs.ts",
+        "src/utils/schema.ts",
+        "tests/unit/utils.test.ts"
+      ],
+      "shared_entry": false
+    },
+    {
+      "id": "generated-schemas",
+      "name": "Generated Schemas",
+      "aliases": [
+        "generated types",
+        "schema declarations"
+      ],
+      "module_root": "generated",
+      "entries": [
+        "src/generated/result.schema.d.ts",
+        "src/generated/workflow.schema.d.ts",
+        "src/generated/receipt.schema.d.ts",
+        "src/generated/packet.schema.d.ts",
+        "src/generated/navigation.schema.d.ts",
+        "src/generated/profile.schema.d.ts",
+        "src/generated/adjustment.schema.d.ts"
+      ],
+      "symbols": [
+        {
+          "file": "src/generated/result.schema.d.ts",
+          "name": "AgentResult",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/generated/workflow.schema.d.ts",
+          "name": "Workflow",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/generated/navigation.schema.d.ts",
+          "name": "NavigationIndex",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/generated/profile.schema.d.ts",
+          "name": "Profile",
+          "kind": "interface",
+          "visibility": "public"
+        }
+      ],
+      "related_files": [],
+      "tests": [],
+      "depends_on": [],
+      "relations": [],
+      "owner_role": "standards-review",
+      "responsibility": "TypeScript declarations generated from authoritative JSON schemas",
+      "read_scope": [
+        "src/generated/result.schema.d.ts",
+        "src/generated/workflow.schema.d.ts",
+        "src/generated/receipt.schema.d.ts",
+        "src/generated/packet.schema.d.ts",
+        "src/generated/navigation.schema.d.ts",
+        "src/generated/profile.schema.d.ts",
+        "src/generated/adjustment.schema.d.ts"
+      ],
+      "shared_entry": false
+    }
+  ]
+}
