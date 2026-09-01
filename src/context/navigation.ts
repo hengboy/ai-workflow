@@ -28,9 +28,18 @@ export interface NavigationFeature {
   shared_entry: boolean;
 }
 
+export interface NavigationModuleRoot {
+  id: string;
+  path: string;
+  owner_role: string;
+  responsibility: string;
+  language: string;
+  entry_kinds: string[];
+}
+
 export interface NavigationIndex {
   version: 1;
-  module_roots: Array<{ id: string; path: string; owner_role: string; responsibility: string; language: string; entry_kinds: string[] }>;
+  module_roots: NavigationModuleRoot[];
   features: NavigationFeature[];
 }
 

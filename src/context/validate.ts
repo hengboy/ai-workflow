@@ -1,8 +1,9 @@
 import { lstat, readFile, realpath } from 'node:fs/promises';
 import { isAbsolute, join, relative, resolve } from 'node:path';
+import ts from 'typescript';
 import { atomicWrite, exists } from '../utils/fs.js';
 import { formatSchemaErrors, schemaValidator } from '../utils/schema.js';
-import { renderNavigation, type NavigationIndex } from './navigation.js';
+import { renderNavigation, type NavigationIndex, type NavigationModuleRoot } from './navigation.js';
 
 export interface ContextValidation { valid: boolean; errors: string[] }
 
@@ -28,6 +29,63 @@ async function validateFile(project: string, realProject: string, path: string, 
   }
 }
 
+function rootFor(index: NavigationIndex, path: string): NavigationModuleRoot | undefined {
+  return index.module_roots.filter((root) => path.startsWith(`${root.path}/`)).sort((left, right) => right.path.length - left.path.length)[0];
+}
+
+function declarations(source: ts.SourceFile): Map<string, Array<{ kind: string; exported: boolean }>> {
+  const result = new Map<string, Array<{ kind: string; exported: boolean }>>();
+  const add = (name: string | undefined, kind: string, exported: boolean): void => {
+    if (!name) return;
+    const values = result.get(name) ?? [];
+    values.push({ kind, exported });
+    result.set(name, values);
+  };
+  const exported = (node: ts.Node): boolean => ts.canHaveModifiers(node) && Boolean(ts.getModifiers(node)?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword));
+  for (const statement of source.statements) {
+    const visibility = exported(statement);
+    if (ts.isFunctionDeclaration(statement)) add(statement.name?.text, 'function', visibility);
+    else if (ts.isClassDeclaration(statement)) add(statement.name?.text, 'class', visibility);
+    else if (ts.isInterfaceDeclaration(statement)) add(statement.name.text, 'interface', visibility);
+    else if (ts.isEnumDeclaration(statement)) add(statement.name.text, 'enum', visibility);
+    else if (ts.isTypeAliasDeclaration(statement)) add(statement.name.text, 'type', visibility);
+    else if (ts.isVariableStatement(statement)) for (const declaration of statement.declarationList.declarations) if (ts.isIdentifier(declaration.name)) add(declaration.name.text, 'variable', visibility);
+  }
+  return result;
+}
+
+function relationReference(value: string): { file: string; name: string } | undefined {
+  const separator = value.lastIndexOf('#');
+  if (separator <= 0 || separator === value.length - 1) return undefined;
+  return { file: value.slice(0, separator), name: value.slice(separator + 1) };
+}
+
+async function validateTypeScriptSymbol(project: string, file: string, name: string, kind: string | undefined, visibility: 'public' | 'private' | undefined, errors: string[]): Promise<void> {
+  const source = ts.createSourceFile(file, await readFile(join(project, file), 'utf8'), ts.ScriptTarget.Latest, true);
+  const candidates = declarations(source).get(name) ?? [];
+  const exists = candidates.some((candidate) => (!kind || candidate.kind === kind) && (visibility !== 'public' || candidate.exported));
+  if (!exists) errors.push(`Navigation index is stale: ${file} no longer contains ${name}`);
+}
+
+async function validateSemantics(project: string, index: NavigationIndex, errors: string[]): Promise<void> {
+  for (const root of index.module_roots) if (root.language !== 'typescript') errors.push(`Unsupported navigation language parser: ${root.language}`);
+  if (errors.length) return;
+  for (const feature of index.features) {
+    for (const symbol of feature.symbols) {
+      const root = rootFor(index, symbol.file);
+      if (!root) { errors.push(`Navigation index is invalid: ${symbol.file} is outside a module root`); continue; }
+      await validateTypeScriptSymbol(project, symbol.file, symbol.name, symbol.kind, symbol.visibility, errors);
+    }
+    for (const relation of feature.relations) for (const endpoint of [relation.from, relation.to]) {
+      const reference = relationReference(endpoint);
+      if (!reference) { errors.push(`Navigation index is invalid: relation endpoint ${endpoint}`); continue; }
+      const root = rootFor(index, reference.file);
+      if (!root) { errors.push(`Navigation index is invalid: ${reference.file} is outside a module root`); continue; }
+      await validateTypeScriptSymbol(project, reference.file, reference.name, undefined, 'public', errors);
+    }
+  }
+}
+
 async function validateIndex(project: string): Promise<{ errors: string[]; index?: NavigationIndex }> {
   const root = resolve(project); const realRoot = await realpath(root); const memoryPath = join(root, 'MEMORY.md'); const jsonPath = join(root, '.ai-workflow/index/navigation.json'); const markdownPath = join(root, '.ai-workflow/index/navigation.md'); const errors: string[] = [];
   if (await exists(memoryPath) && !/^#\s+/m.test(await readFile(memoryPath, 'utf8'))) errors.push('MEMORY.md needs a title');
@@ -49,6 +107,7 @@ async function validateIndex(project: string): Promise<{ errors: string[]; index
   for (const feature of index.features) {
     for (const path of [...feature.entries, ...feature.related_files, ...feature.tests, ...feature.read_scope, ...feature.symbols.map((symbol) => symbol.file)]) await validateFile(root, realRoot, path, errors);
   }
+  if (!errors.length) await validateSemantics(root, index, errors);
   return errors.length ? { errors } : { errors, index };
 }
 
