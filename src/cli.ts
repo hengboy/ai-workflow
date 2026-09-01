@@ -9,8 +9,9 @@ import { approveWorkflow } from './workflow/approval.js';
 import { activateProfile, install, uninstall, initializeProject } from './install/index.js';
 import { writeJson } from './utils/fs.js';
 import { formatSchemaErrors, schemaValidator } from './utils/schema.js';
-import { refreshContext, validateContext, verifyNavigation } from './context/validate.js';
+import { createNavigationCandidate, refreshContext, validateContext, verifyNavigation } from './context/validate.js';
 import { locateContext } from './context/locate.js';
+import { discoverFallback, type FallbackPacket } from './context/fallback.js';
 import { cancelRun, cleanupRun, resumeRun, startRun } from './runtime/runner.js';
 import { loadRun } from './runtime/store.js';
 import { readPlan } from './workflow/parse.js';
@@ -43,8 +44,10 @@ plan.command('validate').requiredOption('--plan <directory>').action(async ({ pl
 });
 
 const context = program.command('context'); context.command('validate').requiredOption('--project <project>').option('--feature <id>').option('--all').action(async ({ project, feature, all }: { project: string; feature?: string; all?: boolean }) => { if (feature && all) throw new Error('Use either --feature or --all'); const result = feature ? await verifyNavigation(resolve(project), feature) : await validateContext(resolve(project)); print(result); if (!result.valid) process.exitCode = 1; });
-context.command('refresh').requiredOption('--project <project>').requiredOption('--write').action(async ({ project }: { project: string }) => print(await refreshContext(resolve(project))));
-context.command('locate').requiredOption('--project <project>').option('--feature <id>').option('--symbol <symbol>').option('--task <id>').option('--verify').action(async (options: { project: string; feature?: string; symbol?: string; task?: string; verify?: boolean }) => print(await locateContext(resolve(options.project), options)));
+context.command('refresh').requiredOption('--project <project>').requiredOption('--candidate <path>').requiredOption('--write').action(async ({ project, candidate }: { project: string; candidate: string }) => print(await refreshContext(resolve(project), candidate)));
+context.command('candidate').requiredOption('--project <project>').requiredOption('--output <path>').requiredOption('--task-target <id>').requiredOption('--root <path...>').requiredOption('--path <path...>').action(async ({ project, output, taskTarget, root, path }: { project: string; output: string; taskTarget: string; root: string[]; path: string[] }) => { await createNavigationCandidate(resolve(project), taskTarget, root, path, output); print({ candidate: output }); });
+context.command('locate').requiredOption('--project <project>').option('--feature <id>').option('--symbol <symbol>').option('--task <id>').option('--root <path...>').option('--maintain-index').option('--depth <count>', 'follow direct relations to this depth', Number).option('--verify').action(async (options: { project: string; feature?: string; symbol?: string; task?: string; root?: string[]; maintainIndex?: boolean; depth?: number; verify?: boolean }) => print(await locateContext(resolve(options.project), { ...options, ...(options.root ? { roots: options.root } : {}), ...(options.maintainIndex !== undefined ? { maintenanceAuthorized: options.maintainIndex } : {}) })));
+context.command('discover').requiredOption('--project <project>').requiredOption('--packet <path>').action(async ({ project, packet }: { project: string; packet: string }) => print(await discoverFallback(resolve(project), await jsonFile<FallbackPacket>(packet))));
 const run = program.command('run');
 run.command('start').requiredOption('--workflow <path>').requiredOption('--host <host>').option('--project <project>').action(async (options: { workflow: string; host: string; project?: string }) => print(await startRun({ workflowPath: options.workflow, host: options.host, ...(options.project ? { project: options.project } : {}) })));
 run.command('status').argument('<runId>').option('--project <project>', '.').action(async (runId: string, { project }: { project: string }) => print(await loadRun(resolve(project), runId)));
