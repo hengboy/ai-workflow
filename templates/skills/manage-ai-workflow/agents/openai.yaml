@@ -1,4 +1,0 @@
-interface:
-  display_name: "Manage AI Workflow"
-  short_description: "Initialize or safely update an ai-workflow project."
-  default_prompt: "Use $manage-ai-workflow to initialize or update ai-workflow for this project."

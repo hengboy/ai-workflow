@@ -1,9 +1,9 @@
 ---
-name: manage-ai-workflow
+name: setup-ai-workflow
 description: Initialize ai-workflow in a project or safely update its unmodified managed templates. Use when a user asks to set up, initialize, update, or upgrade ai-workflow for a project.
 ---
 
-# Manage AI Workflow
+# Setup AI Workflow
 
 ## Outcome
 
