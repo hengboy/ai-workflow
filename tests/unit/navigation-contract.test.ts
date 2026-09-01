@@ -76,4 +76,16 @@ describe('navigation index contract', () => {
     expect(result.valid).toBe(false);
     expect(result.errors).toContainEqual(expect.stringMatching(/write_scope/i));
   });
+
+  it("requires read scope to cover the feature's exact read order", async () => {
+    const project = await projectWithNavigation({
+      ...navigation,
+      features: [{ ...navigation.features[0], read_scope: ['src/workflow/parse.ts'] }]
+    });
+
+    const result = await validateContext(project);
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain('workflow-parsing read_scope must include tests/unit/navigation-contract.test.ts');
+  });
 });

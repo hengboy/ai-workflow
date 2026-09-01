@@ -67,10 +67,11 @@ async function validateTypeScriptSymbol(project: string, file: string, name: str
   if (!exists) errors.push(`Navigation index is stale: ${file} no longer contains ${name}`);
 }
 
-async function validateSemantics(project: string, index: NavigationIndex, errors: string[]): Promise<void> {
-  for (const root of index.module_roots) if (root.language !== 'typescript') errors.push(`Unsupported navigation language parser: ${root.language}`);
+async function validateSemantics(project: string, index: NavigationIndex, features: NavigationIndex['features'], errors: string[]): Promise<void> {
+  const usedRoots = new Set(features.map((feature) => feature.module_root));
+  for (const root of index.module_roots) if (usedRoots.has(root.id) && root.language !== 'typescript') errors.push(`Unsupported navigation language parser: ${root.language}`);
   if (errors.length) return;
-  for (const feature of index.features) {
+  for (const feature of features) {
     for (const symbol of feature.symbols) {
       const root = rootFor(index, symbol.file);
       if (!root) { errors.push(`Navigation index is invalid: ${symbol.file} is outside a module root`); continue; }
@@ -86,7 +87,7 @@ async function validateSemantics(project: string, index: NavigationIndex, errors
   }
 }
 
-async function validateIndex(project: string): Promise<{ errors: string[]; index?: NavigationIndex }> {
+async function validateIndex(project: string, featureIds?: Set<string>): Promise<{ errors: string[]; index?: NavigationIndex }> {
   const root = resolve(project); const realRoot = await realpath(root); const memoryPath = join(root, 'MEMORY.md'); const jsonPath = join(root, '.ai-workflow/index/navigation.json'); const markdownPath = join(root, '.ai-workflow/index/navigation.md'); const errors: string[] = [];
   if (await exists(memoryPath) && !/^#\s+/m.test(await readFile(memoryPath, 'utf8'))) errors.push('MEMORY.md needs a title');
   if (!(await exists(jsonPath))) errors.push('Missing .ai-workflow/index/navigation.json');
@@ -101,13 +102,15 @@ async function validateIndex(project: string): Promise<{ errors: string[]; index
   for (const feature of raw.features ?? []) if ('write_scope' in feature) errors.push('Navigation features cannot declare write_scope');
   if (errors.length) return { errors };
 
+  const features = featureIds ? index.features.filter((feature) => featureIds.has(feature.id)) : index.features;
   for (const rootEntry of index.module_roots) {
     if (!isExactPath(rootEntry.path)) errors.push(`${rootEntry.path}: expected a concrete module root`);
   }
-  for (const feature of index.features) {
+  for (const feature of features) {
     for (const path of [...feature.entries, ...feature.related_files, ...feature.tests, ...feature.read_scope, ...feature.symbols.map((symbol) => symbol.file)]) await validateFile(root, realRoot, path, errors);
+    for (const path of [...feature.entries, ...feature.related_files, ...feature.tests]) if (!feature.read_scope.includes(path)) errors.push(`${feature.id} read_scope must include ${path}`);
   }
-  if (!errors.length) await validateSemantics(root, index, errors);
+  if (!errors.length) await validateSemantics(root, index, features, errors);
   return errors.length ? { errors } : { errors, index };
 }
 
@@ -117,6 +120,11 @@ export async function validateContext(project: string): Promise<ContextValidatio
   const markdown = await readFile(join(resolve(project), '.ai-workflow/index/navigation.md'), 'utf8');
   if (markdown !== renderNavigation(result.index)) result.errors.push('navigation.md does not match navigation.json');
   return { valid: result.errors.length === 0, errors: result.errors };
+}
+
+export async function verifyNavigation(project: string, featureId: string): Promise<ContextValidation> {
+  const result = await validateIndex(project, new Set([featureId]));
+  return { valid: Boolean(result.index), errors: result.errors };
 }
 
 export async function refreshContext(project: string): Promise<{ updated: string[] }> {
