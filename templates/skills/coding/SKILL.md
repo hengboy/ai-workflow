@@ -78,6 +78,8 @@ The fixed lifecycle is:
 10. at most one aggregate repair, followed by affected tests without a second review;
 11. non-fast-forward integration into the starting branch and owned-worktree cleanup.
 
+Git Operator creates every plan and task worktree under `<project>/.worktrees`. Before creating the first worktree, ensure `.gitignore` contains `.worktrees/`; add that exact ignore entry when absent.
+
 ## Role and safety invariants
 
 - File Explorer exclusively searches, traverses, resolves entries/call chains and maintains context files.
