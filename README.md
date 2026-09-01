@@ -26,12 +26,15 @@ ai-workflow workflow generate --plan .ai-workflow/plans/<planId> --host codex
 ai-workflow workflow validate <workflow.json>
 ai-workflow workflow explain <workflow.json>
 ai-workflow workflow approve <workflow.json>
+ai-workflow plan validate --plan .ai-workflow/plans/<planId>
 ai-workflow run start --workflow <workflow.json> --host codex --project .
 ai-workflow run status|resume|cancel|cleanup <runId> --project .
 ai-workflow context validate --project .
 ```
 
 `workflow generate --adjustments-stdin` reads a structured adjustment document from stdin. Natural-language feedback is converted to that schema by the installed coding skill; the CLI deliberately refuses unbounded natural-language mutation.
+
+Frozen `spec.md` and `plan.md` files use a shared digest protocol: each file hashes its exact UTF-8 bytes with only its own frontmatter `digest` line replaced by `digest: ""`; the workflow input digest combines the two resulting digests as stable JSON. Use `ai-workflow plan validate --plan <directory>` after planning and before task splitting or coding.
 
 ## Profiles
 

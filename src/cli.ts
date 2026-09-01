@@ -12,6 +12,7 @@ import { formatSchemaErrors, schemaValidator } from './utils/schema.js';
 import { validateContext, updateContext } from './context/validate.js';
 import { cancelRun, cleanupRun, resumeRun, startRun } from './runtime/runner.js';
 import { loadRun } from './runtime/store.js';
+import { readPlan } from './workflow/parse.js';
 
 const hosts = ['codex', 'claude', 'opencode'] as const;
 function hostList(value: string): Host[] { if (value === 'all') return [...hosts]; if (!hosts.includes(value as Host)) throw new Error(`Invalid host: ${value}`); return [value as Host]; }
@@ -33,6 +34,12 @@ workflow.command('generate').requiredOption('--plan <directory>').requiredOption
 workflow.command('validate').argument('<workflow>').action(async (path: string) => { const result = await validateWorkflow(await jsonFile(path)); print(result); if (!result.valid) process.exitCode = 1; });
 workflow.command('explain').argument('<workflow>').action(async (path: string) => print(explainWorkflow(await jsonFile<Workflow>(path))));
 workflow.command('approve').argument('<workflow>').option('--project <project>', '.').action(async (path: string, { project }: { project: string }) => print(await approveWorkflow(resolve(path), resolve(project))));
+
+const plan = program.command('plan');
+plan.command('validate').requiredOption('--plan <directory>').action(async ({ plan: directory }: { plan: string }) => {
+  const document = await readPlan(resolve(directory));
+  print({ valid: true, plan_id: document.planId, digests: { spec: document.specDigest, plan: document.planDigest, combined: document.digest } });
+});
 
 const context = program.command('context'); context.command('validate').requiredOption('--project <project>').action(async ({ project }: { project: string }) => { const result = await validateContext(resolve(project)); print(result); if (!result.valid) process.exitCode = 1; });
 context.command('update').requiredOption('--project <project>').requiredOption('--memory <file>').requiredOption('--navigation <file>').action(async ({ project, memory, navigation }: { project: string; memory: string; navigation: string }) => print(await updateContext(resolve(project), { memory: await readFile(resolve(memory), 'utf8'), navigation: await readFile(resolve(navigation), 'utf8') })));

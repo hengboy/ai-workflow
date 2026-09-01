@@ -24,6 +24,12 @@ describe('native prompt contracts', () => {
     const reviewer = await readFile(packagePath('templates', 'agents', 'spec-review.md'), 'utf8');
     expect(reviewer).toMatch(/must not invoke Spec Review a second time/i);
   });
+  it('keeps approved planning drafts out of temporary directories while allowing digest writes in the final plan directory', async () => {
+    const text = await readFile(packagePath('templates', 'skills', 'planning', 'SKILL.md'), 'utf8');
+    expect(text).toMatch(/draft both documents in memory/i);
+    expect(text).toMatch(/must not write.*temporary|不得写入.*临时目录/i);
+    expect(text).toMatch(/spec\.md.*plan\.md.*\.ai-workflow\/plans.*plan id.*digest|\.ai-workflow\/plans.*plan id.*spec\.md.*plan\.md.*digest/is);
+  });
   it('installs a message-only commit skill and routes every Git Operator commit through it', async () => {
     const messageSkill = await readFile(packagePath('templates', 'skills', 'git-message', 'SKILL.md'), 'utf8');
     expect(messageSkill).toMatch(/^name: git-message$/m);
@@ -70,6 +76,18 @@ describe('native prompt contracts', () => {
       expect(contents).toContain(title);
       expect(contents).toMatch(/## Example/i);
       expect(await readFile(join(skillRoot, skill, 'SKILL.md'), 'utf8')).toContain(`references/${file}`);
+    }
+  });
+  it('documents the shared frozen-plan digest protocol in all lifecycle skills', async () => {
+    const skillRoot = packagePath('templates', 'skills');
+    const digest = await readFile(join(skillRoot, 'planning', 'references', 'digest.md'), 'utf8');
+    expect(digest).toContain('digest: ""');
+    expect(digest).toMatch(/UTF-8/);
+    expect(digest).toMatch(/sha-?256/i);
+    for (const skill of ['planning', 'plan-to-tasks', 'coding']) {
+      const contents = await readFile(join(skillRoot, skill, 'SKILL.md'), 'utf8');
+      expect(contents).toMatch(/frozen-plan digest protocol/i);
+      expect(contents).toMatch(/plan validate/);
     }
   });
 });

@@ -13,6 +13,7 @@ Convert one frozen spec/plan pair into an approved, immutable task DAG that codi
 
 - `spec.md` and `plan.md` exist in the same plan directory.
 - Both have `status: frozen`, matching `plan_id`, counts and valid digests.
+- Validate the pair with `ai-workflow plan validate --plan <directory>`; use the frozen-plan digest protocol from the planning skill as the source of truth.
 - The plan identifies role responsibility, validation and bounded implementation scope.
 
 Stop and report the exact defect if any precondition fails. Never repair or rewrite frozen inputs.
@@ -42,6 +43,8 @@ Before previewing, verify:
 - each task can produce one coherent Git commit;
 - tests prove its assigned acceptance criteria;
 - screenshot-producing tests name the plan's `screenshot/` directory.
+
+The frozen-plan digest protocol is shared with planning and coding: `ai-workflow plan validate --plan <directory>` must pass before previewing tasks.
 
 ## Approval preview
 

@@ -1,7 +1,7 @@
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { parseMarkdown } from '../utils/frontmatter.js';
-import { objectDigest } from '../utils/hash.js';
+import { frozenDocumentDigest, frozenPlanDigest } from './digest.js';
 import type { PlanDocument, TaskDocument } from './types.js';
 
 function listStrings(value: unknown): string[] { return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []; }
@@ -16,7 +16,11 @@ export async function readPlan(directory: string): Promise<PlanDocument> {
   const requirements = [...listStrings(specDoc.attributes.requirements), ...extractHeadings(specDoc.body, /^###?\s*(REQ-\d+)/gm)];
   const acceptanceCriteria = [...listStrings(specDoc.attributes.acceptance_criteria), ...extractHeadings(specDoc.body, /^###?\s*(AC-\d+)/gm)];
   const declaredReqs = Number(specDoc.attributes.requirement_count); const declaredAcs = Number(specDoc.attributes.acceptance_criteria_count); if (Number.isFinite(declaredReqs) && declaredReqs !== requirements.length) throw new Error(`Requirement count mismatch: declared ${declaredReqs}, found ${requirements.length}`); if (Number.isFinite(declaredAcs) && declaredAcs !== acceptanceCriteria.length) throw new Error(`Acceptance criteria count mismatch: declared ${declaredAcs}, found ${acceptanceCriteria.length}`);
-  return { planId, status: 'frozen', requirements, acceptanceCriteria, digest: objectDigest({ spec, plan }), directory };
+  const specDigest = frozenDocumentDigest(spec); const planDigest = frozenDocumentDigest(plan);
+  const declaredSpecDigest = stringValue(specDoc.attributes.digest); const declaredPlanDigest = stringValue(planDoc.attributes.digest);
+  if (!/^sha256:[0-9a-f]{64}$/.test(declaredSpecDigest) || declaredSpecDigest !== specDigest) throw new Error(`spec.md digest mismatch: declared ${declaredSpecDigest || '<missing>'}, computed ${specDigest}`);
+  if (!/^sha256:[0-9a-f]{64}$/.test(declaredPlanDigest) || declaredPlanDigest !== planDigest) throw new Error(`plan.md digest mismatch: declared ${declaredPlanDigest || '<missing>'}, computed ${planDigest}`);
+  return { planId, status: 'frozen', requirements, acceptanceCriteria, specDigest, planDigest, digest: frozenPlanDigest(spec, plan), directory };
 }
 
 function extractHeadings(body: string, pattern: RegExp): string[] { return [...body.matchAll(pattern)].map((match) => match[1] ?? ''); }

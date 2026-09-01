@@ -13,6 +13,7 @@ Generate, confirm and execute a reproducible JSON DAG from one frozen plan. Use 
 
 - The project is initialized and Git state is available for baseline inspection.
 - Frozen `spec.md` and `plan.md` share a valid plan ID and digests.
+- Validate them with `ai-workflow plan validate --plan <directory>`; planning, task splitting, workflow generation and run-time checks use the same frozen-plan digest protocol.
 - Task files, when present, are frozen and cover the plan. Without tasks, generate one plan-wide Task Worker node.
 - Host is exactly one of `codex`, `claude`, or `opencode`.
 
@@ -32,6 +33,8 @@ Run `workflow generate` and deterministically derive:
 - frozen input digests.
 
 Validate public JSON Schema, unique IDs, dependency existence, acyclicity, role permissions and scope conflicts before showing a candidate.
+
+The frozen-plan digest protocol is shared with planning and plan-to-tasks. A run must reject any changed or stale `spec.md` or `plan.md` before execution.
 
 ## User review and adjustments
 

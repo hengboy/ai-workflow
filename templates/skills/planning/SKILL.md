@@ -64,10 +64,10 @@ Material user changes invalidate the preview and require a new complete preview.
 
 After approval:
 
-1. Draft both documents in memory.
+1. Draft both documents in memory. You must not write drafts, snapshots or any other planning artifacts to a system temporary directory (or any temporary path outside the plan directory). If SHA-256 calculation requires filesystem input, write `spec.md` and `plan.md` directly under `.ai-workflow/plans/<planId>/`, re-read them there for the digest, and then make any required content or frontmatter updates in that same plan directory before freezing; never use a temporary directory as an intermediate location.
 2. Ask Spec Review exactly once to check coverage, testability, contradictions, read/write bounds, sequencing, rollback and role assignment.
 3. Treat any error finding as a failed gate. Revise the draft, show the full changed inventory and obtain renewed user approval; after that repair, continue to the next step without invoking Spec Review again.
-4. Only after the single review has passed (or its findings have been repaired and accepted) write the two frozen files atomically.
+4. Only after the single review has passed (or its findings have been repaired and accepted) write the two frozen files atomically in `.ai-workflow/plans/<planId>/`. When provisional files were materialized for SHA-256 calculation, update or replace those same files in the plan directory and do not copy them through a temporary directory.
 5. Re-read both files and verify their shared plan ID, counts, frozen status and content digests.
 6. Delegate Git Operator to create one automatic local commit containing exactly the new `spec.md` and `plan.md`. Provide the approved outcome, both exact paths and the completed validation evidence; Git Operator must use `$git-message` before committing.
 
@@ -83,6 +83,10 @@ Write to `.ai-workflow/plans/<YYYYMMDD-english-slug>/`:
 - `plan.md`: every REQ/AC mapping, implementation order, exact or bounded read/write paths, checks, compatibility, rollback and responsible native role.
 
 Before drafting, read [the specification template](references/spec.md) and [the implementation plan template](references/plan.md). Preserve their contracts while replacing the illustrative example content with the approved requirements and repository-specific evidence.
+
+## Frozen-plan digest protocol
+
+Use the normative convention in [the digest protocol](references/digest.md). Write both frontmatters with `digest: ""`, calculate each file's SHA-256 over its exact UTF-8 bytes with only that digest line blanked, replace the values, and run `ai-workflow plan validate --plan <directory>` before committing. Do not invent or calculate a digest from the completed self-referential file.
 
 Both frontmatters contain `plan_id`, `status: frozen`, `created_at`, nullable `supersedes`, REQ count, AC count and a content digest. A changed frozen requirement creates a new plan ID; never edit a frozen plan in place.
 

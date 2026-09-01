@@ -5,7 +5,7 @@ created_at: "{{created_at}}"
 supersedes: null
 requirement_count: "{{requirement_count}}"
 acceptance_criteria_count: "{{acceptance_criteria_count}}"
-digest: "{{digest}}"
+digest: ""
 ---
 
 # Implementation Plan
