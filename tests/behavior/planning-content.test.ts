@@ -16,6 +16,15 @@ describe('native prompt contracts', () => {
     expect(text).toMatch(/推荐/);
     expect(text).toMatch(/解释|consequences|trade-?offs/i);
   });
+  it('gates clarification questions on core business impact and resolves routine choices independently', async () => {
+    const text = await readFile(packagePath('templates', 'skills', 'planning', 'SKILL.md'), 'utf8');
+    expect(text).toMatch(/business-relevance gate/i);
+    expect(text).toMatch(/core user workflow|domain rule|data meaning/i);
+    expect(text).toMatch(/Do not ask about naming.*file locations.*framework or library choice/is);
+    expect(text).toMatch(/Resolve low-impact.*yourself/i);
+    expect(text).toMatch(/Do not present options merely to outsource an engineering decision/i);
+    expect(text).toMatch(/stop asking questions.*complete confirmation preview/i);
+  });
   it('specifies a single spec review followed by repair without a second review', async () => {
     const text = await readFile(packagePath('templates', 'skills', 'planning', 'SKILL.md'), 'utf8');
     expect(text).toMatch(/Spec Review exactly once/i);

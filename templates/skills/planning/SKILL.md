@@ -35,6 +35,15 @@ Ask exactly one highest-priority question per turn. Pick the unanswered item who
 - invalid inputs, failures, cancellation and recovery;
 - validation layers and what must fail before implementation (RED).
 
+Apply a business-relevance gate before asking any question:
+
+- Ask only about an ambiguity that can change the product goal, actor or permission, core user workflow, domain rule or data meaning, externally observable acceptance behavior, or a user-mandated compatibility, privacy, performance or failure constraint.
+- Do not ask about naming, wording, formatting, file locations, internal API shape, framework or library choice, code organization, test style, or routine UI details unless the user explicitly constrained them or the choice changes core business behavior.
+- Resolve low-impact and implementation-level choices yourself using the repository's conventions and the simplest reasonable default. Record material assumptions in the working inventory instead of turning them into questions.
+- Do not present options merely to outsource an engineering decision. Present options only when the alternatives represent materially different business outcomes or user-visible behavior, and explain the trade-off for each.
+- For every candidate question, first check: "Can this be decided from the user's goal, repository context or normal engineering judgment?" and "Would another answer change core business behavior or acceptance evidence?" If the answer is no, decide it and continue.
+- If no unanswered ambiguity passes this gate, stop asking questions and show the complete confirmation preview.
+
 Format every clarification prompt as a numbered requirement question. Start each question with `问题 N：` (for example, `问题 1：...`, then `问题 2：...`) and increase N monotonically across the entire clarification loop, including across turns; never reset or reuse a question number. Number its options `1、2、3、4` in display order. Every option must include a short explanation of its consequences or trade-offs. Mark the recommended option prominently (for example, `**推荐：1、...**`) and explain why it is recommended. Never present an unexplained or unnumbered option.
 
 Do not bundle unrelated questions. Reflect the answer into the working inventory and surface contradictions immediately.
