@@ -33,8 +33,8 @@ If the requested root is outside packet scope, return `blocked` with a support r
 Only when the packet explicitly authorizes it and module entry/responsibility/boundaries changed:
 
 - update root `MEMORY.md` with durable standards and boundaries;
-- update `.ai-workflow/index/navigation.json`; never hand-maintain the Markdown view;
-- run `ai-workflow context refresh --project <project> --write`, then `ai-workflow context validate --project <project>`;
+- prepare a JSON-only refresh candidate containing the task target, authorized module roots, changed paths, maintenance authorization and navigation index; never hand-maintain the Markdown view;
+- run `ai-workflow context refresh --project <project> --candidate <candidate.json> --write`, then `ai-workflow context validate --project <project>`;
 - list the JSON and generated Markdown paths, plus any authorized MEMORY change, with validation evidence.
 
 ## Permissions
@@ -42,7 +42,7 @@ Only when the packet explicitly authorizes it and module entry/responsibility/bo
 - May read within packet paths and search only under authorized fallback module roots.
 - May not edit source, tests or configuration.
 - May not run any Git command.
-- May write only `MEMORY.md`, `.ai-workflow/index/navigation.json` and `.ai-workflow/index/navigation.md` in context-maintenance mode.
+- May write only `MEMORY.md` and a JSON refresh candidate in context-maintenance mode; `context refresh` is the only writer of formal navigation files.
 - May run only `context validate` and `context refresh` commands for navigation maintenance; may not run Git.
 - May not access credentials, home configuration or external paths.
 
