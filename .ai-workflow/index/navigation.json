@@ -137,7 +137,7 @@
         "profile-loading"
       ],
       "relations": [],
-      "owner_role": "task-worker",
+      "owner_role": "file-explorer",
       "responsibility": "top-level command registration and dispatch",
       "read_scope": [
         "src/cli.ts",
@@ -161,7 +161,43 @@
       "symbols": [
         {
           "file": "src/install/index.ts",
+          "name": "AgentInstallation",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/install/index.ts",
+          "name": "HostInstallation",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/install/index.ts",
+          "name": "ProfileActivationReport",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/install/index.ts",
           "name": "install",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/install/index.ts",
+          "name": "getActiveProfile",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/install/index.ts",
+          "name": "activateProfile",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/install/index.ts",
+          "name": "uninstall",
           "kind": "function",
           "visibility": "public"
         },
@@ -169,6 +205,12 @@
           "file": "src/install/index.ts",
           "name": "initializeProject",
           "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/install/render.ts",
+          "name": "RenderedFile",
+          "kind": "interface",
           "visibility": "public"
         },
         {
@@ -185,7 +227,18 @@
       "depends_on": [
         "profile-loading"
       ],
-      "relations": [],
+      "relations": [
+        {
+          "kind": "imports",
+          "from": "src/install/index.ts#install",
+          "to": "src/install/render.ts#renderHost"
+        },
+        {
+          "kind": "imports",
+          "from": "src/install/index.ts#install",
+          "to": "src/install/render.ts#RenderedFile"
+        }
+      ],
       "owner_role": "task-worker",
       "responsibility": "install and remove host integrations and initialize projects",
       "read_scope": [
@@ -204,17 +257,53 @@
       ],
       "module_root": "workflow",
       "entries": [
-        "src/workflow/parse.ts",
+        "src/workflow/approval.ts",
         "src/workflow/digest.ts",
         "src/workflow/generate.ts",
-        "src/workflow/validate.ts",
-        "src/workflow/approval.ts",
-        "src/workflow/types.ts"
+        "src/workflow/parse.ts",
+        "src/workflow/types.ts",
+        "src/workflow/validate.ts"
       ],
       "symbols": [
         {
-          "file": "src/workflow/parse.ts",
-          "name": "readPlan",
+          "file": "src/workflow/approval.ts",
+          "name": "receiptPath",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workflow/approval.ts",
+          "name": "approveWorkflow",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workflow/approval.ts",
+          "name": "verifyApproval",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workflow/digest.ts",
+          "name": "canonicalFrozenDocument",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workflow/digest.ts",
+          "name": "frozenDocumentDigest",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workflow/digest.ts",
+          "name": "frozenPlanDigest",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workflow/digest.ts",
+          "name": "renderFrozenMarkdown",
           "kind": "function",
           "visibility": "public"
         },
@@ -231,15 +320,39 @@
           "visibility": "public"
         },
         {
-          "file": "src/workflow/validate.ts",
-          "name": "validateWorkflow",
+          "file": "src/workflow/generate.ts",
+          "name": "explainWorkflow",
           "kind": "function",
           "visibility": "public"
         },
         {
-          "file": "src/workflow/approval.ts",
-          "name": "approveWorkflow",
+          "file": "src/workflow/parse.ts",
+          "name": "fixedTaskContext",
+          "kind": "variable",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workflow/parse.ts",
+          "name": "readPlan",
           "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workflow/parse.ts",
+          "name": "readTasks",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workflow/types.ts",
+          "name": "Host",
+          "kind": "type",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workflow/types.ts",
+          "name": "Role",
+          "kind": "type",
           "visibility": "public"
         },
         {
@@ -247,31 +360,137 @@
           "name": "PlanDocument",
           "kind": "interface",
           "visibility": "public"
+        },
+        {
+          "file": "src/workflow/types.ts",
+          "name": "TaskDocument",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workflow/validate.ts",
+          "name": "ValidationResult",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workflow/validate.ts",
+          "name": "validateWorkflow",
+          "kind": "function",
+          "visibility": "public"
         }
       ],
       "related_files": [],
       "tests": [
         "tests/unit/frozen-protocol.test.ts",
         "tests/integration/runtime.test.ts",
-        "tests/integration/gates-checkpoint.test.ts"
+        "tests/integration/gates-checkpoint.test.ts",
+        "tests/unit/workflow-read-scope.test.ts"
       ],
       "depends_on": [
         "shared-utilities",
         "generated-schemas"
       ],
-      "relations": [],
+      "relations": [
+        {
+          "kind": "imports",
+          "from": "src/workflow/approval.ts#approveWorkflow",
+          "to": "src/workflow/types.ts#Workflow"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workflow/approval.ts#verifyApproval",
+          "to": "src/workflow/types.ts#Workflow"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workflow/generate.ts#generateWorkflow",
+          "to": "src/workflow/types.ts#Host"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workflow/generate.ts#generateWorkflow",
+          "to": "src/workflow/types.ts#Workflow"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workflow/generate.ts#generateWorkflow",
+          "to": "src/workflow/parse.ts#readPlan"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workflow/generate.ts#generateWorkflow",
+          "to": "src/workflow/parse.ts#readTasks"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workflow/generate.ts#generateWorkflow",
+          "to": "src/workflow/parse.ts#fixedTaskContext"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workflow/generate.ts#generateWorkflow",
+          "to": "src/workflow/types.ts#Node"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workflow/generate.ts#generateWorkflow",
+          "to": "src/workflow/validate.ts#validateWorkflow"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workflow/generate.ts#applyAdjustments",
+          "to": "src/workflow/types.ts#Workflow"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workflow/generate.ts#applyAdjustments",
+          "to": "src/workflow/types.ts#Node"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workflow/generate.ts#explainWorkflow",
+          "to": "src/workflow/types.ts#Workflow"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workflow/parse.ts#readPlan",
+          "to": "src/workflow/types.ts#PlanDocument"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workflow/parse.ts#readPlan",
+          "to": "src/workflow/digest.ts#frozenDocumentDigest"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workflow/parse.ts#readPlan",
+          "to": "src/workflow/digest.ts#frozenPlanDigest"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workflow/parse.ts#readTasks",
+          "to": "src/workflow/types.ts#TaskDocument"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workflow/validate.ts#validateWorkflow",
+          "to": "src/workflow/types.ts#Workflow"
+        }
+      ],
       "owner_role": "task-worker",
       "responsibility": "parse frozen plans and produce validated approved workflows",
       "read_scope": [
-        "src/workflow/parse.ts",
+        "src/workflow/approval.ts",
         "src/workflow/digest.ts",
         "src/workflow/generate.ts",
-        "src/workflow/validate.ts",
-        "src/workflow/approval.ts",
+        "src/workflow/parse.ts",
         "src/workflow/types.ts",
+        "src/workflow/validate.ts",
         "tests/unit/frozen-protocol.test.ts",
         "tests/integration/runtime.test.ts",
-        "tests/integration/gates-checkpoint.test.ts"
+        "tests/integration/gates-checkpoint.test.ts",
+        "tests/unit/workflow-read-scope.test.ts"
       ],
       "shared_entry": false
     },
@@ -285,13 +504,31 @@
       "module_root": "runtime",
       "entries": [
         "src/runtime/runner.ts",
-        "src/runtime/store.ts",
-        "src/runtime/state.ts"
+        "src/runtime/state.ts",
+        "src/runtime/store.ts"
       ],
       "symbols": [
         {
           "file": "src/runtime/runner.ts",
+          "name": "ExecutionContext",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/runner.ts",
+          "name": "StartOptions",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/runner.ts",
           "name": "startRun",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/runner.ts",
+          "name": "cancelRun",
           "kind": "function",
           "visibility": "public"
         },
@@ -302,14 +539,74 @@
           "visibility": "public"
         },
         {
+          "file": "src/runtime/runner.ts",
+          "name": "cleanupRun",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/state.ts",
+          "name": "activeStates",
+          "kind": "variable",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/state.ts",
+          "name": "ActiveState",
+          "kind": "type",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/state.ts",
+          "name": "RunState",
+          "kind": "type",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/state.ts",
+          "name": "transitions",
+          "kind": "variable",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/state.ts",
+          "name": "assertTransition",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/store.ts",
+          "name": "NodeRecord",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/store.ts",
+          "name": "RunResources",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
           "file": "src/runtime/store.ts",
           "name": "RunRecord",
           "kind": "interface",
           "visibility": "public"
         },
         {
-          "file": "src/runtime/state.ts",
-          "name": "assertTransition",
+          "file": "src/runtime/store.ts",
+          "name": "runDirectory",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/store.ts",
+          "name": "saveRun",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/store.ts",
+          "name": "loadRun",
           "kind": "function",
           "visibility": "public"
         }
@@ -324,13 +621,54 @@
         "git",
         "security"
       ],
-      "relations": [],
+      "relations": [
+        {
+          "kind": "imports",
+          "from": "src/runtime/runner.ts#startRun",
+          "to": "src/runtime/store.ts#RunRecord"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/runner.ts#startRun",
+          "to": "src/runtime/store.ts#saveRun"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/runner.ts#cancelRun",
+          "to": "src/runtime/store.ts#RunRecord"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/runner.ts#cancelRun",
+          "to": "src/runtime/store.ts#loadRun"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/runner.ts#resumeRun",
+          "to": "src/runtime/store.ts#RunRecord"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/runner.ts#resumeRun",
+          "to": "src/runtime/store.ts#loadRun"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/runner.ts#cleanupRun",
+          "to": "src/runtime/store.ts#loadRun"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/store.ts#RunRecord",
+          "to": "src/runtime/state.ts#RunState"
+        }
+      ],
       "owner_role": "backend",
       "responsibility": "start, resume, cancel, checkpoint and clean up runs",
       "read_scope": [
         "src/runtime/runner.ts",
-        "src/runtime/store.ts",
         "src/runtime/state.ts",
+        "src/runtime/store.ts",
         "tests/integration/runtime.test.ts",
         "tests/integration/gates-checkpoint.test.ts"
       ],
@@ -403,7 +741,19 @@
         },
         {
           "file": "src/security/policy.ts",
+          "name": "snapshot",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/security/policy.ts",
           "name": "snapshotChanges",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/security/policy.ts",
+          "name": "redact",
           "kind": "function",
           "visibility": "public"
         }
@@ -447,13 +797,49 @@
         },
         {
           "file": "src/git/operator.ts",
+          "name": "Worktree",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/git/operator.ts",
           "name": "createPlanWorktree",
           "kind": "function",
           "visibility": "public"
         },
         {
           "file": "src/git/operator.ts",
+          "name": "createTaskWorktree",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/git/operator.ts",
           "name": "commitTask",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/git/operator.ts",
+          "name": "mergeTask",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/git/operator.ts",
+          "name": "integratePlan",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/git/operator.ts",
+          "name": "removeOwnedWorktrees",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/git/operator.ts",
+          "name": "deleteOwnedBranches",
           "kind": "function",
           "visibility": "public"
         }
@@ -483,34 +869,22 @@
       ],
       "module_root": "context",
       "entries": [
-        "src/context/navigation.ts",
-        "src/context/validate.ts",
+        "src/context/fallback.ts",
         "src/context/locate.ts",
-        "src/context/fallback.ts"
+        "src/context/navigation.ts",
+        "src/context/validate.ts"
       ],
       "symbols": [
         {
-          "file": "src/context/navigation.ts",
-          "name": "renderNavigation",
-          "kind": "function",
+          "file": "src/context/fallback.ts",
+          "name": "FallbackStatus",
+          "kind": "type",
           "visibility": "public"
         },
         {
-          "file": "src/context/validate.ts",
-          "name": "validateContext",
-          "kind": "function",
-          "visibility": "public"
-        },
-        {
-          "file": "src/context/validate.ts",
-          "name": "refreshContext",
-          "kind": "function",
-          "visibility": "public"
-        },
-        {
-          "file": "src/context/locate.ts",
-          "name": "locateContext",
-          "kind": "function",
+          "file": "src/context/fallback.ts",
+          "name": "FallbackTarget",
+          "kind": "interface",
           "visibility": "public"
         },
         {
@@ -527,7 +901,103 @@
         },
         {
           "file": "src/context/fallback.ts",
+          "name": "FallbackDiscovery",
+          "kind": "type",
+          "visibility": "public"
+        },
+        {
+          "file": "src/context/fallback.ts",
           "name": "authorizeFallback",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/context/fallback.ts",
+          "name": "discoverFallback",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/context/locate.ts",
+          "name": "LocateOptions",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/context/locate.ts",
+          "name": "locateContext",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/context/navigation.ts",
+          "name": "NavigationSymbol",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/context/navigation.ts",
+          "name": "NavigationRelation",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/context/navigation.ts",
+          "name": "NavigationFeature",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/context/navigation.ts",
+          "name": "NavigationModuleRoot",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/context/navigation.ts",
+          "name": "NavigationIndex",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/context/navigation.ts",
+          "name": "renderNavigation",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/context/validate.ts",
+          "name": "ContextValidation",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/context/validate.ts",
+          "name": "NavigationRefreshCandidate",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/context/validate.ts",
+          "name": "createNavigationCandidate",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/context/validate.ts",
+          "name": "validateContext",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/context/validate.ts",
+          "name": "verifyNavigation",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/context/validate.ts",
+          "name": "refreshContext",
           "kind": "function",
           "visibility": "public"
         }
@@ -540,27 +1010,67 @@
         "tests/integration/navigation-refresh-cli.test.ts",
         "tests/integration/navigation-locate-cli.test.ts",
         "tests/unit/navigation-fallback.test.ts",
-        "tests/integration/navigation-validate-cli.test.ts"
+        "tests/integration/navigation-validate-cli.test.ts",
+        "tests/integration/navigation-fallback-cli.test.ts",
+        "tests/integration/navigation-snake-drill.test.ts"
       ],
       "depends_on": [
         "shared-utilities",
         "generated-schemas"
       ],
-      "relations": [],
+      "relations": [
+        {
+          "kind": "imports",
+          "from": "src/context/locate.ts#locateContext",
+          "to": "src/context/navigation.ts#NavigationFeature"
+        },
+        {
+          "kind": "imports",
+          "from": "src/context/locate.ts#locateContext",
+          "to": "src/context/validate.ts#verifyNavigation"
+        },
+        {
+          "kind": "imports",
+          "from": "src/context/validate.ts#NavigationRefreshCandidate",
+          "to": "src/context/navigation.ts#NavigationIndex"
+        },
+        {
+          "kind": "imports",
+          "from": "src/context/validate.ts#createNavigationCandidate",
+          "to": "src/context/navigation.ts#NavigationIndex"
+        },
+        {
+          "kind": "imports",
+          "from": "src/context/validate.ts#validateContext",
+          "to": "src/context/navigation.ts#renderNavigation"
+        },
+        {
+          "kind": "imports",
+          "from": "src/context/validate.ts#verifyNavigation",
+          "to": "src/context/navigation.ts#renderNavigation"
+        },
+        {
+          "kind": "imports",
+          "from": "src/context/validate.ts#refreshContext",
+          "to": "src/context/navigation.ts#renderNavigation"
+        }
+      ],
       "owner_role": "file-explorer",
       "responsibility": "maintain and query exact source navigation metadata",
       "read_scope": [
+        "src/context/fallback.ts",
+        "src/context/locate.ts",
         "src/context/navigation.ts",
         "src/context/validate.ts",
-        "src/context/locate.ts",
-        "src/context/fallback.ts",
         "tests/unit/navigation-contract.test.ts",
         "tests/unit/navigation-semantic.test.ts",
         "tests/integration/initial-navigation-index.test.ts",
         "tests/integration/navigation-refresh-cli.test.ts",
         "tests/integration/navigation-locate-cli.test.ts",
         "tests/unit/navigation-fallback.test.ts",
-        "tests/integration/navigation-validate-cli.test.ts"
+        "tests/integration/navigation-validate-cli.test.ts",
+        "tests/integration/navigation-fallback-cli.test.ts",
+        "tests/integration/navigation-snake-drill.test.ts"
       ],
       "shared_entry": false
     },
@@ -618,12 +1128,18 @@
       "module_root": "utils",
       "entries": [
         "src/utils/frontmatter.ts",
-        "src/utils/paths.ts",
-        "src/utils/hash.ts",
         "src/utils/fs.ts",
+        "src/utils/hash.ts",
+        "src/utils/paths.ts",
         "src/utils/schema.ts"
       ],
       "symbols": [
+        {
+          "file": "src/utils/frontmatter.ts",
+          "name": "MarkdownDocument",
+          "kind": "interface",
+          "visibility": "public"
+        },
         {
           "file": "src/utils/frontmatter.ts",
           "name": "parseMarkdown",
@@ -631,14 +1147,26 @@
           "visibility": "public"
         },
         {
-          "file": "src/utils/paths.ts",
-          "name": "normalizeScope",
+          "file": "src/utils/frontmatter.ts",
+          "name": "renderMarkdown",
           "kind": "function",
           "visibility": "public"
         },
         {
-          "file": "src/utils/hash.ts",
-          "name": "objectDigest",
+          "file": "src/utils/fs.ts",
+          "name": "exists",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/utils/fs.ts",
+          "name": "readJson",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/utils/fs.ts",
+          "name": "writeJson",
           "kind": "function",
           "visibility": "public"
         },
@@ -649,8 +1177,62 @@
           "visibility": "public"
         },
         {
+          "file": "src/utils/fs.ts",
+          "name": "atomicDirectory",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/utils/hash.ts",
+          "name": "sha256",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/utils/hash.ts",
+          "name": "stableJson",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/utils/hash.ts",
+          "name": "objectDigest",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/utils/paths.ts",
+          "name": "assertInside",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/utils/paths.ts",
+          "name": "normalizeScope",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/utils/paths.ts",
+          "name": "scopesOverlap",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
           "file": "src/utils/schema.ts",
           "name": "schemaValidator",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/utils/schema.ts",
+          "name": "formatSchemaErrors",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/utils/schema.ts",
+          "name": "packagePath",
           "kind": "function",
           "visibility": "public"
         }
@@ -665,9 +1247,9 @@
       "responsibility": "reusable parsing, path, digest, filesystem and schema helpers",
       "read_scope": [
         "src/utils/frontmatter.ts",
-        "src/utils/paths.ts",
-        "src/utils/hash.ts",
         "src/utils/fs.ts",
+        "src/utils/hash.ts",
+        "src/utils/paths.ts",
         "src/utils/schema.ts",
         "tests/unit/utils.test.ts"
       ],
@@ -682,25 +1264,32 @@
       ],
       "module_root": "generated",
       "entries": [
-        "src/generated/result.schema.d.ts",
-        "src/generated/workflow.schema.d.ts",
-        "src/generated/receipt.schema.d.ts",
-        "src/generated/packet.schema.d.ts",
+        "src/generated/adjustment.schema.d.ts",
+        "src/generated/navigation.candidate.schema.d.ts",
         "src/generated/navigation.schema.d.ts",
+        "src/generated/packet.schema.d.ts",
         "src/generated/profile.schema.d.ts",
-        "src/generated/adjustment.schema.d.ts"
+        "src/generated/receipt.schema.d.ts",
+        "src/generated/result.schema.d.ts",
+        "src/generated/workflow.schema.d.ts"
       ],
       "symbols": [
         {
-          "file": "src/generated/result.schema.d.ts",
-          "name": "AgentResult",
+          "file": "src/generated/adjustment.schema.d.ts",
+          "name": "WorkflowAdjustment",
           "kind": "interface",
           "visibility": "public"
         },
         {
-          "file": "src/generated/workflow.schema.d.ts",
-          "name": "Workflow",
+          "file": "src/generated/navigation.candidate.schema.d.ts",
+          "name": "NavigationRefreshCandidate",
           "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/generated/navigation.schema.d.ts",
+          "name": "Role",
+          "kind": "type",
           "visibility": "public"
         },
         {
@@ -710,8 +1299,92 @@
           "visibility": "public"
         },
         {
+          "file": "src/generated/navigation.schema.d.ts",
+          "name": "ModuleRoot",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/generated/navigation.schema.d.ts",
+          "name": "Feature",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/generated/navigation.schema.d.ts",
+          "name": "Symbol",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/generated/navigation.schema.d.ts",
+          "name": "Relation",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/generated/packet.schema.d.ts",
+          "name": "AgentPacket",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
           "file": "src/generated/profile.schema.d.ts",
           "name": "Profile",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/generated/profile.schema.d.ts",
+          "name": "Agent",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/generated/profile.schema.d.ts",
+          "name": "Model",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/generated/receipt.schema.d.ts",
+          "name": "ApprovalReceipt",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/generated/result.schema.d.ts",
+          "name": "AgentResult",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/generated/workflow.schema.d.ts",
+          "name": "Digest",
+          "kind": "type",
+          "visibility": "public"
+        },
+        {
+          "file": "src/generated/workflow.schema.d.ts",
+          "name": "Path",
+          "kind": "type",
+          "visibility": "public"
+        },
+        {
+          "file": "src/generated/workflow.schema.d.ts",
+          "name": "Workflow",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/generated/workflow.schema.d.ts",
+          "name": "Node",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/generated/workflow.schema.d.ts",
+          "name": "Gate",
           "kind": "interface",
           "visibility": "public"
         }
@@ -723,13 +1396,14 @@
       "owner_role": "standards-review",
       "responsibility": "TypeScript declarations generated from authoritative JSON schemas",
       "read_scope": [
-        "src/generated/result.schema.d.ts",
-        "src/generated/workflow.schema.d.ts",
-        "src/generated/receipt.schema.d.ts",
-        "src/generated/packet.schema.d.ts",
+        "src/generated/adjustment.schema.d.ts",
+        "src/generated/navigation.candidate.schema.d.ts",
         "src/generated/navigation.schema.d.ts",
+        "src/generated/packet.schema.d.ts",
         "src/generated/profile.schema.d.ts",
-        "src/generated/adjustment.schema.d.ts"
+        "src/generated/receipt.schema.d.ts",
+        "src/generated/result.schema.d.ts",
+        "src/generated/workflow.schema.d.ts"
       ],
       "shared_entry": false
     }

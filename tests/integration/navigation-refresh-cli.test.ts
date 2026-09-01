@@ -67,6 +67,16 @@ describe('context refresh CLI', () => {
     await expect(readFile(join(project, '.ai-workflow/index/navigation.md'), 'utf8')).resolves.toBe(renderNavigation(navigation));
   });
 
+  it('writes a JSON-only candidate from an authorized module root', async () => {
+    const project = await projectWithIndex();
+    const output = join(project, '.ai-workflow/candidate.json');
+
+    const { stdout } = await exec('pnpm', ['exec', 'tsx', 'src/cli.ts', 'context', 'candidate', '--project', project, '--output', output, '--task-target', 'task-001-navigation', '--root', 'src', '--path', 'src/workflow/parse.ts']);
+
+    expect(JSON.parse(stdout)).toEqual({ candidate: output });
+    await expect(readFile(output, 'utf8')).resolves.toContain('"maintenance_authorized": true');
+  });
+
   it('leaves both formal index files unchanged when candidate validation fails', async () => {
     const project = await projectWithIndex();
     const path = await writeCandidate(project, candidate({ changed_paths: ['src/'] }));

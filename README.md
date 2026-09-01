@@ -29,8 +29,15 @@ ai-workflow workflow approve <workflow.json>
 ai-workflow plan validate --plan .ai-workflow/plans/<planId>
 ai-workflow run start --workflow <workflow.json> --host codex --project .
 ai-workflow run status|resume|cancel|cleanup <runId> --project .
-ai-workflow context validate --project .
+ai-workflow context validate --project . --all
+ai-workflow context validate --project . --feature <id>
+ai-workflow context locate --project . --feature <id> --verify
+ai-workflow context candidate --project . --output <candidate.json> --task-target <id> --root <module-root> --path <changed-file>
+ai-workflow context refresh --project . --candidate <candidate.json> --write
+ai-workflow context discover --project . --packet <fallback.json>
 ```
+
+Navigation is JSON-authoritative. `context locate` returns exact indexed paths on a hit; `missing_index`, `miss`, `stale`, and `invalid` return a fallback packet that must be validated before bounded discovery. `context candidate` emits the structured input for refresh, while `context refresh` atomically replaces `navigation.json` and its generated Markdown view only after candidate validation succeeds.
 
 `workflow generate --adjustments-stdin` reads a structured adjustment document from stdin. Natural-language feedback is converted to that schema by the installed coding skill; the CLI deliberately refuses unbounded natural-language mutation.
 

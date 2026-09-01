@@ -1,13 +1,13 @@
 import { lstat, readdir, readFile, realpath, writeFile } from 'node:fs/promises';
 import { dirname, extname, isAbsolute, join, relative, resolve } from 'node:path';
 import ts from 'typescript';
-import { atomicDirectory, exists } from '../utils/fs.js';
+import { atomicDirectory, atomicWrite, exists } from '../utils/fs.js';
 import { formatSchemaErrors, schemaValidator } from '../utils/schema.js';
 import { renderNavigation, type NavigationIndex, type NavigationModuleRoot } from './navigation.js';
 
 export interface ContextValidation { valid: boolean; errors: string[] }
 
-interface NavigationRefreshCandidate {
+export interface NavigationRefreshCandidate {
   version: 1;
   task_target: string;
   authorized_module_roots: string[];
@@ -135,6 +135,32 @@ async function parseTypeScriptModuleRoot(project: string, root: NavigationModule
 
 const languageParsers: Record<string, LanguageParser> = { typescript: parseTypeScriptModuleRoot };
 
+export async function createNavigationCandidate(project: string, taskTarget: string, moduleRoots: string[], changedPaths: string[], output: string): Promise<void> {
+  const root = resolve(project); const indexPath = join(root, '.ai-workflow/index/navigation.json');
+  const index = JSON.parse(await readFile(indexPath, 'utf8')) as NavigationIndex;
+  const validator = await schemaValidator('navigation.schema.json');
+  if (!validator(index)) throw new Error(formatSchemaErrors(validator.errors));
+  const navigation = structuredClone(index);
+  for (const moduleRoot of navigation.module_roots) {
+    const feature = navigation.features.filter((entry) => entry.module_root === moduleRoot.id);
+    if (feature.length !== 1) throw new Error(`${moduleRoot.id}: candidate generation requires exactly one feature`);
+    const [current] = feature;
+    if (!current) throw new Error(`${moduleRoot.id}: candidate generation requires a feature`);
+    const parser = languageParsers[moduleRoot.language];
+    if (!parser) throw new Error(`Unsupported navigation language parser: ${moduleRoot.language}`);
+    const parsed = await parser(root, moduleRoot);
+    const owned = (await typeScriptFiles(root, join(root, moduleRoot.path))).filter((path) => rootFor(navigation, path)?.id === moduleRoot.id);
+    current.entries = owned;
+    current.related_files = [];
+    current.symbols = parsed.symbols.filter((symbol) => rootFor(navigation, symbol.file)?.id === moduleRoot.id).map((symbol) => ({ ...symbol, visibility: 'public' }));
+    current.relations = parsed.relations.filter((relation) => rootFor(navigation, relation.from.slice(0, relation.from.lastIndexOf('#')))?.id === moduleRoot.id);
+    current.owner_role = moduleRoot.owner_role;
+    current.read_scope = [...new Set([...current.entries, ...current.tests])];
+  }
+  const candidate: NavigationRefreshCandidate = { version: 1, task_target: taskTarget, authorized_module_roots: moduleRoots, changed_paths: changedPaths, maintenance_authorized: true, navigation };
+  await atomicWrite(resolve(root, output), `${JSON.stringify(candidate, null, 2)}\n`);
+}
+
 function relationReference(value: string): { file: string; name: string } | undefined {
   const separator = value.lastIndexOf('#');
   if (separator <= 0 || separator === value.length - 1) return undefined;
@@ -174,12 +200,12 @@ async function validateFullSemantics(project: string, index: NavigationIndex, er
     if (!parser) { errors.push(`Unsupported navigation language parser: ${root.language}`); continue; }
     const parsed = await parser(project, root);
     const indexedSymbols = index.features.flatMap((feature) => feature.symbols.filter((symbol) => symbol.visibility === 'public' && rootFor(index, symbol.file)?.id === root.id));
-    const actualSymbols = new Map(parsed.symbols.map((symbol) => [symbolKey(symbol), symbol]));
+    const actualSymbols = new Map(parsed.symbols.filter((symbol) => rootFor(index, symbol.file)?.id === root.id).map((symbol) => [symbolKey(symbol), symbol]));
     const expectedSymbols = new Map(indexedSymbols.map((symbol) => [symbolKey(symbol), symbol]));
     for (const [key, symbol] of actualSymbols) if (!expectedSymbols.has(key)) errors.push(`Navigation index is stale: added symbol ${symbol.file}#${symbol.name}`);
     for (const [key, symbol] of expectedSymbols) if (!actualSymbols.has(key)) errors.push(`Navigation index is stale: removed symbol ${symbol.file}#${symbol.name}`);
     const indexedRelations = index.features.flatMap((feature) => feature.relations.filter((relation) => rootFor(index, relation.from.slice(0, relation.from.lastIndexOf('#')))?.id === root.id));
-    const actualRelations = new Set(parsed.relations.map(relationKey));
+    const actualRelations = new Set(parsed.relations.filter((relation) => rootFor(index, relation.from.slice(0, relation.from.lastIndexOf('#')))?.id === root.id).map(relationKey));
     const expectedRelations = new Set(indexedRelations.map(relationKey));
     for (const relation of [...actualRelations, ...expectedRelations]) if (!actualRelations.has(relation) || !expectedRelations.has(relation)) errors.push(`Navigation index is stale: relation change ${relation}`);
   }

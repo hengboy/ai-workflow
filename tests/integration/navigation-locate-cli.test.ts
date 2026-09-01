@@ -120,7 +120,11 @@ describe('context locate CLI', () => {
     const project = await projectWithNavigation(index);
     await writeFile(join(project, '.ai-workflow/index/navigation.md'), renderNavigation(index));
 
-    await expect(locate(project, '--feature', 'workflow-parsing', '--verify')).resolves.toMatchObject({ status: 'stale', reason: 'src/workflow/missing.ts: expected an exact regular file', fallback: { known_paths: expect.arrayContaining(['src/workflow/missing.ts']), module_roots: ['src/workflow', 'tests/unit'] } });
+    const result = await locate(project, '--feature', 'workflow-parsing', '--verify');
+
+    expect(result).toMatchObject({ status: 'stale', reason: 'src/workflow/missing.ts: expected an exact regular file', fallback: { module_roots: ['src/workflow', 'tests/unit'] } });
+    expect(result).toHaveProperty('fallback.known_paths');
+    expect((result as { fallback: { known_paths: string[] } }).fallback.known_paths).toContain('src/workflow/missing.ts');
   });
 
   it('reports stale verification when the Markdown review view drifts from JSON', async () => {
