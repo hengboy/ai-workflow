@@ -9,7 +9,7 @@ import { approveWorkflow } from './workflow/approval.js';
 import { activateProfile, install, uninstall, initializeProject } from './install/index.js';
 import { writeJson } from './utils/fs.js';
 import { formatSchemaErrors, schemaValidator } from './utils/schema.js';
-import { validateContext } from './context/validate.js';
+import { refreshContext, validateContext } from './context/validate.js';
 import { cancelRun, cleanupRun, resumeRun, startRun } from './runtime/runner.js';
 import { loadRun } from './runtime/store.js';
 import { readPlan } from './workflow/parse.js';
@@ -42,6 +42,7 @@ plan.command('validate').requiredOption('--plan <directory>').action(async ({ pl
 });
 
 const context = program.command('context'); context.command('validate').requiredOption('--project <project>').action(async ({ project }: { project: string }) => { const result = await validateContext(resolve(project)); print(result); if (!result.valid) process.exitCode = 1; });
+context.command('refresh').requiredOption('--project <project>').requiredOption('--write').action(async ({ project }: { project: string }) => print(await refreshContext(resolve(project))));
 const run = program.command('run');
 run.command('start').requiredOption('--workflow <path>').requiredOption('--host <host>').option('--project <project>').action(async (options: { workflow: string; host: string; project?: string }) => print(await startRun({ workflowPath: options.workflow, host: options.host, ...(options.project ? { project: options.project } : {}) })));
 run.command('status').argument('<runId>').option('--project <project>', '.').action(async (runId: string, { project }: { project: string }) => print(await loadRun(resolve(project), runId)));
