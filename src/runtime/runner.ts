@@ -14,6 +14,7 @@ import { packagePath } from '../utils/schema.js';
 import { snapshot, snapshotChanges, validateChangedPaths, validateRoleCommand } from '../security/policy.js';
 import type { AgentPacket } from '../generated/packet.schema.js';
 import type { AgentResult } from '../generated/result.schema.js';
+import { resolveProjectRoot } from '../context/paths.js';
 
 const activeControllers = new Map<string, AbortController>();
 class ReviewFindingsError extends Error {}
@@ -21,7 +22,7 @@ export interface ExecutionContext { cwd: string; node: Workflow['nodes'][number]
 export interface StartOptions { workflowPath: string; host: string; project?: string; executor?: (nodeId: string, context: ExecutionContext) => Promise<unknown>; defer?: boolean }
 
 export async function startRun(options: StartOptions): Promise<RunRecord> {
-  const workflowPath = resolve(options.workflowPath); const workflow = JSON.parse(await readFile(workflowPath, 'utf8')) as Workflow; const project = resolve(options.project ?? process.cwd());
+  const workflowPath = resolve(options.workflowPath); const workflow = JSON.parse(await readFile(workflowPath, 'utf8')) as Workflow; const project = resolveProjectRoot(options.project ?? process.cwd());
   if (workflow.host !== options.host) throw new Error(`Host mismatch: workflow=${workflow.host}, requested=${options.host}`); const validation = await validateWorkflow(workflow); if (!validation.valid) throw new Error(validation.errors.join('; ')); await verifyApproval(workflowPath, workflow, project);
   const currentPlan = await readPlan(dirname(workflowPath)); const currentTasks = await readTasks(dirname(workflowPath)); if (currentPlan.digest !== workflow.input_digests.plan || objectDigest(currentTasks) !== workflow.input_digests.tasks) throw new Error('Frozen plan or task inputs changed after workflow generation');
   const baseline = await gitBaseline(project); if (!baseline.head) throw new Error('Unborn HEAD requires an explicitly approved baseline commit'); const stableBaseline = objectDigest({ branch: baseline.branch, head: baseline.head });

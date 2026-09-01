@@ -1,10 +1,11 @@
 import { readFile } from 'node:fs/promises';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join } from 'node:path';
 import { exists } from '../utils/fs.js';
 import { formatSchemaErrors, schemaValidator } from '../utils/schema.js';
 import { type FallbackPacket, type FallbackStatus, type FallbackTarget } from './fallback.js';
 import { type NavigationFeature, type NavigationIndex } from './navigation.js';
 import { verifyNavigation } from './validate.js';
+import { resolveProjectRoot } from './paths.js';
 
 export interface LocateOptions {
   feature?: string;
@@ -57,7 +58,7 @@ function fallback(options: LocateOptions, status: FallbackStatus, reason: string
 }
 
 async function loadIndex(project: string, options: LocateOptions): Promise<NavigationIndex | LocateResult> {
-  const root = resolve(project); const jsonPath = join(root, '.ai-workflow/index/navigation.json');
+  const root = resolveProjectRoot(project); const jsonPath = join(root, '.ai-workflow/index/navigation.json');
   if (!(await exists(jsonPath))) return fallback(options, 'missing_index', 'Missing .ai-workflow/index/navigation.json');
   let index: NavigationIndex;
   try { index = JSON.parse(await readFile(jsonPath, 'utf8')) as NavigationIndex; } catch { return fallback(options, 'invalid', 'navigation.json is not valid JSON'); }
@@ -120,11 +121,12 @@ function hit(index: NavigationIndex, feature: NavigationFeature, depth: number):
 }
 
 export async function locateContext(project: string, options: LocateOptions): Promise<LocateResult> {
+  const root = resolveProjectRoot(project);
   const queries = [options.feature, options.symbol, options.task].filter(Boolean);
   if (queries.length !== 1) return { status: 'blocked', resolution_mode: 'index', reason: 'Specify exactly one of --feature, --symbol, or --task', fallback_required: false };
   const depth = options.depth ?? 1;
   if (!Number.isSafeInteger(depth) || depth < 0) return { status: 'blocked', resolution_mode: 'index', reason: '--depth must be a non-negative integer', fallback_required: false };
-  const loaded = await loadIndex(project, options);
+  const loaded = await loadIndex(root, options);
   if (!('features' in loaded)) return loaded;
   const matches = candidatesFor(options, loaded);
   if (!matches.length) return fallback(options, 'miss', 'No indexed feature matches the requested target');
@@ -143,7 +145,7 @@ export async function locateContext(project: string, options: LocateOptions): Pr
   const feature = features[0];
   if (!feature) return fallback(options, 'miss', 'No indexed feature matches the requested target');
   if (options.verify) {
-    const validation = await verifyNavigation(project, feature.id);
+    const validation = await verifyNavigation(root, feature.id);
     if (!validation.valid) {
       const status = validation.errors.some((error) => error.startsWith('Navigation index is stale') || error.includes('expected an exact regular file')) ? 'stale' : 'invalid';
       const knownPaths = [...new Set([...feature.entries, ...feature.related_files, ...feature.tests])];

@@ -1,5 +1,6 @@
 import { fixedTaskContext, readPlan, readTasks } from './parse.js';
 import { locateContext } from '../context/locate.js';
+import { resolveProjectRoot } from '../context/paths.js';
 import { resolve } from 'node:path';
 import type { Host, Workflow, Node, TaskDocument } from './types.js';
 import { objectDigest } from '../utils/hash.js';
@@ -24,7 +25,7 @@ export async function generateWorkflow(planDirectory: string, host: Host, concur
   const plan = await readPlan(planDirectory); const parsedTasks = await readTasks(planDirectory); const planScope = `.ai-workflow/plans/${plan.planId}`;
   for (const task of parsedTasks) {
     if (!task.feature) throw new Error(`Task feature is required: ${task.id}`);
-    const located = await locateContext(resolve(planDirectory, '../../..'), { feature: task.feature, verify: true });
+    const located = await locateContext(resolveProjectRoot(resolve(planDirectory, '../../..')), { feature: task.feature, verify: true });
     if (located.status !== 'hit') throw new Error(`Task locator did not resolve ${task.feature}: ${'reason' in located ? located.reason : located.status}`);
     if (located.read_order.length !== task.locatorReadOrder.length || located.read_order.some((path) => !task.locatorReadOrder.includes(path))) throw new Error(`Task locator_read_order does not match feature ${task.feature}: ${task.id}`);
   }

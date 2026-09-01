@@ -4,6 +4,7 @@ import ts from 'typescript';
 import { atomicDirectory, atomicWrite, exists } from '../utils/fs.js';
 import { formatSchemaErrors, schemaValidator } from '../utils/schema.js';
 import { renderNavigation, type NavigationIndex, type NavigationModuleRoot } from './navigation.js';
+import { resolveCandidatePath, resolveProjectRoot } from './paths.js';
 
 export interface ContextValidation { valid: boolean; errors: string[] }
 
@@ -136,12 +137,13 @@ async function parseTypeScriptModuleRoot(project: string, root: NavigationModule
 const languageParsers: Record<string, LanguageParser> = { typescript: parseTypeScriptModuleRoot };
 
 export async function createNavigationCandidate(project: string, taskTarget: string, moduleRoots: string[], changedPaths: string[], output: string): Promise<void> {
-  const root = resolve(project); const indexPath = join(root, '.ai-workflow/index/navigation.json');
+  const root = resolveProjectRoot(project); const indexPath = join(root, '.ai-workflow/index/navigation.json');
   const index = JSON.parse(await readFile(indexPath, 'utf8')) as NavigationIndex;
   const validator = await schemaValidator('navigation.schema.json');
   if (!validator(index)) throw new Error(formatSchemaErrors(validator.errors));
   const navigation = structuredClone(index);
   for (const moduleRoot of navigation.module_roots) {
+    if (!insideAuthorizedRoots(moduleRoot.path, moduleRoots)) continue;
     const feature = navigation.features.filter((entry) => entry.module_root === moduleRoot.id);
     if (feature.length !== 1) throw new Error(`${moduleRoot.id}: candidate generation requires exactly one feature`);
     const [current] = feature;
@@ -268,7 +270,7 @@ function validateIndexRelationships(index: NavigationIndex, errors: string[]): v
 }
 
 async function validateIndex(project: string, featureIds?: Set<string>, suppliedIndex?: NavigationIndex): Promise<{ errors: string[]; index?: NavigationIndex }> {
-  const root = resolve(project); const realRoot = await realpath(root); const memoryPath = join(root, 'MEMORY.md'); const jsonPath = join(root, '.ai-workflow/index/navigation.json'); const markdownPath = join(root, '.ai-workflow/index/navigation.md'); const errors: string[] = [];
+  const root = resolveProjectRoot(project); const realRoot = await realpath(root); const memoryPath = join(root, 'MEMORY.md'); const jsonPath = join(root, '.ai-workflow/index/navigation.json'); const markdownPath = join(root, '.ai-workflow/index/navigation.md'); const errors: string[] = [];
   if (await exists(memoryPath) && !/^#\s+/m.test(await readFile(memoryPath, 'utf8'))) errors.push('MEMORY.md needs a title');
   if (!suppliedIndex && !(await exists(jsonPath))) errors.push('Missing .ai-workflow/index/navigation.json');
   if (!suppliedIndex && !(await exists(markdownPath))) errors.push('Missing .ai-workflow/index/navigation.md');
@@ -311,17 +313,17 @@ async function validateIndex(project: string, featureIds?: Set<string>, supplied
 }
 
 export async function validateContext(project: string): Promise<ContextValidation> {
-  const result = await validateIndex(project);
+  const root = resolveProjectRoot(project); const result = await validateIndex(root);
   if (!result.index) return { valid: false, errors: result.errors };
-  const markdown = await readFile(join(resolve(project), '.ai-workflow/index/navigation.md'), 'utf8');
+  const markdown = await readFile(join(root, '.ai-workflow/index/navigation.md'), 'utf8');
   if (markdown !== renderNavigation(result.index)) result.errors.push('navigation.md does not match navigation.json');
   return { valid: result.errors.length === 0, errors: result.errors };
 }
 
 export async function verifyNavigation(project: string, featureId: string): Promise<ContextValidation> {
-  const result = await validateIndex(project, new Set([featureId]));
+  const root = resolveProjectRoot(project); const result = await validateIndex(root, new Set([featureId]));
   if (!result.index) return { valid: false, errors: result.errors };
-  const markdown = await readFile(join(resolve(project), '.ai-workflow/index/navigation.md'), 'utf8');
+  const markdown = await readFile(join(root, '.ai-workflow/index/navigation.md'), 'utf8');
   if (markdown !== renderNavigation(result.index)) result.errors.push('Navigation index is stale: navigation.md does not match navigation.json');
   return { valid: result.errors.length === 0, errors: result.errors };
 }
@@ -331,16 +333,60 @@ function isConcreteDirectory(path: string): boolean {
 }
 
 function insideAuthorizedRoots(path: string, roots: string[]): boolean {
-  return roots.some((root) => path.startsWith(`${root}/`));
+  return roots.some((root) => path === root || path.startsWith(`${root}/`));
+}
+
+function sameJson(left: unknown, right: unknown): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function changesOutsideAuthorizedRoots(current: NavigationIndex, candidate: NavigationIndex, roots: string[]): string[] {
+  const errors: string[] = [];
+  const candidateRoots = new Map(candidate.module_roots.map((root) => [root.id, root]));
+  const candidateFeatures = new Map(candidate.features.map((feature) => [feature.id, feature]));
+  for (const root of current.module_roots) {
+    if (insideAuthorizedRoots(root.path, roots)) continue;
+    const proposed = candidateRoots.get(root.id);
+    if (!sameJson(root, proposed)) errors.push(`${root.path}: changes outside authorized module roots`);
+  }
+  for (const root of candidate.module_roots) {
+    if (insideAuthorizedRoots(root.path, roots)) continue;
+    const existing = current.module_roots.find((entry) => entry.id === root.id);
+    if (!sameJson(root, existing)) errors.push(`${root.path}: changes outside authorized module roots`);
+  }
+  for (const feature of current.features) {
+    const root = current.module_roots.find((entry) => entry.id === feature.module_root);
+    if (!root || insideAuthorizedRoots(root.path, roots)) continue;
+    if (!sameJson(feature, candidateFeatures.get(feature.id))) errors.push(`${feature.id}: changes outside authorized module roots`);
+  }
+  for (const feature of candidate.features) {
+    const root = candidateRoots.get(feature.module_root);
+    if (!root || insideAuthorizedRoots(root.path, roots)) continue;
+    if (!sameJson(feature, current.features.find((entry) => entry.id === feature.id))) errors.push(`${feature.id}: changes outside authorized module roots`);
+  }
+  return errors;
 }
 
 async function validateCandidate(project: string, candidatePath: string): Promise<{ candidate?: NavigationRefreshCandidate; errors: string[] }> {
   if (extname(candidatePath) !== '.json') return { errors: ['Navigation candidate must be a JSON file'] };
+  const resolvedCandidatePath = resolveCandidatePath(project, candidatePath);
   let candidate: NavigationRefreshCandidate;
-  try { candidate = JSON.parse(await readFile(resolve(candidatePath), 'utf8')) as NavigationRefreshCandidate; } catch { return { errors: ['Navigation candidate is not valid JSON'] }; }
+  try { candidate = JSON.parse(await readFile(resolvedCandidatePath, 'utf8')) as NavigationRefreshCandidate; } catch { return { errors: [`${resolvedCandidatePath}: Navigation candidate is not valid JSON`] }; }
   const validator = await schemaValidator('navigation.candidate.schema.json');
-  if (!validator(candidate)) return { errors: [formatSchemaErrors(validator.errors)] };
-  const root = resolve(project); const realRoot = await realpath(root); const errors: string[] = [];
+  if (!validator(candidate)) return { errors: [`${resolvedCandidatePath}: ${formatSchemaErrors(validator.errors)}`] };
+  const navigationValidator = await schemaValidator('navigation.schema.json');
+  if (!navigationValidator(candidate.navigation)) {
+    const errors = (navigationValidator.errors ?? []).map((error) => {
+      const path = error.instancePath ? `/navigation${error.instancePath}` : '/navigation';
+      return `${path} ${error.message ?? 'is invalid'}`;
+    });
+    return { errors: [`${resolvedCandidatePath}: ${errors.join('; ')}`] };
+  }
+  const root = resolveProjectRoot(project); const realRoot = await realpath(root); const errors: string[] = [];
+  let current: NavigationIndex;
+  try { current = JSON.parse(await readFile(join(root, '.ai-workflow/index/navigation.json'), 'utf8')) as NavigationIndex; } catch { return { errors: ['navigation.json is not valid JSON'] }; }
+  if (!navigationValidator(current)) return { errors: [formatSchemaErrors(navigationValidator.errors)] };
+  errors.push(...changesOutsideAuthorizedRoots(current, candidate.navigation, candidate.authorized_module_roots));
   for (const moduleRoot of candidate.authorized_module_roots) {
     if (!isConcreteDirectory(moduleRoot)) { errors.push(`${moduleRoot}: expected a concrete authorized module root`); continue; }
     const target = resolve(root, moduleRoot);
@@ -364,7 +410,7 @@ async function validateFormalIndexPath(path: string, name: string): Promise<void
 }
 
 export async function refreshContext(project: string, candidatePath: string): Promise<{ updated: string[] }> {
-  const root = resolve(project);
+  const root = resolveProjectRoot(project);
   const validation = await validateCandidate(root, candidatePath);
   if (!validation.candidate) throw new Error(validation.errors.join('; '));
   const result = await validateIndex(root, undefined, validation.candidate.navigation);

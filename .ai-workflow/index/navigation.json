@@ -208,6 +208,12 @@
           "visibility": "public"
         },
         {
+          "file": "src/install/index.ts",
+          "name": "updateProject",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
           "file": "src/install/render.ts",
           "name": "RenderedFile",
           "kind": "interface",
@@ -872,6 +878,7 @@
         "src/context/fallback.ts",
         "src/context/locate.ts",
         "src/context/navigation.ts",
+        "src/context/paths.ts",
         "src/context/validate.ts"
       ],
       "symbols": [
@@ -966,6 +973,18 @@
           "visibility": "public"
         },
         {
+          "file": "src/context/paths.ts",
+          "name": "resolveProjectRoot",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/context/paths.ts",
+          "name": "resolveCandidatePath",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
           "file": "src/context/validate.ts",
           "name": "ContextValidation",
           "kind": "interface",
@@ -1022,6 +1041,11 @@
         {
           "kind": "imports",
           "from": "src/context/locate.ts#locateContext",
+          "to": "src/context/paths.ts#resolveProjectRoot"
+        },
+        {
+          "kind": "imports",
+          "from": "src/context/locate.ts#locateContext",
           "to": "src/context/navigation.ts#NavigationFeature"
         },
         {
@@ -1037,7 +1061,17 @@
         {
           "kind": "imports",
           "from": "src/context/validate.ts#createNavigationCandidate",
+          "to": "src/context/paths.ts#resolveProjectRoot"
+        },
+        {
+          "kind": "imports",
+          "from": "src/context/validate.ts#createNavigationCandidate",
           "to": "src/context/navigation.ts#NavigationIndex"
+        },
+        {
+          "kind": "imports",
+          "from": "src/context/validate.ts#validateContext",
+          "to": "src/context/paths.ts#resolveProjectRoot"
         },
         {
           "kind": "imports",
@@ -1047,7 +1081,17 @@
         {
           "kind": "imports",
           "from": "src/context/validate.ts#verifyNavigation",
+          "to": "src/context/paths.ts#resolveProjectRoot"
+        },
+        {
+          "kind": "imports",
+          "from": "src/context/validate.ts#verifyNavigation",
           "to": "src/context/navigation.ts#renderNavigation"
+        },
+        {
+          "kind": "imports",
+          "from": "src/context/validate.ts#refreshContext",
+          "to": "src/context/paths.ts#resolveProjectRoot"
         },
         {
           "kind": "imports",
@@ -1061,6 +1105,7 @@
         "src/context/fallback.ts",
         "src/context/locate.ts",
         "src/context/navigation.ts",
+        "src/context/paths.ts",
         "src/context/validate.ts",
         "tests/unit/navigation-contract.test.ts",
         "tests/unit/navigation-semantic.test.ts",

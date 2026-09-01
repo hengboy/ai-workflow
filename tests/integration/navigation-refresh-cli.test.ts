@@ -36,7 +36,19 @@ function candidate(overrides: Record<string, unknown> = {}): Record<string, unkn
   };
 }
 
-async function projectWithIndex(): Promise<string> {
+function navigationWithOtherRoot(): NavigationIndex {
+  return {
+    ...structuredClone(navigation),
+    module_roots: [...navigation.module_roots, { id: 'other', path: 'src/other', owner_role: 'frontend', responsibility: 'other runtime', language: 'typescript', entry_kinds: ['exported-symbol'] }],
+    features: [...navigation.features, {
+      id: 'other-parsing', name: 'other parsing', aliases: [], module_root: 'other', entries: ['src/other/other.ts'],
+      symbols: [{ file: 'src/other/other.ts', name: 'readOther', kind: 'function', visibility: 'public' }], related_files: [], tests: ['tests/unit/frozen-protocol.test.ts'], depends_on: [], relations: [],
+      owner_role: 'frontend', responsibility: 'other validation', read_scope: ['src/other/other.ts', 'tests/unit/frozen-protocol.test.ts'], shared_entry: false
+    }]
+  };
+}
+
+async function projectWithIndex(index = navigation): Promise<string> {
   const project = await temporary('ai-workflow-navigation-refresh-');
   await mkdir(join(project, 'src/workflow'), { recursive: true });
   await mkdir(join(project, 'tests/unit'), { recursive: true });
@@ -44,8 +56,12 @@ async function projectWithIndex(): Promise<string> {
   await writeFile(join(project, 'src/workflow/parse.ts'), 'import { digestPlan } from \'./digest.js\';\nexport function readPlan(): void { digestPlan(); }\n');
   await writeFile(join(project, 'src/workflow/digest.ts'), 'export function digestPlan(): void {}\n');
   await writeFile(join(project, 'tests/unit/frozen-protocol.test.ts'), '');
-  await writeFile(join(project, '.ai-workflow/index/navigation.json'), '{"version":1,"module_roots":[],"features":[]}\n');
-  await writeFile(join(project, '.ai-workflow/index/navigation.md'), renderNavigation({ version: 1, module_roots: [], features: [] }));
+  if (index.module_roots.some((root) => root.id === 'other')) {
+    await mkdir(join(project, 'src/other'), { recursive: true });
+    await writeFile(join(project, 'src/other/other.ts'), 'export function readOther(): void {}\n');
+  }
+  await writeFile(join(project, '.ai-workflow/index/navigation.json'), `${JSON.stringify(index)}\n`);
+  await writeFile(join(project, '.ai-workflow/index/navigation.md'), renderNavigation(index));
   return project;
 }
 
@@ -55,11 +71,49 @@ async function writeCandidate(project: string, value: Record<string, unknown>, e
   return path;
 }
 
+function cliFrom(project: string, arguments_: string[]): Promise<{ stdout: string }> {
+  const root = process.cwd();
+  return exec(process.execPath, [join(root, 'node_modules/tsx/dist/cli.mjs'), join(root, 'src/cli.ts'), ...arguments_], { cwd: project });
+}
+
 describe('context refresh CLI', () => {
+  it('preserves navigation outside the authorized module roots when generating a candidate', async () => {
+    const project = await projectWithIndex(navigationWithOtherRoot());
+    await writeFile(join(project, 'src/other/unclassified.ts'), 'export function unclassified(): void {}\n');
+
+    await exec('pnpm', ['exec', 'tsx', 'src/cli.ts', 'context', 'candidate', '--project', project, '--output', '.ai-workflow/candidate.json', '--task-target', 'task-001-navigation', '--root', 'src/workflow', '--path', 'src/workflow/parse.ts']);
+    const generated = JSON.parse(await readFile(join(project, '.ai-workflow/candidate.json'), 'utf8')) as { navigation: NavigationIndex };
+
+    expect(generated.navigation.features.find((feature) => feature.id === 'other-parsing')?.entries).toEqual(['src/other/other.ts']);
+  });
+
+  it('rejects candidate navigation changes outside the authorized module roots', async () => {
+    const index = navigationWithOtherRoot();
+    const project = await projectWithIndex(index);
+    const changed = structuredClone(index);
+    const other = changed.features.find((feature) => feature.id === 'other-parsing');
+    if (!other) throw new Error('Test fixture must contain other-parsing');
+    other.responsibility = 'unrelated change';
+    const path = await writeCandidate(project, candidate({ authorized_module_roots: ['src/workflow'], navigation: changed }));
+
+    await expect(exec('pnpm', ['exec', 'tsx', 'src/cli.ts', 'context', 'refresh', '--project', project, '--candidate', path, '--write'])).rejects.toThrow(/other-parsing: changes outside authorized module roots/i);
+  });
+
+  it('uses the current project directory for --project . across candidate, refresh, validate and locate', async () => {
+    const project = await projectWithIndex();
+
+    await cliFrom(project, ['context', 'candidate', '--project', '.', '--output', '.ai-workflow/candidate.json', '--task-target', 'task-001-navigation', '--root', 'src/workflow', '--path', 'src/workflow/parse.ts']);
+    expect((await cliFrom(project, ['context', 'refresh', '--project', '.', '--candidate', '.ai-workflow/candidate.json', '--write'])).stdout).toContain('navigation.json');
+    expect((await cliFrom(project, ['context', 'validate', '--project', '.', '--all'])).stdout).toContain('"valid": true');
+    expect((await cliFrom(project, ['context', 'locate', '--project', '.', '--feature', 'workflow-parsing', '--verify'])).stdout).toContain('"read_order"');
+  });
+
   it('promotes a generated candidate from an absolute project path when its path is project-relative', async () => {
     const project = await projectWithIndex();
 
     await exec('pnpm', ['exec', 'tsx', 'src/cli.ts', 'context', 'candidate', '--project', project, '--output', '.ai-workflow/candidate.json', '--task-target', 'task-001-navigation', '--root', 'src', '--path', 'src/workflow/parse.ts']);
+    const generated = JSON.parse(await readFile(join(project, '.ai-workflow/candidate.json'), 'utf8')) as { navigation: NavigationIndex };
+    expect(generated.navigation.features).toMatchObject([{ entries: ['src/workflow/digest.ts', 'src/workflow/parse.ts'] }]);
     const { stdout } = await exec('pnpm', ['exec', 'tsx', 'src/cli.ts', 'context', 'refresh', '--project', project, '--candidate', '.ai-workflow/candidate.json', '--write']);
 
     expect(JSON.parse(stdout)).toEqual({ updated: ['.ai-workflow/index/navigation.json', '.ai-workflow/index/navigation.md'] });
@@ -108,6 +162,16 @@ describe('context refresh CLI', () => {
     await expect(exec('pnpm', ['exec', 'tsx', 'src/cli.ts', 'context', 'refresh', '--project', project, '--candidate', path, '--write'])).rejects.toThrow(/candidate must be a JSON file/i);
 
     await expect(Promise.all([readFile(jsonPath, 'utf8'), readFile(markdownPath, 'utf8')])).resolves.toEqual(before);
+  });
+
+  it.each([
+    ['a missing required changed_paths array', (() => { const value = candidate(); delete value.changed_paths; return value; })(), /candidate\.json: \/ must have required property 'changed_paths'/i],
+    ['a non-array navigation features field', candidate({ navigation: { version: 1, module_roots: [], features: {} } }), /candidate\.json: \/navigation\/features must be array/i]
+  ])('reports a field-path validation error for %s', async (_label, value, error) => {
+    const project = await projectWithIndex();
+    const path = await writeCandidate(project, value);
+
+    await expect(exec('pnpm', ['exec', 'tsx', 'src/cli.ts', 'context', 'refresh', '--project', project, '--candidate', path, '--write'])).rejects.toThrow(error);
   });
 
   it('keeps the formal index directory unchanged when a staged file write fails', async () => {
