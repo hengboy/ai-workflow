@@ -54,7 +54,7 @@ describe('native prompt contracts', () => {
       .map((entry) => entry.name)
       .sort();
 
-    expect(skills).toEqual(['coding', 'git-message', 'plan-to-tasks', 'planning', 'switch-profile']);
+    expect(skills).toEqual(['coding', 'git-message', 'manage-ai-workflow', 'plan-to-tasks', 'planning', 'switch-profile']);
     for (const skill of skills) {
       const metadata = parse(await readFile(join(skillRoot, skill, 'agents', 'openai.yaml'), 'utf8')) as {
         interface?: { display_name?: string; short_description?: string; default_prompt?: string };
