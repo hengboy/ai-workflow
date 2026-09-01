@@ -15,6 +15,9 @@ export interface NavigationFeature {
   id: string;
   name: string;
   aliases: string[];
+  task_ids?: string[];
+  requirement_ids?: string[];
+  acceptance_criteria_ids?: string[];
   module_root: string;
   entries: string[];
   symbols: NavigationSymbol[];

@@ -18,7 +18,8 @@ function navigation(): NavigationIndex {
       symbols: [{ file: 'src/workflow/parse.ts', name: 'readPlan', kind: 'function', visibility: 'public' }],
       related_files: ['src/workflow/digest.ts'], tests: ['tests/unit/frozen-protocol.test.ts'], depends_on: [], relations: [],
       owner_role: 'frontend', responsibility: 'frozen-plan validation',
-      read_scope: ['src/workflow/parse.ts', 'src/workflow/digest.ts', 'tests/unit/frozen-protocol.test.ts'], shared_entry: false
+      read_scope: ['src/workflow/parse.ts', 'src/workflow/digest.ts', 'tests/unit/frozen-protocol.test.ts'], shared_entry: false,
+      task_ids: ['task-001-frozen-plan-digest'], requirement_ids: ['REQ-001'], acceptance_criteria_ids: ['AC-001']
     }]
   };
 }
@@ -49,14 +50,19 @@ describe('context locate CLI', () => {
       status: 'hit', resolution_mode: 'index', feature: 'workflow-parsing', entries: ['src/workflow/parse.ts'],
       symbols: ['src/workflow/parse.ts#readPlan'], related_files: ['src/workflow/digest.ts'],
       tests: ['tests/unit/frozen-protocol.test.ts'],
-      read_order: ['src/workflow/parse.ts', 'src/workflow/digest.ts', 'tests/unit/frozen-protocol.test.ts'], fallback_required: false
+      read_order: ['src/workflow/parse.ts', 'src/workflow/digest.ts', 'tests/unit/frozen-protocol.test.ts'], related_features: [], fallback_required: false
     });
   });
 
-  it('resolves an exact task alias without scanning task files', async () => {
+  it.each([
+    ['task ID', 'task-001-frozen-plan-digest'],
+    ['requirement ID', 'REQ-001'],
+    ['acceptance criterion ID', 'AC-001'],
+    ['pre-registered alias', 'frozen plan digest']
+  ])('resolves an exact %s without scanning task files', async (_kind, query) => {
     const project = await projectWithNavigation();
 
-    await expect(locate(project, '--task', 'task-001-frozen-plan-digest')).resolves.toMatchObject({ status: 'hit', feature: 'workflow-parsing', fallback_required: false });
+    await expect(locate(project, '--task', query)).resolves.toMatchObject({ status: 'hit', feature: 'workflow-parsing', fallback_required: false });
   });
 
   it('returns ambiguous for a bare symbol with multiple indexed candidates', async () => {
@@ -124,5 +130,33 @@ describe('context locate CLI', () => {
     await expect(locate(project, '--feature', 'workflow-parsing', '--verify')).resolves.toEqual({
       status: 'stale', resolution_mode: 'index', reason: 'Navigation index is stale: navigation.md does not match navigation.json', fallback_required: true
     });
+  });
+
+  it('follows direct feature relations by depth without following dependencies', async () => {
+    const index = navigation();
+    index.features.push(
+      {
+        ...index.features[0]!, id: 'workflow-digest', name: 'workflow digest', aliases: [], entries: ['src/workflow/digest.ts'],
+        symbols: [{ file: 'src/workflow/digest.ts', name: 'digestPlan', kind: 'function', visibility: 'public' }], related_files: [],
+        tests: ['tests/unit/frozen-protocol.test.ts'], read_scope: ['src/workflow/digest.ts', 'tests/unit/frozen-protocol.test.ts'],
+        task_ids: ['task-002-digest'], requirement_ids: ['REQ-002'], acceptance_criteria_ids: ['AC-002']
+      },
+      {
+        ...index.features[0]!, id: 'workflow-output', name: 'workflow output', aliases: [], entries: ['src/workflow/output.ts'],
+        symbols: [{ file: 'src/workflow/output.ts', name: 'writePlan', kind: 'function', visibility: 'public' }], related_files: [],
+        tests: ['tests/unit/frozen-protocol.test.ts'], read_scope: ['src/workflow/output.ts', 'tests/unit/frozen-protocol.test.ts'],
+        task_ids: ['task-003-output'], requirement_ids: ['REQ-003'], acceptance_criteria_ids: ['AC-003']
+      }
+    );
+    index.features[0]!.relations = [{ kind: 'calls', from: 'src/workflow/parse.ts#readPlan', to: 'src/workflow/digest.ts#digestPlan' }];
+    index.features[1]!.relations = [{ kind: 'calls', from: 'src/workflow/digest.ts#digestPlan', to: 'src/workflow/output.ts#writePlan' }];
+    index.features[0]!.depends_on = ['workflow-output'];
+    const project = await projectWithNavigation(index);
+    await writeFile(join(project, 'src/workflow/output.ts'), 'export function writePlan(): void {}\n');
+    await writeFile(join(project, '.ai-workflow/index/navigation.md'), renderNavigation(index));
+
+    await expect(locate(project, '--feature', 'workflow-parsing', '--depth', '0')).resolves.toMatchObject({ related_features: [] });
+    await expect(locate(project, '--feature', 'workflow-parsing', '--depth', '1')).resolves.toMatchObject({ related_features: ['workflow-digest'] });
+    await expect(locate(project, '--feature', 'workflow-parsing', '--depth', '2')).resolves.toMatchObject({ related_features: ['workflow-digest', 'workflow-output'] });
   });
 });

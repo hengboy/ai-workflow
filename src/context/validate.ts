@@ -119,10 +119,15 @@ async function validateModuleCoverage(project: string, index: NavigationIndex, e
 
 function validateIndexRelationships(index: NavigationIndex, errors: string[]): void {
   const ids = new Set<string>();
+  const aliases = new Set<string>();
   const entries = new Map<string, NavigationIndex['features']>();
   for (const feature of index.features) {
     if (ids.has(feature.id)) errors.push(`Duplicate feature id: ${feature.id}`);
     ids.add(feature.id);
+    for (const alias of feature.aliases) {
+      if (aliases.has(alias)) errors.push(`Duplicate feature alias: ${alias}`);
+      aliases.add(alias);
+    }
     for (const entry of feature.entries) entries.set(entry, [...(entries.get(entry) ?? []), feature]);
   }
   for (const feature of index.features) for (const dependency of feature.depends_on) if (!ids.has(dependency)) errors.push(`${feature.id} depends on unknown feature ${dependency}`);
@@ -150,6 +155,8 @@ async function validateIndex(project: string, featureIds?: Set<string>): Promise
   if (errors.length) return { errors };
 
   const features = featureIds ? index.features.filter((feature) => featureIds.has(feature.id)) : index.features;
+  if (featureIds) for (const featureId of featureIds) if (!features.some((feature) => feature.id === featureId)) errors.push(`Unknown navigation feature: ${featureId}`);
+  if (errors.length) return { errors };
   for (const rootEntry of index.module_roots) {
     if (!isExactPath(rootEntry.path)) errors.push(`${rootEntry.path}: expected a concrete module root`);
   }

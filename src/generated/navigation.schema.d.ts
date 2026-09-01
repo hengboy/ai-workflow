@@ -30,6 +30,9 @@ export interface Feature {
   id: string;
   name: string;
   aliases: string[];
+  task_ids?: string[];
+  requirement_ids?: string[];
+  acceptance_criteria_ids?: string[];
   module_root: string;
   /**
    * @minItems 1

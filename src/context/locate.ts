@@ -10,6 +10,7 @@ export interface LocateOptions {
   symbol?: string;
   task?: string;
   verify?: boolean;
+  depth?: number;
 }
 
 interface LocateHit {
@@ -21,6 +22,7 @@ interface LocateHit {
   related_files: string[];
   tests: string[];
   read_order: string[];
+  related_features: string[];
   fallback_required: false;
 }
 
@@ -50,7 +52,11 @@ function candidatesFor(options: LocateOptions, index: NavigationIndex): Navigati
   }
   if (options.task) {
     const requested = options.task;
-    return index.features.filter((feature) => feature.id === requested || feature.aliases.includes(requested));
+    return index.features.filter((feature) => feature.id === requested
+      || feature.aliases.includes(requested)
+      || feature.task_ids?.includes(requested)
+      || feature.requirement_ids?.includes(requested)
+      || feature.acceptance_criteria_ids?.includes(requested));
   }
   if (!options.symbol) return [];
   const qualified = options.symbol.includes('#');
@@ -61,18 +67,41 @@ function candidatesFor(options: LocateOptions, index: NavigationIndex): Navigati
   return matches.map((match) => match.symbol);
 }
 
-function hit(feature: NavigationFeature): LocateHit {
+function relationTargets(index: NavigationIndex, start: NavigationFeature, depth: number): string[] {
+  const featureForSymbol = new Map<string, string>(index.features.flatMap((feature) => feature.symbols.map((symbol) => [`${symbol.file}#${symbol.name}`, feature.id] as const)));
+  const outgoing = new Map<string, string[]>();
+  for (const feature of index.features) for (const relation of feature.relations) {
+    const from = featureForSymbol.get(relation.from);
+    const to = featureForSymbol.get(relation.to);
+    if (!from || !to || from === to) continue;
+    outgoing.set(from, [...new Set([...(outgoing.get(from) ?? []), to])]);
+  }
+  const visited = new Set([start.id]);
+  let frontier = [start.id];
+  const result: string[] = [];
+  for (let remaining = depth; remaining > 0 && frontier.length; remaining--) {
+    const next = frontier.flatMap((feature) => outgoing.get(feature) ?? []).filter((feature) => !visited.has(feature));
+    for (const feature of next) visited.add(feature);
+    result.push(...next);
+    frontier = next;
+  }
+  return result;
+}
+
+function hit(index: NavigationIndex, feature: NavigationFeature, depth: number): LocateHit {
   const readOrder = [...new Set([...feature.entries, ...feature.related_files, ...feature.tests])];
   return {
     status: 'hit', resolution_mode: 'index', feature: feature.id, entries: feature.entries,
     symbols: feature.symbols.map((symbol) => `${symbol.file}#${symbol.name}`), related_files: feature.related_files,
-    tests: feature.tests, read_order: readOrder, fallback_required: false
+    tests: feature.tests, read_order: readOrder, related_features: relationTargets(index, feature, depth), fallback_required: false
   };
 }
 
 export async function locateContext(project: string, options: LocateOptions): Promise<LocateResult> {
   const queries = [options.feature, options.symbol, options.task].filter(Boolean);
   if (queries.length !== 1) return { status: 'blocked', resolution_mode: 'index', reason: 'Specify exactly one of --feature, --symbol, or --task', fallback_required: false };
+  const depth = options.depth ?? 1;
+  if (!Number.isSafeInteger(depth) || depth < 0) return { status: 'blocked', resolution_mode: 'index', reason: '--depth must be a non-negative integer', fallback_required: false };
   const loaded = await loadIndex(project);
   if (!('features' in loaded)) return loaded;
   const matches = candidatesFor(options, loaded);
@@ -98,5 +127,5 @@ export async function locateContext(project: string, options: LocateOptions): Pr
       resolution_mode: 'index', reason: validation.errors[0] ?? 'Navigation index validation failed', fallback_required: true
     };
   }
-  return hit(feature);
+  return hit(loaded, feature, depth);
 }
