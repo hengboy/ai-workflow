@@ -56,6 +56,15 @@ async function writeCandidate(project: string, value: Record<string, unknown>, e
 }
 
 describe('context refresh CLI', () => {
+  it('promotes a generated candidate from an absolute project path when its path is project-relative', async () => {
+    const project = await projectWithIndex();
+
+    await exec('pnpm', ['exec', 'tsx', 'src/cli.ts', 'context', 'candidate', '--project', project, '--output', '.ai-workflow/candidate.json', '--task-target', 'task-001-navigation', '--root', 'src', '--path', 'src/workflow/parse.ts']);
+    const { stdout } = await exec('pnpm', ['exec', 'tsx', 'src/cli.ts', 'context', 'refresh', '--project', project, '--candidate', '.ai-workflow/candidate.json', '--write']);
+
+    expect(JSON.parse(stdout)).toEqual({ updated: ['.ai-workflow/index/navigation.json', '.ai-workflow/index/navigation.md'] });
+  });
+
   it('atomically promotes an authorized JSON candidate with entries, symbols, relations and tests', async () => {
     const project = await projectWithIndex();
     const path = await writeCandidate(project, candidate());
