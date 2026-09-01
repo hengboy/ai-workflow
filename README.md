@@ -22,6 +22,7 @@ ai-workflow install --host codex|claude|opencode|all
 ai-workflow uninstall --host codex|claude|opencode|all
 ai-workflow profile activate <name>
 ai-workflow init /path/to/project
+ai-workflow update /path/to/project
 ai-workflow workflow generate --plan .ai-workflow/plans/<planId> --host codex
 ai-workflow workflow validate <workflow.json>
 ai-workflow workflow explain <workflow.json>
