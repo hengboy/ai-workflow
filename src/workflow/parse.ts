@@ -2,15 +2,12 @@ import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { parseMarkdown } from '../utils/frontmatter.js';
 import { frozenDocumentDigest, frozenPlanDigest } from './digest.js';
+import { normalizeProjectPaths } from './read-scope.js';
 import type { PlanDocument, TaskDocument } from './types.js';
 
 function listStrings(value: unknown): string[] { return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []; }
 function stringValue(value: unknown, fallback = ''): string { return typeof value === 'string' ? value : fallback; }
-export const fixedTaskContext = ['MEMORY.md', '.ai-workflow/index/navigation.json', '.ai-workflow/index/navigation.md'];
-
-function exactReadPath(path: string): boolean {
-  return path.length > 0 && path !== '.' && !path.startsWith('/') && !path.endsWith('/') && !path.split('/').some((part) => part === '.' || part === '..' || part.length === 0) && !/[?*[\]{}$<>]/.test(path);
-}
+export { fixedTaskContext } from './read-scope.js';
 
 export async function readPlan(directory: string): Promise<PlanDocument> {
   const [spec, plan] = await Promise.all([readFile(join(directory, 'spec.md'), 'utf8'), readFile(join(directory, 'plan.md'), 'utf8')]);
@@ -36,14 +33,14 @@ export async function readTasks(directory: string): Promise<TaskDocument[]> {
   const tasks: TaskDocument[] = [];
   for (const name of names.filter((item) => /^task-\d{3}-.+\.md$/.test(item)).sort()) {
     const path = join(taskDir, name); const doc = parseMarkdown(await readFile(path, 'utf8')); const a = doc.attributes;
-    const id = stringValue(a.id, name.replace(/\.md$/, '')); const surface = stringValue(a.surface, 'backend'); const feature = stringValue(a.feature); const locatorReadOrder = listStrings(a.locator_read_order); const readScope = listStrings(a.read_scope); const writeScope = listStrings(a.write_scope);
+    const id = stringValue(a.id, name.replace(/\.md$/, '')); const surface = stringValue(a.surface, 'backend'); const feature = stringValue(a.feature); const rawLocatorReadOrder = listStrings(a.locator_read_order); const rawReadScope = listStrings(a.read_scope); const writeScope = listStrings(a.write_scope);
     if (!/^task-\d{3}(?:-[a-z0-9-]+)?$/.test(id)) throw new Error(`Invalid task id: ${id}`);
     if (!['backend', 'frontend', 'cross-stack', 'test', 'docs', 'research', 'documentation'].includes(surface)) throw new Error(`Invalid task surface: ${surface}`);
-    if (!feature || !locatorReadOrder.length || !readScope.length || readScope.some((path) => !exactReadPath(path))) throw new Error(`Unsafe task read_scope: ${id}`);
+    const locator = normalizeProjectPaths(rawLocatorReadOrder);
+    const scope = normalizeProjectPaths(rawReadScope);
+    if (!feature || !locator.paths.length || !scope.paths.length || locator.errors.length || scope.errors.length) throw new Error(`Invalid task read_scope: ${id}: ${[...locator.errors, ...scope.errors].join('; ')}`);
     if (writeScope.some((path) => path === '.' || path.startsWith('/') || path.split('/').includes('..'))) throw new Error(`Unsafe task scope: ${id}`);
-    const expectedReadScope = [...new Set([...fixedTaskContext, ...locatorReadOrder])];
-    if (readScope.length !== expectedReadScope.length || expectedReadScope.some((path) => !readScope.includes(path))) throw new Error(`Task read_scope must equal fixed context and locator_read_order: ${id}`);
-    tasks.push({ id, requirements: listStrings(a.requirements), acceptanceCriteria: listStrings(a.acceptance_criteria), dependsOn: listStrings(a.depends_on), surface, feature, locatorReadOrder, readScope, writeScope, testCommands: listStrings(a.test_commands), path });
+    tasks.push({ id, requirements: listStrings(a.requirements), acceptanceCriteria: listStrings(a.acceptance_criteria), dependsOn: listStrings(a.depends_on), surface, feature, locatorReadOrder: locator.paths, readScope: scope.paths, writeScope, testCommands: listStrings(a.test_commands), path });
   }
   return tasks;
 }

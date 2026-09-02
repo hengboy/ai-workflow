@@ -4,7 +4,7 @@
   "title": "Workflow",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "plan_id", "host", "input_digests", "concurrency", "policies", "phases", "nodes", "gates"],
+  "required": ["schema_version", "plan_id", "host", "input_digests", "concurrency", "policies", "phases", "task_read_authorizations", "nodes", "gates"],
   "properties": {
     "schema_version": { "const": "1.0.0" },
     "plan_id": { "type": "string", "pattern": "^[0-9]{8}-[a-z0-9]+(?:-[a-z0-9]+)*$" },
@@ -31,6 +31,10 @@
       "type": "array",
       "const": ["preflight", "baseline", "plan_setup", "executing", "validating", "reviewing", "repairing", "integrating"]
     },
+    "task_read_authorizations": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/taskReadAuthorization" }
+    },
     "nodes": {
       "type": "array",
       "minItems": 1,
@@ -44,6 +48,16 @@
   "definitions": {
     "digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
     "path": { "type": "string", "minLength": 1, "pattern": "^(?!/)(?!\\.?$)(?!.*(?:^|/)\\.\\.(?:/|$)).+" },
+    "taskReadAuthorization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["task_id", "exact_paths", "module_directories"],
+      "properties": {
+        "task_id": { "type": "string", "pattern": "^task-[0-9]{3}(?:-[a-z0-9-]+)?$" },
+        "exact_paths": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/definitions/path" } },
+        "module_directories": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/definitions/path" } }
+      }
+    },
     "node": {
       "type": "object",
       "additionalProperties": false,

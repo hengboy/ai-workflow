@@ -19,11 +19,17 @@ export interface Workflow {
     rebase_allowed: false;
   };
   phases: unknown[];
+  task_read_authorizations: TaskReadAuthorization[];
   /**
    * @minItems 1
    */
   nodes: [Node, ...Node[]];
   gates: Gate[];
+}
+export interface TaskReadAuthorization {
+  task_id: string;
+  exact_paths: Path[];
+  module_directories: Path[];
 }
 export interface Node {
   id: string;
