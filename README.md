@@ -24,11 +24,11 @@ ai-workflow profile activate <name>
 ai-workflow init /path/to/project
 ai-workflow update /path/to/project
 ai-workflow workflow generate --plan .ai-workflow/plans/<planId> --host codex
-ai-workflow workflow validate <workflow.json>
-ai-workflow workflow explain <workflow.json>
-ai-workflow workflow approve <workflow.json>
+ai-workflow workflow validate .ai-workflow/plans/<planId>/workflow.json
+ai-workflow workflow explain .ai-workflow/plans/<planId>/workflow.json
+ai-workflow workflow approve .ai-workflow/plans/<planId>/workflow.json
 ai-workflow plan validate --plan .ai-workflow/plans/<planId>
-ai-workflow run start --workflow <workflow.json> --host codex --project .
+ai-workflow run start --workflow .ai-workflow/plans/<planId>/workflow.json --host codex --project .
 ai-workflow run status|resume|cancel|cleanup <runId> --project .
 ai-workflow context validate --project . --all
 ai-workflow context validate --project . --feature <id>
@@ -37,6 +37,8 @@ ai-workflow context candidate --project . --output <candidate.json> --task-targe
 ai-workflow context refresh --project . --candidate <candidate.json> --write
 ai-workflow context discover --project . --packet <fallback.json>
 ```
+
+`workflow generate` always writes the canonical `.ai-workflow/plans/<plan-id>/workflow.json` inside the project. It has no `--output` option and never creates a `workflow.candidate.json`.
 
 `--project` is always a project root directory path. From that directory use `--project .` (project root directory path); from elsewhere pass an absolute path such as `--project /path/to/project`. Internal orchestration uses absolute project-root paths, and a relative `--candidate` is resolved from that project root.
 
