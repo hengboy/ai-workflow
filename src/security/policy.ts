@@ -11,6 +11,7 @@ const dangerous = /(?:^|\s)(?:sudo|rm\s+-rf|chmod\s+777|curl[^|]*\||wget[^|]*\|)
 
 export function validateRoleCommand(role: Role, command: string): string | undefined {
   if (dangerous.test(command)) return 'Dangerous command is denied';
+  if (role === 'researcher') return 'Researcher may only use web-link analysis';
   if (role === 'file-explorer' && fileMutation.test(command)) return 'File Explorer is read-only';
   if (role !== 'git-operator' && gitMutation.test(command)) return 'Only Git Operator may mutate Git';
   if (role !== 'file-explorer' && repositorySearch.test(command)) return 'Only File Explorer may search the repository';
@@ -19,6 +20,7 @@ export function validateRoleCommand(role: Role, command: string): string | undef
 
 export function validateChangedPaths(node: Node, changedPaths: string[], screenshotDir: string): string[] {
   const errors: string[] = []; const scopes = node.write_scope.map(normalizeScope); const screenshotScope = normalizeScope(screenshotDir);
+  if (node.role === 'researcher' && changedPaths.length > 0) return ['Researcher cannot modify files'];
   if (node.role === 'file-explorer' && changedPaths.length > 0) return ['File Explorer cannot modify files'];
   for (const path of changedPaths.map(normalizeScope)) {
     if (!scopes.some((scope) => path === scope || path.startsWith(`${scope}/`))) errors.push(`Write outside scope: ${path}`);

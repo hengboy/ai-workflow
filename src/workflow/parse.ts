@@ -38,7 +38,7 @@ export async function readTasks(directory: string): Promise<TaskDocument[]> {
     const path = join(taskDir, name); const doc = parseMarkdown(await readFile(path, 'utf8')); const a = doc.attributes;
     const id = stringValue(a.id, name.replace(/\.md$/, '')); const surface = stringValue(a.surface, 'backend'); const feature = stringValue(a.feature); const locatorReadOrder = listStrings(a.locator_read_order); const readScope = listStrings(a.read_scope); const writeScope = listStrings(a.write_scope);
     if (!/^task-\d{3}(?:-[a-z0-9-]+)?$/.test(id)) throw new Error(`Invalid task id: ${id}`);
-    if (!['backend', 'frontend', 'cross-stack', 'test', 'docs'].includes(surface)) throw new Error(`Invalid task surface: ${surface}`);
+    if (!['backend', 'frontend', 'cross-stack', 'test', 'docs', 'research'].includes(surface)) throw new Error(`Invalid task surface: ${surface}`);
     if (!feature || !locatorReadOrder.length || !readScope.length || readScope.some((path) => !exactReadPath(path))) throw new Error(`Unsafe task read_scope: ${id}`);
     if (writeScope.some((path) => path === '.' || path.startsWith('/') || path.split('/').includes('..'))) throw new Error(`Unsafe task scope: ${id}`);
     const expectedReadScope = [...new Set([...fixedTaskContext, ...locatorReadOrder])];

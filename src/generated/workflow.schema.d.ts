@@ -37,7 +37,8 @@ export interface Node {
     | "frontend"
     | "test"
     | "standards-review"
-    | "spec-review";
+    | "spec-review"
+    | "researcher";
   task_id?: string;
   depends_on: string[];
   read_scope: Path[];

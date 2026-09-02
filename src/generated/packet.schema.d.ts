@@ -13,7 +13,8 @@ export interface AgentPacket {
     | "frontend"
     | "test"
     | "standards-review"
-    | "spec-review";
+    | "spec-review"
+    | "researcher";
   objective: string;
   cwd: string;
   read_paths: string[];

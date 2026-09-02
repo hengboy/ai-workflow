@@ -13,7 +13,7 @@ export async function validateWorkflow(workflow: unknown): Promise<ValidationRes
   for (const node of nodes) {
     if (ids.has(node.id)) errors.push(`Duplicate node id: ${node.id}`); ids.add(node.id);
     for (const dependency of node.depends_on ?? []) if (!nodes.some((candidate) => candidate.id === dependency)) errors.push(`${node.id} depends on unknown node ${dependency}`);
-    if (node.role === 'file-explorer' && (node.write_scope?.length ?? 0) > 0) errors.push(`File Explorer cannot write: ${node.id}`);
+    if ((node.role === 'file-explorer' || node.role === 'researcher') && (node.write_scope?.length ?? 0) > 0) errors.push(`${node.role === 'researcher' ? 'Researcher' : 'File Explorer'} cannot write: ${node.id}`);
     if (node.role === 'git-operator' && (node.write_scope?.some((path) => !path.startsWith('.ai-workflow/')) ?? false)) errors.push(`Git Operator scope must be explicit: ${node.id}`);
   }
   const dependsTransitively = (from: string, target: string, seen = new Set<string>()): boolean => { if (seen.has(from)) return false; seen.add(from); const current = nodes.find((item) => item.id === from); return (current?.depends_on ?? []).some((dependency) => dependency === target || dependsTransitively(dependency, target, seen)); };

@@ -30,7 +30,8 @@ export interface ModuleRoot {
     | "frontend"
     | "test"
     | "standards-review"
-    | "spec-review";
+    | "spec-review"
+    | "researcher";
   responsibility: string;
   language: string;
   /**
@@ -63,7 +64,8 @@ export interface Feature {
     | "frontend"
     | "test"
     | "standards-review"
-    | "spec-review";
+    | "spec-review"
+    | "researcher";
   responsibility: string;
   /**
    * @minItems 1
