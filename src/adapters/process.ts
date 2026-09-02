@@ -29,7 +29,7 @@ export async function invokeHost(host: Host, prompt: string, packet: AgentPacket
 
 function parseHostResult(output: string, host: Host): unknown {
   if (host === 'opencode') return parseOpenCodeResult(output);
-  const trimmed = output.trim(); try { const direct = JSON.parse(trimmed) as unknown; if (direct && typeof direct === 'object' && 'result' in direct) return (direct as { result: unknown }).result; return direct; } catch { /* event stream */ }
+  const trimmed = output.trim(); try { const direct = JSON.parse(trimmed) as unknown; if (direct && typeof direct === 'object') { if ('result' in direct) return (direct as { result: unknown }).result; if ((direct as Record<string, unknown>).type === 'result' && (direct as Record<string, unknown>).data) return (direct as Record<string, unknown>).data; } return direct; } catch { /* event stream */ }
   const lines = trimmed.split(/\r?\n/).filter(Boolean); for (let index = lines.length - 1; index >= 0; index--) { try { const event = JSON.parse(lines[index] ?? '') as Record<string, unknown>; if (event.result) return event.result; if (event.type === 'result' && event.data) return event.data; } catch { continue; } } throw new Error('Host did not return JSON result');
 }
 
