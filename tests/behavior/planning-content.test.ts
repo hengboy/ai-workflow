@@ -107,7 +107,7 @@ describe('native prompt contracts', () => {
     expect(explorer).toMatch(/missing_index.*miss.*stale.*invalid/is);
     expect(explorer).toMatch(/authorized module roots|allowed module roots/i);
     expect(explorer).toMatch(/navigation\.json/i);
-    expect(explorer).toMatch(/context refresh/i);
+    expect(explorer).toMatch(/may only read files and search authorized paths/i);
 
     for (const skill of ['planning', 'plan-to-tasks', 'coding']) {
       const text = await readFile(packagePath('templates', 'skills', skill, 'SKILL.md'), 'utf8');
@@ -116,6 +116,15 @@ describe('native prompt contracts', () => {
       expect(text).toMatch(/read_scope/i);
       expect(text).toMatch(/must not.*(?:src\/|tests\/|project root)|不得.*(?:src\/|tests\/|项目根)/is);
     }
+  });
+  it('keeps File Explorer read-only and limited to file retrieval', async () => {
+    const explorer = await readFile(packagePath('templates', 'agents', 'file-explorer.md'), 'utf8');
+
+    expect(explorer).toMatch(/^tools: \[read, search\]$/m);
+    expect(explorer).not.toMatch(/^tools: .*\b(?:edit|shell)\b.*$/m);
+    expect(explorer).toMatch(/may only read files and search authorized paths/i);
+    expect(explorer).toMatch(/may not edit or create any file/i);
+    expect(explorer).not.toMatch(/context refresh|maintenance mode|MEMORY\.md.*update|write.*candidate/i);
   });
   it('documents --project as a project root path with relative and absolute examples', async () => {
     const readme = await readFile(packagePath('README.md'), 'utf8');
