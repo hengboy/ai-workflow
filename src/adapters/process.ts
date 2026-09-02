@@ -36,9 +36,11 @@ function parseHostResult(output: string, host: Host): unknown {
 function parseOpenCodeResult(output: string): unknown {
   const text: string[] = [];
   for (const line of output.trim().split(/\r?\n/).filter(Boolean)) {
-    const event = JSON.parse(line) as Record<string, unknown>;
+    let event: Record<string, unknown>;
+    try { event = JSON.parse(line) as Record<string, unknown>; } catch (error) { throw new Error(`OpenCode JSONL event is invalid: ${error instanceof Error ? error.message : String(error)}`); }
     if (event.type === 'text' && event.part && typeof event.part === 'object' && typeof (event.part as Record<string, unknown>).text === 'string') text.push((event.part as Record<string, unknown>).text as string);
   }
   if (!text.length) throw new Error('OpenCode did not return a text event');
-  return JSON.parse(text.join('').trim()) as unknown;
+  const combined = text.join('').trim(); const fenced = /^```(?:json)?\s*\n([\s\S]*?)\n```$/i.exec(combined); const source = fenced?.[1]?.trim() ?? combined;
+  try { return JSON.parse(source) as unknown; } catch (error) { throw new Error(`OpenCode text did not contain valid JSON: ${error instanceof Error ? error.message : String(error)}`); }
 }
