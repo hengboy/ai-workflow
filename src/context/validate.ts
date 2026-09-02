@@ -39,6 +39,22 @@ async function validateFile(project: string, realProject: string, path: string, 
   }
 }
 
+async function validateNavigationPath(project: string, realProject: string, path: string, errors: string[], allowDirectoryMarker = false): Promise<void> {
+  if (path.endsWith('/') && !allowDirectoryMarker && path !== './') { errors.push(`${path}: expected an exact regular file path`); return; }
+  const normalizedPath = path.endsWith('/') ? path.slice(0, -1) : path;
+  if (!isExactPath(normalizedPath)) { errors.push(`${path}: expected an exact regular file path`); return; }
+  const target = resolve(project, normalizedPath);
+  if (!isWithin(project, target)) { errors.push(`${path}: path escapes project`); return; }
+  try {
+    const info = await lstat(target);
+    const real = await realpath(target);
+    if (!isWithin(realProject, real)) errors.push(`${path}: symlink escapes project`);
+    else if (!info.isFile() && !info.isDirectory()) errors.push(`${path}: expected a regular file or directory`);
+  } catch {
+    errors.push(`${path}: expected an exact regular file`);
+  }
+}
+
 async function typeScriptFiles(project: string, directory: string): Promise<string[]> {
   const files: string[] = [];
   for (const entry of await readdir(directory, { withFileTypes: true })) {
@@ -55,7 +71,24 @@ interface ParsedModuleRoot { symbols: ParsedSymbol[]; relations: ParsedRelation[
 type LanguageParser = (project: string, root: NavigationModuleRoot) => Promise<ParsedModuleRoot>;
 
 function rootFor(index: NavigationIndex, path: string): NavigationModuleRoot | undefined {
-  return index.module_roots.filter((root) => path.startsWith(`${root.path}/`)).sort((left, right) => right.path.length - left.path.length)[0];
+  const normalizedPath = navigationPath(path);
+  return index.module_roots.filter((root) => root.path === '.' || normalizedPath === root.path || normalizedPath.startsWith(`${root.path}/`)).sort((left, right) => right.path.length - left.path.length)[0];
+}
+
+function navigationPath(path: string): string { return path.endsWith('/') ? path.slice(0, -1) : path; }
+
+function coversPath(scope: string, path: string): boolean {
+  const normalizedScope = navigationPath(scope);
+  const normalizedPath = navigationPath(path);
+  return normalizedScope === normalizedPath || normalizedPath.startsWith(`${normalizedScope}/`);
+}
+
+function includesChangedPath(entries: string[], changedPaths: string[]): boolean {
+  return entries.some((entry) => changedPaths.some((changedPath) => {
+    const indexedPath = navigationPath(entry);
+    const changed = navigationPath(changedPath);
+    return changed === indexedPath || changed.startsWith(`${indexedPath}/`);
+  }));
 }
 
 function declarations(source: ts.SourceFile): Map<string, Array<{ kind: string; exported: boolean }>> {
@@ -74,7 +107,7 @@ function declarations(source: ts.SourceFile): Map<string, Array<{ kind: string; 
     else if (ts.isInterfaceDeclaration(statement)) add(statement.name.text, 'interface', visibility);
     else if (ts.isEnumDeclaration(statement)) add(statement.name.text, 'enum', visibility);
     else if (ts.isTypeAliasDeclaration(statement)) add(statement.name.text, 'type', visibility);
-    else if (ts.isVariableStatement(statement)) for (const declaration of statement.declarationList.declarations) if (ts.isIdentifier(declaration.name)) add(declaration.name.text, 'variable', visibility);
+    else if (ts.isVariableStatement(statement)) for (const declaration of statement.declarationList.declarations) if (ts.isIdentifier(declaration.name)) add(declaration.name.text, declaration.initializer && (ts.isArrowFunction(declaration.initializer) || ts.isFunctionExpression(declaration.initializer)) ? 'function' : 'variable', visibility);
   }
   return result;
 }
@@ -145,19 +178,20 @@ export async function createNavigationCandidate(project: string, taskTarget: str
   for (const moduleRoot of navigation.module_roots) {
     if (!insideAuthorizedRoots(moduleRoot.path, moduleRoots)) continue;
     const feature = navigation.features.filter((entry) => entry.module_root === moduleRoot.id);
-    if (feature.length !== 1) throw new Error(`${moduleRoot.id}: candidate generation requires exactly one feature`);
-    const [current] = feature;
-    if (!current) throw new Error(`${moduleRoot.id}: candidate generation requires a feature`);
+    if (!feature.length) continue;
     const parser = languageParsers[moduleRoot.language];
-    if (!parser) throw new Error(`Unsupported navigation language parser: ${moduleRoot.language}`);
+    if (!parser) continue;
     const parsed = await parser(root, moduleRoot);
     const owned = (await typeScriptFiles(root, join(root, moduleRoot.path))).filter((path) => rootFor(navigation, path)?.id === moduleRoot.id);
-    current.entries = owned;
-    current.related_files = [];
-    current.symbols = parsed.symbols.filter((symbol) => rootFor(navigation, symbol.file)?.id === moduleRoot.id).map((symbol) => ({ ...symbol, visibility: 'public' }));
-    current.relations = parsed.relations.filter((relation) => rootFor(navigation, relation.from.slice(0, relation.from.lastIndexOf('#')))?.id === moduleRoot.id);
-    current.owner_role = moduleRoot.owner_role;
-    current.read_scope = [...new Set([...current.entries, ...current.tests])];
+    for (const current of feature) {
+      if (!includesChangedPath(current.entries, changedPaths)) continue;
+      current.entries = owned;
+      current.related_files = [];
+      current.symbols = parsed.symbols.filter((symbol) => rootFor(navigation, symbol.file)?.id === moduleRoot.id).map((symbol) => ({ ...symbol, visibility: 'public' }));
+      current.relations = parsed.relations.filter((relation) => rootFor(navigation, relation.from.slice(0, relation.from.lastIndexOf('#')))?.id === moduleRoot.id);
+      current.owner_role = moduleRoot.owner_role;
+      current.read_scope = [...new Set([...current.entries, ...current.tests])];
+    }
   }
   const candidate: NavigationRefreshCandidate = { version: 1, task_target: taskTarget, authorized_module_roots: moduleRoots, changed_paths: changedPaths, maintenance_authorized: true, navigation };
   await atomicWrite(resolve(root, output), `${JSON.stringify(candidate, null, 2)}\n`);
@@ -172,13 +206,23 @@ function relationReference(value: string): { file: string; name: string } | unde
 async function validateTypeScriptSymbol(project: string, file: string, name: string, kind: string | undefined, visibility: 'public' | 'private' | undefined, errors: string[]): Promise<void> {
   const source = ts.createSourceFile(file, await readFile(join(project, file), 'utf8'), ts.ScriptTarget.Latest, true);
   const candidates = declarations(source).get(name) ?? [];
-  const exists = candidates.some((candidate) => (!kind || candidate.kind === kind) && (visibility !== 'public' || candidate.exported));
+  const syntaxKinds = new Set(['function', 'class', 'interface', 'enum', 'type', 'variable']);
+  const nested = new Map<string, Array<{ kind: string; exported: boolean }>>();
+  const visit = (node: ts.Node): void => {
+    if (ts.isFunctionDeclaration(node) && node.name) nested.set(node.name.text, [...(nested.get(node.name.text) ?? []), { kind: 'function', exported: false }]);
+    else if (ts.isClassDeclaration(node) && node.name) nested.set(node.name.text, [...(nested.get(node.name.text) ?? []), { kind: 'class', exported: false }]);
+    else if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name)) nested.set(node.name.text, [...(nested.get(node.name.text) ?? []), { kind: node.initializer && (ts.isArrowFunction(node.initializer) || ts.isFunctionExpression(node.initializer)) ? 'function' : 'variable', exported: false }]);
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  const allCandidates = [...candidates, ...(nested.get(name) ?? [])];
+  const exists = allCandidates.some((candidate) => (!kind || !syntaxKinds.has(kind) || candidate.kind === kind) && (visibility !== 'public' || candidate.exported));
   if (!exists) errors.push(`Navigation index is stale: ${file} no longer contains ${name}`);
 }
 
 async function validateSemantics(project: string, index: NavigationIndex, features: NavigationIndex['features'], errors: string[]): Promise<void> {
   const usedRoots = new Set(features.map((feature) => feature.module_root));
-  for (const root of index.module_roots) if (usedRoots.has(root.id) && root.language !== 'typescript') errors.push(`Unsupported navigation language parser: ${root.language}`);
+  for (const root of index.module_roots) if (usedRoots.has(root.id) && root.language !== 'typescript' && root.language !== 'mixed') errors.push(`Unsupported navigation language parser: ${root.language}`);
   if (errors.length) return;
   for (const feature of features) {
     for (const symbol of feature.symbols) {
@@ -188,7 +232,10 @@ async function validateSemantics(project: string, index: NavigationIndex, featur
     }
     for (const relation of feature.relations) for (const endpoint of [relation.from, relation.to]) {
       const reference = relationReference(endpoint);
-      if (!reference) { errors.push(`Navigation index is invalid: relation endpoint ${endpoint}`); continue; }
+      if (!reference) {
+        await validateNavigationPath(project, await realpath(project), endpoint, errors, true);
+        continue;
+      }
       const root = rootFor(index, reference.file);
       if (!root) { errors.push(`Navigation index is invalid: ${reference.file} is outside a module root`); continue; }
       await validateTypeScriptSymbol(project, reference.file, reference.name, undefined, 'public', errors);
@@ -198,8 +245,13 @@ async function validateSemantics(project: string, index: NavigationIndex, featur
 
 async function validateFullSemantics(project: string, index: NavigationIndex, errors: string[]): Promise<void> {
   for (const root of index.module_roots) {
+    if (!root.entry_kinds.includes('exported-symbol')) continue;
     const parser = languageParsers[root.language];
-    if (!parser) { errors.push(`Unsupported navigation language parser: ${root.language}`); continue; }
+    if (!parser) {
+      if (root.language === 'mixed') continue;
+      errors.push(`Unsupported navigation language parser: ${root.language}`);
+      continue;
+    }
     const parsed = await parser(project, root);
     const indexedSymbols = index.features.flatMap((feature) => feature.symbols.filter((symbol) => symbol.visibility === 'public' && rootFor(index, symbol.file)?.id === root.id));
     const actualSymbols = new Map(parsed.symbols.filter((symbol) => rootFor(index, symbol.file)?.id === root.id).map((symbol) => [symbolKey(symbol), symbol]));
@@ -231,6 +283,7 @@ async function validateModuleRoots(project: string, index: NavigationIndex, root
 async function validateModuleCoverage(project: string, index: NavigationIndex, errors: string[]): Promise<void> {
   const registered = new Set(index.features.flatMap((feature) => [...feature.entries, ...feature.related_files, ...feature.symbols.map((symbol) => symbol.file)]));
   for (const moduleRoot of index.module_roots) {
+    if (!moduleRoot.entry_kinds.includes('exported-symbol')) continue;
     const path = join(project, moduleRoot.path);
     try {
       if (!(await lstat(path)).isDirectory()) { errors.push(`${moduleRoot.path}: expected a concrete module root directory`); continue; }
@@ -290,17 +343,18 @@ async function validateIndex(project: string, featureIds?: Set<string>, supplied
   if (featureIds) for (const featureId of featureIds) if (!features.some((feature) => feature.id === featureId)) errors.push(`Unknown navigation feature: ${featureId}`);
   if (errors.length) return { errors };
   for (const rootEntry of index.module_roots) {
-    if (!isExactPath(rootEntry.path)) errors.push(`${rootEntry.path}: expected a concrete module root`);
+    if (rootEntry.path !== '.' && !isExactPath(rootEntry.path)) errors.push(`${rootEntry.path}: expected a concrete module root`);
   }
   for (const feature of features) if (!index.module_roots.some((rootEntry) => rootEntry.id === feature.module_root)) errors.push(`${feature.id}: unknown module root ${feature.module_root}`);
   for (const feature of features) {
-    for (const path of [...feature.entries, ...feature.related_files, ...feature.tests, ...feature.read_scope, ...feature.symbols.map((symbol) => symbol.file)]) await validateFile(root, realRoot, path, errors);
-    for (const path of [...feature.entries, ...feature.symbols.map((symbol) => symbol.file)]) if (rootFor(index, path)?.id !== feature.module_root) errors.push(`${feature.id}: ${path} is outside module root ${feature.module_root}`);
-    const readOrder = new Set([...feature.entries, ...feature.related_files, ...feature.tests]);
-    for (const path of readOrder) if (!feature.read_scope.includes(path)) errors.push(`${feature.id} read_scope must include ${path}`);
-    for (const path of feature.read_scope) if (!readOrder.has(path)) errors.push(`${feature.id} read_scope has unneeded path ${path}`);
+    for (const path of [...feature.entries, ...feature.related_files, ...feature.tests]) await validateNavigationPath(root, realRoot, path, errors, true);
+    for (const path of feature.symbols.map((symbol) => symbol.file)) await validateNavigationPath(root, realRoot, path, errors, true);
+    for (const path of feature.read_scope) await validateNavigationPath(root, realRoot, path, errors);
+    const readOrder = new Set([...feature.entries, ...feature.related_files, ...feature.tests].map(navigationPath));
+    for (const path of readOrder) if (!feature.read_scope.some((scope) => coversPath(scope, path))) errors.push(`${feature.id} read_scope must include ${path}`);
+    for (const path of feature.read_scope) if (!feature.entries.some((entry) => coversPath(path, entry)) && !feature.related_files.some((entry) => coversPath(path, entry)) && !feature.tests.some((entry) => coversPath(path, entry))) errors.push(`${feature.id} read_scope has unneeded path ${path}`);
     const moduleRoot = index.module_roots.find((rootEntry) => rootEntry.id === feature.module_root);
-    if (moduleRoot && feature.owner_role !== moduleRoot.owner_role) errors.push(`${feature.id}: owner mismatch for module root ${moduleRoot.id}`);
+    if (moduleRoot && moduleRoot.owner_role !== 'shared' && feature.owner_role !== moduleRoot.owner_role) errors.push(`${feature.id}: owner mismatch for module root ${moduleRoot.id}`);
   }
   if (featureIds) {
     if (!errors.length) await validateSemantics(root, index, features, errors);
@@ -329,11 +383,11 @@ export async function verifyNavigation(project: string, featureId: string): Prom
 }
 
 function isConcreteDirectory(path: string): boolean {
-  return isExactPath(path) && path !== '.';
+  return path === '.' || isExactPath(path);
 }
 
 function insideAuthorizedRoots(path: string, roots: string[]): boolean {
-  return roots.some((root) => path === root || path.startsWith(`${root}/`));
+  return roots.some((root) => root === '.' || path === root || path.startsWith(`${root}/`));
 }
 
 function sameJson(left: unknown, right: unknown): boolean {
