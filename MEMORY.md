@@ -2,11 +2,11 @@
 
 ## Purpose
 
-`ai-workflow` installs portable planning, task-splitting and coding skills for Codex, Claude Code and OpenCode. Coding execution is handled by this repository's own JSON DAG runtime.
+`ai-workflow` installs portable planning, task-splitting and coding skills once into `~/.agents/skills`, and per-host role agents for Codex, Claude Code and OpenCode. Coding execution is handled by this repository's own JSON DAG runtime.
 
 ## Boundaries
 
-- `src/install`: host rendering, atomic install/uninstall and project initialization.
+- `src/install`: shared-skill and host-agent rendering, atomic install/uninstall and project initialization.
 - `src/profile`: profile YAML discovery and authoritative schema validation.
 - `src/workflow`: frozen-plan parsing, workflow generation, validation, explanation and approval.
 - `src/runtime`: persistent state machine, scheduling, checkpoints and lifecycle commands.

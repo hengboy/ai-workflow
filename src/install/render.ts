@@ -55,20 +55,21 @@ async function markdownFiles(root: string): Promise<string[]> {
   return (await filesRecursively(root)).filter((path) => path.endsWith('.md'));
 }
 
-export async function renderHost(host: Host, version: string, profile?: Profile): Promise<{ plugin: RenderedFile[]; agents: RenderedFile[] }> {
-  const skillRoot = packagePath('templates', 'skills'); const agentRoot = packagePath('templates', 'agents');
-  const plugin: RenderedFile[] = []; const agents: RenderedFile[] = [];
+export async function renderSkills(): Promise<RenderedFile[]> {
+  const skillRoot = packagePath('templates', 'skills');
+  const files: RenderedFile[] = [];
   for (const path of await filesRecursively(skillRoot)) {
-    const contents = await readFile(path, 'utf8');
-    plugin.push({ relativePath: `skills/${relative(skillRoot, path)}`, contents: path.endsWith('.md') ? frontmatterFor(host, contents) : contents });
+    files.push({ relativePath: relative(skillRoot, path), contents: await readFile(path, 'utf8') });
   }
+  return files;
+}
+
+export async function renderHost(host: Host, profile?: Profile): Promise<RenderedFile[]> {
+  const agentRoot = packagePath('templates', 'agents');
+  const agents: RenderedFile[] = [];
   for (const path of await markdownFiles(agentRoot)) {
     const name = basename(path, '.md'); const extension = host === 'codex' ? '.toml' : '.md';
     agents.push({ relativePath: `${name}${extension}`, contents: agentFrontmatterFor(host, await readFile(path, 'utf8'), profile?.agents[name]?.[host]) });
   }
-  if (host !== 'opencode') {
-    const manifestPath = packagePath('templates', 'hosts', host, `.${host === 'codex' ? 'codex' : 'claude'}-plugin`, 'plugin.json');
-    plugin.push({ relativePath: `.${host === 'codex' ? 'codex' : 'claude'}-plugin/plugin.json`, contents: (await readFile(manifestPath, 'utf8')).replaceAll('{{version}}', version) });
-  }
-  return { plugin, agents };
+  return agents;
 }

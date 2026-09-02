@@ -221,6 +221,12 @@
         },
         {
           "file": "src/install/render.ts",
+          "name": "renderSkills",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/install/render.ts",
           "name": "renderHost",
           "kind": "function",
           "visibility": "public"
@@ -237,12 +243,17 @@
         {
           "kind": "imports",
           "from": "src/install/index.ts#install",
-          "to": "src/install/render.ts#renderHost"
+          "to": "src/install/render.ts#renderSkills"
         },
         {
           "kind": "imports",
           "from": "src/install/index.ts#install",
           "to": "src/install/render.ts#RenderedFile"
+        },
+        {
+          "kind": "imports",
+          "from": "src/install/index.ts#install",
+          "to": "src/install/render.ts#renderHost"
         }
       ],
       "owner_role": "task-worker",
