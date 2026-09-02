@@ -126,12 +126,13 @@ describe('native prompt contracts', () => {
     expect(explorer).toMatch(/may not edit or create any file/i);
     expect(explorer).not.toMatch(/context refresh|maintenance mode|MEMORY\.md.*update|write.*candidate/i);
   });
-  it('gives Researcher bounded web-link analysis and a research report contract', async () => {
+  it('gives Researcher bounded topic research and a research report contract', async () => {
     const researcher = await readFile(packagePath('templates', 'agents', 'researcher.md'), 'utf8');
 
     expect(researcher).toMatch(/^tools: \[read, web\]$/m);
-    expect(researcher).toMatch(/GitHub|https?:\/\//i);
-    expect(researcher).toMatch(/only.*(?:provided|supplied).*links/i);
+    expect(researcher).toMatch(/technology.*project.*keyword/is);
+    expect(researcher).toMatch(/links?.*(?:optional|if available)|(?:optional|if available).*links?/is);
+    expect(researcher).toMatch(/delegate every request|must delegate/i);
     expect(researcher).toMatch(/research report/i);
     expect(researcher).toMatch(/sources|evidence|unresolved/i);
     expect(researcher).toMatch(/may not edit or create any file/i);
