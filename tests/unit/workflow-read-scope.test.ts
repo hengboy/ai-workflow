@@ -112,7 +112,14 @@ describe('workflow task read scope', () => {
     const source = await (await import('node:fs/promises')).readFile(path, 'utf8');
     await writeFile(path, source.replaceAll('src/workflow/input.ts', 'src/workflow/other.ts'));
 
-    await expect(generateWorkflow(plan, 'codex')).rejects.toThrow(/locator_read_order does not match feature task-input/);
+    await expect(generateWorkflow(plan, 'codex')).rejects.toThrow(/locator_read_order sequence does not match feature task-input/);
+  });
+
+  it('rejects a task whose locator read order is reordered', async () => {
+    const locatorReadOrder = ['src/workflow/input.ts', 'tests/workflow/input.test.ts'];
+    const plan = await projectWithBoundTask([...fixedContext, ...locatorReadOrder], locatorReadOrder, [], ['src/workflow/output.ts'], ['tests/workflow/input.test.ts', 'src/workflow/input.ts']);
+
+    await expect(generateWorkflow(plan, 'codex')).rejects.toThrow(/read_order sequence does not match/);
   });
 
   it('reports an exact path that the locator did not authorize', async () => {

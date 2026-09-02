@@ -49,9 +49,9 @@ export async function generateWorkflow(planDirectory: string, host: Host, concur
     const locator = normalizeProjectPaths(located.read_order);
     if (locator.errors.length) throw new Error(`Task locator returned invalid paths for ${task.id}: ${locator.errors.join('; ')}`);
     const authorization: TaskReadAuthorization = { task_id: task.id, exact_paths: locator.paths, module_directories: task.newModuleDirectories };
-    const missingFromLocator = task.locatorReadOrder.filter((path) => !locator.paths.includes(path));
-    const missingFromTask = locator.paths.filter((path) => !task.locatorReadOrder.includes(path));
-    if (missingFromLocator.length || missingFromTask.length) throw new Error(`Task locator_read_order does not match feature ${task.feature}: ${task.id}; not returned by locator: ${missingFromLocator.join(', ') || '<none>'}; omitted locator paths: ${missingFromTask.join(', ') || '<none>'}`);
+    const taskLocator = normalizeProjectPaths(task.locatorReadOrder);
+    const sequenceMatches = taskLocator.paths.length === locator.paths.length && taskLocator.paths.every((path, index) => path === locator.paths[index]);
+    if (!sequenceMatches) throw new Error(`Task locator_read_order sequence does not match feature ${task.feature}: ${task.id}; task: ${taskLocator.paths.join(', ') || '<none>'}; locator: ${locator.paths.join(', ') || '<none>'}`);
     const newModuleDiagnostics = await validateNewModuleDirectories(project, task, locator.paths);
     if (newModuleDiagnostics.length) throw new Error(`Task ${task.id} read_scope: ${newModuleDiagnostics.join('; ')}`);
     const broadPaths = await broadReadScopePaths(project, task.readScope);
