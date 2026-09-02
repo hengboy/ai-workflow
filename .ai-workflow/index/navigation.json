@@ -267,6 +267,7 @@
         "src/workflow/digest.ts",
         "src/workflow/generate.ts",
         "src/workflow/parse.ts",
+        "src/workflow/read-scope.ts",
         "src/workflow/types.ts",
         "src/workflow/validate.ts"
       ],
@@ -333,12 +334,6 @@
         },
         {
           "file": "src/workflow/parse.ts",
-          "name": "fixedTaskContext",
-          "kind": "variable",
-          "visibility": "public"
-        },
-        {
-          "file": "src/workflow/parse.ts",
           "name": "readPlan",
           "kind": "function",
           "visibility": "public"
@@ -346,6 +341,48 @@
         {
           "file": "src/workflow/parse.ts",
           "name": "readTasks",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workflow/read-scope.ts",
+          "name": "fixedTaskContext",
+          "kind": "variable",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workflow/read-scope.ts",
+          "name": "TaskReadAuthorization",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workflow/read-scope.ts",
+          "name": "normalizeProjectPath",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workflow/read-scope.ts",
+          "name": "normalizeProjectPaths",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workflow/read-scope.ts",
+          "name": "taskReadScope",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workflow/read-scope.ts",
+          "name": "taskReadScopeDiagnostics",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workflow/read-scope.ts",
+          "name": "pathIsWithin",
           "kind": "function",
           "visibility": "public"
         },
@@ -431,6 +468,21 @@
         {
           "kind": "imports",
           "from": "src/workflow/generate.ts#generateWorkflow",
+          "to": "src/workflow/read-scope.ts#TaskReadAuthorization"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workflow/generate.ts#generateWorkflow",
+          "to": "src/workflow/read-scope.ts#normalizeProjectPaths"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workflow/generate.ts#generateWorkflow",
+          "to": "src/workflow/read-scope.ts#taskReadScopeDiagnostics"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workflow/generate.ts#generateWorkflow",
           "to": "src/workflow/parse.ts#fixedTaskContext"
         },
         {
@@ -480,8 +532,33 @@
         },
         {
           "kind": "imports",
+          "from": "src/workflow/parse.ts#readTasks",
+          "to": "src/workflow/read-scope.ts#normalizeProjectPaths"
+        },
+        {
+          "kind": "imports",
           "from": "src/workflow/validate.ts#validateWorkflow",
           "to": "src/workflow/types.ts#Workflow"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workflow/validate.ts#validateWorkflow",
+          "to": "src/workflow/read-scope.ts#TaskReadAuthorization"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workflow/validate.ts#validateWorkflow",
+          "to": "src/workflow/read-scope.ts#normalizeProjectPaths"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workflow/validate.ts#validateWorkflow",
+          "to": "src/workflow/read-scope.ts#pathIsWithin"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workflow/validate.ts#validateWorkflow",
+          "to": "src/workflow/read-scope.ts#taskReadScopeDiagnostics"
         }
       ],
       "owner_role": "task-worker",
@@ -491,6 +568,7 @@
         "src/workflow/digest.ts",
         "src/workflow/generate.ts",
         "src/workflow/parse.ts",
+        "src/workflow/read-scope.ts",
         "src/workflow/types.ts",
         "src/workflow/validate.ts",
         "tests/unit/frozen-protocol.test.ts",
