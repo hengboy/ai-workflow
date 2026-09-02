@@ -1,6 +1,6 @@
 # ai-workflow
 
-A self-contained macOS/Node.js 22 CLI that installs the same native planning, task-splitting and coding guidance for Codex, Claude Code and OpenCode. Planning uses only host-native skills and agents. Coding runs through a local, versioned JSON DAG with explicit approval, checkpoints, role/scope enforcement and Git worktrees.
+A self-contained macOS/Node.js 22 CLI that installs planning, task-splitting and coding skills once into `~/.agents/skills`, plus the same native role agents for Codex, Claude Code and OpenCode. Planning uses the shared skills and host-native agents. Coding runs through a local, versioned JSON DAG with explicit approval, checkpoints, role/scope enforcement and Git worktrees.
 
 The product does not execute, depend on or provide compatibility for external workflow frameworks. It calls exactly one selected host CLI per run and never calls model-provider APIs directly.
 
