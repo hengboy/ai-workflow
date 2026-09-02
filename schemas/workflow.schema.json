@@ -52,7 +52,7 @@
         "id": { "type": "string", "pattern": "^[a-z][a-z0-9_-]*$" },
         "phase": { "type": "string", "pattern": "^[a-z][a-z0-9_-]*$" },
         "kind": { "enum": ["agent", "parallel", "pipeline", "phase", "gate", "git"] },
-        "role": { "enum": ["file-explorer", "git-operator", "task-worker", "backend", "frontend", "test", "standards-review", "spec-review"] },
+        "role": { "enum": ["file-explorer", "git-operator", "task-worker", "backend", "frontend", "test", "standards-review", "spec-review", "researcher", "documentation-maintainer"] },
         "task_id": { "type": "string", "pattern": "^task-[0-9]{3}(?:-[a-z0-9-]+)?$" },
         "depends_on": { "type": "array", "uniqueItems": true, "items": { "type": "string" } },
         "read_scope": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/definitions/path" } },

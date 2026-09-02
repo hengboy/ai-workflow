@@ -5,6 +5,12 @@ import { schemaValidator } from '../utils/schema.js';
 
 export interface ValidationResult { valid: boolean; errors: string[]; topologicalOrder: string[] }
 
+const codeExtension = /\.(?:c|cjs|cpp|css|go|h|html|java|js|jsx|mjs|py|rs|scss|sh|sql|swift|ts|tsx|vue)$/i;
+function validDocumentationPath(path: string): boolean {
+  const normalized = path.replaceAll('\\', '/');
+  return !normalized.startsWith('src/') && !normalized.startsWith('tests/') && !normalized.startsWith('schemas/') && !normalized.startsWith('.ai-workflow/plans/') && !codeExtension.test(normalized);
+}
+
 export async function validateWorkflow(workflow: unknown): Promise<ValidationResult> {
   const errors: string[] = []; const validator = await schemaValidator('workflow.schema.json');
   if (!validator(workflow)) errors.push(formatSchemaErrors(validator.errors));
@@ -13,7 +19,8 @@ export async function validateWorkflow(workflow: unknown): Promise<ValidationRes
   for (const node of nodes) {
     if (ids.has(node.id)) errors.push(`Duplicate node id: ${node.id}`); ids.add(node.id);
     for (const dependency of node.depends_on ?? []) if (!nodes.some((candidate) => candidate.id === dependency)) errors.push(`${node.id} depends on unknown node ${dependency}`);
-    if (node.role === 'file-explorer' && (node.write_scope?.length ?? 0) > 0) errors.push(`File Explorer cannot write: ${node.id}`);
+    if ((node.role === 'file-explorer' || node.role === 'researcher') && (node.write_scope?.length ?? 0) > 0) errors.push(`${node.role === 'researcher' ? 'Researcher' : 'File Explorer'} cannot write: ${node.id}`);
+    if (node.role === 'documentation-maintainer' && (node.write_scope?.some((path) => !validDocumentationPath(path)) ?? false)) errors.push(`Documentation Maintainer scope must contain only non-code documentation: ${node.id}`);
     if (node.role === 'git-operator' && (node.write_scope?.some((path) => !path.startsWith('.ai-workflow/')) ?? false)) errors.push(`Git Operator scope must be explicit: ${node.id}`);
   }
   const dependsTransitively = (from: string, target: string, seen = new Set<string>()): boolean => { if (seen.has(from)) return false; seen.add(from); const current = nodes.find((item) => item.id === from); return (current?.depends_on ?? []).some((dependency) => dependency === target || dependsTransitively(dependency, target, seen)); };

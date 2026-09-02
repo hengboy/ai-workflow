@@ -18,7 +18,7 @@
   },
   "definitions": {
     "role": {
-      "enum": ["file-explorer", "git-operator", "task-worker", "backend", "frontend", "test", "standards-review", "spec-review"]
+      "enum": ["file-explorer", "git-operator", "task-worker", "backend", "frontend", "test", "standards-review", "spec-review", "researcher", "documentation-maintainer"]
     },
     "moduleRoot": {
       "type": "object",

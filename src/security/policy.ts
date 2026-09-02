@@ -6,10 +6,14 @@ import type { Node, Role } from '../workflow/types.js';
 
 const gitMutation = /(?:^|\s)git\s+(?:add|commit|checkout|switch|branch|merge|rebase|reset|clean|worktree|tag|push|pull|fetch)\b/;
 const repositorySearch = /(?:^|\s)(?:rg|grep|find|fd|locate)\b/;
+const fileMutation = /(?:^|\s)(?:touch|mkdir|cp|mv|install|tee|dd|truncate)\b|(?:^|\s)(?:sed|perl)\s+[^\n]*\s-i(?:\s|$)|(?:^|\s)[^\n]+(?:>>|>)[^\n]*/;
 const dangerous = /(?:^|\s)(?:sudo|rm\s+-rf|chmod\s+777|curl[^|]*\||wget[^|]*\|)/;
 
 export function validateRoleCommand(role: Role, command: string): string | undefined {
   if (dangerous.test(command)) return 'Dangerous command is denied';
+  if (role === 'researcher') return 'Researcher may only use web-link analysis';
+  if (role === 'documentation-maintainer' && (gitMutation.test(command) || repositorySearch.test(command))) return 'Documentation Maintainer may only maintain documentation';
+  if (role === 'file-explorer' && fileMutation.test(command)) return 'File Explorer is read-only';
   if (role !== 'git-operator' && gitMutation.test(command)) return 'Only Git Operator may mutate Git';
   if (role !== 'file-explorer' && repositorySearch.test(command)) return 'Only File Explorer may search the repository';
   return undefined;
@@ -17,6 +21,8 @@ export function validateRoleCommand(role: Role, command: string): string | undef
 
 export function validateChangedPaths(node: Node, changedPaths: string[], screenshotDir: string): string[] {
   const errors: string[] = []; const scopes = node.write_scope.map(normalizeScope); const screenshotScope = normalizeScope(screenshotDir);
+  if (node.role === 'researcher' && changedPaths.length > 0) return ['Researcher cannot modify files'];
+  if (node.role === 'file-explorer' && changedPaths.length > 0) return ['File Explorer cannot modify files'];
   for (const path of changedPaths.map(normalizeScope)) {
     if (!scopes.some((scope) => path === scope || path.startsWith(`${scope}/`))) errors.push(`Write outside scope: ${path}`);
     if (/\.(?:png|jpe?g|webp)$/i.test(path) && !(path === screenshotScope || path.startsWith(`${screenshotScope}/`))) errors.push(`Screenshot outside plan directory: ${path}`);
