@@ -23,9 +23,11 @@ Do not silently repair documents. Return to planning or task splitting when requ
 
 Before implementation, directly read `MEMORY.md`, `.ai-workflow/index/navigation.json` and `.ai-workflow/index/navigation.md`. For every known task feature, run `ai-workflow context locate --project <absolute-project-root> --feature <id> --verify` and read only the returned exact `read_order`. `<absolute-project-root>` is the normalized project directory path, never its directory name. Do not search source, traverse the repository or widen a packet `read_scope`. If locate returns `missing_index`, `miss`, `stale` or `invalid`, request File Explorer with the precise failure and authorized module roots; without such roots the run is blocked. Packets must use fixed context plus exact locator paths; `read_scope` must not contain `src/`, `tests/` or the project root.
 
-## Candidate generation
+## Workflow generation
 
-Run `workflow generate` and deterministically derive:
+Run `workflow generate --plan <directory> --host <host>`. It always writes `.ai-workflow/plans/<plan-id>/workflow.json`; do not pass `--output`, and do not create or refer to a `workflow.candidate.json`.
+
+Deterministically derive:
 
 - task nodes and declared dependencies;
 - role from surface;
@@ -36,7 +38,7 @@ Run `workflow generate` and deterministically derive:
 - test, dual-review, context and integration gates;
 - frozen input digests.
 
-Validate public JSON Schema, unique IDs, dependency existence, acyclicity, role permissions and scope conflicts before showing a candidate.
+Validate public JSON Schema, unique IDs, dependency existence, acyclicity, role permissions and scope conflicts before review.
 
 The frozen-plan digest protocol is shared with planning and plan-to-tasks. A run must reject any changed or stale `spec.md` or `plan.md` before execution.
 
@@ -55,7 +57,7 @@ Translate user feedback into `adjustment.schema.json`. Permitted operations are 
 
 ## Approval gate
 
-Run `workflow approve` only after explicit user confirmation. The receipt binds workflow digest, plan ID, host and approval time. `run start` must reject:
+Run `workflow approve <plan-directory>/workflow.json` only after explicit user confirmation. The receipt binds workflow digest, plan ID, host and approval time. `run start` must reject:
 
 - missing receipt;
 - mismatched workflow digest, plan ID or host;
