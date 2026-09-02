@@ -1,14 +1,14 @@
 import { homedir } from 'node:os';
 import { basename, dirname, extname, join, relative, resolve } from 'node:path';
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
-import { atomicDirectory, atomicWrite, exists, readJson, writeJson } from '../utils/fs.js';
+import { readFile, rm } from 'node:fs/promises';
+import { atomicWrite, exists, readJson, writeJson } from '../utils/fs.js';
 import { sha256 } from '../utils/hash.js';
-import { renderHost, type RenderedFile } from './render.js';
+import { renderHost, renderSkills, type RenderedFile } from './render.js';
 import { loadProfile, type Profile } from '../profile/index.js';
 import type { Host } from '../workflow/types.js';
 
 interface ManifestFile { path: string; digest: string; kind: 'file' | 'directory' }
-interface InstallManifest { version: string; installed_at: string; hosts: Partial<Record<Host, ManifestFile[]>> }
+interface InstallManifest { version: string; installed_at: string; skills?: ManifestFile[]; hosts: Partial<Record<Host, ManifestFile[]>> }
 interface ProjectManifest { version: 1; files: Record<string, string> }
 export interface AgentInstallation {
   name: string;
@@ -29,6 +29,8 @@ export interface ProfileActivationReport {
 const manifestRelative = '.config/ai-workflow/install-manifest.json';
 const activeProfileRelative = '.config/ai-workflow/active-profile';
 const projectManifestRelative = '.ai-workflow/project-manifest.json';
+const marketplaceRelative = '.agents/plugins/marketplace.json';
+const skillsRelative = '.agents/skills';
 const projectTemplates = ['AGENTS.md', 'MEMORY.md', 'navigation.json', 'navigation.md', 'config.yaml'] as const;
 function projectTargets(): Array<{ source: string; target: string }> {
   return projectTemplates.map((name) => ({ source: join('templates/project', name), target: name === 'navigation.json' || name === 'navigation.md' ? `.ai-workflow/index/${name}` : name === 'config.yaml' ? '.ai-workflow/config.yaml' : name }));
@@ -37,31 +39,41 @@ async function projectTemplateContents(): Promise<Array<{ target: string; conten
   return Promise.all(projectTargets().map(async ({ source, target }) => ({ target, contents: await readFile(new URL(`../../${source}`, import.meta.url), 'utf8') })));
 }
 
-function roots(home: string, host: Host): { plugin?: string; skills?: string; agents: string } {
-  if (host === 'codex') return { plugin: join(home, '.codex/plugins/ai-workflow'), agents: join(home, '.codex/agents') };
-  if (host === 'claude') return { plugin: join(home, '.claude/skills/ai-workflow'), agents: join(home, '.claude/skills/ai-workflow/agents') };
-  return { skills: join(home, '.config/opencode/skills'), agents: join(home, '.config/opencode/agents') };
+function agentsRoot(home: string, host: Host): string {
+  if (host === 'codex') return join(home, '.codex/agents');
+  if (host === 'claude') return join(home, '.claude/agents');
+  return join(home, '.config/opencode/agents');
 }
+function skillsRoot(home: string): string { return join(home, skillsRelative); }
 
-async function writeRendered(root: string, files: RenderedFile[]): Promise<void> { for (const file of files) { const target = join(root, file.relativePath); await mkdir(dirname(target), { recursive: true }); await writeFile(target, file.contents); } }
+async function writeRendered(root: string, files: RenderedFile[]): Promise<void> {
+  for (const file of files) await atomicWrite(join(root, file.relativePath), file.contents);
+}
 
 async function readManifest(home: string): Promise<InstallManifest> {
   const path = join(home, manifestRelative); return await exists(path) ? readJson<InstallManifest>(path) : { version: '1', installed_at: new Date(0).toISOString(), hosts: {} };
 }
 
-async function mergeMarketplace(home: string, version: string): Promise<ManifestFile> {
-  const path = join(home, '.agents/plugins/marketplace.json'); let content: Record<string, unknown> = {};
-  if (await exists(path)) { const parsed = JSON.parse(await readFile(path, 'utf8')) as unknown; if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('marketplace.json must be an object'); content = parsed as Record<string, unknown>; }
-  const existing: unknown[] = Array.isArray(content.plugins) ? content.plugins as unknown[] : [];
-  const retained = existing.filter((entry) => !(entry && typeof entry === 'object' && (entry as Record<string, unknown>).name === 'ai-workflow'));
-  content.name = typeof content.name === 'string' ? content.name : 'ai-workflow-local';
-  content.plugins = [...retained, { name: 'ai-workflow', source: { source: 'local', path: './.codex/plugins/ai-workflow' }, policy: { installation: 'INSTALLED_BY_DEFAULT', authentication: 'ON_INSTALL' }, category: 'Productivity', version }]; await writeJson(path, content); return { path: relative(home, path), digest: sha256(await readFile(path)), kind: 'file' };
+// Legacy migration: previous versions recorded the Codex plugin in the shared marketplace.
+// ai-workflow no longer ships a Codex plugin, so strip only its own entry and leave other entries intact.
+async function removeMarketplaceEntry(home: string): Promise<void> {
+  const path = join(home, marketplaceRelative);
+  if (!(await exists(path))) return;
+  let parsed: unknown;
+  try { parsed = JSON.parse(await readFile(path, 'utf8')); } catch { return; }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return;
+  const content = parsed as Record<string, unknown>;
+  if (!Array.isArray(content.plugins)) return;
+  const retained = content.plugins.filter((entry) => !(entry && typeof entry === 'object' && (entry as Record<string, unknown>).name === 'ai-workflow'));
+  if (retained.length === content.plugins.length) return;
+  content.plugins = retained;
+  await writeJson(path, content);
 }
 
 async function removeStaleOwnedFiles(home: string, previous: ManifestFile[], current: ManifestFile[]): Promise<void> {
   const retained = new Set(current.map((file) => file.path));
   for (const file of previous) {
-    if (retained.has(file.path) || file.path === '.agents/plugins/marketplace.json') continue;
+    if (retained.has(file.path) || file.path === marketplaceRelative) continue;
     const path = resolve(home, file.path);
     if (!path.startsWith(`${home}/`)) throw new Error(`Unsafe manifest path: ${file.path}`);
     await rm(path, { recursive: file.kind === 'directory', force: true });
@@ -71,31 +83,19 @@ async function removeStaleOwnedFiles(home: string, previous: ManifestFile[], cur
 export async function install(hosts: Host[], options: { home?: string; version?: string; profile?: Profile } = {}): Promise<InstallManifest> {
   const home = resolve(options.home ?? homedir()); const version = options.version ?? '0.1.0'; const manifest = await readManifest(home);
   const activeName = options.profile ? undefined : await getActiveProfile(home); const profile = options.profile ?? (activeName ? await loadProfile(home, activeName) : undefined);
-  if (hosts.includes('codex')) {
-    const marketplace = join(home, '.agents/plugins/marketplace.json');
-    if (await exists(marketplace)) { const parsed = JSON.parse(await readFile(marketplace, 'utf8')) as unknown; if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('marketplace.json must be an object'); }
-  }
-  const renderedHosts = new Map<Host, Awaited<ReturnType<typeof renderHost>>>(); for (const host of hosts) renderedHosts.set(host, await renderHost(host, version, profile));
+  // Shared skills are host-neutral and installed once, independent of the requested host list.
+  const skills = await renderSkills();
+  const ownedSkills: ManifestFile[] = [];
+  for (const file of skills) { const path = join(skillsRoot(home), file.relativePath); await atomicWrite(path, file.contents); ownedSkills.push({ path: relative(home, path), digest: sha256(file.contents), kind: 'file' }); }
+  await removeStaleOwnedFiles(home, manifest.skills ?? [], ownedSkills);
+  manifest.skills = ownedSkills;
+  const renderedHosts = new Map<Host, RenderedFile[]>(); for (const host of hosts) renderedHosts.set(host, await renderHost(host, profile));
   for (const host of hosts) {
-    const rendered = renderedHosts.get(host); if (!rendered) throw new Error(`Missing rendered host: ${host}`); const target = roots(home, host); const owned: ManifestFile[] = [];
-    if (target.plugin) { await atomicDirectory(target.plugin, (temporary) => writeRendered(temporary, rendered.plugin)); owned.push({ path: relative(home, target.plugin), digest: sha256(JSON.stringify(rendered.plugin)), kind: 'directory' }); }
-    if (target.skills) {
-      const skills = new Map<string, RenderedFile[]>();
-      for (const file of rendered.plugin) {
-        const match = /^skills\/([^/]+)\/(.+)$/.exec(file.relativePath);
-        if (!match?.[1] || !match[2]) continue;
-        const files = skills.get(match[1]) ?? [];
-        files.push({ ...file, relativePath: match[2] });
-        skills.set(match[1], files);
-      }
-      for (const [skill, files] of skills) {
-        const path = join(target.skills, skill);
-        await atomicDirectory(path, (temporary) => writeRendered(temporary, files));
-        owned.push({ path: relative(home, path), digest: sha256(JSON.stringify(files)), kind: 'directory' });
-      }
-    }
-    for (const file of rendered.agents) { const path = join(target.agents, file.relativePath); await atomicWrite(path, file.contents); owned.push({ path: relative(home, path), digest: sha256(file.contents), kind: 'file' }); }
-    if (host === 'codex') owned.push(await mergeMarketplace(home, version));
+    const rendered = renderedHosts.get(host); if (!rendered) throw new Error(`Missing rendered host: ${host}`);
+    const target = agentsRoot(home, host);
+    await writeRendered(target, rendered);
+    const owned = rendered.map((file) => ({ path: relative(home, join(target, file.relativePath)), digest: sha256(file.contents), kind: 'file' as const }));
+    if (host === 'codex') await removeMarketplaceEntry(home);
     await removeStaleOwnedFiles(home, manifest.hosts[host] ?? [], owned);
     manifest.hosts[host] = owned;
   }
@@ -109,7 +109,7 @@ export async function getActiveProfile(home: string): Promise<string | undefined
 
 function profileInstallations(home: string, hosts: Host[], manifest: InstallManifest, profile: Profile): HostInstallation[] {
   return hosts.map((host) => {
-    const agentsDirectory = roots(home, host).agents;
+    const agentsDirectory = agentsRoot(home, host);
     const agents = (manifest.hosts[host] ?? []).flatMap((file): AgentInstallation[] => {
       const path = resolve(home, file.path);
       if (file.kind !== 'file' || dirname(path) !== agentsDirectory) return [];
@@ -138,11 +138,18 @@ export async function uninstall(hosts: Host[], options: { home?: string } = {}):
   for (const host of hosts) {
     for (const file of manifest.hosts[host] ?? []) {
       const path = resolve(home, file.path); if (!path.startsWith(`${home}/`)) throw new Error(`Unsafe manifest path: ${file.path}`);
-      if (host === 'codex' && file.path === '.agents/plugins/marketplace.json' && await exists(path)) {
-        const data = await readJson<Record<string, unknown>>(path); if (Array.isArray(data.plugins)) { data.plugins = data.plugins.filter((entry) => !(entry && typeof entry === 'object' && (entry as Record<string, unknown>).name === 'ai-workflow')); await writeJson(path, data); }
-      } else await rm(path, { recursive: file.kind === 'directory', force: true });
+      if (file.path === marketplaceRelative) continue;
+      await rm(path, { recursive: file.kind === 'directory', force: true });
     }
+    if (host === 'codex') await removeMarketplaceEntry(home);
     manifest.hosts = Object.fromEntries(Object.entries(manifest.hosts).filter(([key]) => key !== host)) as InstallManifest['hosts'];
+  }
+  if (Object.keys(manifest.hosts).length === 0) {
+    for (const file of manifest.skills ?? []) {
+      const path = resolve(home, file.path); if (!path.startsWith(`${home}/`)) throw new Error(`Unsafe manifest path: ${file.path}`);
+      await rm(path, { recursive: file.kind === 'directory', force: true });
+    }
+    delete manifest.skills;
   }
   await writeJson(join(home, manifestRelative), manifest); return manifest;
 }
