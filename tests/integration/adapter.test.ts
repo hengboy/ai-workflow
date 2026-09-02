@@ -12,8 +12,64 @@ describe('host adapter', () => {
   it('accepts a result envelope from Claude', async () => { const root = await temporary(); const fake = join(root, 'claude-envelope'); await writeFile(fake, '#!/bin/sh\ncat >/dev/null\nprintf \'%s\\n\' \'{"result":{"status":"done","summary":"envelope","changed_paths":[],"evidence":[],"tests":[],"findings":[],"git_refs":[],"support_requests":[]}}\'\n'); await chmod(fake, 0o755); await expect(invokeHost('claude', 'prompt', packet(root), { executable: fake, args: [] })).resolves.toMatchObject({ summary: 'envelope' }); });
   it('accepts a JSONL result event from Claude', async () => { const root = await temporary(); const fake = join(root, 'claude-jsonl'); await writeFile(fake, '#!/bin/sh\ncat >/dev/null\nprintf \'%s\\n\' \'{"type":"result","data":{"status":"done","summary":"jsonl","changed_paths":[],"evidence":[],"tests":[],"findings":[],"git_refs":[],"support_requests":[]}}\'\n'); await chmod(fake, 0o755); await expect(invokeHost('claude', 'prompt', packet(root), { executable: fake, args: [] })).resolves.toMatchObject({ summary: 'jsonl' }); });
   it('rejects malformed output and process failures', async () => { const root = await temporary(); const malformed = join(root, 'malformed'); await writeFile(malformed, '#!/bin/sh\ncat >/dev/null\nprintf \'{}\\n\'\n'); await chmod(malformed, 0o755); await expect(invokeHost('claude', 'prompt', packet(root), { executable: malformed, args: [] })).rejects.toThrow(/Invalid host result/); const failed = join(root, 'failed'); await writeFile(failed, '#!/bin/sh\ncat >/dev/null\necho bad >&2\nexit 3\n'); await chmod(failed, 0o755); await expect(invokeHost('opencode', 'prompt', packet(root), { executable: failed, args: [] })).rejects.toThrow(/exited 3/); });
-  it('runs OpenCode file-explorer with a positional packet message and parses text JSONL', async () => { const root = await temporary(); const result = '{"status":"done","summary":"ok","changed_paths":[],"evidence":[],"tests":[],"findings":[],"git_refs":[],"support_requests":[]}'; const textEvent = JSON.stringify({ type: 'text', part: { text: result } }); const script = join(root, 'opencode'); await writeFile(script, `#!/bin/sh\nprintf '%s\\n' "$@" > args.txt\ncat > stdin.txt\nprintf '%s\\n' '{"type":"start"}' '${textEvent}'\n`); await chmod(script, 0o755); const response = await invokeHost('opencode', 'prompt', packet(root, 'file-explorer'), { executable: script }); const args = await readFile(join(root, 'args.txt'), 'utf8'); expect(response.status).toBe('done'); expect(args).toContain('run\n--agent\nfile-explorer\n--format\njson\nprompt\n'); expect(args).toContain('PACKET:'); expect(args).toContain('exactly one JSON object conforming to schemas/result.schema.json'); expect(await readFile(join(root, 'stdin.txt'), 'utf8')).toBe(''); });
-  it('runs OpenCode frontend with split text events and a positional packet message', async () => { const root = await temporary(); const result = '{"status":"done","summary":"ok","changed_paths":[],"evidence":[],"tests":[],"findings":[],"git_refs":[],"support_requests":[]}'; const split = Math.floor(result.length / 2); const first = JSON.stringify({ type: 'text', part: { text: result.slice(0, split) } }); const second = JSON.stringify({ type: 'text', part: { text: result.slice(split) } }); const script = join(root, 'opencode'); await writeFile(script, `#!/bin/sh\nprintf '%s\\n' "$@" > args.txt\ncat >/dev/null\nprintf '%s\\n' '${first}' '${second}'\n`); await chmod(script, 0o755); const response = await invokeHost('opencode', 'prompt', packet(root, 'frontend'), { executable: script }); expect(response.status).toBe('done'); expect(await readFile(join(root, 'args.txt'), 'utf8')).toContain('run\n--agent\nfrontend\n--format\njson\n'); });
+  it('runs OpenCode file-explorer with one positional packet message', async () => {
+    const root = await temporary();
+    const result = '{"status":"done","summary":"ok","changed_paths":[],"evidence":[],"tests":[],"findings":[],"git_refs":[],"support_requests":[]}';
+    const textEvent = JSON.stringify({ type: 'text', part: { text: result } });
+    const script = join(root, 'opencode.mjs');
+    await writeFile(script, `#!/usr/bin/env node
+import { readFile, writeFile } from 'node:fs/promises';
+await writeFile('args.json', JSON.stringify(process.argv.slice(2)));
+let stdin = '';
+for await (const chunk of process.stdin) stdin += chunk;
+await writeFile('stdin.txt', stdin);
+process.stdout.write(${JSON.stringify(`${textEvent}\n`)});
+`);
+    await chmod(script, 0o755);
+
+    const response = await invokeHost('opencode', 'prompt', packet(root, 'file-explorer'), { executable: script, args: [] });
+    const args = JSON.parse(await readFile(join(root, 'args.json'), 'utf8')) as string[];
+
+    expect(response.status).toBe('done');
+    expect(args).toHaveLength(6);
+    expect(args.slice(0, 5)).toEqual(['run', '--agent', 'file-explorer', '--format', 'json']);
+    expect(args[5]).toContain('prompt');
+    expect(args[5]).toContain('PACKET:\n');
+    expect(args[5]).toContain('"role":"file-explorer"');
+    expect(args[5]).toContain('Respond with exactly one JSON object conforming to schemas/result.schema.json. Do not output Markdown or explanations.');
+    expect(args.filter((arg) => arg.includes('PACKET:'))).toEqual([args[5]]);
+    expect(await readFile(join(root, 'stdin.txt'), 'utf8')).toBe('');
+  });
+  it('runs OpenCode frontend with one positional packet message', async () => {
+    const root = await temporary();
+    const result = '{"status":"done","summary":"ok","changed_paths":[],"evidence":[],"tests":[],"findings":[],"git_refs":[],"support_requests":[]}';
+    const split = Math.floor(result.length / 2);
+    const first = JSON.stringify({ type: 'text', part: { text: result.slice(0, split) } });
+    const second = JSON.stringify({ type: 'text', part: { text: result.slice(split) } });
+    const script = join(root, 'opencode.mjs');
+    await writeFile(script, `#!/usr/bin/env node
+import { writeFile } from 'node:fs/promises';
+await writeFile('args.json', JSON.stringify(process.argv.slice(2)));
+let stdin = '';
+for await (const chunk of process.stdin) stdin += chunk;
+await writeFile('stdin.txt', stdin);
+process.stdout.write(${JSON.stringify(`${first}\n${second}\n`)});
+`);
+    await chmod(script, 0o755);
+
+    const response = await invokeHost('opencode', 'prompt', packet(root, 'frontend'), { executable: script, args: [] });
+    const args = JSON.parse(await readFile(join(root, 'args.json'), 'utf8')) as string[];
+
+    expect(response.status).toBe('done');
+    expect(args).toHaveLength(6);
+    expect(args.slice(0, 5)).toEqual(['run', '--agent', 'frontend', '--format', 'json']);
+    expect(args[5]).toContain('prompt');
+    expect(args[5]).toContain('PACKET:\n');
+    expect(args[5]).toContain('"role":"frontend"');
+    expect(args[5]).toContain('Respond with exactly one JSON object conforming to schemas/result.schema.json. Do not output Markdown or explanations.');
+    expect(args.filter((arg) => arg.includes('PACKET:'))).toEqual([args[5]]);
+    expect(await readFile(join(root, 'stdin.txt'), 'utf8')).toBe('');
+  });
   it('accepts fenced JSON in an OpenCode text event', async () => { const root = await temporary(); const result = '{"status":"done","summary":"fenced","changed_paths":[],"evidence":[],"tests":[],"findings":[],"git_refs":[],"support_requests":[]}'; const event = JSON.stringify({ type: 'text', part: { text: ['```json', result, '```'].join('\n') } }); const script = join(root, 'opencode'); await writeFile(script, `#!/bin/sh\ncat >/dev/null\nprintf '%s\\n' '${event}'\n`); await chmod(script, 0o755); await expect(invokeHost('opencode', 'prompt', packet(root, 'frontend'), { executable: script })).resolves.toMatchObject({ summary: 'fenced' }); });
   it('reports invalid JSON returned in an OpenCode text event', async () => { const root = await temporary(); const event = JSON.stringify({ type: 'text', part: { text: 'not JSON' } }); const script = join(root, 'opencode'); await writeFile(script, `#!/bin/sh\ncat >/dev/null\nprintf '%s\\n' '${event}'\n`); await chmod(script, 0o755); await expect(invokeHost('opencode', 'prompt', packet(root, 'frontend'), { executable: script })).rejects.toThrow(/OpenCode text did not contain valid JSON/); });
   it('reports invalid JSONL returned by OpenCode', async () => { const root = await temporary(); const script = join(root, 'opencode'); await writeFile(script, `#!/bin/sh\ncat >/dev/null\nprintf '%s\\n' 'not JSONL'\n`); await chmod(script, 0o755); await expect(invokeHost('opencode', 'prompt', packet(root, 'frontend'), { executable: script })).rejects.toThrow(/OpenCode JSONL event is invalid/); });
