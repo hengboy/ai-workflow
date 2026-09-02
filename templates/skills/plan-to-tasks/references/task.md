@@ -7,6 +7,7 @@ surface: backend
 feature: "{{verified_feature_id}}"
 locator_read_order: ["{{exact/locator/file.ts}}"]
 read_scope: ["MEMORY.md", ".ai-workflow/index/navigation.json", ".ai-workflow/index/navigation.md", "{{exact/locator/file.ts}}"]
+new_module_directories: []
 write_scope: ["{{exact/write/file}}"]
 test_commands: ["{{targeted_test_command}}"]
 ---
@@ -49,6 +50,7 @@ surface: backend
 feature: "notification-preferences"
 locator_read_order: ["src/preferences/store.ts", "tests/preferences/store.test.ts"]
 read_scope: ["MEMORY.md", ".ai-workflow/index/navigation.json", ".ai-workflow/index/navigation.md", "src/preferences/store.ts", "tests/preferences/store.test.ts"]
+new_module_directories: []
 write_scope: ["src/preferences/store.ts", "tests/preferences/store.test.ts"]
 test_commands: ["pnpm vitest run tests/preferences/store.test.ts"]
 ---

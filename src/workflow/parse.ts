@@ -33,14 +33,15 @@ export async function readTasks(directory: string): Promise<TaskDocument[]> {
   const tasks: TaskDocument[] = [];
   for (const name of names.filter((item) => /^task-\d{3}-.+\.md$/.test(item)).sort()) {
     const path = join(taskDir, name); const doc = parseMarkdown(await readFile(path, 'utf8')); const a = doc.attributes;
-    const id = stringValue(a.id, name.replace(/\.md$/, '')); const surface = stringValue(a.surface, 'backend'); const feature = stringValue(a.feature); const rawLocatorReadOrder = listStrings(a.locator_read_order); const rawReadScope = listStrings(a.read_scope); const writeScope = listStrings(a.write_scope);
+    const id = stringValue(a.id, name.replace(/\.md$/, '')); const surface = stringValue(a.surface, 'backend'); const feature = stringValue(a.feature); const rawLocatorReadOrder = listStrings(a.locator_read_order); const rawReadScope = listStrings(a.read_scope); const rawNewModuleDirectories = listStrings(a.new_module_directories); const rawWriteScope = listStrings(a.write_scope);
     if (!/^task-\d{3}(?:-[a-z0-9-]+)?$/.test(id)) throw new Error(`Invalid task id: ${id}`);
     if (!['backend', 'frontend', 'cross-stack', 'test', 'docs', 'research', 'documentation'].includes(surface)) throw new Error(`Invalid task surface: ${surface}`);
     const locator = normalizeProjectPaths(rawLocatorReadOrder);
     const scope = normalizeProjectPaths(rawReadScope);
-    if (!feature || !locator.paths.length || !scope.paths.length || locator.errors.length || scope.errors.length) throw new Error(`Invalid task read_scope: ${id}: ${[...locator.errors, ...scope.errors].join('; ')}`);
-    if (writeScope.some((path) => path === '.' || path.startsWith('/') || path.split('/').includes('..'))) throw new Error(`Unsafe task scope: ${id}`);
-    tasks.push({ id, requirements: listStrings(a.requirements), acceptanceCriteria: listStrings(a.acceptance_criteria), dependsOn: listStrings(a.depends_on), surface, feature, locatorReadOrder: locator.paths, readScope: scope.paths, writeScope, testCommands: listStrings(a.test_commands), path });
+    const newModuleDirectories = normalizeProjectPaths(rawNewModuleDirectories);
+    const writeScope = normalizeProjectPaths(rawWriteScope);
+    if (!feature || !locator.paths.length || !scope.paths.length || locator.errors.length || scope.errors.length || newModuleDirectories.errors.length || writeScope.errors.length) throw new Error(`Invalid task scope: ${id}: ${[...locator.errors, ...scope.errors, ...newModuleDirectories.errors, ...writeScope.errors].join('; ')}`);
+    tasks.push({ id, requirements: listStrings(a.requirements), acceptanceCriteria: listStrings(a.acceptance_criteria), dependsOn: listStrings(a.depends_on), surface, feature, locatorReadOrder: locator.paths, readScope: scope.paths, newModuleDirectories: newModuleDirectories.paths, writeScope: writeScope.paths, testCommands: listStrings(a.test_commands), path });
   }
   return tasks;
 }

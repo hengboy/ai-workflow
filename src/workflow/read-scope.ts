@@ -17,7 +17,7 @@ export function normalizeProjectPath(path: string): string {
   if (!portable) throw invalidPath(path, 'path is empty');
   if (/^[A-Za-z]:\//.test(portable) || portable.startsWith('/')) throw invalidPath(path, 'path must be project-relative');
   if (/[?*[\]{}$<>]/.test(portable)) throw invalidPath(path, 'wildcards are not allowed');
-  const normalized = posix.normalize(portable);
+  const normalized = posix.normalize(portable).replace(/\/+$/, '');
   if (normalized === '.') throw invalidPath(path, 'project root is not allowed');
   if (normalized === '..' || normalized.startsWith('../')) throw invalidPath(path, 'path escapes the project');
   return normalized;
@@ -39,7 +39,7 @@ export function normalizeProjectPaths(paths: string[]): { paths: string[]; error
 }
 
 export function taskReadScope(task: TaskReadAuthorization): string[] {
-  return [...new Set([...fixedTaskContext, ...task.exact_paths, ...task.module_directories])];
+  return [...new Set([...fixedTaskContext, ...task.exact_paths, ...task.module_directories].map(normalizeProjectPath))];
 }
 
 export function taskReadScopeDiagnostics(readScope: string[], authorization: TaskReadAuthorization): string[] {
@@ -49,4 +49,9 @@ export function taskReadScopeDiagnostics(readScope: string[], authorization: Tas
   for (const path of normalized.paths) if (!authorized.has(path)) diagnostics.push(`unauthorized read_scope path: ${path}`);
   for (const path of authorized) if (!normalized.paths.includes(path)) diagnostics.push(`missing authorized read_scope path: ${path}`);
   return diagnostics;
+}
+
+export function pathIsWithin(scope: string, path: string): boolean {
+  const relative = posix.relative(normalizeProjectPath(scope), normalizeProjectPath(path));
+  return relative === '' || (relative !== '..' && !relative.startsWith('../'));
 }
