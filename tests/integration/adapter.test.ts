@@ -31,13 +31,43 @@ process.stdout.write(${JSON.stringify(`${textEvent}\n`)});
     const args = JSON.parse(await readFile(join(root, 'args.json'), 'utf8')) as string[];
 
     expect(response.status).toBe('done');
-    expect(args).toHaveLength(6);
-    expect(args.slice(0, 5)).toEqual(['run', '--agent', 'file-explorer', '--format', 'json']);
-    expect(args[5]).toContain('prompt');
-    expect(args[5]).toContain('PACKET:\n');
-    expect(args[5]).toContain('"role":"file-explorer"');
-    expect(args[5]).toContain('Respond with exactly one JSON object conforming to schemas/result.schema.json. Do not output Markdown or explanations.');
-    expect(args.filter((arg) => arg.includes('PACKET:'))).toEqual([args[5]]);
+    expect(args).toHaveLength(7);
+    expect(args.slice(0, 6)).toEqual(['run', '--agent', 'file-explorer', '--format', 'json', '--']);
+    expect(args[6]).toContain('prompt');
+    expect(args[6]).toContain('PACKET:\n');
+    expect(args[6]).toContain('"role":"file-explorer"');
+    expect(args[6]).toContain('Respond with exactly one JSON object conforming to schemas/result.schema.json. Do not output Markdown or explanations.');
+    expect(args.filter((arg) => arg.includes('PACKET:'))).toEqual([args[6]]);
+    expect(await readFile(join(root, 'stdin.txt'), 'utf8')).toBe('');
+  });
+  it('runs OpenCode successfully when the message starts with YAML frontmatter', async () => {
+    const root = await temporary();
+    const result = '{"status":"done","summary":"frontmatter","changed_paths":[],"evidence":[],"tests":[],"findings":[],"git_refs":[],"support_requests":[]}';
+    const textEvent = JSON.stringify({ type: 'text', part: { text: result } });
+    const script = join(root, 'opencode.mjs');
+    await writeFile(script, `#!/usr/bin/env node
+import { writeFile } from 'node:fs/promises';
+await writeFile('args.json', JSON.stringify(process.argv.slice(2)));
+let stdin = '';
+for await (const chunk of process.stdin) stdin += chunk;
+await writeFile('stdin.txt', stdin);
+if (process.argv[7] !== '--') {
+  process.stderr.write('message interpreted as an option');
+  process.exit(1);
+}
+process.stdout.write(${JSON.stringify(`${textEvent}\n`)});
+`);
+    await chmod(script, 0o755);
+
+    const message = '---\nrole: file-explorer\n---\nInspect the repository.';
+    const response = await invokeHost('opencode', message, packet(root, 'file-explorer'), { executable: script });
+    const args = JSON.parse(await readFile(join(root, 'args.json'), 'utf8')) as string[];
+
+    expect(response.summary).toBe('frontmatter');
+    expect(args.slice(0, 6)).toEqual(['run', '--agent', 'file-explorer', '--format', 'json', '--']);
+    expect(args).toHaveLength(7);
+    expect(args[6]).toContain(message);
+    expect(args.filter((arg) => arg.includes(message))).toEqual([args[6]]);
     expect(await readFile(join(root, 'stdin.txt'), 'utf8')).toBe('');
   });
   it('runs OpenCode frontend with one positional packet message', async () => {
@@ -61,13 +91,13 @@ process.stdout.write(${JSON.stringify(`${first}\n${second}\n`)});
     const args = JSON.parse(await readFile(join(root, 'args.json'), 'utf8')) as string[];
 
     expect(response.status).toBe('done');
-    expect(args).toHaveLength(6);
-    expect(args.slice(0, 5)).toEqual(['run', '--agent', 'frontend', '--format', 'json']);
-    expect(args[5]).toContain('prompt');
-    expect(args[5]).toContain('PACKET:\n');
-    expect(args[5]).toContain('"role":"frontend"');
-    expect(args[5]).toContain('Respond with exactly one JSON object conforming to schemas/result.schema.json. Do not output Markdown or explanations.');
-    expect(args.filter((arg) => arg.includes('PACKET:'))).toEqual([args[5]]);
+    expect(args).toHaveLength(7);
+    expect(args.slice(0, 6)).toEqual(['run', '--agent', 'frontend', '--format', 'json', '--']);
+    expect(args[6]).toContain('prompt');
+    expect(args[6]).toContain('PACKET:\n');
+    expect(args[6]).toContain('"role":"frontend"');
+    expect(args[6]).toContain('Respond with exactly one JSON object conforming to schemas/result.schema.json. Do not output Markdown or explanations.');
+    expect(args.filter((arg) => arg.includes('PACKET:'))).toEqual([args[6]]);
     expect(await readFile(join(root, 'stdin.txt'), 'utf8')).toBe('');
   });
   it('accepts fenced JSON in an OpenCode text event', async () => { const root = await temporary(); const result = '{"status":"done","summary":"fenced","changed_paths":[],"evidence":[],"tests":[],"findings":[],"git_refs":[],"support_requests":[]}'; const event = JSON.stringify({ type: 'text', part: { text: ['```json', result, '```'].join('\n') } }); const script = join(root, 'opencode'); await writeFile(script, `#!/bin/sh\ncat >/dev/null\nprintf '%s\\n' '${event}'\n`); await chmod(script, 0o755); await expect(invokeHost('opencode', 'prompt', packet(root, 'frontend'), { executable: script })).resolves.toMatchObject({ summary: 'fenced' }); });
