@@ -9,7 +9,8 @@ export type Role =
   | "test"
   | "standards-review"
   | "spec-review"
-  | "researcher";
+  | "researcher"
+  | "documentation-maintainer";
 
 export interface NavigationIndex {
   version: 1;

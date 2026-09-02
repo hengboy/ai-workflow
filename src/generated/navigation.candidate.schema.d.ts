@@ -31,7 +31,8 @@ export interface ModuleRoot {
     | "test"
     | "standards-review"
     | "spec-review"
-    | "researcher";
+    | "researcher"
+    | "documentation-maintainer";
   responsibility: string;
   language: string;
   /**
@@ -65,7 +66,8 @@ export interface Feature {
     | "test"
     | "standards-review"
     | "spec-review"
-    | "researcher";
+    | "researcher"
+    | "documentation-maintainer";
   responsibility: string;
   /**
    * @minItems 1

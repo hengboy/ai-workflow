@@ -28,7 +28,7 @@ Directly read `MEMORY.md`, `.ai-workflow/index/navigation.json` and `.ai-workflo
 - Assign sequential IDs: `task-001-short-slug`, `task-002-short-slug`.
 - Map every REQ and AC to at least one task; explain intentional shared coverage.
 - Declare dependencies only for data, contract, ordering or overlapping-write constraints.
-- Use `surface: backend|frontend|cross-stack|test|docs|research` to route implementation; `research` delegates to Researcher for supplied-link analysis.
+- Use `surface: backend|frontend|cross-stack|test|docs|research|documentation` to route implementation; `research` delegates to Researcher for supplied-link analysis and `documentation` to Documentation Maintainer for non-code documentation and index maintenance.
 - Make read scopes bounded and write scopes exact enough for filesystem enforcement.
 - Ask File Explorer for exact paths when an entry, call chain or dependency is unknown.
 - Never use `.`, project root, `**`, an unresolved placeholder or a broad directory with unclear ownership as write scope.

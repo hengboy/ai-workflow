@@ -12,6 +12,7 @@ const dangerous = /(?:^|\s)(?:sudo|rm\s+-rf|chmod\s+777|curl[^|]*\||wget[^|]*\|)
 export function validateRoleCommand(role: Role, command: string): string | undefined {
   if (dangerous.test(command)) return 'Dangerous command is denied';
   if (role === 'researcher') return 'Researcher may only use web-link analysis';
+  if (role === 'documentation-maintainer' && (gitMutation.test(command) || repositorySearch.test(command))) return 'Documentation Maintainer may only maintain documentation';
   if (role === 'file-explorer' && fileMutation.test(command)) return 'File Explorer is read-only';
   if (role !== 'git-operator' && gitMutation.test(command)) return 'Only Git Operator may mutate Git';
   if (role !== 'file-explorer' && repositorySearch.test(command)) return 'Only File Explorer may search the repository';

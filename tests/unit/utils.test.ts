@@ -16,6 +16,7 @@ describe('core utilities', () => {
   it('rejects File Explorer commands that can modify files', () => { expect(validateRoleCommand('file-explorer', 'touch result.txt')).toMatch(/read-only|retrieval/i); expect(validateRoleCommand('file-explorer', 'rg pattern src')).toBeUndefined(); });
   it('keeps Researcher from searching repositories or mutating Git', () => { expect(validateRoleCommand('researcher', 'rg pattern src')).toMatch(/web-link/); expect(validateRoleCommand('researcher', 'git commit -m x')).toMatch(/web-link/); });
   it('keeps Researcher read-only and command-free', () => { const node = { role: 'researcher', write_scope: [] } as never; expect(validateRoleCommand('researcher', 'node script.js')).toMatch(/web|link/i); expect(validateChangedPaths(node, ['research.md'], '.ai-workflow/plans/x/screenshot')).toEqual(['Researcher cannot modify files']); });
+  it('keeps Documentation Maintainer away from repository search and Git', () => { expect(validateRoleCommand('documentation-maintainer', 'rg pattern src')).toMatch(/documentation/i); expect(validateRoleCommand('documentation-maintainer', 'git commit -m x')).toMatch(/documentation/i); });
   it('redacts common secrets', () => expect(redact('authorization: Bearer secret-value ghp_abcdefghijklmnop')).not.toContain('abcdefghijklmnop'));
   it('serializes JSON canonically', () => expect(stableJson({ z: [2, 1], a: true })).toBe('{"a":true,"z":[2,1]}'));
 });

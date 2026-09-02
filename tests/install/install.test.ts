@@ -29,8 +29,9 @@ agents:
       join(home, '.claude/skills/ai-workflow/agents'),
       join(home, '.config/opencode/agents')
     ]);
-    expect(report.installations.every((installation) => installation.agents.length === 9)).toBe(true);
+    expect(report.installations.every((installation) => installation.agents.length === 10)).toBe(true);
     expect(report.installations.every((installation) => installation.agents.some((agent) => agent.name === 'researcher'))).toBe(true);
+    expect(report.installations.every((installation) => installation.agents.some((agent) => agent.name === 'documentation-maintainer'))).toBe(true);
     expect(report.installations[0]?.agents.find((agent) => agent.name === 'backend')).toMatchObject({
       path: join(home, '.codex/agents/backend.toml'),
       model: 'gpt-5.6',
@@ -140,6 +141,7 @@ agents:
     expect(await exists(join(home, '.claude/skills/ai-workflow/agents/backend.md'))).toBe(true);
     expect(await exists(join(home, '.config/opencode/agents/task-worker.md'))).toBe(true);
     expect(await exists(join(home, '.config/opencode/agents/researcher.md'))).toBe(true);
+    expect(await exists(join(home, '.config/opencode/agents/documentation-maintainer.md'))).toBe(true);
     expect(await exists(join(home, '.config/opencode/agents/ai-workflow-task-worker.md'))).toBe(false);
 
     const codex = await readFile(join(home, '.codex/agents/backend.toml'), 'utf8');

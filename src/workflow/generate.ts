@@ -7,7 +7,7 @@ import { objectDigest } from '../utils/hash.js';
 import { scopesOverlap } from '../utils/paths.js';
 import { validateWorkflow } from './validate.js';
 
-const roleBySurface: Record<string, Node['role']> = { backend: 'backend', frontend: 'frontend', docs: 'backend', research: 'researcher', 'cross-stack': 'task-worker' };
+const roleBySurface: Record<string, Node['role']> = { backend: 'backend', frontend: 'frontend', docs: 'backend', research: 'researcher', documentation: 'documentation-maintainer', 'cross-stack': 'task-worker' };
 const base = { timeout_ms: 3600000, retry: 2, result_schema: 'schemas/result.schema.json' as const, on_failure: 'pause' as Node['on_failure'] };
 function node(value: Omit<Node, keyof typeof base> & Partial<typeof base>): Node { return { ...base, ...value }; }
 function broadOrUnknown(task: TaskDocument): boolean { return task.writeScope.length === 0 || task.writeScope.some((path) => !path.includes('/') && !path.includes('.')); }
@@ -16,7 +16,7 @@ function taskNodes(task: TaskDocument, planScope: string): Node[] { const prefix
   node({ id: `${prefix}-setup`, phase: 'plan_setup', kind: 'git', role: 'git-operator', task_id: task.id, depends_on: dependencyCommits, read_scope: context, write_scope: [], allowed_commands: ['git worktree add'] }),
   node({ id: `${prefix}-explore`, phase: 'executing', kind: 'agent', role: 'file-explorer', task_id: task.id, depends_on: [`${prefix}-setup`], read_scope: context, write_scope: [], allowed_commands: [] }),
   node({ id: `${prefix}-coordinate`, phase: 'executing', kind: 'pipeline', role: 'task-worker', task_id: task.id, depends_on: [`${prefix}-explore`], read_scope: context, write_scope: [], allowed_commands: [] }),
-  node({ id: `${prefix}-implement`, phase: 'executing', kind: 'agent', role: implementationRole, task_id: task.id, depends_on: [`${prefix}-coordinate`], read_scope: writable, write_scope: task.writeScope, allowed_commands: implementationRole === 'researcher' ? [] : task.testCommands }),
+  node({ id: `${prefix}-implement`, phase: 'executing', kind: 'agent', role: implementationRole, task_id: task.id, depends_on: [`${prefix}-coordinate`], read_scope: writable, write_scope: task.writeScope, allowed_commands: ['researcher', 'documentation-maintainer'].includes(implementationRole) ? [] : task.testCommands }),
   node({ id: `${prefix}-test`, phase: 'validating', kind: 'agent', role: 'test', task_id: task.id, depends_on: [`${prefix}-implement`], read_scope: writable, write_scope: [screenshot], allowed_commands: task.testCommands, on_failure: 'repair_once' }),
   node({ id: `${prefix}-commit`, phase: 'executing', kind: 'git', role: 'git-operator', task_id: task.id, depends_on: [`${prefix}-test`], read_scope: writable, write_scope: [], allowed_commands: ['git add', 'git commit', 'git merge', 'git worktree remove'] })
 ]; }

@@ -5,7 +5,7 @@ import { parse } from 'yaml';
 import { packagePath } from '../../src/utils/schema.js';
 describe('native prompt contracts', () => {
   it('gives each skill structured gates and completion checks', async () => { for (const name of ['planning', 'plan-to-tasks', 'coding']) { const text = await readFile(packagePath('templates', 'skills', name, 'SKILL.md'), 'utf8'); expect(text).toMatch(/## Outcome/); expect(text).toMatch(/## .*checklist/i); expect(text.split('\n').length).toBeGreaterThan(50); } });
-  it('gives all nine roles structured permissions and output contracts', async () => { const root = packagePath('templates', 'agents'); const files = (await readdir(root)).filter((name) => name.endsWith('.md')); expect(files).toHaveLength(9); for (const name of files) { const text = await readFile(join(root, name), 'utf8'); expect(text).toMatch(/## (Mission|Mission and authority)/); expect(text).toMatch(/## (Permissions|Prohibited actions)/); expect(text).toMatch(/## Output checklist/); } });
+  it('gives all ten roles structured permissions and output contracts', async () => { const root = packagePath('templates', 'agents'); const files = (await readdir(root)).filter((name) => name.endsWith('.md')); expect(files).toHaveLength(10); for (const name of files) { const text = await readFile(join(root, name), 'utf8'); expect(text).toMatch(/## (Mission|Mission and authority)/); expect(text).toMatch(/## (Permissions|Prohibited actions)/); expect(text).toMatch(/## Output checklist/); } });
   it('requires numbered clarification questions and explained recommended options', async () => {
     const text = await readFile(packagePath('templates', 'skills', 'planning', 'SKILL.md'), 'utf8');
     expect(text).toMatch(/问题 N：/);
@@ -135,6 +135,16 @@ describe('native prompt contracts', () => {
     expect(researcher).toMatch(/research report/i);
     expect(researcher).toMatch(/sources|evidence|unresolved/i);
     expect(researcher).toMatch(/may not edit or create any file/i);
+  });
+  it('gives Documentation Maintainer bounded documentation and index ownership', async () => {
+    const maintainer = await readFile(packagePath('templates', 'agents', 'documentation-maintainer.md'), 'utf8');
+
+    expect(maintainer).toMatch(/^tools: \[read, edit\]$/m);
+    expect(maintainer).toMatch(/MEMORY\.md|navigation\.json|navigation\.md/i);
+    expect(maintainer).toMatch(/non-?code|non-?coding|documentation/i);
+    expect(maintainer).toMatch(/May read and edit|may update/i);
+    expect(maintainer).toMatch(/may not edit.*(?:source|tests|schema|plan)/is);
+    expect(maintainer).toMatch(/may not run Git/i);
   });
   it('documents --project as a project root path with relative and absolute examples', async () => {
     const readme = await readFile(packagePath('README.md'), 'utf8');

@@ -11,7 +11,7 @@
       "type": "object",
       "minProperties": 1,
       "propertyNames": {
-        "enum": ["backend", "file-explorer", "frontend", "git-operator", "researcher", "spec-review", "standards-review", "task-worker", "test"]
+        "enum": ["backend", "documentation-maintainer", "file-explorer", "frontend", "git-operator", "researcher", "spec-review", "standards-review", "task-worker", "test"]
       },
       "additionalProperties": { "$ref": "#/definitions/agent" }
     }
