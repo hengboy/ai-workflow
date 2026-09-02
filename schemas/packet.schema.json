@@ -10,6 +10,7 @@
     "run_id": { "type": "string", "minLength": 1 },
     "plan_id": { "type": "string", "minLength": 1 },
     "task_id": { "type": "string" },
+    "feature": { "type": "string" },
     "role": { "enum": ["file-explorer", "git-operator", "task-worker", "backend", "frontend", "test", "standards-review", "spec-review", "researcher", "documentation-maintainer"] },
     "objective": { "type": "string", "minLength": 1 },
     "cwd": { "type": "string", "minLength": 1 },
@@ -19,6 +20,45 @@
     "screenshot_dir": { "type": "string", "pattern": "^\\.ai-workflow/plans/.+/screenshot/?$" },
     "allowed_commands": { "type": "array", "uniqueItems": true, "items": { "type": "string" } },
     "timeout_ms": { "type": "integer", "minimum": 1000, "maximum": 3600000 },
-    "result_schema": { "const": "schemas/result.schema.json" }
+    "result_schema": { "const": "schemas/result.schema.json" },
+    "context_locator": { "$ref": "#/definitions/contextLocator" }
+  },
+  "definitions": {
+    "path": { "type": "string", "minLength": 1, "pattern": "^(?!/)(?!\\.?$)(?!.*(?:^|/)\\.\\.(?:/|$)).+" },
+    "contextLocator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "resolution_mode", "fallback_required"],
+      "properties": {
+        "status": { "enum": ["hit", "ambiguous", "blocked", "missing_index", "miss", "stale", "invalid"] },
+        "resolution_mode": { "const": "index" },
+        "feature": { "type": "string" },
+        "entries": { "type": "array", "items": { "type": "string" } },
+        "symbols": { "type": "array", "items": { "type": "string" } },
+        "related_files": { "type": "array", "items": { "type": "string" } },
+        "tests": { "type": "array", "items": { "type": "string" } },
+        "read_order": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/definitions/path" } },
+        "related_features": { "type": "array", "items": { "type": "string" } },
+        "candidates": { "type": "array", "items": { "type": "string" } },
+        "reason": { "type": "string" },
+        "fallback_required": { "type": "boolean" },
+        "fallback": { "$ref": "#/definitions/contextFallback" }
+      }
+    },
+    "contextFallback": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "target", "reason", "known_paths", "known_symbols", "module_roots", "maintenance_authorized", "question"],
+      "properties": {
+        "status": { "enum": ["missing_index", "miss", "stale", "invalid"] },
+        "target": { "type": "object", "additionalProperties": false, "properties": { "feature": { "type": "string" }, "symbol": { "type": "string" }, "task": { "type": "string" } } },
+        "reason": { "type": "string" },
+        "known_paths": { "type": "array", "items": { "type": "string" } },
+        "known_symbols": { "type": "array", "items": { "type": "string" } },
+        "module_roots": { "type": "array", "items": { "type": "string" } },
+        "maintenance_authorized": { "type": "boolean" },
+        "question": { "type": "string" }
+      }
+    }
   }
 }

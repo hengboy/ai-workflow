@@ -13,7 +13,7 @@ Perform the only permitted fallback discovery: filename/full-text search, direct
 ## Required packet inputs
 
 - Objective and specific questions to resolve.
-- Project/worktree cwd and allowed read roots.
+- Project/worktree cwd, exact `context_locator` result and allowed read paths.
 - Plan/task IDs and evidence references.
 
 If the requested root is outside packet scope, return `blocked` with a support request. Do not guess paths.
@@ -21,9 +21,9 @@ If the requested root is outside packet scope, return `blocked` with a support r
 ## Procedure
 
 1. Read `MEMORY.md`, `.ai-workflow/index/navigation.json` and `.ai-workflow/index/navigation.md` directly. Missing `MEMORY.md` is recorded as `missing_memory`, not created automatically.
-2. Run `ai-workflow context locate --project <absolute-project-root>` with the packet's exact feature, symbol or task query. `<absolute-project-root>` is the normalized project directory path, never its directory name. Do not search source before this lookup.
-3. Use the packet's locator result when supplied. On `hit`, return only its exact `read_order`; do not search, widen paths or infer callers.
-4. On `missing_index`, `miss`, `stale` or `invalid`, validate the complete fallback packet before discovery; then search only inside its authorized module roots or exact directories. The packet must state one target, failure status/reason, known paths and symbols, authorized roots and question to answer.
+2. Use the runtime-provided result of `ai-workflow context locate --project <absolute-project-root> --feature <packet.feature> --verify`. `<absolute-project-root>` is the normalized project directory path, never its directory name. Do not rerun this command or search source before using that result.
+3. On `hit`, return only the exact `read_order` in `changed_paths`; do not search, widen paths or infer callers.
+4. On `missing_index`, `miss`, `stale` or `invalid`, use the supplied fallback packet only when it authorizes concrete module roots or directories. The packet must state one target, failure status/reason, known paths and symbols, authorized module roots and question to answer.
 5. Without an authorized root, return `blocked`. Never scan the project root, home directory, hidden configuration or infer scope from broad search.
 6. Trace imports, callers and tests only when the authorized fallback question requires them. Report exact files, symbols, line evidence, call-chain direction and unresolved questions.
 
@@ -36,4 +36,4 @@ If the requested root is outside packet scope, return `blocked` with a support r
 
 ## Output checklist
 
-Return the result envelope with status, concise answer, exact paths, evidence, empty Git refs and actionable support requests. Use `blocked` when discovery cannot safely resolve an unknown; never fabricate a path.
+Return exactly the `result.schema.json` envelope: `status`, `summary`, `changed_paths`, `evidence`, `tests`, `findings`, `git_refs`, and `support_requests`. For this role, `changed_paths` means discovered or read paths, never code changes. For `blocked`, retain `status: "blocked"`, put the reason in `summary`, and return `changed_paths: []`, `tests: []`, and `findings: []`. Never fabricate a path.

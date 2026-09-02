@@ -5,8 +5,52 @@ import { invokeHost } from '../../src/adapters/process.js';
 import { temporary } from '../helpers.js';
 import type { AgentPacket } from '../../src/generated/packet.schema.js';
 
-function packet(cwd: string, role: AgentPacket['role'] = 'backend'): AgentPacket { return { packet_version: '1.0.0', run_id: 'run', plan_id: '20260831-example', task_id: 'task-001-example', role, objective: 'test', cwd, read_paths: [], write_paths: [], evidence: [], screenshot_dir: '.ai-workflow/plans/20260831-example/screenshot/', allowed_commands: [], timeout_ms: 1000, result_schema: 'schemas/result.schema.json' }; }
+function packet(cwd: string, role: AgentPacket['role'] = 'backend'): AgentPacket { return { packet_version: '1.0.0', run_id: 'run', plan_id: '20260831-example', task_id: 'task-001-example', role, objective: 'test', cwd, read_paths: [], write_paths: [], evidence: [], screenshot_dir: '.ai-workflow/plans/20260831-example/screenshot/', allowed_commands: [], timeout_ms: 5000, result_schema: 'schemas/result.schema.json' }; }
 describe('host adapter', () => {
+  it('normalizes the legacy File Explorer answer and paths without losing information', async () => {
+    const root = await temporary();
+    const legacy = '{"status":"done","answer":"Located the requested files","paths":["src/App.tsx"],"evidence":["App.tsx:1"],"git_refs":[],"support_requests":[]}';
+    const fake = join(root, 'file-explorer-legacy');
+    await writeFile(fake, `#!/bin/sh\ncat >/dev/null\nprintf '%s\\n' '${legacy}'\n`);
+    await chmod(fake, 0o755);
+
+    await expect(invokeHost('codex', 'prompt', packet(root, 'file-explorer'), { executable: fake, args: [] })).resolves.toMatchObject({
+      status: 'done',
+      summary: 'Located the requested files',
+      changed_paths: ['src/App.tsx'],
+      evidence: ['App.tsx:1'],
+      tests: [],
+      findings: [],
+      support_requests: []
+    });
+  });
+  it('normalizes a blocked legacy File Explorer result into the result schema', async () => {
+    const root = await temporary();
+    const legacy = '{"status":"blocked","answer":"Locator is unavailable","paths":[],"evidence":[],"git_refs":[],"support_requests":["Provide an authorized locator"]}';
+    const fake = join(root, 'file-explorer-blocked');
+    await writeFile(fake, `#!/bin/sh\ncat >/dev/null\nprintf '%s\\n' '${legacy}'\n`);
+    await chmod(fake, 0o755);
+
+    await expect(invokeHost('codex', 'prompt', packet(root, 'file-explorer'), { executable: fake, args: [] })).resolves.toEqual({
+      status: 'blocked',
+      summary: 'Locator is unavailable',
+      changed_paths: [],
+      evidence: [],
+      tests: [],
+      findings: [],
+      git_refs: [],
+      support_requests: ['Provide an authorized locator']
+    });
+  });
+  it('does not normalize the legacy File Explorer format for other roles', async () => {
+    const root = await temporary();
+    const legacy = '{"status":"done","answer":"Located the requested files","paths":["src/App.tsx"],"evidence":[],"git_refs":[],"support_requests":[]}';
+    const fake = join(root, 'backend-legacy');
+    await writeFile(fake, `#!/bin/sh\ncat >/dev/null\nprintf '%s\\n' '${legacy}'\n`);
+    await chmod(fake, 0o755);
+
+    await expect(invokeHost('codex', 'prompt', packet(root, 'backend'), { executable: fake, args: [] })).rejects.toThrow(/Invalid host result/);
+  });
   it('accepts a valid fake CLI result envelope', async () => { const root = await temporary(); const fake = join(root, 'fake-cli'); await writeFile(fake, '#!/bin/sh\ncat >/dev/null\nprintf \'%s\\n\' \'{"status":"done","summary":"ok","changed_paths":[],"evidence":[],"tests":[],"findings":[],"git_refs":[],"support_requests":[]}\'\n'); await chmod(fake, 0o755); const result = await invokeHost('codex', 'prompt', packet(root), { executable: fake, args: [] }); expect(result.status).toBe('done'); });
   it('accepts a direct JSON result from Claude', async () => { const root = await temporary(); const fake = join(root, 'claude-direct'); await writeFile(fake, '#!/bin/sh\ncat >/dev/null\nprintf \'%s\\n\' \'{"status":"done","summary":"direct","changed_paths":[],"evidence":[],"tests":[],"findings":[],"git_refs":[],"support_requests":[]}\'\n'); await chmod(fake, 0o755); await expect(invokeHost('claude', 'prompt', packet(root), { executable: fake, args: [] })).resolves.toMatchObject({ summary: 'direct' }); });
   it('accepts a result envelope from Claude', async () => { const root = await temporary(); const fake = join(root, 'claude-envelope'); await writeFile(fake, '#!/bin/sh\ncat >/dev/null\nprintf \'%s\\n\' \'{"result":{"status":"done","summary":"envelope","changed_paths":[],"evidence":[],"tests":[],"findings":[],"git_refs":[],"support_requests":[]}}\'\n'); await chmod(fake, 0o755); await expect(invokeHost('claude', 'prompt', packet(root), { executable: fake, args: [] })).resolves.toMatchObject({ summary: 'envelope' }); });

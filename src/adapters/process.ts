@@ -24,7 +24,24 @@ export async function invokeHost(host: Host, prompt: string, packet: AgentPacket
     child.once('error', reject); child.once('close', (code) => { clearTimeout(timeout); if (size > limit) reject(new Error('Host output exceeded limit')); else if (code !== 0) reject(new Error(`Host exited ${String(code)}: ${redact(Buffer.concat(errors).toString('utf8')).slice(0, 10000)}`)); else resolve(Buffer.concat(chunks).toString('utf8')); });
     if (host === 'opencode') child.stdin.end(); else child.stdin.end(`${prompt}\n\nPACKET:\n${JSON.stringify(packet)}\n`);
   });
-  const result = parseHostResult(output, host); const validate = await schemaValidator('result.schema.json'); if (!validate(result)) throw new Error(`Invalid host result: ${formatSchemaErrors(validate.errors)}`); return result as AgentResult;
+  const parsed = parseHostResult(output, host); const result = packet.role === 'file-explorer' ? normalizeFileExplorerResult(parsed) : parsed; const validate = await schemaValidator('result.schema.json'); if (!validate(result)) throw new Error(`Invalid host result: ${formatSchemaErrors(validate.errors)}`); return result as AgentResult;
+}
+
+function normalizeFileExplorerResult(value: unknown): unknown {
+  if (value === null || typeof value !== 'object') return value;
+  const source = value as Record<string, unknown>;
+  if (!('answer' in source) && !('paths' in source)) return value;
+  const status = source.status;
+  return {
+    status,
+    summary: typeof source.answer === 'string' ? source.answer : '',
+    changed_paths: status === 'done' && Array.isArray(source.paths) ? source.paths : [],
+    evidence: Array.isArray(source.evidence) ? source.evidence : [],
+    tests: Array.isArray(source.tests) ? source.tests : [],
+    findings: Array.isArray(source.findings) ? source.findings : [],
+    git_refs: Array.isArray(source.git_refs) ? source.git_refs : [],
+    support_requests: Array.isArray(source.support_requests) ? source.support_requests : []
+  };
 }
 
 function parseHostResult(output: string, host: Host): unknown {

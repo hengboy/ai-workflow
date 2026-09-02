@@ -108,6 +108,7 @@ describe('native prompt contracts', () => {
     expect(explorer).toMatch(/authorized module roots|allowed module roots/i);
     expect(explorer).toMatch(/navigation\.json/i);
     expect(explorer).toMatch(/may only read files and search authorized paths/i);
+    expect(explorer).toMatch(/summary.*changed_paths.*evidence.*tests.*findings.*git_refs.*support_requests/is);
 
     for (const skill of ['planning', 'plan-to-tasks', 'coding']) {
       const text = await readFile(packagePath('templates', 'skills', skill, 'SKILL.md'), 'utf8');
