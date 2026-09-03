@@ -1,5 +1,5 @@
 import { constants } from 'node:fs';
-import { access, mkdir, open, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { access, chmod, mkdir, open, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 
@@ -26,6 +26,7 @@ export async function atomicWrite(path: string, contents: string | Buffer): Prom
     await handle.close();
   }
   await rename(temporary, path);
+  await chmod(path, 0o600);
   await syncDirectory(dirname(path));
 }
 
@@ -38,6 +39,7 @@ export async function appendFsync(path: string, contents: string | Buffer): Prom
   } finally {
     await handle.close();
   }
+  await chmod(path, 0o600);
 }
 
 export async function syncDirectory(path: string): Promise<void> {
