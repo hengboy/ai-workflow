@@ -111,13 +111,13 @@ function validateHostCapability(manifest: ActionCapabilityManifest, action: Acti
     return;
   }
   if (execution.mode !== 'brokered-sandbox'
-    || execution.model_transport.network_allowed !== true
-    || execution.model_transport.project_write_allowed !== false
+    || !execution.model_transport.network_allowed
+    || execution.model_transport.project_write_allowed
     || execution.model_transport.credential_visibility !== 'broker-only'
-    || execution.action_executor.process_group !== true
-    || execution.action_executor.network_allowed !== false
-    || execution.action_executor.project_write_enforced !== true
-    || execution.action_executor.git_metadata_write_allowed !== false) {
+    || !execution.action_executor.process_group
+    || execution.action_executor.network_allowed
+    || !execution.action_executor.project_write_enforced
+    || execution.action_executor.git_metadata_write_allowed) {
     reject('ACTION_SANDBOX_UNAVAILABLE', `action ${action.action_id} lacks brokered sandbox capability`);
   }
 }

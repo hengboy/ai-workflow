@@ -117,8 +117,8 @@ function isCredentialKey(key: string): boolean {
 
 function executorEnvironment(brokerEnvironment: Readonly<Record<string, string>> | undefined): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {};
-  for (const [key, value] of Object.entries(process.env)) if (!isCredentialKey(key)) env[key] = value;
-  for (const key of Object.keys(brokerEnvironment ?? {})) delete env[key];
+  const brokerKeys = new Set(Object.keys(brokerEnvironment ?? {}));
+  for (const [key, value] of Object.entries(process.env)) if (!isCredentialKey(key) && !brokerKeys.has(key)) env[key] = value;
   env.AI_WORKFLOW_SANDBOX = 'brokered-executor';
   env.AI_WORKFLOW_NETWORK = 'denied';
   env.AI_WORKFLOW_CREDENTIALS = 'broker-only';
@@ -140,6 +140,7 @@ export class BrokeredSandboxProvider {
   }
 
   spawnSpec(command: string, args: readonly string[], cwd: string): SandboxSpawnSpec {
+    if (!cwd) reject('executor cwd is required');
     const useSeatbelt = this.options.useSeatbelt ?? false;
     if (!useSeatbelt) return { command, args: [...args], env: executorEnvironment(this.options.brokerEnvironment) };
     if (!this.options.projectRoot) reject('Seatbelt executor requires projectRoot');

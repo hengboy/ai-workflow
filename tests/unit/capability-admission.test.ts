@@ -91,43 +91,31 @@ describe('action capability admission', () => {
   });
 
   it('rejects an action that is not in the manifest', () => {
-    expect(() => admitAction(request({ action_id: 'secret-action' }))).toThrowError(
-      expect.objectContaining({ code: 'ACTION_NOT_AUTHORIZED' }),
-    );
+    expect(() => admitAction(request({ action_id: 'secret-action' }))).toThrowError(/action is not authorized/);
   });
 
   it('rejects an action while its task dependency is not ready', () => {
-    expect(() => admitAction(request({ task_states: { 'task-001-host': 'pending' } }))).toThrowError(
-      expect.objectContaining({ code: 'TASK_NOT_AUTHORIZED' }),
-    );
+    expect(() => admitAction(request({ task_states: { 'task-001-host': 'pending' } }))).toThrowError(/task is not ready/);
   });
 
   it('rejects a second host when one host is already active', () => {
-    expect(() => admitAction(request({ active_hosts: ['claude'] }))).toThrowError(
-      expect.objectContaining({ code: 'ACTION_NOT_READY' }),
-    );
+    expect(() => admitAction(request({ active_hosts: ['claude'] }))).toThrowError(/one-host policy/);
   });
 
   it('rejects attempts beyond the immutable action budget', () => {
-    expect(() => admitAction(request({ attempt: 3 }))).toThrowError(
-      expect.objectContaining({ code: 'ACTION_NOT_AUTHORIZED' }),
-    );
+    expect(() => admitAction(request({ attempt: 3 }))).toThrowError(/attempt exceeds action budget/);
   });
 
   it('fails closed when a write action lacks brokered sandbox capability', () => {
     const unsafe = manifest({ host_execution: { ...manifest().host_execution, mode: 'unsupported' } });
-    expect(() => admitAction(request({ manifest: unsafe }))).toThrowError(
-      expect.objectContaining({ code: 'ACTION_SANDBOX_UNAVAILABLE' }),
-    );
+    expect(() => admitAction(request({ manifest: unsafe }))).toThrowError(/lacks brokered sandbox/);
   });
 
   it.each(['role', 'operation', 'cwd', 'read_scope', 'write_scope', 'allowed_commands', 'output_schema'] as const)(
     'rejects script or agent override of %s',
     (field) => {
       const overrides = { [field]: field === 'cwd' ? '/tmp/other' : field === 'role' ? 'frontend' : field === 'operation' ? 'test' : field === 'output_schema' ? 'schemas/other.schema.json' : ['outside'] };
-      expect(() => admitAction(request({ overrides }))).toThrowError(
-        expect.objectContaining({ code: 'ACTION_SCOPE_VIOLATION' }),
-      );
+      expect(() => admitAction(request({ overrides }))).toThrowError(/override is not allowed/);
     },
   );
 
@@ -136,7 +124,7 @@ describe('action capability admission', () => {
       admitAction(request({ action_id: 'missing' }));
     } catch (error) {
       expect(error).toBeInstanceOf(ActionAdmissionError);
-      expect(error).toMatchObject({ code: 'ACTION_NOT_AUTHORIZED' });
+      expect((error as ActionAdmissionError).code).toBe('ACTION_NOT_AUTHORIZED');
     }
   });
 });
