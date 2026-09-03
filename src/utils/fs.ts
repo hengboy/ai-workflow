@@ -1,5 +1,5 @@
 import { constants } from 'node:fs';
-import { access, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { access, mkdir, open, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 
@@ -18,8 +18,31 @@ export async function writeJson(path: string, value: unknown): Promise<void> {
 export async function atomicWrite(path: string, contents: string | Buffer): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
   const temporary = join(dirname(path), `.${randomUUID()}.tmp`);
-  await writeFile(temporary, contents, { mode: 0o600 });
+  const handle = await open(temporary, 'w', 0o600);
+  try {
+    await handle.writeFile(contents);
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
   await rename(temporary, path);
+  await syncDirectory(dirname(path));
+}
+
+export async function appendFsync(path: string, contents: string | Buffer): Promise<void> {
+  await mkdir(dirname(path), { recursive: true });
+  const handle = await open(path, 'a', 0o600);
+  try {
+    await handle.writeFile(contents);
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
+}
+
+export async function syncDirectory(path: string): Promise<void> {
+  const handle = await open(path, 'r');
+  try { await handle.sync(); } finally { await handle.close(); }
 }
 
 export async function atomicDirectory(target: string, build: (temporary: string) => Promise<void>): Promise<void> {
