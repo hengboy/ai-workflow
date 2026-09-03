@@ -8,8 +8,8 @@ import { loadProfile, type Profile } from '../profile/index.js';
 import type { Host } from '../workflow/types.js';
 
 interface ManifestFile { path: string; digest: string; kind: 'file' | 'directory' }
-interface InstallManifest { version: string; installed_at: string; skills?: ManifestFile[]; hosts: Partial<Record<Host, ManifestFile[]>> }
-interface ProjectManifest { version: 1; files: Record<string, string> }
+interface InstallManifest { version: string; workflow_version?: '2.0.0'; installed_at: string; skills?: ManifestFile[]; hosts: Partial<Record<Host, ManifestFile[]>> }
+interface ProjectManifest { version: 1; workflow_version?: '2.0.0'; worktree_root?: '.ai-workflow/runs/<runId>/worktrees'; files: Record<string, string> }
 export interface AgentInstallation {
   name: string;
   path: string;
@@ -99,7 +99,7 @@ export async function install(hosts: Host[], options: { home?: string; version?:
     await removeStaleOwnedFiles(home, manifest.hosts[host] ?? [], owned);
     manifest.hosts[host] = owned;
   }
-  manifest.version = version; manifest.installed_at = new Date().toISOString(); await writeJson(join(home, manifestRelative), manifest); return manifest;
+  manifest.version = version; manifest.workflow_version = '2.0.0'; manifest.installed_at = new Date().toISOString(); await writeJson(join(home, manifestRelative), manifest); return manifest;
 }
 
 export async function getActiveProfile(home: string): Promise<string | undefined> {
@@ -160,8 +160,8 @@ export async function initializeProject(project: string): Promise<string[]> {
   const conflicts: Array<{ target: string; contents: string }> = []; for (const item of templates) if (await exists(join(root, item.target))) conflicts.push(item);
   if (conflicts.length) throw new Error(`Initialization conflicts; no files written. Merge these templates manually:\n${conflicts.map((item) => `${item.target}\n--- proposed ---\n${item.contents}`).join('\n')}`);
   for (const item of templates) { await atomicWrite(join(root, item.target), item.contents); created.push(item.target); }
-  const ignorePath = join(root, '.gitignore'); const ignore = await exists(ignorePath) ? await readFile(ignorePath, 'utf8') : ''; const additions = ['.ai-workflow/runs/', '*.log'].filter((line) => !ignore.split(/\r?\n/).includes(line)); if (additions.length) { await atomicWrite(ignorePath, `${ignore.trimEnd()}${ignore ? '\n' : ''}${additions.join('\n')}\n`); created.push('.gitignore'); }
-  await writeJson(join(root, projectManifestRelative), { version: 1, files: Object.fromEntries(templates.map((item) => [item.target, sha256(item.contents)])) } satisfies ProjectManifest);
+  const ignorePath = join(root, '.gitignore'); const ignore = await exists(ignorePath) ? await readFile(ignorePath, 'utf8') : ''; const additions = ['.ai-workflow/runs/', '.ai-workflow/runs/*/worktrees/', '*.log'].filter((line) => !ignore.split(/\r?\n/).includes(line)); if (additions.length) { await atomicWrite(ignorePath, `${ignore.trimEnd()}${ignore ? '\n' : ''}${additions.join('\n')}\n`); created.push('.gitignore'); }
+  await writeJson(join(root, projectManifestRelative), { version: 1, workflow_version: '2.0.0', worktree_root: '.ai-workflow/runs/<runId>/worktrees', files: Object.fromEntries(templates.map((item) => [item.target, sha256(item.contents)])) } satisfies ProjectManifest);
   created.push(projectManifestRelative);
   return created;
 }
