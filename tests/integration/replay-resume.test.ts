@@ -3,7 +3,9 @@ import { mkdtemp } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { RunLedger, type CallDescriptor, type RecordedAgentResult } from '../../src/runtime/ledger.js';
-import { assertResumeFingerprint, type ResumeFingerprint } from '../../src/runtime/store.js';
+import { assertResumeFingerprint, loadRun, loadV2Run, saveRun, type ResumeFingerprint, type RunRecord } from '../../src/runtime/store.js';
+import { EventLog } from '../../src/runtime/events.js';
+import { cancelV2Run, projectV2Run, resumeV2Run, startV2Run } from '../../src/runtime/runner.js';
 
 const descriptor: CallDescriptor = { action_id: 'action-one', task_id: 'task-one', input: { value: 1 } };
 const result: RecordedAgentResult = { result_version: '2.0.0', status: 'done', summary: 'ok', changed_paths: [], evidence: [], tests: [], findings: [], git_refs: [], support_requests: [] };
@@ -76,5 +78,34 @@ describe('replay and resume', () => {
       const current = { ...fingerprint, [key]: `${fingerprint[key]}-drift` };
       expect(() => assertResumeFingerprint(fingerprint, current)).toThrow(new RegExp(`${key}.*drift`, 'i'));
     }
+  });
+
+  it('keeps v1 and v2 persistence entries on separate loader contracts', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'ai-workflow-versioned-'));
+    const started = await startV2Run({ project: directory, runId: 'run-v2', manifestDigest: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', fencingEpoch: 1 });
+
+    expect(started).toMatchObject({ record_version: '2.0.0', engine: 'worker-thread-trusted', run_id: 'run-v2' });
+    await expect(loadV2Run(directory, 'run-v2')).resolves.toMatchObject({ record_version: '2.0.0', run_state: 'preflight' });
+    await expect(loadRun(directory, 'run-v2')).rejects.toMatchObject({ code: 'RUN_VERSION_MISMATCH' });
+
+    const legacyDirectory = await mkdtemp(join(tmpdir(), 'ai-workflow-legacy-'));
+    const legacy: RunRecord = { run_id: 'run-v1', project: legacyDirectory, workflow_path: 'workflow.json', workflow_digest: 'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', plan_id: 'plan', host: 'codex', state: 'paused', started_at: '2026-09-03T00:00:00.000Z', updated_at: '2026-09-03T00:00:00.000Z', cancelled: false, resources: { start_branch: 'main', start_head: 'a'.repeat(40), task_worktrees: {}, task_branches: {}, commits: {} }, nodes: {}, events: [] };
+    await saveRun(legacy);
+    await expect(loadV2Run(legacyDirectory, 'run-v1')).rejects.toMatchObject({ code: 'RUN_VERSION_MISMATCH' });
+    await expect(startV2Run({ project: legacyDirectory, runId: 'run-v1', manifestDigest: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', fencingEpoch: 1 })).rejects.toThrow(/already exists/i);
+  });
+
+  it('projects v2 lifecycle events and resumes only after durable preflight checks', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'ai-workflow-v2-lifecycle-'));
+    const manifestDigest = 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+    await startV2Run({ project: directory, runId: 'run-lifecycle', manifestDigest, fencingEpoch: 2 });
+    const log = new EventLog({ path: join(directory, '.ai-workflow/runs/run-lifecycle/events.jsonl'), runId: 'run-lifecycle', fencingEpoch: 2 });
+    await log.append({ type: 'run/error', payload: { state: 'paused', reason: 'worker exited' } });
+    await expect(projectV2Run(directory, 'run-lifecycle')).resolves.toMatchObject({ run_state: 'paused' });
+
+    const fingerprint: ResumeFingerprint = { workflow: 'workflow', script: 'script', args: 'args', manifest: manifestDigest, profile: 'profile', baseline: 'baseline' };
+    await expect(resumeV2Run(directory, 'run-lifecycle', { expected: fingerprint, current: fingerprint })).resolves.toMatchObject({ run_state: 'executing' });
+    await expect(cancelV2Run(directory, 'run-lifecycle')).resolves.toMatchObject({ run_state: 'cancelled', stop_reason: 'cancelled' });
+    await expect(resumeV2Run(directory, 'run-lifecycle')).rejects.toThrow(/paused v2/i);
   });
 });
