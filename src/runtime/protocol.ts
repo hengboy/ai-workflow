@@ -182,7 +182,7 @@ function validateControlDescriptor(value: unknown): TaskControlDescriptor {
 function validateAgentResult(value: unknown): CodingAgentResult {
   const result = record(value, 'result');
   exactKeys(result, ['result_version', 'status', 'summary', 'changed_paths', 'evidence', 'tests', 'findings', 'git_refs', 'support_requests', 'value'], ['result_version', 'status', 'summary', 'changed_paths', 'evidence', 'tests', 'findings', 'git_refs', 'support_requests']);
-  if (result.result_version !== '2.0.0' || !['done', 'blocked', 'failed'].includes(result.status)) fail('agent result version or status is invalid');
+  if (result.result_version !== '2.0.0' || !['done', 'blocked', 'failed'].includes(result.status as string)) fail('agent result version or status is invalid');
   if (typeof result.summary !== 'string' || !Array.isArray(result.changed_paths) || !Array.isArray(result.evidence) || !Array.isArray(result.tests) || !Array.isArray(result.findings) || !Array.isArray(result.git_refs) || !Array.isArray(result.support_requests)) fail('agent result shape is invalid');
   return result as unknown as CodingAgentResult;
 }
@@ -190,7 +190,7 @@ function validateAgentResult(value: unknown): CodingAgentResult {
 function validateWorkflowResult(value: unknown): WorkflowResult {
   const result = record(value, 'result');
   exactKeys(result, ['value', 'stop_reason', 'error', 'agents_started', 'completed_tasks', 'blocked_tasks'], ['value', 'stop_reason', 'agents_started', 'completed_tasks', 'blocked_tasks']);
-  if (!['completed', 'cancelled', 'error', 'blocked'].includes(result.stop_reason)) fail('workflow result stop_reason is invalid');
+  if (!['completed', 'cancelled', 'error', 'blocked'].includes(result.stop_reason as string)) fail('workflow result stop_reason is invalid');
   integerValue(result.agents_started === 0 ? 1 : result.agents_started, 'result.agents_started');
   if (typeof result.agents_started !== 'number' || result.agents_started < 0 || !Array.isArray(result.completed_tasks) || !Array.isArray(result.blocked_tasks)) fail('workflow result shape is invalid');
   if (result.error !== undefined && typeof result.error !== 'string') fail('workflow result error is invalid');
