@@ -116,8 +116,9 @@ agents:
     await install(['codex', 'claude', 'opencode'], { home });
 
     const skill = await readFile(join(home, '.agents/skills/coding/SKILL.md'), 'utf8');
-    expect(skill).toContain('`<project>/.worktrees`');
-    expect(skill).toContain('`.gitignore` contains `.worktrees/`');
+    expect(skill).toContain('`.ai-workflow/runs/<runId>/worktrees/plan`');
+    expect(skill).toContain('`.ai-workflow/runs/<runId>/worktrees/tasks/<taskId>`');
+    expect(skill).not.toContain('`<project>/.worktrees`');
   });
   it('installs agents without a product prefix and emits valid host frontmatter', async () => {
     const home = await temporary('ai-workflow-agent-format-');

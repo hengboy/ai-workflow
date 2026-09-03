@@ -79,4 +79,24 @@ describe('v2 CLI artifacts', () => {
 
     await expect(workflowCli(project, ['run', 'start', '--workflow', workflow, '--host', 'codex', '--project', project])).rejects.toThrow(/digest drift|approval/i);
   });
+
+  it('initializes the v2 run path and installs all host coding guidance in an isolated home', async () => {
+    const project = await temporary('ai-workflow-cli-v2-project-');
+    const home = await temporary('ai-workflow-cli-v2-home-');
+    await gitInit(project);
+
+    await workflowCli(project, ['init', project]);
+    const ignore = await readFile(join(project, '.gitignore'), 'utf8');
+    expect(ignore).toContain('.ai-workflow/runs/*/worktrees/');
+    expect(JSON.parse(await readFile(join(project, '.ai-workflow/project-manifest.json'), 'utf8'))).toMatchObject({ workflow_version: '2.0.0', worktree_root: '.ai-workflow/runs/<runId>/worktrees' });
+
+    await workflowCli(project, ['install', '--host', 'all', '--home', home]);
+    await expect(readFile(join(home, '.agents/skills/coding/SKILL.md'), 'utf8')).resolves.toContain('workflow.args.json');
+    for (const path of [
+      join(home, '.codex/agents/backend.toml'),
+      join(home, '.claude/agents/backend.md'),
+      join(home, '.config/opencode/agents/backend.md'),
+    ]) await expect(readFile(path, 'utf8')).resolves.toContain('backend');
+    expect(JSON.parse(await readFile(join(home, '.config/ai-workflow/install-manifest.json'), 'utf8'))).toMatchObject({ workflow_version: '2.0.0' });
+  });
 });
