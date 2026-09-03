@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mkdtemp, readFile, stat, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { RunLedger, type CallDescriptor, type ControlDescriptor, type RecordedAgentResult } from '../../src/runtime/ledger.js';
