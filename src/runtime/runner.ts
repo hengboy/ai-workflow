@@ -5,7 +5,9 @@ import type { Workflow } from '../workflow/types.js';
 import { objectDigest } from '../utils/hash.js';
 import { verifyApproval } from '../workflow/approval.js';
 import { validateWorkflow } from '../workflow/validate.js';
-import { loadRun, saveRun, type RunRecord } from './store.js';
+import { assertResumeFingerprint, loadRun, loadV2Run, saveRun, saveV2Run, type RunRecord, type RunRecordV2, type ResumeFingerprint } from './store.js';
+import { EventLog } from './events.js';
+import { RunLedger } from './ledger.js';
 import { assertTransition, type RunState } from './state.js';
 import { commitTask, createPlanWorktree, createTaskWorktree, deleteOwnedBranches, gitBaseline, integratePlan, mergeTask, removeOwnedWorktrees, type Worktree } from '../git/operator.js';
 import { readPlan, readTasks } from '../workflow/parse.js';
@@ -16,6 +18,7 @@ import type { AgentPacket, ContextLocator } from '../generated/packet.schema.js'
 import type { AgentResult } from '../generated/result.schema.js';
 import { resolveProjectRoot } from '../context/paths.js';
 import { locateContext } from '../context/locate.js';
+import { exists } from '../utils/fs.js';
 
 const activeControllers = new Map<string, AbortController>();
 class ReviewFindingsError extends Error {}
@@ -80,3 +83,68 @@ export async function resumeRun(project: string, runId: string, executor?: (node
   }
   await advance(record, next, 'Checkpoint, inputs and baseline validated; resumed'); if (next === 'repairing') await advance(record, 'executing', 'Repair round started'); const controller = new AbortController(); activeControllers.set(runId, controller); try { await executeNodes(record, workflow, executor ?? createHostExecutor(record, workflow, controller.signal)); } finally { activeControllers.delete(runId); } return record; }
 export async function cleanupRun(project: string, runId: string): Promise<void> { const record = await loadRun(project, runId); if (!['complete', 'cancelled'].includes(record.state)) throw new Error('Cleanup accepts only complete or cancelled runs'); const paths = [...Object.values(record.resources.task_worktrees), ...(record.resources.plan_worktree ? [record.resources.plan_worktree] : [])]; await removeOwnedWorktrees(project, paths); await deleteOwnedBranches(project, [...Object.values(record.resources.task_branches), ...(record.resources.plan_branch ? [record.resources.plan_branch] : [])]); const directory = join(project, '.ai-workflow/runs', runId); const archive = join(project, '.ai-workflow/runs', `${basename(directory)}.final.json`); const { writeJson } = await import('../utils/fs.js'); await writeJson(archive, record); await rm(directory, { recursive: true, force: true }); }
+
+export interface StartV2RunOptions {
+  project: string;
+  runId: string;
+  manifestDigest: string;
+  fencingEpoch: number;
+  parentRun?: string;
+}
+
+function v2EventLog(project: string, runId: string, fencingEpoch: number): EventLog {
+  return new EventLog({ path: join(project, '.ai-workflow/runs', runId, 'events.jsonl'), runId, fencingEpoch });
+}
+
+export async function startV2Run(options: StartV2RunOptions): Promise<RunRecordV2> {
+  const directory = join(options.project, '.ai-workflow/runs', options.runId);
+  if (await exists(join(directory, 'state.json')) || await exists(join(directory, 'events.jsonl'))) throw new Error(`Run already exists: ${options.runId}`);
+  const now = new Date().toISOString();
+  const record: RunRecordV2 = { record_version: '2.0.0', engine: 'worker-thread-trusted', run_id: options.runId, manifest_digest: options.manifestDigest, fencing_epoch: options.fencingEpoch, run_state: 'preflight', parent_run: options.parentRun ?? 'root', started_at: now, updated_at: now, call_ledger: [], control_ledger: [], resources: [], completed_tasks: [], blocked_tasks: [] };
+  const log = v2EventLog(options.project, options.runId, options.fencingEpoch);
+  await log.append({ type: 'run/start', payload: { engine: 'worker-thread-trusted', manifest_digest: options.manifestDigest, state: 'preflight' } });
+  await saveV2Run(options.project, record);
+  return record;
+}
+
+export async function projectV2Run(project: string, runId: string): Promise<RunRecordV2> {
+  const record = await loadV2Run(project, runId);
+  const ledger = new RunLedger({ directory: join(project, '.ai-workflow/runs', runId), runId, fencingEpoch: record.fencing_epoch });
+  const projection = await v2EventLog(project, runId, record.fencing_epoch).rebuildState();
+  if (projection.tail_interrupted) { record.run_state = 'paused'; }
+  else if (projection.run_state && ['preflight', 'executing', 'reconciling', 'validating', 'reviewing', 'repairing', 'integrating', 'complete', 'paused', 'cancelling', 'cancelled', 'cancelled-with-retained-resources'].includes(projection.run_state)) record.run_state = projection.run_state as RunRecordV2['run_state'];
+  record.call_ledger = await ledger.replaySubmissionOrder();
+  record.control_ledger = await ledger.replayControlOrder();
+  await saveV2Run(project, record);
+  return record;
+}
+
+export async function resumeV2Run(project: string, runId: string, fingerprints?: { expected: ResumeFingerprint; current: ResumeFingerprint }): Promise<RunRecordV2> {
+  const record = await projectV2Run(project, runId);
+  if (record.run_state !== 'paused') throw new Error('Only paused v2 runs may resume');
+  const log = v2EventLog(project, runId, record.fencing_epoch);
+  if (fingerprints) {
+    try { assertResumeFingerprint(fingerprints.expected, fingerprints.current); }
+    catch (error) {
+      await log.append({ type: 'resume/diverged', payload: { state: 'paused', reason: error instanceof Error ? error.message : String(error) } });
+      await saveV2Run(project, record);
+      throw error;
+    }
+  }
+  await log.append({ type: 'resume/replayed', payload: { state: 'executing', manifest_digest: record.manifest_digest } });
+  record.run_state = 'executing';
+  await saveV2Run(project, record);
+  return record;
+}
+
+export async function cancelV2Run(project: string, runId: string): Promise<RunRecordV2> {
+  const record = await projectV2Run(project, runId);
+  if (['complete', 'cancelled', 'cancelled-with-retained-resources'].includes(record.run_state)) return record;
+  const log = v2EventLog(project, runId, record.fencing_epoch);
+  await log.append({ type: 'run/cancel-requested', payload: { state: 'cancelling', reason: 'Cancelled by user' } });
+  await log.append({ type: 'run/cancelled', payload: { state: 'cancelled', stop_reason: 'cancelled' } });
+  record.run_state = 'cancelled';
+  record.stop_reason = 'cancelled';
+  await saveV2Run(project, record);
+  return record;
+}
