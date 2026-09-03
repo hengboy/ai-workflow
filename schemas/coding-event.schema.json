@@ -11,7 +11,7 @@
     "at": { "type": "string", "format": "date-time" },
     "run_id": { "$ref": "#/definitions/runId" },
     "fencing_epoch": { "type": "integer", "minimum": 1 },
-    "type": { "enum": ["run/start", "run/lease-acquired", "run/cancel-requested", "run/cancelling", "run/cancelled", "run/end", "run/error", "workflow/phase", "workflow/log", "agent/start", "agent/end", "call/prepared", "call/dispatch-intent", "call/running", "call/observed", "call/checkpointed", "call/retry-scheduled", "call/business-failed", "call/blocked", "call/audit-failed", "call/reconcile-required", "control/prepared", "control/intent", "control/observed", "control/cancelled", "control/reconcile-required", "action/remediated", "action/skipped", "task/admitted", "task/skipped", "task/blocked", "task/finalize-intent", "task/finalized", "task/commit-intent", "task/committed", "scope/lease-acquired", "scope/lease-released", "scope/queued", "test/result", "review/result", "gate/started", "gate/passed", "gate/failed", "repair/started", "repair/completed", "git/baseline", "git/project-lease-acquired", "git/project-lease-released", "git/worktree-intent", "git/worktree-created", "git/commit-intent", "git/commit-observed", "git/merge-intent", "git/merge-observed", "git/integration-intent", "git/integration-observed", "git/cleanup-intent", "git/cleanup-observed", "resource/create-intent", "resource/created", "resource/retained", "resume/replayed", "resume/diverged"] },
+    "type": { "$ref": "#/definitions/codingEventType" },
     "call_id": { "$ref": "#/definitions/callId" },
     "task_id": { "type": "string", "minLength": 1 },
     "transaction_id": { "$ref": "#/definitions/callId" },
@@ -22,7 +22,22 @@
     "callId": { "type": "string", "pattern": "^[a-zA-Z][a-zA-Z0-9._/-]*$" },
     "digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
     "path": { "type": "string", "minLength": 1, "pattern": "^(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*//)(?!.*\\\\)[^\\u0000]+$" },
+    "codingEventType": {
+      "title": "CodingEventType",
+      "enum": ["run/start", "run/lease-acquired", "run/cancel-requested", "run/cancelling", "run/cancelled", "run/end", "run/error", "workflow/phase", "workflow/log", "agent/start", "agent/end", "call/prepared", "call/dispatch-intent", "call/running", "call/observed", "call/checkpointed", "call/retry-scheduled", "call/business-failed", "call/blocked", "call/audit-failed", "call/reconcile-required", "control/prepared", "control/intent", "control/observed", "control/cancelled", "control/reconcile-required", "action/remediated", "action/skipped", "task/admitted", "task/skipped", "task/blocked", "task/finalize-intent", "task/finalized", "task/commit-intent", "task/committed", "scope/lease-acquired", "scope/lease-released", "scope/queued", "test/result", "review/result", "gate/started", "gate/passed", "gate/failed", "repair/started", "repair/completed", "git/baseline", "git/project-lease-acquired", "git/project-lease-released", "git/worktree-intent", "git/worktree-created", "git/commit-intent", "git/commit-observed", "git/merge-intent", "git/merge-observed", "git/integration-intent", "git/integration-observed", "git/cleanup-intent", "git/cleanup-observed", "resource/create-intent", "resource/created", "resource/retained", "resume/replayed", "resume/diverged"]
+    },
+    "reviewFindingV2": {
+      "type": "object", "additionalProperties": false,
+      "required": ["finding_id", "ordinal", "source_gate", "severity", "message", "message_digest", "applicable_action_ids"],
+      "properties": { "finding_id": { "type": "string", "pattern": "^finding-sha256:[a-f0-9]{64}$" }, "ordinal": { "type": "integer", "minimum": 1 }, "source_gate": { "enum": ["standards-review", "spec-review"] }, "severity": { "enum": ["error", "warning", "info"] }, "message": { "type": "string", "minLength": 1 }, "message_digest": { "$ref": "#/definitions/digest" }, "path": { "$ref": "#/definitions/path" }, "applicable_action_ids": { "type": "array", "uniqueItems": true, "items": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" } } }
+    },
+    "codingAgentResult": {
+      "type": "object", "additionalProperties": false,
+      "required": ["result_version", "status", "summary", "changed_paths", "evidence", "tests", "findings", "git_refs", "support_requests"],
+      "properties": { "result_version": { "const": "2.0.0" }, "status": { "enum": ["done", "blocked", "failed"] }, "summary": { "type": "string" }, "changed_paths": { "type": "array" }, "evidence": { "type": "array" }, "tests": { "type": "array" }, "findings": { "type": "array" }, "git_refs": { "type": "array" }, "support_requests": { "type": "array" }, "value": {} }
+    },
     "eventPayload": {
+      "title": "CodingEventPayload",
       "type": "object",
       "additionalProperties": false,
       "properties": {
@@ -68,8 +83,8 @@
         "path": { "$ref": "#/definitions/path" },
         "kind": { "type": "string", "minLength": 1 },
         "resource_kinds": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
-        "findings": { "type": "array", "items": { "$ref": "schemas/coding-agent-result.schema.json#/definitions/reviewFindingV2" } },
-        "result": { "$ref": "schemas/coding-agent-result.schema.json" },
+        "findings": { "type": "array", "items": { "$ref": "#/definitions/reviewFindingV2" } },
+        "result": { "$ref": "#/definitions/codingAgentResult" },
         "gate_id": { "type": "string", "minLength": 1 },
         "predicate": { "type": "string", "minLength": 1 },
         "merge_commit": { "type": "string", "minLength": 1 },

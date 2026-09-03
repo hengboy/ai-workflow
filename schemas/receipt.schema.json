@@ -5,6 +5,10 @@
   "type": "object",
   "additionalProperties": false,
   "required": ["receipt_version"],
+  "oneOf": [
+    { "$ref": "#/definitions/ApprovalReceiptV1" },
+    { "$ref": "#/definitions/ApprovalReceiptV2" }
+  ],
   "properties": {
     "receipt_version": { "enum": ["1.0.0", "2.0.0"] },
     "workflow_digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
@@ -26,11 +30,11 @@
   "allOf": [
     {
       "if": { "properties": { "receipt_version": { "const": "1.0.0" } }, "required": ["receipt_version"] },
-      "then": { "required": ["workflow_digest", "baseline_digest", "plan_id", "host", "approved_at"], "not": { "required": ["engine"] } }
+      "then": { "properties": { "workflow_digest": {}, "baseline_digest": {}, "plan_id": {}, "host": {}, "approved_at": {}, "engine": {} }, "required": ["workflow_digest", "baseline_digest", "plan_id", "host", "approved_at"], "not": { "properties": { "engine": {} }, "required": ["engine"] } }
     },
     {
       "if": { "properties": { "receipt_version": { "const": "2.0.0" } }, "required": ["receipt_version"] },
-      "then": { "required": ["plan_id", "host", "engine", "manifest_digest", "script_digest", "args_digest", "input_artifacts_digest", "profile_route_digest", "sandbox_policy_digest", "baseline_digest", "target_branch", "target_head", "approval_identity", "approved_at"], "not": { "anyOf": [{ "required": ["workflow_digest"] }] } }
+      "then": { "$ref": "#/definitions/ApprovalReceiptV2" }
     }
   ],
   "definitions": {
@@ -41,6 +45,24 @@
       "additionalProperties": false,
       "required": ["kind", "subject_digest"],
       "properties": { "kind": { "const": "local-user" }, "subject_digest": { "$ref": "#/definitions/digest" } }
+    },
+    "ApprovalReceiptV1": {
+      "title": "ApprovalReceiptV1",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["receipt_version", "workflow_digest", "baseline_digest", "plan_id", "host", "approved_at"],
+      "properties": {
+        "receipt_version": { "const": "1.0.0" }, "workflow_digest": { "$ref": "#/definitions/digest" }, "baseline_digest": { "$ref": "#/definitions/digest" }, "plan_id": { "type": "string", "minLength": 1 }, "host": { "enum": ["codex", "claude", "opencode"] }, "approved_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "ApprovalReceiptV2": {
+      "title": "ApprovalReceiptV2",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["receipt_version", "plan_id", "host", "engine", "manifest_digest", "script_digest", "args_digest", "input_artifacts_digest", "profile_route_digest", "sandbox_policy_digest", "baseline_digest", "target_branch", "target_head", "approval_identity", "approved_at"],
+      "properties": {
+        "receipt_version": { "const": "2.0.0" }, "plan_id": { "type": "string", "minLength": 1 }, "host": { "enum": ["codex", "claude", "opencode"] }, "engine": { "const": "worker-thread-trusted" }, "manifest_digest": { "$ref": "#/definitions/digest" }, "script_digest": { "$ref": "#/definitions/digest" }, "args_digest": { "$ref": "#/definitions/digest" }, "input_artifacts_digest": { "$ref": "#/definitions/digest" }, "profile_route_digest": { "$ref": "#/definitions/digest" }, "sandbox_policy_digest": { "$ref": "#/definitions/digest" }, "baseline_digest": { "$ref": "#/definitions/digest" }, "target_branch": { "type": "string", "minLength": 1 }, "target_head": { "type": "string", "pattern": "^[a-f0-9]{40,64}$" }, "approval_identity": { "$ref": "#/definitions/approvalIdentity" }, "approved_at": { "type": "string", "format": "date-time" }
+      }
     }
   }
 }

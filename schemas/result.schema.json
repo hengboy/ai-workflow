@@ -32,11 +32,11 @@
   "allOf": [
     {
       "if": { "required": ["result_version"], "properties": { "result_version": { "const": "1.0.0" } } },
-      "then": { "not": { "required": ["value"] } }
+      "then": { "properties": { "value": {} }, "not": { "properties": { "value": {} }, "required": ["value"] } }
     },
     {
       "if": { "required": ["result_version"], "properties": { "result_version": { "const": "2.0.0" } } },
-      "then": { "properties": { "findings": { "items": { "oneOf": [{ "$ref": "#/definitions/findingDraft" }, { "$ref": "#/definitions/findingV2" }] } } } }
+      "then": { "properties": { "findings": { "type": "array", "items": { "oneOf": [{ "$ref": "#/definitions/findingDraft" }, { "$ref": "#/definitions/findingV2" }] } } } }
     }
   ],
   "definitions": {

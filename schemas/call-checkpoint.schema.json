@@ -15,7 +15,7 @@
     "attempt": { "type": "integer", "minimum": 1 },
     "attempt_id": { "$ref": "#/definitions/callId" },
     "state": { "const": "checkpointed" },
-    "result": { "$ref": "schemas/coding-agent-result.schema.json" },
+    "result": { "$ref": "#/definitions/codingAgentResult" },
     "audit_digest": { "$ref": "#/definitions/digest" },
     "changed_paths": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/definitions/path" } }
   },
@@ -23,6 +23,11 @@
     "digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
     "path": { "type": "string", "minLength": 1, "pattern": "^(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*//)(?!.*\\\\)[^\\u0000]+$" },
     "actionId": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
-    "callId": { "type": "string", "pattern": "^[a-zA-Z][a-zA-Z0-9._/-]*$" }
+    "callId": { "type": "string", "pattern": "^[a-zA-Z][a-zA-Z0-9._/-]*$" },
+    "codingAgentResult": {
+      "type": "object", "additionalProperties": false,
+      "required": ["result_version", "status", "summary", "changed_paths", "evidence", "tests", "findings", "git_refs", "support_requests"],
+      "properties": { "result_version": { "const": "2.0.0" }, "status": { "enum": ["done", "blocked", "failed"] }, "summary": { "type": "string", "maxLength": 20000 }, "changed_paths": { "type": "array" }, "evidence": { "type": "array" }, "tests": { "type": "array" }, "findings": { "type": "array" }, "git_refs": { "type": "array" }, "support_requests": { "type": "array" }, "value": {} }
+    }
   }
 }

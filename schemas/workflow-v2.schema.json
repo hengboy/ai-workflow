@@ -2,7 +2,20 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://ai-workflow.local/schemas/workflow-v2.schema.json",
   "title": "WorkflowV2",
-  "allOf": [
-    { "$ref": "schemas/coding-manifest.schema.json" }
-  ]
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "engine", "plan_id", "host", "project", "input_artifacts", "input_artifacts_digest", "script", "meta", "args", "concurrency_groups", "limits", "policies", "host_execution", "tasks", "actions", "scope_conflicts", "aggregate_repair", "repair_tests", "review_rechecks", "mandatory_gates"],
+  "properties": {
+    "schema_version": { "const": "2.0.0" },
+    "engine": { "const": "worker-thread-trusted" },
+    "plan_id": { "type": "string", "minLength": 1 },
+    "host": { "enum": ["codex", "claude", "opencode"] },
+    "project": { "type": "object", "additionalProperties": false, "required": ["git_common_dir_digest", "target_branch"], "properties": { "git_common_dir_digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" }, "target_branch": { "type": "string", "minLength": 1 } } },
+    "input_artifacts": { "type": "array", "items": { "type": "object", "additionalProperties": false, "required": ["path", "kind", "bytes_digest"], "properties": { "path": { "type": "string", "minLength": 1 }, "kind": { "enum": ["spec", "plan", "task", "navigation-json", "navigation-markdown", "script", "meta", "args"] }, "bytes_digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" } } } },
+    "input_artifacts_digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "script": { "type": "object", "additionalProperties": false, "required": ["path", "bytes_digest", "meta_digest", "language"], "properties": { "path": { "type": "string", "minLength": 1 }, "bytes_digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" }, "meta_digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" }, "language": { "const": "javascript" } } },
+    "meta": { "type": "object", "additionalProperties": false, "required": ["name", "description"], "properties": { "name": { "type": "string", "minLength": 1 }, "description": { "type": "string", "minLength": 1 }, "whenToUse": { "type": "string" }, "phases": { "type": "array" } } },
+    "args": { "type": "object", "additionalProperties": false, "required": ["path", "bytes_digest"], "properties": { "path": { "const": "workflow.args.json" }, "bytes_digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" } } },
+    "concurrency_groups": { "type": "array" }, "limits": { "type": "object" }, "policies": { "type": "object" }, "host_execution": { "type": "object" }, "tasks": { "type": "array" }, "actions": { "type": "array" }, "scope_conflicts": { "type": "array" }, "aggregate_repair": { "type": "object" }, "repair_tests": { "type": "array" }, "review_rechecks": { "type": "array" }, "mandatory_gates": { "type": "array" }
+  }
 }
