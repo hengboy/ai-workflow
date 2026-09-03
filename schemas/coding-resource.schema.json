@@ -1,0 +1,64 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://ai-workflow.local/schemas/coding-resource.schema.json",
+  "title": "CodingResource",
+  "oneOf": [
+    { "$ref": "#/definitions/ownedGitResource" },
+    { "$ref": "#/definitions/projectRunResource" }
+  ],
+  "definitions": {
+    "digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "identifier": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+    "path": { "type": "string", "minLength": 1, "pattern": "^(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*//)(?!.*\\\\)[^\\u0000]+$" },
+    "ownedGitResource": {
+      "title": "OwnedGitResource",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["resource_version", "resource_type", "resource_id", "run_id", "fencing_epoch", "manifest_digest", "git_common_dir_digest", "kind", "base_ref", "created_head", "creation_intent_digest", "creation_transaction_id", "committed"],
+      "properties": {
+        "resource_version": { "const": "2.0.0" },
+        "resource_type": { "const": "owned-git-resource" },
+        "resource_id": { "$ref": "#/definitions/identifier" },
+        "run_id": { "$ref": "#/definitions/identifier" },
+        "fencing_epoch": { "type": "integer", "minimum": 1 },
+        "manifest_digest": { "$ref": "#/definitions/digest" },
+        "git_common_dir_digest": { "$ref": "#/definitions/digest" },
+        "kind": { "enum": ["plan-worktree", "task-worktree", "repair-worktree", "repair-test-worktree", "plan-branch", "task-branch", "repair-branch", "repair-test-branch"] },
+        "canonical_path": { "$ref": "#/definitions/path" },
+        "branch": { "type": "string", "minLength": 1 },
+        "base_ref": { "type": "string", "minLength": 1 },
+        "created_head": { "type": "string", "pattern": "^[a-f0-9]{40,64}$" },
+        "owner_trailer": { "type": "string", "minLength": 1 },
+        "creation_intent_digest": { "$ref": "#/definitions/digest" },
+        "creation_transaction_id": { "$ref": "#/definitions/identifier" },
+        "committed": { "type": "boolean" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "kind": { "enum": ["plan-worktree", "task-worktree", "repair-worktree", "repair-test-worktree"] } }, "required": ["kind"] },
+          "then": { "properties": { "canonical_path": {} }, "required": ["canonical_path"] }
+        },
+        {
+          "if": { "properties": { "kind": { "enum": ["plan-branch", "task-branch", "repair-branch", "repair-test-branch"] } }, "required": ["kind"] },
+          "then": { "properties": { "branch": {} }, "required": ["branch"] }
+        }
+      ]
+    },
+    "projectRunResource": {
+      "title": "ProjectRunResource",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["resource_version", "resource_type", "run_id", "project_path", "git_common_dir_digest", "target_branch", "target_head", "manifest_digest"],
+      "properties": {
+        "resource_version": { "const": "2.0.0" },
+        "resource_type": { "const": "project-run-resource" },
+        "run_id": { "$ref": "#/definitions/identifier" },
+        "project_path": { "$ref": "#/definitions/path" },
+        "git_common_dir_digest": { "$ref": "#/definitions/digest" },
+        "target_branch": { "type": "string", "minLength": 1 },
+        "target_head": { "type": "string", "pattern": "^[a-f0-9]{40,64}$" },
+        "manifest_digest": { "$ref": "#/definitions/digest" }
+      }
+    }
+  }
+}

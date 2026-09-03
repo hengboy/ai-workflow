@@ -4,13 +4,43 @@
   "title": "ApprovalReceipt",
   "type": "object",
   "additionalProperties": false,
-  "required": ["receipt_version", "workflow_digest", "baseline_digest", "plan_id", "host", "approved_at"],
+  "required": ["receipt_version"],
   "properties": {
-    "receipt_version": { "const": "1.0.0" },
+    "receipt_version": { "enum": ["1.0.0", "2.0.0"] },
     "workflow_digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
     "baseline_digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
-    "plan_id": { "type": "string" },
+    "plan_id": { "type": "string", "minLength": 1 },
     "host": { "enum": ["codex", "claude", "opencode"] },
+    "engine": { "const": "worker-thread-trusted" },
+    "manifest_digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "script_digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "args_digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "input_artifacts_digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "profile_route_digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "sandbox_policy_digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "target_branch": { "type": "string", "minLength": 1 },
+    "target_head": { "type": "string", "pattern": "^[a-f0-9]{40,64}$" },
+    "approval_identity": { "$ref": "#/definitions/approvalIdentity" },
     "approved_at": { "type": "string", "format": "date-time" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "receipt_version": { "const": "1.0.0" } }, "required": ["receipt_version"] },
+      "then": { "required": ["workflow_digest", "baseline_digest", "plan_id", "host", "approved_at"], "not": { "required": ["engine"] } }
+    },
+    {
+      "if": { "properties": { "receipt_version": { "const": "2.0.0" } }, "required": ["receipt_version"] },
+      "then": { "required": ["plan_id", "host", "engine", "manifest_digest", "script_digest", "args_digest", "input_artifacts_digest", "profile_route_digest", "sandbox_policy_digest", "baseline_digest", "target_branch", "target_head", "approval_identity", "approved_at"], "not": { "anyOf": [{ "required": ["workflow_digest"] }] } }
+    }
+  ],
+  "definitions": {
+    "digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "approvalIdentity": {
+      "title": "ApprovalIdentity",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "subject_digest"],
+      "properties": { "kind": { "const": "local-user" }, "subject_digest": { "$ref": "#/definitions/digest" } }
+    }
   }
 }

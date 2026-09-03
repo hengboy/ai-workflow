@@ -1,0 +1,40 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://ai-workflow.local/schemas/coding-run.schema.json",
+  "title": "CodingRunRecord",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["record_version", "engine", "run_id", "manifest_digest", "fencing_epoch", "run_state", "parent_run", "started_at", "updated_at", "call_ledger", "control_ledger", "resources"],
+  "properties": {
+    "record_version": { "const": "2.0.0" },
+    "engine": { "const": "worker-thread-trusted" },
+    "run_id": { "$ref": "#/definitions/runId" },
+    "manifest_digest": { "$ref": "#/definitions/digest" },
+    "fencing_epoch": { "type": "integer", "minimum": 1 },
+    "run_state": { "$ref": "#/definitions/runState" },
+    "parent_run": { "type": "string", "minLength": 1 },
+    "started_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" },
+    "stop_reason": { "enum": ["completed", "cancelled", "error", "blocked"] },
+    "call_ledger": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/definitions/callLedgerEntry" } },
+    "control_ledger": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/definitions/controlLedgerEntry" } },
+    "resources": { "type": "array", "uniqueItems": true, "items": { "$ref": "schemas/coding-resource.schema.json" } },
+    "completed_tasks": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
+    "blocked_tasks": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } }
+  },
+  "definitions": {
+    "digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "runId": { "type": "string", "pattern": "^[a-zA-Z][a-zA-Z0-9._-]*$" },
+    "callId": { "type": "string", "pattern": "^[a-zA-Z][a-zA-Z0-9._/-]*$" },
+    "actionId": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+    "runState": { "enum": ["preflight", "executing", "reconciling", "validating", "reviewing", "repairing", "integrating", "complete", "paused", "cancelling", "cancelled", "cancelled-with-retained-resources"] },
+    "callLedgerEntry": {
+      "type": "object", "additionalProperties": false, "required": ["call_id", "call_ordinal", "action_id", "task_id", "descriptor_digest", "attempt", "attempt_id", "state"],
+      "properties": { "call_id": { "$ref": "#/definitions/callId" }, "call_ordinal": { "type": "integer", "minimum": 1 }, "action_id": { "$ref": "#/definitions/actionId" }, "task_id": { "type": "string", "minLength": 1 }, "descriptor_digest": { "$ref": "#/definitions/digest" }, "attempt": { "type": "integer", "minimum": 1 }, "attempt_id": { "$ref": "#/definitions/callId" }, "state": { "enum": ["prepared", "dispatch_intent", "running", "observed", "checkpointed", "transient_failed", "retry_scheduled", "business_failed", "blocked", "cancelled", "reconcile_required"] }, "checkpoint_digest": { "$ref": "#/definitions/digest" }, "audit_digest": { "$ref": "#/definitions/digest" }, "child_id": { "type": "string", "minLength": 1 }, "pid": { "type": "integer", "minimum": 1 }, "pgid": { "type": "integer", "minimum": 1 } }
+    },
+    "controlLedgerEntry": {
+      "type": "object", "additionalProperties": false, "required": ["control_id", "control_ordinal", "operation", "descriptor_digest", "state"],
+      "properties": { "control_id": { "$ref": "#/definitions/callId" }, "control_ordinal": { "type": "integer", "minimum": 1 }, "operation": { "enum": ["finalize-task", "skip-action", "skip-task"] }, "descriptor_digest": { "$ref": "#/definitions/digest" }, "state": { "enum": ["prepared", "intent", "observed", "cancelled", "reconcile_required"] }, "receipt_digest": { "$ref": "#/definitions/digest" } }
+    }
+  }
+}

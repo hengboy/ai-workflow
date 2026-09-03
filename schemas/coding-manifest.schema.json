@@ -1,0 +1,112 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://ai-workflow.local/schemas/coding-manifest.schema.json",
+  "title": "CodingCapabilityManifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "engine", "plan_id", "host", "project", "input_artifacts", "input_artifacts_digest", "script", "meta", "args", "concurrency_groups", "limits", "policies", "host_execution", "tasks", "actions", "scope_conflicts", "aggregate_repair", "repair_tests", "review_rechecks", "mandatory_gates"],
+  "properties": {
+    "schema_version": { "const": "2.0.0" },
+    "engine": { "const": "worker-thread-trusted" },
+    "plan_id": { "$ref": "#/definitions/planId" },
+    "host": { "enum": ["codex", "claude", "opencode"] },
+    "project": { "$ref": "#/definitions/project" },
+    "input_artifacts": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/definitions/inputArtifact" } },
+    "input_artifacts_digest": { "$ref": "#/definitions/digest" },
+    "script": { "$ref": "#/definitions/script" },
+    "meta": { "$ref": "#/definitions/meta" },
+    "args": { "$ref": "#/definitions/args" },
+    "concurrency_groups": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/definitions/concurrencyGroupPolicy" } },
+    "limits": { "$ref": "#/definitions/limits" },
+    "policies": { "$ref": "#/definitions/policies" },
+    "host_execution": { "$ref": "#/definitions/hostExecution" },
+    "tasks": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/definitions/codingTaskCapability" } },
+    "actions": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/definitions/codingActionCapability" } },
+    "scope_conflicts": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/definitions/scopeConflict" } },
+    "aggregate_repair": { "$ref": "#/definitions/aggregateRepairCapability" },
+    "repair_tests": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/definitions/repairTestCapability" } },
+    "review_rechecks": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/definitions/reviewRecheckCapability" } },
+    "mandatory_gates": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/definitions/codingGate" } }
+  },
+  "definitions": {
+    "digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "path": { "type": "string", "minLength": 1, "pattern": "^(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*//)(?!.*\\\\)[^\\u0000]+$" },
+    "planId": { "type": "string", "pattern": "^[0-9]{8}-[a-z0-9]+(?:-[a-z0-9]+)*$" },
+    "taskId": { "type": "string", "pattern": "^task-[0-9]{3}(?:-[a-z0-9-]+)?$" },
+    "actionId": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+    "project": {
+      "type": "object", "additionalProperties": false, "required": ["git_common_dir_digest", "target_branch"],
+      "properties": { "git_common_dir_digest": { "$ref": "#/definitions/digest" }, "target_branch": { "type": "string", "minLength": 1 } }
+    },
+    "inputArtifact": {
+      "type": "object", "additionalProperties": false, "required": ["path", "kind", "bytes_digest"],
+      "properties": { "path": { "$ref": "#/definitions/path" }, "kind": { "enum": ["spec", "plan", "task", "navigation-json", "navigation-markdown", "script", "meta", "args"] }, "bytes_digest": { "$ref": "#/definitions/digest" } }
+    },
+    "script": {
+      "type": "object", "additionalProperties": false, "required": ["path", "bytes_digest", "meta_digest", "language"],
+      "properties": { "path": { "$ref": "#/definitions/path" }, "bytes_digest": { "$ref": "#/definitions/digest" }, "meta_digest": { "$ref": "#/definitions/digest" }, "language": { "const": "javascript" } }
+    },
+    "meta": {
+      "type": "object", "additionalProperties": false, "required": ["name", "description"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 160 }, "description": { "type": "string", "minLength": 1, "maxLength": 4000 }, "whenToUse": { "type": "string", "minLength": 1, "maxLength": 4000 },
+        "phases": { "type": "array", "uniqueItems": true, "items": { "type": "object", "additionalProperties": false, "required": ["title"], "properties": { "title": { "type": "string", "minLength": 1, "maxLength": 160 }, "detail": { "type": "string", "minLength": 1, "maxLength": 4000 } } } }
+      }
+    },
+    "args": {
+      "type": "object", "additionalProperties": false, "required": ["path", "bytes_digest"],
+      "properties": { "path": { "const": "workflow.args.json" }, "bytes_digest": { "$ref": "#/definitions/digest" } }
+    },
+    "limits": {
+      "type": "object", "additionalProperties": false, "required": ["max_concurrent_agents", "max_total_agents", "max_items_per_call", "max_script_bytes", "max_result_bytes", "sync_timeout_ms", "dispose_grace_ms"],
+      "properties": {
+        "max_concurrent_agents": { "type": "integer", "minimum": 1 }, "max_total_agents": { "type": "integer", "minimum": 1 }, "max_items_per_call": { "type": "integer", "minimum": 1 }, "max_script_bytes": { "type": "integer", "minimum": 1 }, "max_result_bytes": { "type": "integer", "minimum": 1 }, "sync_timeout_ms": { "type": "integer", "minimum": 1 }, "dispose_grace_ms": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "policies": {
+      "type": "object", "additionalProperties": false, "required": ["max_retries", "repair_rounds", "push_allowed", "rebase_allowed", "mixed_host_allowed", "untrusted_script_allowed"],
+      "properties": { "max_retries": { "type": "integer", "minimum": 0 }, "repair_rounds": { "const": 1 }, "push_allowed": { "const": false }, "rebase_allowed": { "const": false }, "mixed_host_allowed": { "const": false }, "untrusted_script_allowed": { "const": false } }
+    },
+    "hostExecution": {
+      "type": "object", "additionalProperties": false, "required": ["adapter", "mode", "model_transport", "action_executor", "native_tool_authorization", "capability_digest"],
+      "properties": {
+        "adapter": { "enum": ["codex", "claude", "opencode"] }, "mode": { "enum": ["brokered-sandbox", "read-only-diagnostic", "unsupported"] },
+        "model_transport": { "type": "object", "additionalProperties": false, "required": ["owner", "network_allowed", "project_write_allowed", "credential_visibility"], "properties": { "owner": { "const": "host-native-broker" }, "network_allowed": { "const": true }, "project_write_allowed": { "const": false }, "credential_visibility": { "const": "broker-only" } } },
+        "action_executor": { "type": "object", "additionalProperties": false, "required": ["process_group", "network_allowed", "project_write_enforced", "git_metadata_write_allowed"], "properties": { "process_group": { "const": true }, "network_allowed": { "const": false }, "project_write_enforced": { "const": true }, "git_metadata_write_allowed": { "const": false } } },
+        "native_tool_authorization": { "enum": ["audited", "unavailable"] }, "capability_digest": { "$ref": "#/definitions/digest" }
+      }
+    },
+    "codingTaskCapability": {
+      "title": "CodingTaskCapability", "type": "object", "additionalProperties": false,
+      "required": ["task_id", "requirements", "acceptance_criteria", "feature", "activation", "depends_on", "required_actions", "optional_actions", "finalization_action", "finalization_mode", "worktree_policy", "max_repair_rounds"],
+      "properties": {
+        "task_id": { "$ref": "#/definitions/taskId" }, "requirements": { "type": "array", "items": { "type": "string", "minLength": 1 } }, "acceptance_criteria": { "type": "array", "items": { "type": "string", "minLength": 1 } }, "feature": { "type": "string", "minLength": 1 }, "activation": { "enum": ["required", "conditional"] }, "depends_on": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/definitions/taskId" } }, "required_actions": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/definitions/actionId" } }, "optional_actions": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/definitions/actionId" } }, "finalization_action": { "$ref": "#/definitions/actionId" }, "finalization_mode": { "enum": ["read-only-finalize", "commit-and-merge"] }, "worktree_policy": { "const": "isolated-task-worktree" }, "max_repair_rounds": { "const": 1 }
+      }
+    },
+    "codingActionCapability": {
+      "title": "CodingActionCapability", "type": "object", "additionalProperties": false,
+      "required": ["action_id", "task_id", "operation", "role", "locator_read_order", "read_scope", "write_scope", "new_module_directories", "allowed_commands", "test_commands", "requires_actions", "max_attempts", "optional", "write_access", "host_only"],
+      "properties": {
+        "action_id": { "$ref": "#/definitions/actionId" }, "task_id": { "$ref": "#/definitions/taskId" }, "operation": { "enum": ["explore", "implement", "test", "repair", "review", "finalize"] }, "role": { "enum": ["file-explorer", "git-operator", "task-worker", "backend", "frontend", "test", "standards-review", "spec-review", "researcher", "documentation-maintainer"] }, "locator_read_order": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/definitions/path" } }, "read_scope": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/definitions/path" } }, "write_scope": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/definitions/path" } }, "new_module_directories": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/definitions/path" } }, "allowed_commands": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } }, "test_commands": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } }, "output_schema": { "type": "string", "pattern": "^schemas/[a-z0-9-]+\\.schema\\.json$" }, "requires_actions": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/definitions/actionId" } }, "max_attempts": { "type": "integer", "minimum": 1 }, "optional": { "type": "boolean" }, "write_access": { "type": "boolean" }, "host_only": { "type": "boolean" }, "repair_for_action_id": { "$ref": "#/definitions/actionId" }, "concurrency_group_id": { "$ref": "#/definitions/actionId" }
+      }
+    },
+    "scopeConflict": { "type": "object", "additionalProperties": false, "required": ["left_action_id", "right_action_id", "kind"], "properties": { "left_action_id": { "$ref": "#/definitions/actionId" }, "right_action_id": { "$ref": "#/definitions/actionId" }, "kind": { "enum": ["write-write", "write-read"] } } },
+    "concurrencyGroupPolicy": { "type": "object", "additionalProperties": false, "required": ["group_id", "kind", "action_ids", "conflict_policy", "outside_group_policy"], "properties": { "group_id": { "$ref": "#/definitions/actionId" }, "kind": { "enum": ["parallel", "pipeline-item", "host-coordinator"] }, "action_ids": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/definitions/actionId" } }, "conflict_policy": { "const": "reject-before-second-admission" }, "outside_group_policy": { "const": "submission-fifo-after-predecessor-terminal" } } },
+    "aggregateRepairCapability": {
+      "title": "AggregateRepairCapability", "type": "object", "additionalProperties": false,
+      "required": ["action_id", "task_id", "operation", "role", "locator_read_order", "read_scope", "write_scope", "new_module_directories", "allowed_commands", "test_commands", "output_schema", "requires_actions", "max_attempts", "optional", "write_access", "host_only", "maximum_write_scope", "test_actions_by_task", "worktree_policy"],
+      "properties": { "action_id": { "const": "plan-aggregate-repair" }, "task_id": { "const": "plan" }, "operation": { "const": "repair" }, "role": { "enum": ["backend", "frontend", "task-worker"] }, "locator_read_order": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/definitions/path" } }, "read_scope": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/definitions/path" } }, "write_scope": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/definitions/path" } }, "new_module_directories": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/definitions/path" } }, "allowed_commands": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } }, "test_commands": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } }, "output_schema": { "const": "schemas/coding-agent-result.schema.json" }, "requires_actions": { "const": [] }, "max_attempts": { "const": 1 }, "optional": { "const": false }, "write_access": { "const": true }, "host_only": { "const": true }, "maximum_write_scope": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/definitions/path" } }, "test_actions_by_task": { "type": "object", "additionalProperties": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/definitions/actionId" } } }, "worktree_policy": { "const": "isolated-repair-worktree" } }
+    },
+    "repairTestCapability": {
+      "title": "RepairTestCapability", "type": "object", "additionalProperties": false,
+      "required": ["action_id", "task_id", "operation", "role", "locator_read_order", "read_scope", "write_scope", "new_module_directories", "allowed_commands", "test_commands", "requires_actions", "max_attempts", "optional", "write_access", "host_only", "source_test_action_id", "worktree_policy", "base_source", "resource_kinds", "coordinator_action_id", "coordinator_call_id_template", "repair_transaction_id"],
+      "properties": { "action_id": { "$ref": "#/definitions/actionId" }, "task_id": { "$ref": "#/definitions/taskId" }, "operation": { "const": "test" }, "role": { "enum": ["file-explorer", "git-operator", "task-worker", "backend", "frontend", "test", "standards-review", "spec-review", "researcher", "documentation-maintainer"] }, "locator_read_order": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/definitions/path" } }, "read_scope": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/definitions/path" } }, "write_scope": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/definitions/path" } }, "new_module_directories": { "const": [] }, "allowed_commands": { "const": [] }, "test_commands": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } }, "output_schema": { "type": "string", "pattern": "^schemas/[a-z0-9-]+\\.schema\\.json$" }, "requires_actions": { "const": [] }, "max_attempts": { "const": 1 }, "optional": { "const": false }, "write_access": { "const": false }, "host_only": { "const": true }, "source_test_action_id": { "$ref": "#/definitions/actionId" }, "worktree_policy": { "const": "isolated-repair-test-worktree" }, "base_source": { "const": "plan-head-after-repair-merge" }, "resource_kinds": { "const": ["repair-test-worktree", "repair-test-branch"] }, "coordinator_action_id": { "$ref": "#/definitions/actionId" }, "coordinator_call_id_template": { "const": "host/repair-test/<repair-transaction-id>/<task-id>" }, "repair_transaction_id": { "$ref": "#/definitions/actionId" } }
+    },
+    "reviewRecheckCapability": {
+      "title": "ReviewRecheckCapability", "type": "object", "additionalProperties": false,
+      "required": ["gate_id", "action_id", "task_id", "operation", "role", "locator_read_order", "read_scope", "write_scope", "new_module_directories", "allowed_commands", "test_commands", "output_schema", "requires_actions", "max_attempts", "optional", "write_access", "host_only", "read_scope_source", "coordinator_call_id_template"],
+      "properties": { "gate_id": { "enum": ["standards-review", "spec-review"] }, "action_id": { "$ref": "#/definitions/actionId" }, "task_id": { "const": "plan" }, "operation": { "const": "review" }, "role": { "enum": ["standards-review", "spec-review"] }, "locator_read_order": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/definitions/path" } }, "read_scope": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/definitions/path" } }, "write_scope": { "const": [] }, "new_module_directories": { "const": [] }, "allowed_commands": { "const": [] }, "test_commands": { "const": [] }, "output_schema": { "const": "schemas/review-repair-resolution.schema.json" }, "requires_actions": { "const": [] }, "max_attempts": { "const": 1 }, "optional": { "const": false }, "write_access": { "const": false }, "host_only": { "const": true }, "read_scope_source": { "const": "original-review-action" }, "coordinator_call_id_template": { "const": "host/finding-recheck/<gate-id>/<finding-id>" } }
+    },
+    "codingGate": { "title": "CodingGate", "type": "object", "additionalProperties": false, "required": ["gate_id", "owner", "requires", "predicate", "repair_budget"], "properties": { "gate_id": { "enum": ["task-closure", "plan-validation", "standards-review", "spec-review", "repair-closure", "baseline-stable", "integration"] }, "owner": { "const": "host" }, "requires": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } }, "predicate": { "enum": ["all-required-tasks-finalized", "plan-validation-passed", "review-findings-have-no-errors", "every-original-finding-targeted-recheck-closed", "aggregate-repair-closed", "baseline-matches-receipt", "target-no-ff-merge-observed"] }, "repair_budget": { "enum": [0, 1] } } }
+  }
+}

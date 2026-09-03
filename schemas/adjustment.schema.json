@@ -23,7 +23,7 @@
             "properties": {
               "op": { "enum": ["set-role", "set-retry", "set-failure-policy"] },
               "node": { "type": "string" },
-              "value": { "type": ["string", "integer"] }
+              "value": { "anyOf": [{ "type": "string" }, { "type": "integer" }] }
             }
           },
           {

@@ -1,0 +1,57 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://ai-workflow.local/schemas/coding-sandbox.schema.json",
+  "title": "HostExecutionCapability",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["adapter", "mode", "model_transport", "action_executor", "native_tool_authorization", "capability_digest"],
+  "properties": {
+    "adapter": { "enum": ["codex", "claude", "opencode"] },
+    "mode": { "enum": ["brokered-sandbox", "read-only-diagnostic", "unsupported"] },
+    "model_transport": { "$ref": "#/definitions/modelTransport" },
+    "action_executor": { "$ref": "#/definitions/actionExecutor" },
+    "native_tool_authorization": { "enum": ["audited", "unavailable"] },
+    "capability_digest": { "$ref": "#/definitions/digest" }
+  },
+  "definitions": {
+    "digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "modelTransport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["owner", "network_allowed", "project_write_allowed", "credential_visibility"],
+      "properties": {
+        "owner": { "const": "host-native-broker" },
+        "network_allowed": { "const": true },
+        "project_write_allowed": { "const": false },
+        "credential_visibility": { "const": "broker-only" }
+      }
+    },
+    "actionExecutor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["process_group", "network_allowed", "project_write_enforced", "git_metadata_write_allowed"],
+      "properties": {
+        "process_group": { "const": true },
+        "network_allowed": { "const": false },
+        "project_write_enforced": { "const": true },
+        "git_metadata_write_allowed": { "const": false }
+      }
+    },
+    "actionSandboxCapability": {
+      "title": "ActionSandboxCapability",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["platform", "project_write_enforcement", "git_metadata_write_denied", "action_executor_network_denied", "model_transport_partitioned", "native_tool_broker", "process_group_control", "policy_digest"],
+      "properties": {
+        "platform": { "const": "darwin" },
+        "project_write_enforcement": { "const": true },
+        "git_metadata_write_denied": { "const": true },
+        "action_executor_network_denied": { "const": true },
+        "model_transport_partitioned": { "const": true },
+        "native_tool_broker": { "const": true },
+        "process_group_control": { "const": true },
+        "policy_digest": { "$ref": "#/definitions/digest" }
+      }
+    }
+  }
+}

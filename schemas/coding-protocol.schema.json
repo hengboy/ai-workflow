@@ -1,0 +1,59 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://ai-workflow.local/schemas/coding-protocol.schema.json",
+  "title": "CodingProtocolMessage",
+  "oneOf": [
+    { "$ref": "#/definitions/hostToWorker" },
+    { "$ref": "#/definitions/workerToHost" }
+  ],
+  "definitions": {
+    "digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "runId": { "type": "string", "pattern": "^[a-zA-Z][a-zA-Z0-9._-]*$" },
+    "callId": { "type": "string", "pattern": "^[a-zA-Z][a-zA-Z0-9._/-]*$" },
+    "actionId": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+    "base": { "type": "object", "additionalProperties": false, "required": ["protocol_version", "run_id", "message_id"], "properties": { "protocol_version": { "const": "2.0.0" }, "run_id": { "$ref": "#/definitions/runId" }, "message_id": { "type": "integer", "minimum": 1 } } },
+    "requestBase": { "type": "object", "additionalProperties": false, "required": ["protocol_version", "run_id", "message_id", "request_id"], "properties": { "protocol_version": { "const": "2.0.0" }, "run_id": { "$ref": "#/definitions/runId" }, "message_id": { "type": "integer", "minimum": 1 }, "request_id": { "$ref": "#/definitions/callId" } } },
+    "hostToWorker": {
+      "type": "object", "additionalProperties": false, "required": ["type", "protocol_version", "run_id", "message_id"],
+      "properties": { "type": { "enum": ["go", "cancel", "agent-started", "agent-settled", "agent-start-error", "agent-disposed", "task-control-settled", "task-control-error"] }, "protocol_version": { "const": "2.0.0" }, "run_id": { "$ref": "#/definitions/runId" }, "message_id": { "type": "integer", "minimum": 1 }, "request_id": { "$ref": "#/definitions/callId" }, "call_id": { "$ref": "#/definitions/callId" }, "child_id": { "type": "string", "minLength": 1 }, "control_id": { "$ref": "#/definitions/callId" }, "reason": { "type": "string", "minLength": 1, "maxLength": 4000 }, "result": { "$ref": "schemas/coding-agent-result.schema.json" }, "error": { "$ref": "#/definitions/workflowErrorInfo" }, "state": { "enum": ["finalized", "committed", "skipped"] }, "receipt_digest": { "$ref": "#/definitions/digest" } },
+      "allOf": [
+        { "if": { "properties": { "type": { "const": "cancel" } }, "required": ["type"] }, "then": { "properties": { "reason": {} }, "required": ["reason"] } },
+        { "if": { "properties": { "type": { "enum": ["agent-started", "agent-settled", "agent-start-error", "agent-disposed"] } }, "required": ["type"] }, "then": { "properties": { "request_id": {}, "call_id": {} }, "required": ["request_id", "call_id"] } },
+        { "if": { "properties": { "type": { "const": "agent-started" } }, "required": ["type"] }, "then": { "properties": { "child_id": {} }, "required": ["child_id"] } },
+        { "if": { "properties": { "type": { "const": "agent-settled" } }, "required": ["type"] }, "then": { "properties": { "result": {} }, "required": ["result"] } },
+        { "if": { "properties": { "type": { "const": "agent-start-error" } }, "required": ["type"] }, "then": { "properties": { "error": {} }, "required": ["error"] } },
+        { "if": { "properties": { "type": { "const": "task-control-settled" } }, "required": ["type"] }, "then": { "properties": { "request_id": {}, "control_id": {}, "state": {}, "receipt_digest": {} }, "required": ["request_id", "control_id", "state", "receipt_digest"] } },
+        { "if": { "properties": { "type": { "const": "task-control-error" } }, "required": ["type"] }, "then": { "properties": { "request_id": {}, "control_id": {}, "error": {} }, "required": ["request_id", "control_id", "error"] } }
+      ]
+    },
+    "workerToHost": {
+      "type": "object", "additionalProperties": false, "required": ["type", "protocol_version", "run_id", "message_id"],
+      "properties": { "type": { "enum": ["ready", "agent-start", "agent-dispose", "task-control", "phase", "log", "result"] }, "protocol_version": { "const": "2.0.0" }, "run_id": { "$ref": "#/definitions/runId" }, "message_id": { "type": "integer", "minimum": 1 }, "request_id": { "$ref": "#/definitions/callId" }, "call_id": { "$ref": "#/definitions/callId" }, "descriptor": { "$ref": "#/definitions/callDescriptor" }, "control_id": { "$ref": "#/definitions/callId" }, "control_descriptor": { "$ref": "#/definitions/taskControlDescriptor" }, "title": { "type": "string", "minLength": 1, "maxLength": 160 }, "message": { "type": "string", "minLength": 1, "maxLength": 50000 }, "result": { "$ref": "#/definitions/workflowResult" } },
+      "allOf": [
+        { "if": { "properties": { "type": { "enum": ["agent-start", "agent-dispose", "task-control"] } }, "required": ["type"] }, "then": { "properties": { "request_id": {} }, "required": ["request_id"] } },
+        { "if": { "properties": { "type": { "const": "agent-start" } }, "required": ["type"] }, "then": { "properties": { "descriptor": {} }, "required": ["descriptor"] } },
+        { "if": { "properties": { "type": { "const": "agent-dispose" } }, "required": ["type"] }, "then": { "properties": { "call_id": {} }, "required": ["call_id"] } },
+        { "if": { "properties": { "type": { "const": "task-control" } }, "required": ["type"] }, "then": { "properties": { "control_descriptor": {} }, "required": ["control_descriptor"] } },
+        { "if": { "properties": { "type": { "const": "phase" } }, "required": ["type"] }, "then": { "properties": { "title": {} }, "required": ["title"] } },
+        { "if": { "properties": { "type": { "const": "log" } }, "required": ["type"] }, "then": { "properties": { "message": {} }, "required": ["message"] } },
+        { "if": { "properties": { "type": { "const": "result" } }, "required": ["type"] }, "then": { "properties": { "result": {} }, "required": ["result"] } }
+      ]
+    },
+    "callDescriptor": {
+      "title": "CallDescriptor", "type": "object", "additionalProperties": false,
+      "required": ["call_id", "call_ordinal", "action_id", "task_id", "prompt", "manifest_digest", "script_digest", "args_digest", "action_digest", "descriptor_digest"],
+      "properties": { "call_id": { "$ref": "#/definitions/callId" }, "call_ordinal": { "type": "integer", "minimum": 1 }, "action_id": { "$ref": "#/definitions/actionId" }, "task_id": { "type": "string", "minLength": 1 }, "prompt": { "type": "string", "minLength": 1, "maxLength": 50000 }, "label": { "type": "string", "minLength": 1, "maxLength": 4000 }, "phase": { "type": "string", "minLength": 1, "maxLength": 160 }, "pipeline_item_key": { "type": "string", "minLength": 1, "maxLength": 4000 }, "manifest_digest": { "$ref": "#/definitions/digest" }, "script_digest": { "$ref": "#/definitions/digest" }, "args_digest": { "$ref": "#/definitions/digest" }, "action_digest": { "$ref": "#/definitions/digest" }, "descriptor_digest": { "$ref": "#/definitions/digest" } }
+    },
+    "taskControlDescriptor": {
+      "title": "TaskControlDescriptor", "type": "object", "additionalProperties": false,
+      "required": ["control_id", "control_ordinal", "operation", "manifest_digest", "script_digest", "args_digest", "descriptor_digest"],
+      "properties": { "control_id": { "$ref": "#/definitions/callId" }, "control_ordinal": { "type": "integer", "minimum": 1 }, "operation": { "enum": ["finalize-task", "skip-action", "skip-task"] }, "task_id": { "type": "string", "minLength": 1 }, "action_id": { "$ref": "#/definitions/actionId" }, "reason": { "type": "string", "minLength": 1, "maxLength": 20000 }, "manifest_digest": { "$ref": "#/definitions/digest" }, "script_digest": { "$ref": "#/definitions/digest" }, "args_digest": { "$ref": "#/definitions/digest" }, "descriptor_digest": { "$ref": "#/definitions/digest" } }
+    },
+    "workflowErrorInfo": {
+      "title": "WorkflowErrorInfo", "type": "object", "additionalProperties": false, "required": ["code", "message", "fatal"],
+      "properties": { "code": { "enum": ["SCRIPT_API_FORBIDDEN", "SCRIPT_PARSE", "ACTION_NOT_AUTHORIZED", "TASK_NOT_AUTHORIZED", "ACTION_NOT_READY", "REPLAY_DIVERGED", "PARALLEL_SCOPE_CONFLICT", "PROTOCOL_VIOLATION", "CANCEL_UNAUTHORIZED", "CANCEL_CONTROL_STALE", "NAVIGATION_DIGEST_MISMATCH", "NAVIGATION_INVALID", "ACTION_SANDBOX_UNAVAILABLE", "AUDIT_SYMLINK_CHANGE", "V2_ADJUSTMENTS_UNSUPPORTED", "CLEANUP_OWNERSHIP_UNPROVEN", "WORKFLOW_RECEIPT_MISMATCH", "FROZEN_INPUT_DRIFT", "EXECUTION_ROUTE_DRIFT", "GIT_BASELINE_DRIFT", "APPROVAL_IDENTITY_MISMATCH", "TASK_SKIP_FORBIDDEN", "OUTPUT_CONTRACT_INVALID", "ACTION_SCOPE_VIOLATION", "LEASE_LOST", "WORKER_DEAD", "WORKFLOW_VERSION_UNSUPPORTED", "RUN_VERSION_UNSUPPORTED", "LEGACY_CANCEL_UNAVAILABLE", "LEGACY_RESUME_UNSUPPORTED"] }, "message": { "type": "string", "minLength": 1, "maxLength": 20000 }, "fatal": { "const": true } }
+    },
+    "workflowResult": { "title": "CodingWorkflowResult", "type": "object", "additionalProperties": false, "required": ["value", "stop_reason", "agents_started", "completed_tasks", "blocked_tasks"], "properties": { "value": {}, "stop_reason": { "enum": ["completed", "cancelled", "error", "blocked"] }, "error": { "type": "string", "maxLength": 20000 }, "agents_started": { "type": "integer", "minimum": 0 }, "completed_tasks": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } }, "blocked_tasks": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } } }
+    }
+  }
+}

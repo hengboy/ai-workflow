@@ -6,6 +6,7 @@
   "additionalProperties": false,
   "required": ["status", "summary", "changed_paths", "evidence", "tests", "findings", "git_refs", "support_requests"],
   "properties": {
+    "result_version": { "enum": ["1.0.0", "2.0.0"] },
     "status": { "enum": ["done", "blocked", "failed"] },
     "summary": { "type": "string", "maxLength": 20000 },
     "changed_paths": { "type": "array", "uniqueItems": true, "items": { "type": "string" } },
@@ -26,5 +27,29 @@
     },
     "git_refs": { "type": "array", "items": { "type": "string" } },
     "support_requests": { "type": "array", "items": { "type": "string" } }
+    ,"value": {}
+  },
+  "allOf": [
+    {
+      "if": { "required": ["result_version"], "properties": { "result_version": { "const": "1.0.0" } } },
+      "then": { "not": { "required": ["value"] } }
+    },
+    {
+      "if": { "required": ["result_version"], "properties": { "result_version": { "const": "2.0.0" } } },
+      "then": { "properties": { "findings": { "items": { "oneOf": [{ "$ref": "#/definitions/findingDraft" }, { "$ref": "#/definitions/findingV2" }] } } } }
+    }
+  ],
+  "definitions": {
+    "digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "path": { "type": "string", "minLength": 1, "pattern": "^(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*//)(?!.*\\\\)[^\\u0000]+$" },
+    "actionId": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+    "findingDraft": {
+      "type": "object", "additionalProperties": false, "required": ["severity", "message", "applicable_action_ids"],
+      "properties": { "severity": { "enum": ["error", "warning", "info"] }, "message": { "type": "string", "minLength": 1 }, "path": { "$ref": "#/definitions/path" }, "applicable_action_ids": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/definitions/actionId" } } }
+    },
+    "findingV2": {
+      "type": "object", "additionalProperties": false, "required": ["finding_id", "ordinal", "source_gate", "severity", "message", "message_digest", "applicable_action_ids"],
+      "properties": { "finding_id": { "type": "string", "pattern": "^finding-sha256:[a-f0-9]{64}$" }, "ordinal": { "type": "integer", "minimum": 1 }, "source_gate": { "enum": ["standards-review", "spec-review"] }, "severity": { "enum": ["error", "warning", "info"] }, "message": { "type": "string", "minLength": 1 }, "message_digest": { "$ref": "#/definitions/digest" }, "path": { "$ref": "#/definitions/path" }, "applicable_action_ids": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/definitions/actionId" } } }
+    }
   }
 }
