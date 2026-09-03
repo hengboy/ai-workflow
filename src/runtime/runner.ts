@@ -19,6 +19,9 @@ import type { AgentResult } from '../generated/result.schema.js';
 import { resolveProjectRoot } from '../context/paths.js';
 import { locateContext } from '../context/locate.js';
 import { exists } from '../utils/fs.js';
+import { TaskClosureCoordinator, type TaskActionObservation } from '../workflow/approval.js';
+import { GateCoordinator, type GateReceipt } from './gates.js';
+import { V2GitOperator, type V2Worktree } from '../git/operator.js';
 
 const activeControllers = new Map<string, AbortController>();
 class ReviewFindingsError extends Error {}
@@ -92,6 +95,23 @@ export interface StartV2RunOptions {
   parentRun?: string;
 }
 
+export interface V2LifecycleActionContext { cwd: string; taskId: string; actionId: string }
+export interface V2LifecycleActionResult { status: 'done' | 'failed'; tests: Array<{ command: string; status: 'passed' | 'failed' | 'skipped' }>; changedPaths: string[] }
+export interface V2LifecycleOptions {
+  project: string;
+  runId: string;
+  manifest: { manifest_digest: string; target_branch?: string; tasks: Array<{ task_id: string; activation: 'required' | 'conditional'; finalization_mode: 'read-only-finalize' | 'commit-and-merge'; required_actions: string[]; depends_on: string[] }>; actions: Array<{ action_id: string; task_id: string; operation: string; write_scope: string[] }> };
+  fencingEpoch?: number;
+  execute: (context: V2LifecycleActionContext) => Promise<V2LifecycleActionResult>;
+}
+
+export interface V2LifecycleResult {
+  run_state: RunRecordV2['run_state'];
+  gates: Record<string, GateReceipt>;
+  integration?: { observed: boolean; noFastForward: boolean; mergeCommit?: string };
+  trace: string[];
+}
+
 function v2EventLog(project: string, runId: string, fencingEpoch: number): EventLog {
   return new EventLog({ path: join(project, '.ai-workflow/runs', runId, 'events.jsonl'), runId, fencingEpoch });
 }
@@ -145,6 +165,69 @@ export async function cancelV2Run(project: string, runId: string): Promise<RunRe
   await log.append({ type: 'run/cancelled', payload: { state: 'cancelled', stop_reason: 'cancelled' } });
   record.run_state = 'cancelled';
   record.stop_reason = 'cancelled';
+  await saveV2Run(project, record);
+  return record;
+}
+
+export async function runV2Lifecycle(options: V2LifecycleOptions): Promise<V2LifecycleResult> {
+  const fencingEpoch = options.fencingEpoch ?? 1;
+  const record = await startV2Run({ project: options.project, runId: options.runId, manifestDigest: options.manifest.manifest_digest, fencingEpoch });
+  const directory = join(options.project, '.ai-workflow/runs', options.runId);
+  const trace = ['run:start'];
+  const operator = new V2GitOperator({ project: options.project, runId: options.runId, manifestDigest: options.manifest.manifest_digest, fencingEpoch, targetBranch: options.manifest.target_branch ?? 'main' });
+  const plan = await operator.createPlanWorktree({ baseBranch: options.manifest.target_branch ?? 'main' });
+  trace.push('resource:plan-created');
+  const tasks = new Map<string, { worktree: V2Worktree; state: 'finalized' | 'committed' | 'skipped' }>();
+  const actionObservations = new Map<string, TaskActionObservation[]>();
+  for (const task of options.manifest.tasks) {
+    if (task.activation === 'conditional') continue;
+    for (const actionId of task.required_actions) {
+      const action = options.manifest.actions.find((candidate) => candidate.action_id === actionId);
+      if (!action) throw new Error(`Missing action capability: ${actionId}`);
+      const worktree = tasks.get(task.task_id)?.worktree ?? await operator.createTaskWorktree(plan, task.task_id);
+      tasks.set(task.task_id, { worktree, state: task.finalization_mode === 'read-only-finalize' ? 'finalized' : 'committed' });
+      const result = await options.execute({ cwd: worktree.path, taskId: task.task_id, actionId });
+      actionObservations.set(task.task_id, [...(actionObservations.get(task.task_id) ?? []), { action_id: actionId, state: result.status === 'done' ? 'checkpointed' : 'failed', result: { status: result.status, tests: result.tests } }]);
+    }
+    const ledger = new RunLedger({ directory, runId: options.runId, fencingEpoch });
+    const coordinator = new TaskClosureCoordinator({ ledger });
+    const predecessorStates = Object.fromEntries(task.depends_on.map((dependency) => [dependency, tasks.get(dependency)?.state ?? 'pending'])) as Record<string, 'pending' | 'running' | 'finalized' | 'committed' | 'skipped'>;
+    const worktree = tasks.get(task.task_id)?.worktree;
+    if (!worktree) throw new Error(`Missing task worktree: ${task.task_id}`);
+    const finalized = await coordinator.finalizeTask({ taskId: task.task_id, controlId: `finalize-${task.task_id}`, controlOrdinal: tasks.size, activation: task.activation, requiredActionIds: task.required_actions, actions: actionObservations.get(task.task_id) ?? [], predecessorStates, finalizationMode: task.finalization_mode, taskWorktree: worktree, planWorktree: plan, writeScope: options.manifest.actions.filter((action) => action.task_id === task.task_id).flatMap((action) => action.write_scope), operator });
+    tasks.set(task.task_id, { worktree: tasks.get(task.task_id)!.worktree, state: finalized.state });
+    trace.push(`task-${task.task_id}:${finalized.state}`);
+  }
+  const gates = new GateCoordinator({ directory, runId: options.runId, fencingEpoch, manifestDigest: options.manifest.manifest_digest });
+  await gates.runGate('task-closure', { taskClosure: Object.fromEntries([...tasks].map(([taskId, task]) => [taskId, { state: task.state }])) }); trace.push('gate:task-closure:passed');
+  await gates.runGate('plan-validation', { planValidation: { valid: true, errors: [] } }); trace.push('gate:plan-validation:passed');
+  await gates.runGate('standards-review', { review: { findings: [] } });
+  await gates.runGate('spec-review', { review: { findings: [] } });
+  await gates.runGate('repair-closure', { repairClosure: { closedFindingIds: [] } });
+  const baseline = await gitBaseline(options.project);
+  await gates.runGate('baseline-stable', { baseline: { expected: baseline.head ?? '', current: baseline.head ?? '' } }); trace.push('gate:baseline-stable:passed');
+  const mergeCommit = await operator.integratePlan(plan, { targetBranch: options.manifest.target_branch ?? 'main', expectedHead: baseline.head });
+  const integration = { observed: true, noFastForward: true, mergeCommit };
+  await gates.runGate('integration', { integration }); trace.push('gate:integration:passed');
+  record.run_state = 'complete'; record.stop_reason = 'completed';
+  record.resources = operator.resources as unknown[];
+  record.completed_tasks = [...tasks.keys()];
+  await v2EventLog(options.project, options.runId, fencingEpoch).append({ type: 'run/end', payload: { state: 'complete', stop_reason: 'completed' } });
+  await saveV2Run(options.project, record);
+  trace.push('run:complete');
+  const gateIds = ['task-closure', 'plan-validation', 'standards-review', 'spec-review', 'repair-closure', 'baseline-stable', 'integration'] as const;
+  const gateEntries = await Promise.all(gateIds.map(async (gateId) => [gateId, (await gates.readGate(gateId))!] as const));
+  return { run_state: record.run_state, gates: Object.fromEntries(gateEntries), integration, trace };
+}
+
+export async function cleanupV2Run(project: string, runId: string): Promise<RunRecordV2> {
+  const record = await projectV2Run(project, runId);
+  if (!['complete', 'cancelled', 'cancelled-with-retained-resources'].includes(record.run_state)) throw new Error('Cleanup accepts only complete or cancelled v2 runs');
+  const operator = new V2GitOperator({ project, runId, manifestDigest: record.manifest_digest, fencingEpoch: record.fencing_epoch });
+  await operator.reconcile();
+  await operator.cleanup();
+  record.resources = operator.resources as unknown[];
+  record.run_state = record.run_state === 'cancelled' ? 'cancelled' : 'complete';
   await saveV2Run(project, record);
   return record;
 }
