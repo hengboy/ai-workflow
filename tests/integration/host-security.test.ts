@@ -10,9 +10,13 @@ import {
   type SandboxProbe,
 } from '../../src/security/sandbox.js';
 import { invokeHost } from '../../src/adapters/process.js';
+import { createProcessGroupIdentity, ProcessGroupRegistry, ProcessIdentityError, type ProcessGroupIdentity } from '../../src/adapters/process.js';
+import { CodingWorkflowEngine, type ChildRun, type HostChildExecutor } from '../../src/runtime/engine.js';
+import type { CallDescriptor, CodingAgentResult } from '../../src/runtime/protocol.js';
 import type { AgentPacket } from '../../src/generated/packet.schema.js';
 
 const digest = `sha256:${'c'.repeat(64)}`;
+const identity: ProcessGroupIdentity = createProcessGroupIdentity(1201, 1201, '2026-09-03T14:00:00Z', 'spawn-1');
 
 function packet(cwd: string, writePaths: string[] = []): AgentPacket {
   return {
@@ -74,9 +78,7 @@ describe('host security', () => {
     ['Git metadata denial', { gitMetadataWriteDenied: false }],
     ['credential partition', { credentialsVisibleToExecutor: true }],
   ] as const)('fails closed when %s is unavailable', (_reason, overrides) => {
-    expect(() => requireActionSandbox(probe(overrides))).toThrowError(
-      expect.objectContaining({ code: 'ACTION_SANDBOX_UNAVAILABLE' }),
-    );
+    expect(() => requireActionSandbox(probe(overrides))).toThrowError(ActionSandboxError);
   });
 
   it('does not pass broker credentials into the action executor environment', async () => {
@@ -100,9 +102,7 @@ process.stdout.write(JSON.stringify({ status: 'done', summary: 'ok', changed_pat
     const executable = join(root, 'should-not-run');
     await writeFile(executable, 'process.exit(0);');
 
-    await expect(invokeHost('codex', 'run', packet(root, ['src/output.ts']), { executable, args: [] })).rejects.toThrowError(
-      expect.objectContaining({ code: 'ACTION_SANDBOX_UNAVAILABLE' }),
-    );
+    await expect(invokeHost('codex', 'run', packet(root, ['src/output.ts']), { executable, args: [] })).rejects.toThrowError(ActionSandboxError);
     expect(() => new ActionSandboxError('ACTION_SANDBOX_UNAVAILABLE', 'missing')).toBeTruthy();
   });
 
@@ -120,5 +120,53 @@ try {
     await chmod(executable, 0o755);
     const provider = new BrokeredSandboxProvider(probe(), { projectRoot: root, useSeatbelt: true });
     await expect(invokeHost('codex', 'run', packet(root), { executable, args: [], sandbox: provider })).resolves.toMatchObject({ summary: 'executor network denied' });
+  });
+
+  it('refuses to signal or release a process group when its identity cannot be verified', () => {
+    const registry = new ProcessGroupRegistry();
+    registry.register('run-1', 'call-1', identity);
+    expect(registry.verify('run-1', 'call-1', identity)).toBe(true);
+    expect(() => registry.verify('run-1', 'call-1', { ...identity, spawn_nonce: 'stale' })).toThrowError(/could not be verified/);
+    expect(() => registry.release('run-1', 'call-1', { ...identity, pgid: 9999 })).toThrowError(/could not be verified/);
+    expect(registry.has('run-1', 'call-1')).toBe(true);
+    expect(() => registry.signal('run-1', 'call-1', undefined)).toThrowError(ProcessIdentityError);
+  });
+
+  it('keeps child failure separate from host fatal sandbox failure and audits after reap', async () => {
+    const done: CodingAgentResult = { result_version: '2.0.0', status: 'done', summary: 'ok', changed_paths: [], evidence: [], tests: [], findings: [], git_refs: [], support_requests: [], value: 'ok' };
+    const order: string[] = [];
+    let resolveReaped!: () => void;
+    const reaped = new Promise<void>((resolve) => { resolveReaped = () => { order.push('reaped'); resolve(); }; });
+    const executor: HostChildExecutor = {
+      async start() {
+        order.push('start');
+        return { id: 'child-1', identity, result: Promise.reject(new Error('child failed')), dispose: async () => { order.push('dispose'); resolveReaped(); }, reaped } as ChildRun;
+      },
+    };
+    const run = new CodingWorkflowEngine().start({
+      script: `const result = await agent('child', { actionId: 'build', callId: 'call-1' }); return result;`,
+      manifestDigest: `sha256:${'d'.repeat(64)}`, scriptDigest: digest, argsDigest: digest,
+      actions: [{ action_id: 'build', task_id: 'task-001-host' }], childExecutor: executor, disposeGraceMs: 100,
+      sandboxPreflight: () => { order.push('preflight'); },
+      audit: (_descriptor: CallDescriptor, event: 'before-dispatch' | 'after-dispose') => { order.push(`audit:${event}`); },
+      processRegistry: (event) => { order.push(`registry:${event.type}`); },
+    });
+    await expect(run.result).resolves.toMatchObject({ stop_reason: 'completed', value: null });
+    await run.dispose();
+    expect(order).toEqual(['preflight', 'audit:before-dispatch', 'start', 'registry:registered', 'dispose', 'reaped', 'audit:after-dispose', 'registry:released']);
+    expect(done.status).toBe('done');
+  });
+
+  it('returns a host fatal result when sandbox preflight rejects an action', async () => {
+    const run = new CodingWorkflowEngine().start({
+      script: `await agent('blocked', { actionId: 'build', callId: 'call-fatal' });`,
+      manifestDigest: digest, scriptDigest: digest, argsDigest: digest,
+      actions: [{ action_id: 'build', task_id: 'task-001-host' }], disposeGraceMs: 50,
+      childExecutor: { async start(): Promise<never> { throw new Error('executor must not start'); } },
+      sandboxPreflight: () => { throw new ActionSandboxError('ACTION_SANDBOX_UNAVAILABLE', 'fixture sandbox unavailable'); },
+    });
+
+    await expect(run.result).resolves.toMatchObject({ stop_reason: 'error', error: 'fixture sandbox unavailable' });
+    await run.dispose();
   });
 });
