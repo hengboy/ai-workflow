@@ -1,6 +1,6 @@
 # ai-workflow
 
-A self-contained macOS/Node.js 22 CLI that installs planning, task-splitting and coding skills once into `~/.agents/skills`, plus the same native role agents for Codex, Claude Code and OpenCode. Planning uses the shared skills and host-native agents. Coding runs through a local, versioned JSON DAG with explicit approval, checkpoints, role/scope enforcement and Git worktrees.
+A self-contained macOS/Node.js 22 CLI that installs planning, task-splitting and coding skills once into `~/.agents/skills`, plus the same native role agents for Codex, Claude Code and OpenCode. Planning uses the shared skills and host-native agents. Coding runs through a local v2 trusted workflow manifest with explicit approval, durable checkpoints, brokered execution, scope audit and Git worktrees.
 
 The product does not execute, depend on or provide compatibility for external workflow frameworks. It calls exactly one selected host CLI per run and never calls model-provider APIs directly.
 
@@ -23,8 +23,8 @@ ai-workflow uninstall --host codex|claude|opencode|all
 ai-workflow profile activate <name>
 ai-workflow init /path/to/project
 ai-workflow update /path/to/project
-ai-workflow workflow generate --plan .ai-workflow/plans/<planId> --host codex
-ai-workflow workflow validate .ai-workflow/plans/<planId>/workflow.json
+ai-workflow workflow generate --plan .ai-workflow/plans/<planId> --host codex [--script <plan-local-file>] [--args <plan-local-json>]
+ai-workflow workflow validate .ai-workflow/plans/<planId>/workflow.json --project .
 ai-workflow workflow explain .ai-workflow/plans/<planId>/workflow.json
 ai-workflow workflow approve .ai-workflow/plans/<planId>/workflow.json
 ai-workflow plan validate --plan .ai-workflow/plans/<planId>
@@ -38,13 +38,19 @@ ai-workflow context refresh --project . --candidate <candidate.json> --write
 ai-workflow context discover --project . --packet <fallback.json>
 ```
 
-`workflow generate` always writes the canonical `.ai-workflow/plans/<plan-id>/workflow.json` inside the project. It has no `--output` option and never creates a `workflow.candidate.json`.
+`workflow generate` always writes the v2 manifest to the canonical `.ai-workflow/plans/<plan-id>/workflow.json` inside the project. `--script` and `--args` accept only regular files inside that plan directory. Symlinks, external paths, stdin, v1 artifacts and start-time replacement are rejected.
 
 `--project` is always a project root directory path. From that directory use `--project .` (project root directory path); from elsewhere pass an absolute path such as `--project /path/to/project`. Internal orchestration uses absolute project-root paths, and a relative `--candidate` is resolved from that project root.
 
 Navigation is JSON-authoritative. `context locate` resolves a feature by exact ID then exact alias; task queries match exact feature, alias, task, requirement, or acceptance-criterion IDs; symbols match an exact export name or qualified `file#symbol` name. A hit returns exact indexed paths; `missing_index`, `miss`, `stale`, and `invalid` return a fallback packet that must be validated before bounded discovery. `context candidate` emits the structured input for refresh, while `context refresh` atomically replaces `navigation.json` and its generated Markdown view only after candidate validation succeeds.
 
-`workflow generate --adjustments-stdin` reads a structured adjustment document from stdin. Natural-language feedback is converted to that schema by the installed coding skill; the CLI deliberately refuses unbounded natural-language mutation.
+The v2 manifest freezes action capabilities, `actionId`, scope, brokered executor policy, repair-test policy and mandatory gates. Runtime script calls must use approved `callId` values and pipeline `itemKey` values; runtime changes cannot expand the approved boundary.
+
+The host-native broker owns model transport and credentials. The brokered executor controls process groups, denies executor network access and enforces project write scope. Worker/VM execution is a trusted boundary and containment mechanism, not a malicious-code security sandbox. Opaque host command fields are audit data, not a complete in-process allowlist.
+
+v2 Git resources use `.ai-workflow/runs/<runId>/worktrees/plan`, `.ai-workflow/runs/<runId>/worktrees/tasks/<taskId>`, `.ai-workflow/runs/<runId>/worktrees/repair` and `.ai-workflow/runs/<runId>/worktrees/repair-tests/<taskId>`. Git mutation is serialized by the Git mutex and run queue. Repair-tests start from the plan head after repair merge and require targeted finding rechecks.
+
+Coding sessions are serial. Pass the complete handoff and durable receipts to the next session only after the current run has reached its defined terminal state.
 
 Frozen `spec.md` and `plan.md` files use a shared digest protocol: each file hashes its exact UTF-8 bytes with only its own frontmatter `digest` line replaced by `digest: ""`; the workflow input digest combines the two resulting digests as stable JSON. Use `ai-workflow plan validate --plan <directory>` after planning and before task splitting or coding.
 
