@@ -1,7 +1,7 @@
 import type { CodingAgentResult } from '../generated/coding-agent-result.schema.js';
 import { redact } from '../security/policy.js';
 import { objectDigest, sha256 } from '../utils/hash.js';
-import { EventLog, type EventLogOptions } from './events.js';
+import { EventLog } from './events.js';
 import { ensureRunStorage, readCallCheckpoint, writeCallCheckpoint, writeControlReceipt, type CallCheckpoint } from './store.js';
 
 export type RecordedAgentResult = CodingAgentResult;
@@ -24,6 +24,7 @@ export interface CallLedgerEntry {
   child_id?: string;
   pid?: number;
   pgid?: number;
+  reconciled?: boolean;
   result?: unknown;
 }
 
@@ -82,8 +83,8 @@ export function redactAndCap(value: unknown, options: ProjectionOptions = {}): u
 }
 
 function digestValue(value: unknown): string { return typeof value === 'string' && /^sha256:[a-f0-9]{64}$/.test(value) ? value : objectDigest(value); }
-function callEventPayload(entry: CallLedgerEntry, options: { state?: string; result?: RecordedAgentResult; error?: string } = {}): { call_ordinal: number; attempt: number; attempt_id: string; descriptor_digest: string; action_id: string; state?: string; result?: RecordedAgentResult; error?: string; audit_digest?: string; checkpoint_digest?: string } {
-  return { call_ordinal: entry.call_ordinal, attempt: entry.attempt, attempt_id: entry.attempt_id, descriptor_digest: entry.descriptor_digest, action_id: entry.action_id, ...(options.state === undefined ? {} : { state: options.state }), ...(options.result === undefined ? {} : { result: options.result }), ...(options.error === undefined ? {} : { error: options.error }), ...(entry.audit_digest === undefined ? {} : { audit_digest: entry.audit_digest }), ...(entry.checkpoint_digest === undefined ? {} : { checkpoint_digest: entry.checkpoint_digest }) };
+function callEventPayload(entry: CallLedgerEntry, options: { state?: string; result?: RecordedAgentResult; error?: string; reconciled?: boolean } = {}): { call_ordinal: number; attempt: number; attempt_id: string; descriptor_digest: string; action_id: string; state?: string; result?: RecordedAgentResult; error?: string; audit_digest?: string; checkpoint_digest?: string; reconciled?: boolean } {
+  return { call_ordinal: entry.call_ordinal, attempt: entry.attempt, attempt_id: entry.attempt_id, descriptor_digest: entry.descriptor_digest, action_id: entry.action_id, ...(options.state === undefined ? {} : { state: options.state }), ...(options.result === undefined ? {} : { result: options.result }), ...(options.error === undefined ? {} : { error: options.error }), ...(options.reconciled === undefined ? {} : { reconciled: options.reconciled }), ...(entry.audit_digest === undefined ? {} : { audit_digest: entry.audit_digest }), ...(entry.checkpoint_digest === undefined ? {} : { checkpoint_digest: entry.checkpoint_digest }) };
 }
 
 export class RunLedger {
@@ -165,14 +166,35 @@ export class RunLedger {
 
   async replayCall(callId: string): Promise<unknown> {
     const entry = await this.requireCall(callId);
-    if (entry.state === 'checkpointed') return entry.result ?? (await readCallCheckpoint(this.options.directory, callId)).result;
+    if (entry.state === 'checkpointed' || (entry.state === 'observed' && entry.reconciled)) return entry.result ?? (await readCallCheckpoint(this.options.directory, callId)).result;
     if (entry.state === 'business_failed' || entry.state === 'blocked' || entry.state === 'cancelled') return null;
     throw new LedgerError('RECONCILE_REQUIRED', `call ${callId} has unresolved state ${entry.state}`);
   }
 
-  async reconcileCall(callId: string): Promise<CallLedgerEntry> {
+  async replaySubmissionOrder(): Promise<CallLedgerEntry[]> {
+    await this.hydrate();
+    return [...this.calls.values()].sort((left, right) => left.call_ordinal - right.call_ordinal).map((entry) => ({ ...entry }));
+  }
+
+  async reconcileCall(callId: string, outcome?: { outcome: 'expected'; result: RecordedAgentResult; audit?: unknown } | { outcome: 'none'; readOnly: true; audit: unknown } | { outcome: 'ambiguous' }): Promise<CallLedgerEntry> {
     const entry = await this.requireCall(callId);
     if (entry.state === 'reconcile_required') return entry;
+    if (outcome?.outcome === 'expected') {
+      entry.audit_digest = digestValue(outcome.audit ?? null);
+      const projected = redactAndCap(outcome.result, { maxBytes: this.maxFieldBytes, patterns: this.redactionPatterns }) as RecordedAgentResult;
+      await this.eventLog.append({ type: 'call/observed', call_id: callId, task_id: entry.task_id, payload: callEventPayload(entry, { state: 'observed', result: projected, reconciled: true }) });
+      entry.state = 'observed';
+      entry.reconciled = true;
+      entry.result = outcome.result;
+      return entry;
+    }
+    if (outcome?.outcome === 'none' && outcome.readOnly) {
+      entry.audit_digest = digestValue(outcome.audit);
+      await this.eventLog.append({ type: 'call/business-failed', call_id: callId, task_id: entry.task_id, payload: callEventPayload(entry, { state: 'business_failed' }) });
+      entry.state = 'business_failed';
+      entry.result = null;
+      return entry;
+    }
     await this.eventLog.append({ type: 'call/reconcile-required', call_id: callId, task_id: entry.task_id, payload: callEventPayload(entry, { state: 'reconcile_required' }) });
     entry.state = 'reconcile_required';
     return entry;
@@ -264,6 +286,7 @@ export class RunLedger {
         if (payload.action_id !== undefined) entry.action_id = payload.action_id;
         if (payload.audit_digest !== undefined) entry.audit_digest = payload.audit_digest;
         if (payload.checkpoint_digest !== undefined) entry.checkpoint_digest = payload.checkpoint_digest;
+        if (payload.reconciled !== undefined) entry.reconciled = payload.reconciled;
         if (payload.result !== undefined) entry.result = payload.result;
         this.calls.set(event.call_id, entry);
       }

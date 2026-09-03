@@ -57,3 +57,23 @@ export async function readControlReceipt<T>(directory: string, controlId: string
   if (!(await exists(path))) throw new Error(`Unknown control receipt: ${controlId}`);
   return JSON.parse(await readFile(path, 'utf8')) as T;
 }
+
+export interface ResumeFingerprint {
+  workflow: string;
+  script: string;
+  args: string;
+  manifest: string;
+  profile: string;
+  baseline: string;
+}
+
+export class ResumeDivergedError extends Error {
+  readonly name = 'ResumeDivergedError';
+  constructor(readonly field: keyof ResumeFingerprint, message: string) { super(message); }
+}
+
+export function assertResumeFingerprint(expected: ResumeFingerprint, current: ResumeFingerprint): void {
+  for (const field of Object.keys(expected) as Array<keyof ResumeFingerprint>) {
+    if (expected[field] !== current[field]) throw new ResumeDivergedError(field, `${field} drift prevents resume`);
+  }
+}

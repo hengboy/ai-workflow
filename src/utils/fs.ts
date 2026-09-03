@@ -1,5 +1,5 @@
 import { constants } from 'node:fs';
-import { access, chmod, mkdir, open, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { access, chmod, mkdir, open, readFile, rename, rm } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 
