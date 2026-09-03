@@ -32,6 +32,7 @@ export async function atomicWrite(path: string, contents: string | Buffer): Prom
 
 export async function appendFsync(path: string, contents: string | Buffer): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
+  await chmod(dirname(path), 0o700);
   const handle = await open(path, 'a', 0o600);
   try {
     await handle.writeFile(contents);

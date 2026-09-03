@@ -176,6 +176,11 @@ export class RunLedger {
     return [...this.calls.values()].sort((left, right) => left.call_ordinal - right.call_ordinal).map((entry) => ({ ...entry }));
   }
 
+  async replayControlOrder(): Promise<ControlLedgerEntry[]> {
+    await this.hydrate();
+    return [...this.controls.values()].sort((left, right) => left.control_ordinal - right.control_ordinal).map((entry) => ({ ...entry }));
+  }
+
   async reconcileCall(callId: string, outcome?: { outcome: 'expected'; result: RecordedAgentResult; audit?: unknown } | { outcome: 'none'; readOnly: true; audit: unknown } | { outcome: 'ambiguous' }): Promise<CallLedgerEntry> {
     const entry = await this.requireCall(callId);
     if (entry.state === 'reconcile_required') return entry;
