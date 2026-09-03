@@ -20,7 +20,7 @@ describe('v2 manifest generation', () => {
     expect((await readFile(join(plan, 'workflow.args.json'))).equals(firstArgs)).toBe(true);
     expect((await readFile(join(plan, 'workflow.json'))).equals(firstWorkflow)).toBe(true);
     expect(first.schema_version).toBe('2.0.0');
-    expect(JSON.parse(firstWorkflow)).not.toHaveProperty('nodes');
+    expect(JSON.parse(firstWorkflow.toString('utf8'))).not.toHaveProperty('nodes');
     expect(first.actions.length).toBeGreaterThan(0);
     expect(first.input_artifacts_digest).toMatch(/^sha256:[0-9a-f]{64}$/);
     expect((await validateWorkflow(first, resolve(plan, '../../..'))).valid).toBe(true);
