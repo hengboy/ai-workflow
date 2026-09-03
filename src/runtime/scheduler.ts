@@ -1,4 +1,7 @@
 import { normalizeScope } from '../utils/paths.js';
+import { createHash, randomUUID } from 'node:crypto';
+import { mkdir, open, readFile, rename, unlink } from 'node:fs/promises';
+import { join } from 'node:path';
 
 export type LeaseTerminalState = 'completed' | 'finalized' | 'committed' | 'reconciled' | 'cancelled' | 'blocked';
 
@@ -196,5 +199,152 @@ export class ScopeScheduler {
       index -= 1;
       this.admit(entry);
     }
+  }
+}
+
+export interface GitMutexOwner {
+  runId: string;
+  pid: number;
+  startIdentity: string;
+  fencingEpoch: number;
+  leaseExpiresAt: number;
+  socket?: string;
+}
+
+export type GitMutexIdentity = Pick<GitMutexOwner, 'runId' | 'pid' | 'startIdentity'> & Pick<GitMutexOwner, 'socket'>;
+
+export interface ProjectGitMutexOptions {
+  root: string;
+  gitCommonDir: string;
+  targetBranch: string;
+  leaseMs: number;
+  pollMs?: number;
+}
+
+export class GitMutexError extends Error {
+  readonly name = 'GitMutexError';
+
+  constructor(readonly code: 'GIT_MUTEX_BUSY' | 'LEASE_LOST' | 'GIT_MUTEX_OWNER_MISMATCH', message: string) {
+    super(message);
+  }
+}
+
+function lockKey(gitCommonDir: string, targetBranch: string): string {
+  return createHash('sha256').update(`${gitCommonDir}\0${targetBranch}`).digest('hex');
+}
+
+function sameOwner(left: GitMutexOwner, right: GitMutexOwner): boolean {
+  return left.runId === right.runId && left.pid === right.pid && left.startIdentity === right.startIdentity && left.fencingEpoch === right.fencingEpoch;
+}
+
+export class ProjectGitMutex {
+  private readonly lockPath: string;
+  private readonly pollMs: number;
+
+  constructor(private readonly options: ProjectGitMutexOptions) {
+    if (!Number.isSafeInteger(options.leaseMs) || options.leaseMs < 1) throw new GitMutexError('GIT_MUTEX_BUSY', 'leaseMs must be positive');
+    this.pollMs = options.pollMs ?? 10;
+    this.lockPath = join(options.root, '.ai-workflow', 'locks', `${lockKey(options.gitCommonDir, options.targetBranch)}.json`);
+  }
+
+  async acquire(identity: GitMutexIdentity, options: { wait?: boolean; timeoutMs?: number } = {}): Promise<GitMutexOwner> {
+    const deadline = Date.now() + (options.timeoutMs ?? 30_000);
+    while (true) {
+      const current = await this.readOwner();
+      if (!current || this.expired(current)) {
+        const epoch = (current?.fencingEpoch ?? 0) + 1;
+        const owner: GitMutexOwner = { ...identity, fencingEpoch: epoch, leaseExpiresAt: Date.now() + this.options.leaseMs };
+        if (await this.create(owner) || await this.takeover(current, owner)) return owner;
+      }
+      if (!options.wait) throw new GitMutexError('GIT_MUTEX_BUSY', `Git mutex is held by ${current?.runId ?? 'another run'}`);
+      if (Date.now() >= deadline) throw new GitMutexError('GIT_MUTEX_BUSY', 'timed out waiting for Git mutex');
+      await new Promise((resolve) => setTimeout(resolve, this.pollMs));
+    }
+  }
+
+  async renew(owner: GitMutexOwner): Promise<GitMutexOwner> {
+    const current = await this.readOwner();
+    if (!current || !sameOwner(current, owner)) throw new GitMutexError('LEASE_LOST', 'Git mutex fencing epoch or owner identity is stale');
+    const renewed = { ...current, leaseExpiresAt: Date.now() + this.options.leaseMs };
+    await this.replace(current, renewed);
+    return renewed;
+  }
+
+  async release(owner: GitMutexOwner): Promise<void> {
+    const current = await this.readOwner();
+    if (!current || !sameOwner(current, owner)) throw new GitMutexError('GIT_MUTEX_OWNER_MISMATCH', 'only the current Git mutex owner may release');
+    await unlink(this.lockPath).catch((error: unknown) => { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; });
+  }
+
+  async withLock<T>(identity: GitMutexIdentity, callback: (owner: GitMutexOwner) => Promise<T> | T): Promise<T>;
+  async withLock<T>(owner: GitMutexOwner, callback: (owner: GitMutexOwner) => Promise<T> | T): Promise<T>;
+  async withLock<T>(identityOrOwner: GitMutexIdentity | GitMutexOwner, callback: (owner: GitMutexOwner) => Promise<T> | T): Promise<T> {
+    if (!('fencingEpoch' in identityOrOwner)) {
+      const owner = await this.acquire(identityOrOwner, { wait: true });
+      try { return await callback(owner); } finally { await this.release(owner); }
+    }
+    const owner = identityOrOwner;
+    const current = await this.readOwner();
+    if (!current || !sameOwner(current, owner) || this.expired(current)) throw new GitMutexError('LEASE_LOST', 'Git mutation rejected by stale Git mutex owner');
+    return callback(current);
+  }
+
+  private expired(owner: GitMutexOwner): boolean {
+    return owner.leaseExpiresAt <= Date.now();
+  }
+
+  private async readOwner(): Promise<GitMutexOwner | undefined> {
+    try { return JSON.parse(await readFile(this.lockPath, 'utf8')) as GitMutexOwner; }
+    catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined; throw error; }
+  }
+
+  private async create(owner: GitMutexOwner): Promise<boolean> {
+    await mkdir(join(this.options.root, '.ai-workflow', 'locks'), { recursive: true });
+    try {
+      const handle = await open(this.lockPath, 'wx');
+      await handle.writeFile(`${JSON.stringify(owner)}\n`, 'utf8');
+      await handle.close();
+      return true;
+    } catch (error) { if ((error as NodeJS.ErrnoException).code === 'EEXIST') return false; throw error; }
+  }
+
+  private async takeover(previous: GitMutexOwner | undefined, next: GitMutexOwner): Promise<boolean> {
+    if (!previous || !this.expired(previous)) return false;
+    const claimPath = `${this.lockPath}.takeover-${previous.fencingEpoch}`;
+    let claim;
+    try { claim = await open(claimPath, 'wx'); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code === 'EEXIST') return false; throw error; }
+    await claim.close();
+    const temporary = `${this.lockPath}.${randomUUID()}.tmp`;
+    try {
+      await open(temporary, 'w').then(async (handle) => { await handle.writeFile(`${JSON.stringify(next)}\n`, 'utf8'); await handle.close(); });
+      const current = await this.readOwner();
+      if (!current || !sameOwner(current, previous)) return false;
+      await rename(temporary, this.lockPath);
+      return true;
+    } finally {
+      await unlink(temporary).catch(() => undefined);
+      await unlink(claimPath).catch(() => undefined);
+    }
+  }
+
+  private async replace(expected: GitMutexOwner, next: GitMutexOwner): Promise<void> {
+    const current = await this.readOwner();
+    if (!current || !sameOwner(current, expected)) throw new GitMutexError('LEASE_LOST', 'Git mutex changed during renewal');
+    const temporary = `${this.lockPath}.${randomUUID()}.tmp`;
+    const handle = await open(temporary, 'w');
+    await handle.writeFile(`${JSON.stringify(next)}\n`, 'utf8');
+    await handle.close();
+    await rename(temporary, this.lockPath);
+  }
+}
+
+export class RunGitQueue {
+  private tail: Promise<unknown> = Promise.resolve();
+
+  enqueue<T>(operation: (owner: GitMutexOwner) => Promise<T> | T, owner: GitMutexOwner): Promise<T> {
+    const result = this.tail.then(() => operation(owner));
+    this.tail = result.catch(() => undefined);
+    return result;
   }
 }
