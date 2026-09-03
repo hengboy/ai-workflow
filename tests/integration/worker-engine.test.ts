@@ -95,4 +95,24 @@ describe('worker workflow engine lifecycle', () => {
     await expect(run.result).resolves.toMatchObject({ stop_reason: 'error', error: expect.stringMatching(/undefined/i) });
     await run.dispose();
   });
+
+  it('exposes S04 callbacks with descriptor and cleanup ordering', async () => {
+    const audit: string[] = [];
+    const sandbox: string[] = [];
+    const registry: string[] = [];
+    const records: CallDescriptor[] = [];
+    const run = start(`const value = await agent('seam', { actionId: 'build', callId: 'call-seam' }); return value.value;`, executor(done('seam-ok'), records), {
+      audit: (descriptor: CallDescriptor, event: 'before-dispatch' | 'after-dispose') => { audit.push(`${event}:${descriptor.call_id}`); },
+      sandboxPreflight: (descriptor: CallDescriptor) => { sandbox.push(descriptor.call_id); },
+      processRegistry: (event: { type: 'registered' | 'released'; runId: string; callId: string; childId: string }) => { registry.push(`${event.type}:${event.callId}`); },
+    });
+
+    await expect(run.result).resolves.toMatchObject({ stop_reason: 'completed', value: 'seam-ok' });
+    await run.dispose();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(records[0]!.descriptor_digest).toMatch(/^sha256:/);
+    expect(sandbox).toEqual(['call-seam']);
+    expect(audit).toEqual(['before-dispatch:call-seam', 'after-dispose:call-seam']);
+    expect(registry).toEqual(['registered:call-seam', 'released:call-seam']);
+  });
 });
