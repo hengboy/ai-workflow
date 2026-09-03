@@ -16,6 +16,10 @@ export function normalizeScope(path: string): string {
   return normalized;
 }
 
+export function canonicalPath(path: string): string {
+  return resolve(path).replaceAll('\\', '/');
+}
+
 export function scopesOverlap(left: string[], right: string[]): boolean {
   return left.some((a) => right.some((b) => a === b || a.startsWith(`${b}/`) || b.startsWith(`${a}/`)));
 }

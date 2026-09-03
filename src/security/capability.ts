@@ -1,10 +1,11 @@
 import type { AgentPacket } from '../generated/packet.schema.js';
 import type { CodingActionCapability, CodingTaskCapability, HostExecution } from '../generated/coding-manifest.schema.js';
+import type { ScopeLease, ScopeScheduler } from '../runtime/scheduler.js';
 
 export type Host = HostExecution['adapter'];
 export type HostExecutionMode = HostExecution['mode'];
 
-export interface ActionCapability extends Pick<CodingActionCapability, 'action_id' | 'task_id' | 'operation' | 'role' | 'locator_read_order' | 'read_scope' | 'write_scope' | 'new_module_directories' | 'allowed_commands' | 'test_commands' | 'requires_actions' | 'max_attempts' | 'optional' | 'write_access' | 'host_only'> {
+export interface ActionCapability extends Pick<CodingActionCapability, 'action_id' | 'task_id' | 'operation' | 'role' | 'locator_read_order' | 'read_scope' | 'write_scope' | 'new_module_directories' | 'allowed_commands' | 'test_commands' | 'requires_actions' | 'max_attempts' | 'optional' | 'write_access' | 'host_only' | 'concurrency_group_id'> {
   output_schema?: string;
   action_digest?: string;
 }
@@ -56,6 +57,11 @@ export interface AgentPacketInput {
   evidence: readonly string[];
   screenshot_dir: string;
   timeout_ms: number;
+}
+
+export interface ScheduledActionAdmission {
+  admission: ActionAdmission;
+  lease: ScopeLease;
 }
 
 const permissionFields = new Set([
@@ -159,6 +165,20 @@ export function admitAction(request: ActionAdmissionRequest): ActionAdmission {
     task: taskSnapshot,
     capability_digest: request.manifest.host_execution.capability_digest,
   };
+}
+
+export async function admitActionWithScheduler(request: ActionAdmissionRequest, scheduler: ScopeScheduler): Promise<ScheduledActionAdmission> {
+  const admission = admitAction(request);
+  const lease = await scheduler.submit({
+    admission_id: admission.attempt_id,
+    call_ordinal: request.attempt,
+    action_id: admission.action.action_id,
+    task_id: admission.task.task_id,
+    read_scope: admission.action.read_scope,
+    write_scope: admission.action.write_scope,
+    ...(admission.action.concurrency_group_id === undefined ? {} : { concurrency_group_id: admission.action.concurrency_group_id }),
+  });
+  return { admission, lease };
 }
 
 export function buildAgentPacket(input: AgentPacketInput): AgentPacket {
