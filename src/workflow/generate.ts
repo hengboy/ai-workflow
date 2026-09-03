@@ -8,6 +8,12 @@ import type { Host, Workflow, Node, TaskDocument } from './types.js';
 import { objectDigest } from '../utils/hash.js';
 import { scopesOverlap } from '../utils/paths.js';
 import { validateWorkflow } from './validate.js';
+import { collectRawArtifacts } from './artifacts.js';
+import { compileTaskCapabilities, manifestDigest, type TaskCapabilityInput } from './manifest.js';
+import { snapshotWorkflowScript } from './script.js';
+import type { CodingCapabilityManifest } from '../generated/coding-manifest.schema.js';
+import { sha256, stableJson } from '../utils/hash.js';
+import { writeFile } from 'node:fs/promises';
 
 const roleBySurface: Record<string, Node['role']> = { backend: 'backend', frontend: 'frontend', docs: 'backend', research: 'researcher', documentation: 'documentation-maintainer', 'cross-stack': 'task-worker' };
 const base = { timeout_ms: 3600000, retry: 2, result_schema: 'schemas/result.schema.json' as const, on_failure: 'pause' as Node['on_failure'] };
@@ -66,6 +72,52 @@ export async function generateWorkflow(planDirectory: string, host: Host, concur
   nodes.push(node({ id: 'plan-validate', phase: 'validating', kind: 'gate', role: 'test', depends_on: commits, read_scope: changed.length ? changed : [planScope], write_scope: [`${planScope}/screenshot`], allowed_commands: [] }), node({ id: 'standards-review', phase: 'reviewing', kind: 'agent', role: 'standards-review', depends_on: ['plan-validate'], read_scope: ['MEMORY.md', ...changed], write_scope: [], allowed_commands: [], retry: 0 }), node({ id: 'spec-review', phase: 'reviewing', kind: 'agent', role: 'spec-review', depends_on: ['plan-validate'], read_scope: [planScope, ...changed], write_scope: [], allowed_commands: [], retry: 0 }), node({ id: 'plan-integrate', phase: 'integrating', kind: 'git', role: 'git-operator', depends_on: ['standards-review', 'spec-review'], read_scope: changed.length ? changed : [planScope], write_scope: [], allowed_commands: ['git merge --no-ff', 'git worktree remove'], retry: 0 }));
   const workflow: Workflow = { schema_version: '1.0.0', plan_id: plan.planId, host, input_digests: { plan: plan.digest, tasks: objectDigest(parsedTasks) }, concurrency: Math.min(3, Math.max(1, concurrency)), policies: { max_retries: 2, default_timeout_ms: 3600000, repair_rounds: 1, push_allowed: false, rebase_allowed: false }, phases: ['preflight', 'baseline', 'plan_setup', 'executing', 'validating', 'reviewing', 'repairing', 'integrating'], task_read_authorizations: taskReadAuthorizations, nodes: nodes as [Node, ...Node[]], gates: [{ id: 'tests', after: ['plan-validate'], kind: 'tests-pass' }, { id: 'reviews', after: ['standards-review', 'spec-review'], kind: 'reviews-pass-or-repair' }, { id: 'integration', after: ['plan-integrate'], kind: 'baseline-stable' }] };
   const validation = await validateWorkflow(workflow, project); if (!validation.valid) throw new Error(`Generated workflow is invalid: ${validation.errors.join('; ')}`); return workflow;
+}
+
+export async function generateManifest(planDirectory: string, host: Host): Promise<CodingCapabilityManifest> {
+  const plan = await readPlan(planDirectory);
+  const project = resolveProjectRoot(resolve(planDirectory, '../../..'));
+  await generateWorkflow(planDirectory, host);
+  const parsedTasks = await readTasks(planDirectory);
+  const tasks: TaskCapabilityInput[] = parsedTasks.map((task): TaskCapabilityInput => ({
+    id: task.id, requirements: task.requirements, acceptanceCriteria: task.acceptanceCriteria, dependsOn: task.dependsOn,
+    surface: task.surface as TaskCapabilityInput['surface'], feature: task.feature || (() => { throw new Error(`Task feature is required: ${task.id}`); })(), locatorReadOrder: task.locatorReadOrder, readScope: task.readScope,
+    newModuleDirectories: task.newModuleDirectories, writeScope: task.writeScope, testCommands: task.testCommands,
+  }));
+  if (!tasks.length) tasks.push({
+    id: 'task-001-plan', requirements: plan.requirements, acceptanceCriteria: plan.acceptanceCriteria, dependsOn: [],
+    surface: 'cross-stack', feature: 'plan', locatorReadOrder: [], readScope: fixedTaskContext,
+    newModuleDirectories: [], writeScope: [], testCommands: [],
+  });
+  const compilation = compileTaskCapabilities(tasks);
+  const actionIds = compilation.actions.map((action) => action.action_id);
+  const scriptSnapshot = await snapshotWorkflowScript({ projectDirectory: project, planDirectory, planId: plan.planId, actionIds });
+  const artifacts = await collectRawArtifacts({ projectDirectory: project, planDirectory });
+  const projectCapability = { git_common_dir_digest: sha256('.git'), target_branch: 'main' };
+  const hostExecutionBase = {
+    adapter: host,
+    mode: 'brokered-sandbox' as const,
+    model_transport: { owner: 'host-native-broker' as const, network_allowed: true as const, project_write_allowed: false as const, credential_visibility: 'broker-only' as const },
+    action_executor: { process_group: true as const, network_allowed: false as const, project_write_enforced: true as const, git_metadata_write_allowed: false as const },
+    native_tool_authorization: 'unavailable' as const,
+  };
+  const hostExecution = { ...hostExecutionBase, capability_digest: manifestDigest(hostExecutionBase) };
+  const manifest: CodingCapabilityManifest = {
+    schema_version: '2.0.0', engine: 'worker-thread-trusted', plan_id: plan.planId, host,
+    project: projectCapability, input_artifacts: artifacts.artifacts, input_artifacts_digest: artifacts.inputArtifactsDigest,
+    script: { path: scriptSnapshot.script.path, bytes_digest: scriptSnapshot.script.bytes_digest, meta_digest: scriptSnapshot.script.meta_digest, language: 'javascript' },
+    meta: scriptSnapshot.meta,
+    args: { path: scriptSnapshot.args.path, bytes_digest: scriptSnapshot.args.bytes_digest },
+    concurrency_groups: compilation.concurrency_groups,
+    limits: { max_concurrent_agents: 3, max_total_agents: 32, max_items_per_call: 32, max_script_bytes: 1_000_000, max_result_bytes: 1_000_000, sync_timeout_ms: 30_000, dispose_grace_ms: 5_000 },
+    policies: { max_retries: 2, repair_rounds: 1, push_allowed: false, rebase_allowed: false, mixed_host_allowed: false, untrusted_script_allowed: false },
+    host_execution: hostExecution, tasks: compilation.tasks, actions: compilation.actions, scope_conflicts: compilation.scope_conflicts,
+    aggregate_repair: compilation.aggregate_repair, repair_tests: compilation.repair_tests, review_rechecks: compilation.review_rechecks, mandatory_gates: compilation.mandatory_gates,
+  };
+  const validation = await validateWorkflow(manifest, project);
+  if (!validation.valid) throw new Error(`Generated manifest is invalid: ${validation.errors.join('; ')}`);
+  await writeFile(resolve(planDirectory, 'workflow.json'), `${stableJson(manifest)}\n`, 'utf8');
+  return manifest;
 }
 export function applyAdjustments(workflow: Workflow, operations: Array<Record<string, unknown>>): Workflow { const result: Workflow = structuredClone(workflow); for (const operation of operations) { const op = String(operation.op); const target = result.nodes.find((item) => item.id === operation.node || item.task_id === operation.node); if (op === 'set-concurrency') result.concurrency = Number(operation.value); else if (target && op === 'set-role') target.role = String(operation.value) as Node['role']; else if (target && op === 'set-retry') target.retry = Number(operation.value); else if (target && op === 'set-failure-policy') target.on_failure = String(operation.value) as Node['on_failure']; else if (target && op === 'add-dependency') target.depends_on = [...new Set([...target.depends_on, String(operation.dependency)])]; else if (target && op === 'remove-dependency') target.depends_on = target.depends_on.filter((item) => item !== operation.dependency); else if (op === 'add-gate' && operation.gate && typeof operation.gate === 'object') result.gates.push(operation.gate as Workflow['gates'][number]); else if (op === 'remove-gate' && operation.gate && typeof operation.gate === 'object') { const id = (operation.gate as { id?: unknown }).id; result.gates = result.gates.filter((gate) => gate.id !== id); } else throw new Error(`Unsupported or unknown adjustment: ${op}`); } return result; }
 export function explainWorkflow(workflow: Workflow): string { const lines = [`Plan: ${workflow.plan_id}`, `Host: ${workflow.host}`, `Concurrency: ${workflow.concurrency}`, `Nodes: ${workflow.nodes.length}`, `Input digests: ${JSON.stringify(workflow.input_digests)}`, '', '```mermaid', 'graph TD']; for (const item of workflow.nodes) { if (item.depends_on.length === 0) lines.push(`  ${item.id}[${item.role}]`); for (const dependency of item.depends_on) lines.push(`  ${dependency} --> ${item.id}`); } lines.push('```', '', 'Risks: scope violations, baseline drift, conflicts, host failures and failed gates pause the run.'); return lines.join('\n'); }
