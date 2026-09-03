@@ -1,6 +1,9 @@
 /* Generated from authoritative JSON Schemas. Do not edit. */
 
-export interface AgentResult {
+export type AgentResult = {
+  [k: string]: unknown;
+} & {
+  result_version?: "1.0.0" | "2.0.0";
   status: "done" | "blocked" | "failed";
   summary: string;
   changed_paths: string[];
@@ -17,4 +20,5 @@ export interface AgentResult {
   }[];
   git_refs: string[];
   support_requests: string[];
-}
+  value?: unknown;
+};
