@@ -16,6 +16,7 @@ import { locateContext } from './context/locate.js';
 import { discoverFallback, type FallbackPacket } from './context/fallback.js';
 import { resolveCandidatePath, resolveProjectRoot } from './context/paths.js';
 import { cancelV2Run, cleanupV2Run, projectV2Run, resumeV2Run, startV2Run } from './runtime/runner.js';
+import { RunVersionError } from './runtime/store.js';
 import { readPlan } from './workflow/parse.js';
 import { gitBaseline } from './git/operator.js';
 import type { CodingCapabilityManifest } from './generated/coding-manifest.schema.js';
@@ -29,6 +30,19 @@ function print(value: unknown): void { process.stdout.write(`${typeof value === 
 
 function isV2Manifest(value: unknown): value is CodingCapabilityManifest {
   return !!value && typeof value === 'object' && (value as { schema_version?: unknown }).schema_version === '2.0.0' && (value as { engine?: unknown }).engine === 'worker-thread-trusted';
+}
+
+function requireV2Manifest(value: unknown): CodingCapabilityManifest {
+  if (!isV2Manifest(value)) throw new Error('WORKFLOW_VERSION_UNSUPPORTED: only v2 manifests are supported');
+  return value;
+}
+
+async function v2RunCommand<T>(operation: () => Promise<T>): Promise<T> {
+  try { return await operation(); }
+  catch (error) {
+    if (error instanceof RunVersionError) throw new Error(`RUN_VERSION_UNSUPPORTED: ${error.message}`);
+    throw error;
+  }
 }
 
 function explainManifest(manifest: CodingCapabilityManifest): string {
@@ -140,12 +154,12 @@ workflow.command('generate').description('Generate canonical .ai-workflow/plans/
   if (args) await copyPlanLocalFile(directory, args, 'workflow.args.json', '--args');
   const manifest = await generateManifest(directory, host); const target = join(directory, 'workflow.json'); print({ workflow: target, manifest: { schema_version: manifest.schema_version, engine: manifest.engine } });
 });
-workflow.command('validate').argument('<workflow>').option('--project <project>', '.').action(async (path: string, { project }: { project: string }) => { const result = await validateWorkflow(await jsonFile(path), resolveProjectRoot(project)); print(result); if (!result.valid) process.exitCode = 1; });
+workflow.command('validate').argument('<workflow>').option('--project <project>', '.').action(async (path: string, { project }: { project: string }) => { const result = await validateWorkflow(requireV2Manifest(await jsonFile<unknown>(path)), resolveProjectRoot(project)); print(result); if (!result.valid) process.exitCode = 1; });
 workflow.command('explain').argument('<workflow>').action(async (path: string) => {
-  const value = await jsonFile<unknown>(path); if (!isV2Manifest(value)) throw new Error('Only v2 manifests are supported'); print(explainManifest(value));
+  print(explainManifest(requireV2Manifest(await jsonFile<unknown>(path))));
 });
 workflow.command('approve').argument('<workflow>').option('--project <project>', '.').action(async (path: string, { project }: { project: string }) => {
-  const value = await jsonFile<unknown>(path); if (!isV2Manifest(value)) throw new Error('Only v2 manifests are supported'); print(await approveV2Manifest(resolve(path), value, resolve(project)));
+  print(await approveV2Manifest(resolve(path), requireV2Manifest(await jsonFile<unknown>(path)), resolve(project)));
 });
 
 const plan = program.command('plan');
@@ -162,16 +176,16 @@ context.command('locate').requiredOption('--project <project>', projectOption).o
 context.command('discover').requiredOption('--project <project>', projectOption).requiredOption('--packet <path>').action(async ({ project, packet }: { project: string; packet: string }) => print(await discoverFallback(resolveProjectRoot(project), await jsonFile<FallbackPacket>(packet))));
 const run = program.command('run');
 run.command('start').requiredOption('--workflow <path>').requiredOption('--host <host>').requiredOption('--project <project>').action(async (options: { workflow: string; host: string; project: string }) => {
-  const manifest = await jsonFile<unknown>(options.workflow); if (!isV2Manifest(manifest)) throw new Error('Only v2 manifests are supported');
+  const manifest = requireV2Manifest(await jsonFile<unknown>(options.workflow));
   if (manifest.host !== options.host) throw new Error(`Host mismatch: manifest=${manifest.host}, requested=${options.host}`);
   const project = resolveProjectRoot(options.project); const validation = await validateWorkflow(manifest, project); if (!validation.valid) throw new Error(validation.errors.join('; '));
   await verifyV2Approval(resolve(options.workflow), manifest, project);
   const runId = `run-${manifest.plan_id}-${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
   print(await startV2Run({ project, runId, manifestDigest: objectDigest(manifest), fencingEpoch: 1 }));
 });
-run.command('status').argument('<runId>').requiredOption('--project <project>').action(async (runId: string, { project }: { project: string }) => print(await projectV2Run(resolveProjectRoot(project), runId)));
-run.command('resume').argument('<runId>').requiredOption('--project <project>').action(async (runId: string, { project }: { project: string }) => print(await resumeV2Run(resolveProjectRoot(project), runId)));
-run.command('cancel').argument('<runId>').requiredOption('--project <project>').action(async (runId: string, { project }: { project: string }) => print(await cancelV2Run(resolveProjectRoot(project), runId)));
-run.command('cleanup').argument('<runId>').requiredOption('--project <project>').action(async (runId: string, { project }: { project: string }) => { await cleanupV2Run(resolveProjectRoot(project), runId); print({ cleaned: runId }); });
+run.command('status').argument('<runId>').requiredOption('--project <project>').action(async (runId: string, { project }: { project: string }) => print(await v2RunCommand(() => projectV2Run(resolveProjectRoot(project), runId))));
+run.command('resume').argument('<runId>').requiredOption('--project <project>').action(async (runId: string, { project }: { project: string }) => print(await v2RunCommand(() => resumeV2Run(resolveProjectRoot(project), runId))));
+run.command('cancel').argument('<runId>').requiredOption('--project <project>').action(async (runId: string, { project }: { project: string }) => print(await v2RunCommand(() => cancelV2Run(resolveProjectRoot(project), runId))));
+run.command('cleanup').argument('<runId>').requiredOption('--project <project>').action(async (runId: string, { project }: { project: string }) => { await v2RunCommand(() => cleanupV2Run(resolveProjectRoot(project), runId)); print({ cleaned: runId }); });
 
 program.parseAsync().catch((error: unknown) => { process.stderr.write(`ai-workflow: ${error instanceof Error ? error.message : String(error)}\n`); process.exitCode = 1; });
