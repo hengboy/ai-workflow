@@ -9,6 +9,7 @@ import type {
   ConcurrencyGroupPolicy,
 } from '../generated/coding-manifest.schema.js';
 import { fixedTaskContext } from './read-scope.js';
+import { objectDigest } from '../utils/hash.js';
 
 export type TaskSurface = 'backend' | 'frontend' | 'cross-stack' | 'test' | 'docs' | 'research' | 'documentation';
 
@@ -36,6 +37,10 @@ export interface TaskCapabilityCompilation {
   repair_tests: RepairTestCapability[];
   review_rechecks: ReviewRecheckCapability[];
   mandatory_gates: CodingGate[];
+}
+
+export function manifestDigest(manifest: object): string {
+  return objectDigest(manifest);
 }
 
 const implementationRole: Record<TaskSurface, CodingActionCapability['role']> = {

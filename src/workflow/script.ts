@@ -173,6 +173,7 @@ export async function snapshotWorkflowScript(options: ScriptSnapshotOptions): Pr
   const planDirectory = await planPath(options.projectDirectory, options.planDirectory);
   const scriptRaw = await readPlanLocalFile(resolve(planDirectory, 'workflow.js'));
   const script = scriptRaw ?? defaultScript(options.actionIds);
+  if (!scriptRaw) await writeFile(resolve(planDirectory, 'workflow.js'), script, { flag: 'wx' });
   if (script.length > 1_000_000) throw new Error('workflow.js exceeds the script size policy');
   const calls = parseScript(script.toString('utf8'), options.actionIds);
   const meta = parseMeta(await readPlanLocalFile(resolve(planDirectory, 'workflow.meta.json')), options.planId);

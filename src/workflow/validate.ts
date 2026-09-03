@@ -5,6 +5,7 @@ import { schemaValidator } from '../utils/schema.js';
 import { normalizeProjectPaths, pathIsWithin, taskReadScopeDiagnostics, type TaskReadAuthorization } from './read-scope.js';
 import { lstat } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import type { CodingCapabilityManifest, CodingActionCapability } from '../generated/coding-manifest.schema.js';
 
 export interface ValidationResult { valid: boolean; errors: string[]; topologicalOrder: string[] }
 
@@ -14,7 +15,44 @@ function validDocumentationPath(path: string): boolean {
   return !normalized.startsWith('src/') && !normalized.startsWith('tests/') && !normalized.startsWith('schemas/') && !normalized.startsWith('.ai-workflow/plans/') && !codeExtension.test(normalized);
 }
 
+async function validateManifest(manifest: unknown): Promise<ValidationResult> {
+  const errors: string[] = [];
+  const validator = await schemaValidator('coding-manifest.schema.json');
+  if (!validator(manifest)) errors.push(formatSchemaErrors(validator.errors));
+  const value = manifest as Partial<CodingCapabilityManifest>;
+  const actions = Array.isArray(value.actions) ? value.actions : [];
+  const actionIds = new Set<string>();
+  const actionById = new Map<string, CodingActionCapability>();
+  for (const action of actions) {
+    if (actionIds.has(action.action_id)) errors.push(`Duplicate action id: ${action.action_id}`);
+    actionIds.add(action.action_id);
+    actionById.set(action.action_id, action);
+  }
+  for (const action of actions) {
+    for (const dependency of action.requires_actions ?? []) if (!actionIds.has(dependency)) errors.push(`${action.action_id} requires unknown action ${dependency}`);
+    if (!Array.isArray(value.tasks) || !value.tasks.some((task) => task.task_id === action.task_id)) errors.push(`${action.action_id} references unknown task ${action.task_id}`);
+  }
+  for (const conflict of Array.isArray(value.scope_conflicts) ? value.scope_conflicts : []) {
+    if (!actionIds.has(conflict.left_action_id) || !actionIds.has(conflict.right_action_id)) errors.push(`Scope conflict references unknown action: ${conflict.left_action_id}, ${conflict.right_action_id}`);
+  }
+  const order: string[] = [];
+  const visiting = new Set<string>();
+  const visited = new Set<string>();
+  const visit = (id: string): void => {
+    if (visiting.has(id)) { errors.push(`Action graph cycle detected at ${id}`); return; }
+    if (visited.has(id)) return;
+    visiting.add(id);
+    for (const dependency of actionById.get(id)?.requires_actions ?? []) visit(dependency);
+    visiting.delete(id);
+    visited.add(id);
+    order.push(id);
+  };
+  for (const action of actions) visit(action.action_id);
+  return { valid: errors.length === 0, errors, topologicalOrder: order };
+}
+
 export async function validateWorkflow(workflow: unknown, project?: string): Promise<ValidationResult> {
+  if (typeof workflow === 'object' && workflow !== null && (workflow as { schema_version?: unknown }).schema_version === '2.0.0') return validateManifest(workflow);
   const errors: string[] = []; const validator = await schemaValidator('workflow.schema.json');
   if (!validator(workflow)) errors.push(formatSchemaErrors(validator.errors));
   const value = workflow as Partial<Workflow>; const nodes = Array.isArray(value.nodes) ? value.nodes : [];
