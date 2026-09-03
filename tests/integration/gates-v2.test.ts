@@ -6,6 +6,7 @@ import { RepairCoordinator, type ReviewFindingInput } from '../../src/runtime/re
 import { V2GitOperator } from '../../src/git/operator.js';
 import { gitBaseline } from '../../src/git/operator.js';
 import { mkdir, writeFile } from 'node:fs/promises';
+import { startV2Run, runV2Lifecycle, cancelV2Run, projectV2Run, cleanupV2Run } from '../../src/runtime/runner.js';
 import { gitInit, temporary } from '../helpers.js';
 
 const digest = `sha256:${'b'.repeat(64)}`;
@@ -141,5 +142,53 @@ describe('v2 mandatory gates', () => {
     expect(repairTest.base_head).toBe(completed.planHead);
     await recovered.recheckFinding(started.findings[0]!.finding_id, { state: 'closed', evidence: ['output.txt'] });
     expect((await recovered.status()).state).toBe('closed');
+  });
+
+  it('runs the complete v2 task, gate, and integration lifecycle in a temporary Git repository', async () => {
+    const project = await temporary();
+    await gitInit(project);
+    const runId = 'runner-v2-complete';
+    const manifest = {
+      manifest_digest: digest,
+      target_branch: 'main',
+      tasks: [{ task_id: 'task-001', activation: 'required' as const, finalization_mode: 'commit-and-merge' as const, required_actions: ['task-001-test'], depends_on: [] }],
+      actions: [{ action_id: 'task-001-test', task_id: 'task-001', operation: 'test', write_scope: ['output.txt'] }],
+    };
+
+    const result = await runV2Lifecycle({ project, runId, manifest, execute: async ({ cwd }) => { await writeFile(join(cwd, 'output.txt'), 'runner lifecycle\n'); return { status: 'done', tests: [{ command: 'pnpm test', status: 'passed' }], changedPaths: ['output.txt'] }; } });
+    expect(result.run_state).toBe('complete');
+    expect(result.integration?.observed).toBe(true);
+    expect(result.gates.integration?.state).toBe('passed');
+    expect(result.trace).toEqual(expect.arrayContaining(['task-task-001:committed', 'gate:integration:passed', 'run:complete']));
+    expect(await readFile(join(project, 'output.txt'), 'utf8')).toContain('runner lifecycle');
+  });
+
+  it('cancels a deferred v2 run and reconciles its durable projection without deleting resources', async () => {
+    const project = await temporary();
+    await gitInit(project);
+    const runId = 'runner-v2-cancel';
+    await startV2Run({ project, runId, manifestDigest: digest, fencingEpoch: 1 });
+    const cancelled = await cancelV2Run(project, runId);
+    expect(cancelled.run_state).toBe('cancelled');
+    const projected = await projectV2Run(project, runId);
+    expect(projected.run_state).toBe('cancelled');
+    expect(await readFile(join(project, '.ai-workflow/runs', runId, 'events.jsonl'), 'utf8')).toContain('run/cancelled');
+  });
+
+  it('cleans a completed v2 run only through its owned resource receipts', async () => {
+    const project = await temporary();
+    await gitInit(project);
+    const runId = 'runner-v2-cleanup';
+    const manifest = {
+      manifest_digest: digest,
+      target_branch: 'main',
+      tasks: [{ task_id: 'task-001', activation: 'required' as const, finalization_mode: 'commit-and-merge' as const, required_actions: ['task-001-test'], depends_on: [] }],
+      actions: [{ action_id: 'task-001-test', task_id: 'task-001', operation: 'test', write_scope: ['output.txt'] }],
+    };
+    const result = await runV2Lifecycle({ project, runId, manifest, execute: async ({ cwd }) => { await writeFile(join(cwd, 'output.txt'), 'cleanup\n'); return { status: 'done', tests: [{ command: 'pnpm test', status: 'passed' }], changedPaths: ['output.txt'] }; } });
+    expect(result.run_state).toBe('complete');
+    const cleaned = await cleanupV2Run(project, runId);
+    expect(cleaned.run_state).toBe('complete');
+    expect(await readFile(join(project, 'output.txt'), 'utf8')).toBe('cleanup\n');
   });
 });
