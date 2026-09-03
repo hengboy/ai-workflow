@@ -1,12 +1,15 @@
 import { Worker } from 'node:worker_threads';
 import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
-import { MessageLedger, ProtocolError, encodeMessage, type CallDescriptor, type CodingAgentResult, type HostToWorkerMessage, type WorkerToHostMessage, type WorkflowResult } from './protocol.js';
+import { MessageLedger, encodeMessage, type CallDescriptor, type CodingAgentResult, type HostToWorkerMessage, type WorkerToHostMessage, type WorkflowResult } from './protocol.js';
 import type { WorkerInit } from './session.js';
+import type { ProcessGroupIdentity } from '../adapters/process.js';
 
 export interface ChildRun {
   readonly id: string;
   readonly result: Promise<CodingAgentResult>;
+  readonly identity?: ProcessGroupIdentity;
+  readonly reaped?: Promise<void>;
   dispose(): Promise<void>;
 }
 
@@ -23,7 +26,7 @@ export interface SandboxPreflightCallback {
 }
 
 export interface ProcessRegistryCallback {
-  (event: { type: 'registered' | 'released'; runId: string; callId: string; childId: string }): Promise<void> | void;
+  (event: { type: 'registered' | 'released'; runId: string; callId: string; childId: string; identity?: ProcessGroupIdentity }): Promise<void> | void;
 }
 
 export interface WorkflowObserver {
@@ -159,7 +162,7 @@ export class WorkerRun {
       if (this.cancelReason || this.terminalClaimed || this.deathObserved) { await run.dispose().catch(() => undefined); this.send({ type: 'agent-start-error', request_id: requestId, call_id: descriptor.call_id, error: { code: 'CANCEL_UNAUTHORIZED', message: this.cancelReason ?? 'workflow is terminal', fatal: true } }); return; }
       this.children.set(descriptor.call_id, { descriptor, run });
       this.liveAgents.set(descriptor.call_id, descriptor);
-      await this.options.processRegistry?.({ type: 'registered', runId: this.options.runId, callId: descriptor.call_id, childId: run.id });
+       await this.options.processRegistry?.({ type: 'registered', runId: this.options.runId, callId: descriptor.call_id, childId: run.id, ...(run.identity === undefined ? {} : { identity: run.identity }) });
       this.options.observer?.agentStart?.(descriptor, run.id);
       this.send({ type: 'agent-started', request_id: requestId, call_id: descriptor.call_id, child_id: run.id });
       void run.result.then((result) => {
@@ -171,15 +174,22 @@ export class WorkerRun {
         this.options.observer?.agentEnd?.(descriptor, 'failed');
         this.liveAgents.delete(descriptor.call_id);
       });
-    } catch (error) {
-      this.send({ type: 'agent-start-error', request_id: requestId, call_id: descriptor.call_id, error: { code: 'ACTION_NOT_READY', message: error instanceof Error ? error.message : String(error), fatal: true } });
-    }
+     } catch (error) {
+       const code = error && typeof error === 'object' && 'code' in error && typeof error.code === 'string' ? error.code : 'ACTION_NOT_READY';
+       this.send({ type: 'agent-start-error', request_id: requestId, call_id: descriptor.call_id, error: { code: code as 'ACTION_NOT_READY', message: error instanceof Error ? error.message : String(error), fatal: true } });
+     }
   }
 
   private disposeChild(requestId: string, callId: string): Promise<void> {
     const record = this.children.get(callId);
     if (!record) { this.send({ type: 'agent-disposed', request_id: requestId, call_id: callId }); return Promise.resolve(); }
-    if (!record.disposal) record.disposal = record.run.dispose().catch(() => undefined).then(async () => { await this.options.audit?.(record.descriptor, 'after-dispose'); await this.options.processRegistry?.({ type: 'released', runId: this.options.runId, callId, childId: record.run.id }); this.children.delete(callId); });
+     if (!record.disposal) record.disposal = (async () => {
+       await record.run.dispose().catch(() => undefined);
+       await record.run.reaped?.catch(() => undefined);
+       await this.options.audit?.(record.descriptor, 'after-dispose');
+       await this.options.processRegistry?.({ type: 'released', runId: this.options.runId, callId, childId: record.run.id, ...(record.run.identity === undefined ? {} : { identity: record.run.identity }) });
+       this.children.delete(callId);
+     })();
     return record.disposal.then(() => { this.send({ type: 'agent-disposed', request_id: requestId, call_id: callId }); });
   }
 
