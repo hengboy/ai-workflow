@@ -1,4 +1,4 @@
-import { normalizeScope } from '../utils/paths.js';
+import { canonicalPath, normalizeScope } from '../utils/paths.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, open, readFile, rename, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -29,6 +29,7 @@ export interface ScopeAdmission {
 export interface ScopeLease extends ScopeAdmission {
   readonly released: boolean;
   release(state: LeaseTerminalState): void;
+  releaseAfterReconcile(state: LeaseTerminalState, reconcile: () => Promise<void> | void): Promise<void>;
 }
 
 export class SchedulerError extends Error {
@@ -48,7 +49,7 @@ interface QueueEntry {
 
 interface ActiveLease {
   lease: ScopeLease;
-  released: boolean;
+  state: { released: boolean };
 }
 
 interface TaskScopeHolder {
@@ -98,7 +99,7 @@ export class ScopeScheduler {
   submit(rawRequest: ScopeAdmissionRequest): Promise<ScopeLease> {
     const request = this.normalizeRequest(rawRequest);
     const existing = [
-      ...[...this.activeLeases.values()].filter(({ released }) => !released).map(({ lease }) => lease),
+      ...[...this.activeLeases.values()].filter(({ state }) => !state.released).map(({ lease }) => lease),
       ...this.queue.filter((entry) => !entry.cancelled).map((entry) => entry.request),
     ].find((candidate) => conflicts(request, candidate));
     if (existing && request.concurrency_group_id !== undefined && request.concurrency_group_id === existing.concurrency_group_id) {
@@ -129,7 +130,7 @@ export class ScopeScheduler {
   finalizeTask(taskId: string, state: LeaseTerminalState): void {
     if (!['completed', 'finalized', 'committed', 'reconciled', 'cancelled', 'blocked'].includes(state)) throw new SchedulerError('LEASE_NOT_TERMINAL', `task ${taskId} is not terminal`);
     const ids = [...this.activeLeases.entries()]
-      .filter(([, activeLease]) => activeLease.lease.task_id === taskId && !activeLease.released)
+      .filter(([, activeLease]) => activeLease.lease.task_id === taskId && !activeLease.state.released)
       .map(([id]) => id);
     for (const id of ids) this.releaseLease(id, state, true);
     this.taskWriteLeases.delete(taskId);
@@ -151,7 +152,7 @@ export class ScopeScheduler {
 
   private canAdmit(request: ScopeAdmissionRequest): boolean {
     if (this.active >= this.options.maxConcurrent) return false;
-    if ([...this.activeLeases.values()].some(({ lease, released }) => !released && conflicts(request, lease) && (lease.task_id !== request.task_id || lease.concurrency_group_id === request.concurrency_group_id))) return false;
+    if ([...this.activeLeases.values()].some(({ lease, state }) => !state.released && conflicts(request, lease) && (lease.task_id !== request.task_id || lease.concurrency_group_id === request.concurrency_group_id))) return false;
     return ![...this.taskWriteLeases.values()].some((holder) => holder.taskId !== request.task_id
       && (overlaps(request.write_scope, holder.writeScope) || overlaps(request.read_scope, holder.writeScope)));
   }
@@ -162,13 +163,14 @@ export class ScopeScheduler {
       ...entry.request,
       admission_ordinal: this.nextAdmissionOrdinal++,
     };
-    let activeLease: ActiveLease;
+    const state = { released: false };
     const lease = {
       ...admission,
-      get released() { return activeLease.released; },
+      get released() { return state.released; },
       release: (state: LeaseTerminalState) => this.releaseLease(admission.admission_id, state),
+      releaseAfterReconcile: async (state: LeaseTerminalState, reconcile: () => Promise<void> | void) => { await reconcile(); this.releaseLease(admission.admission_id, state); },
     } as ScopeLease;
-    activeLease = { lease, released: false };
+    const activeLease: ActiveLease = { lease, state };
     this.activeLeases.set(admission.admission_id, activeLease);
     this.active += 1;
     if (admission.write_scope.length > 0) {
@@ -182,9 +184,9 @@ export class ScopeScheduler {
 
   private releaseLease(admissionId: string, state: LeaseTerminalState, fromTaskFinalization = false): void {
     const activeLease = this.activeLeases.get(admissionId);
-    if (!activeLease || activeLease.released) return;
+    if (!activeLease || activeLease.state.released) return;
     if (!fromTaskFinalization && !['completed', 'finalized', 'committed', 'reconciled', 'cancelled', 'blocked'].includes(state)) throw new SchedulerError('LEASE_NOT_TERMINAL', `admission ${admissionId} cannot release at ${state}`);
-    activeLease.released = true;
+    activeLease.state.released = true;
     this.active -= 1;
     this.traceEntries.push(`release:${admissionId}:${state}`);
     this.pump();
@@ -230,7 +232,7 @@ export class GitMutexError extends Error {
 }
 
 function lockKey(gitCommonDir: string, targetBranch: string): string {
-  return createHash('sha256').update(`${gitCommonDir}\0${targetBranch}`).digest('hex');
+  return createHash('sha256').update(`${canonicalPath(gitCommonDir)}\0${targetBranch}`).digest('hex');
 }
 
 function sameOwner(left: GitMutexOwner, right: GitMutexOwner): boolean {
@@ -276,8 +278,6 @@ export class ProjectGitMutex {
     await unlink(this.lockPath).catch((error: unknown) => { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; });
   }
 
-  async withLock<T>(identity: GitMutexIdentity, callback: (owner: GitMutexOwner) => Promise<T> | T): Promise<T>;
-  async withLock<T>(owner: GitMutexOwner, callback: (owner: GitMutexOwner) => Promise<T> | T): Promise<T>;
   async withLock<T>(identityOrOwner: GitMutexIdentity | GitMutexOwner, callback: (owner: GitMutexOwner) => Promise<T> | T): Promise<T> {
     if (!('fencingEpoch' in identityOrOwner)) {
       const owner = await this.acquire(identityOrOwner, { wait: true });

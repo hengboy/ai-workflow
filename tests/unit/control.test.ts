@@ -3,7 +3,7 @@ import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { connect } from 'node:net';
-import { CancelControl, CancelSocket, ControlError, OwnerLease, safeReapProcessGroup, cancelProof, cancelReasonDigest } from '../../src/runtime/control.js';
+import { CancelControl, CancelSocket, OwnerLease, safeReapProcessGroup, cancelProof, cancelReasonDigest } from '../../src/runtime/control.js';
 
 describe('run control', () => {
   it('rejects a cancel request from an unauthorized socket peer', async () => {

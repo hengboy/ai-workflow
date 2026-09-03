@@ -2,6 +2,8 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { chmod, mkdir, open, readFile, rename, unlink } from 'node:fs/promises';
 import { createServer, type Server, type Socket } from 'node:net';
 import { dirname, join, resolve } from 'node:path';
+import { admitAction, type ActionAdmission, type ActionAdmissionRequest } from '../security/capability.js';
+import { ScopeScheduler, type LeaseTerminalState, type ScopeLease } from './scheduler.js';
 
 export interface ReceiptApprovalIdentity {
   osUid: number;
@@ -311,4 +313,84 @@ export async function safeReapProcessGroup(expected: ProcessIdentity, observed: 
   await sleep(options.waitMs ?? 100);
   if (await options.isAlive(expected)) throw new ControlError('CLEANUP_OWNERSHIP_UNPROVEN', 'process group did not reap');
   return 'reaped';
+}
+
+export interface ControlledActionAdmission {
+  admission: ActionAdmission;
+  lease: ScopeLease;
+}
+
+export interface RunControlOptions {
+  ownerLease: OwnerLease;
+  owner: OwnerLeaseRecord;
+  cancelControl: CancelControl;
+  scheduler: ScopeScheduler;
+  abortChild?: (lease: ScopeLease, reason: string) => Promise<void> | void;
+  reapChild?: (lease: ScopeLease) => Promise<void> | void;
+  reconcileChild?: (lease: ScopeLease) => Promise<void> | void;
+}
+
+export class RunControl {
+  private owner: OwnerLeaseRecord;
+  private admissionStopped = false;
+  private readonly pending = new Set<string>();
+  private readonly admitted = new Map<string, ScopeLease>();
+
+  constructor(private readonly options: RunControlOptions) {
+    this.owner = options.owner;
+  }
+
+  async renewOwner(): Promise<OwnerLeaseRecord> {
+    this.owner = await this.options.ownerLease.renew(this.owner);
+    return this.owner;
+  }
+
+  async admitAction(request: ActionAdmissionRequest): Promise<ControlledActionAdmission> {
+    if (this.admissionStopped || await this.options.cancelControl.readIntent()) throw new ControlError('CANCEL_CONTROL_STALE', 'run cancellation has stopped action admission');
+    await this.options.ownerLease.assertCurrent(this.owner);
+    const admission = admitAction(request);
+    this.pending.add(admission.attempt_id);
+    try {
+      const lease = await this.options.scheduler.submit({
+        admission_id: admission.attempt_id,
+        call_ordinal: request.attempt,
+        action_id: admission.action.action_id,
+        task_id: admission.task.task_id,
+        read_scope: admission.action.read_scope,
+        write_scope: admission.action.write_scope,
+        ...(admission.action.concurrency_group_id === undefined ? {} : { concurrency_group_id: admission.action.concurrency_group_id }),
+      });
+      if (this.admissionStopped || await this.options.cancelControl.readIntent()) {
+        await this.releaseCancelled(lease, 'workflow cancellation won during admission');
+        throw new ControlError('CANCEL_CONTROL_STALE', 'run cancellation has stopped action admission');
+      }
+      await this.options.ownerLease.assertCurrent(this.owner);
+      this.admitted.set(lease.admission_id, lease);
+      return { admission, lease };
+    } finally {
+      this.pending.delete(admission.attempt_id);
+    }
+  }
+
+  async settleAction(lease: ScopeLease, state: LeaseTerminalState, reconcile: () => Promise<void> | void = () => undefined): Promise<void> {
+    await this.options.ownerLease.assertCurrent(this.owner);
+    await lease.releaseAfterReconcile(state, reconcile);
+    this.admitted.delete(lease.admission_id);
+  }
+
+  async requestCancel(request: CancelRequest): Promise<CancelOutcome> {
+    const outcome = await this.options.cancelControl.requestCancel(request);
+    if (!outcome.won) return outcome;
+    this.admissionStopped = true;
+    for (const admissionId of this.pending) this.options.scheduler.cancel(admissionId);
+    await Promise.all([...this.admitted.values()].map((lease) => this.releaseCancelled(lease, outcome.intent.reason)));
+    return outcome;
+  }
+
+  private async releaseCancelled(lease: ScopeLease, reason: string): Promise<void> {
+    await this.options.abortChild?.(lease, reason);
+    await this.options.reapChild?.(lease);
+    await lease.releaseAfterReconcile('cancelled', () => this.options.reconcileChild?.(lease));
+    this.admitted.delete(lease.admission_id);
+  }
 }
