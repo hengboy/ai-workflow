@@ -1,11 +1,6 @@
 /* Generated from authoritative JSON Schemas. Do not edit. */
 
-export type ApprovalReceipt = (
-  | ApprovalReceiptV2
-  | {
-      [k: string]: unknown;
-    }
-) & {
+export type ApprovalReceipt = {
   [k: string]: unknown;
 } & {
   receipt_version: "1.0.0" | "2.0.0";
@@ -24,9 +19,21 @@ export type ApprovalReceipt = (
   target_head?: string;
   approval_identity?: ApprovalIdentity;
   approved_at?: string;
-};
+} & (ApprovalReceiptV1 | ApprovalReceiptV2);
 export type Digest = string;
 
+export interface ApprovalIdentity {
+  kind: "local-user";
+  subject_digest: Digest;
+}
+export interface ApprovalReceiptV1 {
+  receipt_version: "1.0.0";
+  workflow_digest: Digest;
+  baseline_digest: Digest;
+  plan_id: string;
+  host: "codex" | "claude" | "opencode";
+  approved_at: string;
+}
 export interface ApprovalReceiptV2 {
   receipt_version: "2.0.0";
   plan_id: string;
@@ -43,8 +50,4 @@ export interface ApprovalReceiptV2 {
   target_head: string;
   approval_identity: ApprovalIdentity;
   approved_at: string;
-}
-export interface ApprovalIdentity {
-  kind: "local-user";
-  subject_digest: Digest;
 }

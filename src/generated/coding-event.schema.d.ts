@@ -138,30 +138,19 @@ export interface ReviewFindingV2 {
   source_gate: "standards-review" | "spec-review";
   severity: "error" | "warning" | "info";
   message: string;
-  message_digest: string;
-  path?: string;
+  message_digest: Digest;
+  path?: Path;
   applicable_action_ids: string[];
 }
 export interface CodingAgentResult {
   result_version: "2.0.0";
   status: "done" | "blocked" | "failed";
   summary: string;
-  changed_paths: string[];
-  evidence: string[];
-  tests: TestResult[];
-  findings: ReviewFindingDraft[];
-  git_refs: string[];
-  support_requests: string[];
+  changed_paths: unknown[];
+  evidence: unknown[];
+  tests: unknown[];
+  findings: unknown[];
+  git_refs: unknown[];
+  support_requests: unknown[];
   value?: unknown;
-}
-export interface TestResult {
-  command: string;
-  status: "passed" | "failed" | "skipped";
-  output?: string;
-}
-export interface ReviewFindingDraft {
-  severity: "error" | "warning" | "info";
-  message: string;
-  path?: string;
-  applicable_action_ids: string[];
 }
