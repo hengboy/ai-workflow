@@ -567,6 +567,8 @@ async function publishDirectCancellation(project: string, record: RunRecordV2, r
 }
 
 export async function runV2Lifecycle(options: V2LifecycleOptions): Promise<V2LifecycleResult> {
+  throw new Error('host-owned v2 lifecycle entry is unavailable: use the approved plan-local script through runV2Script');
+  /* istanbul ignore next: retained below only as an unreachable compatibility implementation. */
   const fencingEpoch = options.fencingEpoch ?? 1;
   const record = await startV2Run({ project: options.project, runId: options.runId, manifestDigest: options.manifest.manifest_digest, fencingEpoch });
   const directory = join(options.project, '.ai-workflow/runs', options.runId);

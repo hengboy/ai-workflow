@@ -145,7 +145,7 @@ describe('v2 mandatory gates', () => {
     expect((await recovered.status()).state).toBe('closed');
   });
 
-  it('runs the complete v2 task, gate, and integration lifecycle in a temporary Git repository', async () => {
+  it('rejects caller-supplied lifecycle executors and gate evidence', async () => {
     const project = await temporary();
     await gitInit(project);
     const runId = 'runner-v2-complete';
@@ -156,13 +156,9 @@ describe('v2 mandatory gates', () => {
       actions: [{ action_id: 'task-001-test', task_id: 'task-001', operation: 'test', write_scope: ['output.txt'] }],
     };
 
-    const baseline = (await gitBaseline(project)).head!;
-    const result = await runV2Lifecycle({ project, runId, manifest, execute: async ({ cwd }) => { await writeFile(join(cwd, 'output.txt'), 'runner lifecycle\n'); return { status: 'done', tests: [{ command: 'pnpm test', status: 'passed' }], changedPaths: ['output.txt'] }; }, gateEvidence: { planValidation: { valid: true, errors: [] }, standardsReview: { findings: [] }, specReview: { findings: [] }, repairClosure: { closedFindingIds: [], expectedFindingIds: [] }, baseline: { expected: baseline, current: baseline }, integration: { observed: true, noFastForward: true } }, planAuthority: async () => ({ valid: true, errors: [] }), reviewAuthority: { standardsReview: async () => ({ findings: [] }), specReview: async () => ({ findings: [] }) } });
-    expect(result.run_state).toBe('complete');
-    expect(result.integration?.observed).toBe(true);
-    expect(result.gates.integration?.state).toBe('passed');
-    expect(result.trace).toEqual(expect.arrayContaining(['task-task-001:committed', 'gate:integration:passed', 'run:complete']));
-    expect(await readFile(join(project, 'output.txt'), 'utf8')).toContain('runner lifecycle');
+    const forged = { project, runId, manifest, execute: async () => ({ status: 'done' as const, tests: [], changedPaths: [] }), gateEvidence: { planValidation: { valid: true, errors: [] } }, planAuthority: async () => ({ valid: true, errors: [] }) };
+    await expect(runV2Lifecycle(forged as never)).rejects.toThrow(/host-owned|production entry/i);
+    expect((await gitBaseline(project)).head).toBeTruthy();
   });
 
   it('keeps the lifecycle paused when host-owned gate evidence is missing', async () => {
