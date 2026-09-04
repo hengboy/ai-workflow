@@ -155,6 +155,7 @@ export async function runV2Script(options: V2ScriptRunOptions): Promise<RunRecor
   const actionStates: Record<string, 'prepared' | 'dispatch_intent' | 'running' | 'observed' | 'checkpointed' | 'done'> = {};
   const taskStates: Record<string, 'pending' | 'ready' | 'running' | 'done' | 'blocked' | 'failed' | 'cancelled' | 'finalized'> = Object.fromEntries(options.manifest.tasks.map((task) => [task.task_id, 'ready']));
   const actionMap = new Map(options.manifest.actions.map((action) => [action.action_id, action]));
+  const actionObservations = new Map<string, TaskActionObservation[]>();
   const operator = new V2GitOperator({ project: options.project, runId: options.runId, manifestDigest, fencingEpoch: record.fencing_epoch, targetBranch: options.manifest.project.target_branch });
   const planWorktree = await operator.createPlanWorktree({ baseBranch: options.manifest.project.target_branch });
   const taskWorktrees = new Map<string, V2Worktree>();
@@ -195,6 +196,11 @@ export async function runV2Script(options: V2ScriptRunOptions): Promise<RunRecor
         }
         await ledger.checkpointCall(descriptor.call_id, changedPaths);
         actionStates[action.action_id] = value.status === 'done' ? 'checkpointed' : 'observed';
+        actionObservations.set(action.task_id, [...(actionObservations.get(action.task_id) ?? []), {
+          action_id: action.action_id,
+          state: value.status === 'done' ? 'checkpointed' : 'failed',
+          result: { status: value.status, tests: value.tests.filter((test): test is { command: string; status: 'passed' | 'failed' | 'skipped' } => typeof test === 'object' && test !== null && typeof (test as { command?: unknown }).command === 'string' && ['passed', 'failed', 'skipped'].includes((test as { status?: unknown }).status as string)) },
+        }]);
         lease.release(value.status === 'done' ? 'completed' : 'blocked');
         return value;
       }, (error: unknown) => { lease.release('blocked'); throw error; });
@@ -203,10 +209,23 @@ export async function runV2Script(options: V2ScriptRunOptions): Promise<RunRecor
   };
   const trace: string[] = [];
   const worker = new CodingWorkflowEngine().start({ runId: options.runId, script: options.script, args: options.args, manifestDigest, scriptDigest: options.scriptDigest, argsDigest: options.argsDigest, actions: options.manifest.actions.map((action) => ({ action_id: action.action_id, task_id: action.task_id, action_digest: objectDigest(action) })), maxConcurrentAgents: options.manifest.limits.max_concurrent_agents, maxTotalAgents: options.manifest.limits.max_total_agents, maxItemsPerCall: options.manifest.limits.max_items_per_call, maxScriptBytes: options.manifest.limits.max_script_bytes, maxResultBytes: options.manifest.limits.max_result_bytes, syncTimeoutMs: options.manifest.limits.sync_timeout_ms, disposeGraceMs: options.manifest.limits.dispose_grace_ms, childExecutor, taskControl: async (descriptor: TaskControlDescriptor) => {
-    if (descriptor.operation !== 'skip-task') throw new Error('task finalization requires host-owned action closure evidence');
+    if (descriptor.operation !== 'skip-task' && descriptor.operation !== 'finalize-task') throw new Error('unsupported task control operation');
     const task = options.manifest.tasks.find((candidate) => candidate.task_id === descriptor.task_id);
-    if (!task || task.activation !== 'conditional' || !descriptor.task_id || !descriptor.reason) throw new Error('conditional task skip requires a task, conditional activation and reason');
-    const receipt = await new TaskClosureCoordinator({ ledger }).skipTask({ taskId: task.task_id, controlId: descriptor.control_id, controlOrdinal: descriptor.control_ordinal, activation: task.activation, requiredActionIds: [], actions: [], predecessorStates: Object.fromEntries(task.depends_on.map((dependency) => [dependency, 'skipped' as const])), reason: descriptor.reason });
+    if (!task || !descriptor.task_id) throw new Error('task control requires an authorized task');
+    const coordinator = new TaskClosureCoordinator({ ledger });
+    let receipt;
+    if (descriptor.operation === 'skip-task') {
+      receipt = await coordinator.skipTask({ taskId: task.task_id, controlId: descriptor.control_id, controlOrdinal: descriptor.control_ordinal, activation: task.activation, requiredActionIds: [], actions: [], predecessorStates: Object.fromEntries(task.depends_on.map((dependency) => [dependency, taskStates[dependency] === 'finalized' ? 'finalized' : 'pending'])), reason: descriptor.reason ?? '' });
+    } else if (task.finalization_mode === 'commit-and-merge') {
+      const taskWorktree = taskWorktrees.get(task.task_id);
+      if (!taskWorktree) throw new Error(`TASK_CLOSURE_INCOMPLETE: task worktree is missing: ${task.task_id}`);
+      receipt = await coordinator.finalizeTask({ taskId: task.task_id, controlId: descriptor.control_id, controlOrdinal: descriptor.control_ordinal, activation: task.activation, requiredActionIds: task.required_actions, actions: actionObservations.get(task.task_id) ?? [], predecessorStates: Object.fromEntries(task.depends_on.map((dependency) => [dependency, taskStates[dependency] === 'finalized' ? 'finalized' : 'pending'])), finalizationMode: task.finalization_mode, taskWorktree, planWorktree, writeScope: options.manifest.actions.filter((action) => action.task_id === task.task_id).flatMap((action) => action.write_scope), operator });
+    } else {
+      receipt = await coordinator.finalizeTask({ taskId: task.task_id, controlId: descriptor.control_id, controlOrdinal: descriptor.control_ordinal, activation: task.activation, requiredActionIds: task.required_actions, actions: actionObservations.get(task.task_id) ?? [], predecessorStates: Object.fromEntries(task.depends_on.map((dependency) => [dependency, taskStates[dependency] === 'finalized' ? 'finalized' : 'pending'])), finalizationMode: task.finalization_mode });
+    }
+    taskStates[task.task_id] = receipt.state === 'skipped' ? 'done' : 'finalized';
+    if (receipt.state === 'skipped' && !record.blocked_tasks?.includes(task.task_id)) record.blocked_tasks = [...(record.blocked_tasks ?? []), task.task_id];
+    else if (receipt.state !== 'skipped' && !record.completed_tasks?.includes(task.task_id)) record.completed_tasks = [...(record.completed_tasks ?? []), task.task_id];
     return { state: receipt.state, receipt_digest: objectDigest(receipt) };
   }, observer: { phase: (title) => trace.push(`phase:${title}`), log: (message) => trace.push(`log:${message}`) }, sandboxPreflight: () => { new BrokeredSandboxProvider().preflight(); } });
   await events.append({ type: 'run/lease-acquired', payload: { state: 'executing', manifest_digest: record.manifest_digest } });

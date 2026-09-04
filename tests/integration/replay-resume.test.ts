@@ -159,4 +159,30 @@ describe('replay and resume', () => {
     const skipResult = skipControl?.result;
     expect(skipResult !== null && typeof skipResult === 'object' && !Array.isArray(skipResult) && 'state' in skipResult && skipResult.state === 'skipped').toBe(true);
   });
+
+  it('records task closure only after the approved action is checkpointed', async () => {
+    const project = await mkdtemp(join(tmpdir(), 'ai-workflow-v2-finalize-control-'));
+    await gitInit(project);
+    const plan = await frozenPlan(project);
+    await writeFile(join(plan, 'workflow.js'), 'await agent("explore", { actionId: "task-001-example-explore", callId: "call/explore-finalize" });\nawait finalizeTask("task-001-example", "control/finalize-task");\n');
+    const manifest = await generateManifest(plan, 'codex');
+    manifest.tasks[0]!.required_actions = ['task-001-example-explore'];
+    manifest.tasks[0]!.finalization_mode = 'read-only-finalize';
+
+    const hostDir = await mkdtemp(join(tmpdir(), 'ai-workflow-v2-finalize-host-'));
+    const host = join(hostDir, 'codex');
+    await writeFile(host, '#!/bin/sh\nprintf \'%s\\n\' \'{"result_version":"2.0.0","status":"done","summary":"explored","changed_paths":[],"evidence":[],"tests":[],"findings":[],"git_refs":[],"support_requests":[]}\'\n');
+    await (await import('node:fs/promises')).chmod(host, 0o755);
+    const previousPath = process.env.PATH;
+    process.env.PATH = `${hostDir}:${previousPath ?? ''}`;
+    try {
+      const record = await runV2Script({ project, runId: 'run-finalize-control', manifest, script: await readFile(join(plan, 'workflow.js'), 'utf8'), args: {}, scriptDigest: manifest.script.bytes_digest, argsDigest: manifest.args.bytes_digest });
+      expect(record.run_state).toBe('paused');
+      const control = record.control_ledger.find((entry) => entry.control_id === 'control/finalize-task');
+      expect(control?.state).toBe('observed');
+      expect(record.completed_tasks).toContain('task-001-example');
+    } finally {
+      process.env.PATH = previousPath;
+    }
+  });
 });
