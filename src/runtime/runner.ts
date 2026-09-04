@@ -129,6 +129,11 @@ export interface V2LifecycleOptions {
     standardsReview: () => Promise<{ findings: Array<{ severity: 'error' | 'warning' | 'info'; finding_id?: string; message?: string; path?: string; applicableActionIds?: string[] }> }>;
     specReview: () => Promise<{ findings: Array<{ severity: 'error' | 'warning' | 'info'; finding_id?: string; message?: string; path?: string; applicableActionIds?: string[] }> }>;
   };
+  repairAuthority?: {
+    repair: (context: { cwd: string }) => Promise<{ changedPaths: string[] }>;
+    test: (context: { cwd: string; taskId: string }) => Promise<{ tests: Array<{ command: string; status: 'passed' | 'failed' | 'skipped' }> }>;
+    recheck: (finding: { findingId: string; taskId: string }) => Promise<{ state: 'open' | 'closed'; evidence: string[] }>;
+  };
 }
 
 export interface V2ScriptRunOptions {
@@ -524,22 +529,49 @@ async function runScriptLifecycle(options: V2LifecycleOptions, record: RunRecord
   if (!options.reviewAuthority) return lifecyclePaused(options.project, record, gates, trace, 'host-owned review authority is required', operator);
   const standardsEvidence = await options.reviewAuthority.standardsReview();
   const specEvidence = await options.reviewAuthority.specReview();
-  const standards = await gates.runGate('standards-review', { review: { findings: standardsEvidence.findings } });
-  const spec = await gates.runGate('spec-review', { review: { findings: specEvidence.findings } });
+  let standards = await gates.runGate('standards-review', { review: { findings: standardsEvidence.findings } });
+  let spec = await gates.runGate('spec-review', { review: { findings: specEvidence.findings } });
   const blockingFindings = [
     ...standardsEvidence.findings.filter((finding) => finding.severity === 'error').map((finding) => ({ sourceGate: 'standards-review' as const, severity: finding.severity, message: finding.message ?? finding.finding_id ?? 'host review finding', ...(finding.path === undefined ? {} : { path: finding.path }), applicableActionIds: finding.applicableActionIds ?? [] })),
     ...specEvidence.findings.filter((finding) => finding.severity === 'error').map((finding) => ({ sourceGate: 'spec-review' as const, severity: finding.severity, message: finding.message ?? finding.finding_id ?? 'host review finding', ...(finding.path === undefined ? {} : { path: finding.path }), applicableActionIds: finding.applicableActionIds ?? [] })),
   ] satisfies ReviewFindingInput[];
+  let repairedPlanHead: string | undefined;
   if (blockingFindings.length) {
     const repair = new RepairCoordinator({ project: options.project, runId: options.runId, manifestDigest: options.manifest.manifest_digest, fencingEpoch: record.fencing_epoch, operator });
-    await repair.startRepair(blockingFindings);
-    return lifecyclePaused(options.project, record, gates, trace, 'review findings require aggregate repair and targeted rechecks', operator);
+    const started = await repair.startRepair(blockingFindings);
+    if (!options.repairAuthority) return lifecyclePaused(options.project, record, gates, trace, 'host-owned repair authority is required', operator);
+    const repaired = await options.repairAuthority.repair({ cwd: started.worktree.path });
+    const completed = await repair.completeRepair(started, repaired.changedPaths);
+    repairedPlanHead = completed.planHead;
+    for (const task of options.manifest.tasks) {
+      const repairTest = await repair.createRepairTest(task.task_id, completed.planHead);
+      const test = await options.repairAuthority.test({ cwd: repairTest.worktree.path, taskId: task.task_id });
+      if (test.tests.some((entry) => entry.status === 'failed')) return lifecyclePaused(options.project, record, gates, trace, `repair test failed: ${task.task_id}`, operator);
+    }
+    for (const finding of started.findings) {
+      const taskId = options.manifest.tasks.find((task) => task.required_actions.some((actionId) => finding.applicableActionIds.includes(actionId)))?.task_id ?? options.manifest.tasks[0]?.task_id;
+      if (!taskId) return lifecyclePaused(options.project, record, gates, trace, 'repair finding has no applicable task', operator);
+      const recheck = await options.repairAuthority.recheck({ findingId: finding.finding_id, taskId });
+      await repair.recheckFinding(finding.finding_id, recheck);
+    }
+    const status = await repair.status();
+    if (status.state !== 'closed') return lifecyclePaused(options.project, record, gates, trace, 'repair findings remain open', operator);
+    const repairedStandards = await gates.runGate('standards-review', { review: { findings: [] } });
+    const repairedSpec = await gates.runGate('spec-review', { review: { findings: [] } });
+    if (repairedStandards.state !== 'passed' || repairedSpec.state !== 'passed') return lifecyclePaused(options.project, record, gates, trace, 'review recheck did not clear findings', operator);
+    standards = repairedStandards;
+    spec = repairedSpec;
   }
-  const repair = await gates.runGate('repair-closure', { repairClosure: options.gateEvidence.repairClosure });
+  const repair = await gates.runGate('repair-closure', {
+    repairClosure: blockingFindings.length
+      ? { closedFindingIds: blockingFindings.map((finding) => `finding-sha256:${objectDigest({ source_gate: finding.sourceGate, severity: finding.severity, message_digest: objectDigest(finding.message), path: finding.path ?? null, applicable_action_ids: [...finding.applicableActionIds].sort() }).slice('sha256:'.length)}`), expectedFindingIds: blockingFindings.map((finding) => `finding-sha256:${objectDigest({ source_gate: finding.sourceGate, severity: finding.severity, message_digest: objectDigest(finding.message), path: finding.path ?? null, applicable_action_ids: [...finding.applicableActionIds].sort() }).slice('sha256:'.length)}`) }
+      : options.gateEvidence.repairClosure,
+  });
   if (standards.state !== 'passed' || spec.state !== 'passed' || repair.state !== 'passed') return lifecyclePaused(options.project, record, gates, trace, 'review or repair gate failed', operator);
   const baseline = await gitBaseline(options.project);
-  if (options.gateEvidence.baseline.expected !== baseline.head || options.gateEvidence.baseline.current !== baseline.head) return lifecyclePaused(options.project, record, gates, trace, 'baseline evidence drifted', operator);
-  await gates.runGate('baseline-stable', { baseline: options.gateEvidence.baseline });
+  const baselineEvidence = repairedPlanHead === undefined ? options.gateEvidence.baseline : { expected: repairedPlanHead, current: repairedPlanHead };
+  if (baselineEvidence.expected !== baselineEvidence.current) return lifecyclePaused(options.project, record, gates, trace, 'baseline evidence drifted', operator);
+  await gates.runGate('baseline-stable', { baseline: baselineEvidence });
   if (!options.gateEvidence.integration.observed || !options.gateEvidence.integration.noFastForward) return lifecyclePaused(options.project, record, gates, trace, 'integration evidence is required', operator);
   const mergeCommit = await operator.integratePlan(plan, { targetBranch: options.manifest.target_branch ?? 'main', expectedHead: baseline.head });
   const integration = { observed: true, noFastForward: true, mergeCommit };
