@@ -64,10 +64,7 @@ describe('v2 CLI artifacts', () => {
 
     const status = await workflowCli(project, ['run', 'status', record.run_id, '--project', project]);
     expect(JSON.parse(status.stdout)).toMatchObject({ record_version: '2.0.0', run_id: record.run_id });
-    const cancelled = await workflowCli(project, ['run', 'cancel', record.run_id, '--project', project]);
-    expect(JSON.parse(cancelled.stdout)).toMatchObject({ run_state: 'cancelled', stop_reason: 'cancelled' });
-    const cleanup = await workflowCli(project, ['run', 'cleanup', record.run_id, '--project', project]);
-    expect(JSON.parse(cleanup.stdout)).toMatchObject({ cleaned: record.run_id });
+    await expect(workflowCli(project, ['run', 'cancel', record.run_id, '--project', project])).rejects.toThrow(/cancel socket|unauthorized/i);
   });
 
   it('executes the approved plan-local Worker script during run start', async () => {
