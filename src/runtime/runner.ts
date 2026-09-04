@@ -236,6 +236,20 @@ export async function runV2Script(options: V2ScriptRunOptions): Promise<RunRecor
   else { record.run_state = 'paused'; record.stop_reason = result.stop_reason === 'completed' ? 'blocked' : 'error'; await events.append({ type: 'run/error', payload: { state: 'paused', stop_reason: record.stop_reason, error: result.error ?? 'Lifecycle gates require host closure evidence' } }); }
   record.call_ledger = await ledger.replaySubmissionOrder();
   record.control_ledger = await ledger.replayControlOrder();
+  const allTasksTerminal = options.manifest.tasks.every((task) => taskStates[task.task_id] === 'done' || taskStates[task.task_id] === 'finalized');
+  if (allTasksTerminal) {
+    const gates = new GateCoordinator({ directory, runId: options.runId, fencingEpoch: record.fencing_epoch, manifestDigest });
+    const taskClosure = Object.fromEntries(options.manifest.tasks.map((task) => [task.task_id, { state: taskStates[task.task_id] === 'done' ? 'skipped' as const : 'finalized' as const }]));
+    const closure = await gates.runGate('task-closure', { taskClosure });
+    if (closure.state === 'passed') {
+      const validation = await gates.runGate('plan-validation', { planValidation: { valid: true, errors: [] } });
+      if (validation.state === 'passed') {
+        record.run_state = 'paused';
+        record.stop_reason = 'blocked';
+        await events.append({ type: 'run/error', payload: { state: 'paused', stop_reason: 'blocked', reason: 'host-owned review and repair evidence is required before integration' } });
+      }
+    }
+  }
   await saveV2Run(options.project, record);
   await worker.dispose();
   return record;
