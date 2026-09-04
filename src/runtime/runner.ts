@@ -314,8 +314,13 @@ export async function resumeV2Run(project: string, runId: string, fingerprints?:
       throw error;
     }
   }
-  await log.append({ type: 'resume/replayed', payload: { state: 'executing', manifest_digest: record.manifest_digest } });
-  record.run_state = 'executing';
+  const uid = process.getuid?.();
+  if (uid === undefined) throw new Error('CANCEL_UNAUTHORIZED: local process identity is unavailable');
+  const ownerLease = new OwnerLease({ root: project, runId, owner: { osUid: uid, identityDigest: objectDigest({ runId, manifest: record.manifest_digest }) }, process: { pid: process.pid, pgid: process.pid, startIdentity: `${process.pid}:${record.updated_at}`, spawnNonce: `${runId}-resume` }, leaseMs: 30_000, isProcessAlive: () => false });
+  await ownerLease.acquire({ wait: false });
+  await log.append({ type: 'run/lease-acquired', payload: { state: 'paused', manifest_digest: record.manifest_digest } });
+  await log.append({ type: 'resume/replayed', payload: { state: 'paused', manifest_digest: record.manifest_digest } });
+  record.run_state = 'paused';
   await saveV2Run(project, record);
   return record;
 }

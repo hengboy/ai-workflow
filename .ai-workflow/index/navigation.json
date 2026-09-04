@@ -1999,6 +1999,11 @@
         },
         {
           "kind": "imports",
+          "from": "src/runtime/runner.ts#resumeV2Run",
+          "to": "src/runtime/control.ts#OwnerLease"
+        },
+        {
+          "kind": "imports",
           "from": "src/runtime/runner.ts#cancelV2Run",
           "to": "src/runtime/store.ts#RunRecordV2"
         },

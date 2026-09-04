@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mkdtemp, readFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { RunLedger, type CallDescriptor, type RecordedAgentResult } from '../../src/runtime/ledger.js';
@@ -8,7 +8,6 @@ import { EventLog } from '../../src/runtime/events.js';
 import { cancelV2Run, projectV2Run, resumeV2Run, startV2Run } from '../../src/runtime/runner.js';
 import { generateManifest } from '../../src/workflow/generate.js';
 import { frozenPlan, gitInit } from '../helpers.js';
-import { writeFile } from 'node:fs/promises';
 import { runV2Script } from '../../src/runtime/runner.js';
 
 const descriptor: CallDescriptor = { action_id: 'action-one', task_id: 'task-one', input: { value: 1 } };
@@ -108,7 +107,7 @@ describe('replay and resume', () => {
     await expect(projectV2Run(directory, 'run-lifecycle')).resolves.toMatchObject({ run_state: 'paused' });
 
     const fingerprint: ResumeFingerprint = { workflow: 'workflow', script: 'script', args: 'args', manifest: manifestDigest, profile: 'profile', baseline: 'baseline' };
-    await expect(resumeV2Run(directory, 'run-lifecycle', { expected: fingerprint, current: fingerprint })).resolves.toMatchObject({ run_state: 'executing' });
+    await expect(resumeV2Run(directory, 'run-lifecycle', { expected: fingerprint, current: fingerprint })).resolves.toMatchObject({ run_state: 'paused' });
     await expect(cancelV2Run(directory, 'run-lifecycle')).resolves.toMatchObject({ run_state: 'cancelled', stop_reason: 'cancelled' });
     await expect(resumeV2Run(directory, 'run-lifecycle')).rejects.toThrow(/paused v2/i);
   });
@@ -124,6 +123,21 @@ describe('replay and resume', () => {
     await expect(projectV2Run(directory, 'run-guard')).resolves.toMatchObject({ run_state: 'paused' });
     const events = await log.read();
     expect(events.events.some((event) => event.type === 'resume/diverged')).toBe(true);
+  });
+
+  it('fences a crashed lifecycle owner before a replacement owner resumes', async () => {
+    const project = await mkdtemp(join(tmpdir(), 'ai-workflow-v2-owner-takeover-'));
+    const manifestDigest = 'sha256:' + 'e'.repeat(64);
+    await startV2Run({ project, runId: 'run-owner-takeover', manifestDigest, fencingEpoch: 1 });
+    const ownerPath = join(project, '.ai-workflow/runs/run-owner-takeover/control/owner.json');
+    await mkdir(join(project, '.ai-workflow/runs/run-owner-takeover/control'), { recursive: true });
+    await writeFile(ownerPath, JSON.stringify({ leaseVersion: '1.0.0', runId: 'run-owner-takeover', owner: { osUid: process.getuid?.() ?? 0, identityDigest: 'old-owner' }, process: { pid: 999999, pgid: 999999, startIdentity: 'old', spawnNonce: 'old' }, fencingEpoch: 1, leaseExpiresAt: Date.now() - 1, socketPath: join(project, 'old.sock'), status: 'active' }));
+    await new EventLog({ path: join(project, '.ai-workflow/runs/run-owner-takeover/events.jsonl'), runId: 'run-owner-takeover', fencingEpoch: 1 }).append({ type: 'run/error', payload: { state: 'paused', reason: 'owner crashed' } });
+
+    const resumed = await resumeV2Run(project, 'run-owner-takeover', { expected: { workflow: 'workflow', script: 'script', args: 'args', manifest: manifestDigest, profile: 'profile', baseline: 'baseline' }, current: { workflow: 'workflow', script: 'script', args: 'args', manifest: manifestDigest, profile: 'profile', baseline: 'baseline' } });
+
+    expect(resumed.run_state).toBe('paused');
+    await expect(readFile(ownerPath, 'utf8')).resolves.toMatch(/"fencingEpoch":2/);
   });
 
   it('persists the first v2 cancel intent and retains unknown resources', async () => {
