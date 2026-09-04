@@ -428,6 +428,7 @@ async function runScriptLifecycle(options: V2LifecycleOptions, record: RunRecord
   const taskStates = Object.fromEntries(options.manifest.tasks.map((task) => [task.task_id, 'ready' as const]));
   const actionStates: Record<string, 'prepared' | 'dispatch_intent' | 'running' | 'observed' | 'checkpointed' | 'done'> = {};
   const observations = new Map<string, TaskActionObservation[]>();
+  const tasks = new Map<string, { worktree: V2Worktree; state: 'finalized' | 'committed' | 'skipped' }>();
   const actions: ActionCapability[] = options.manifest.actions.map((action) => ({
     action_id: action.action_id,
     task_id: action.task_id,
@@ -486,11 +487,19 @@ async function runScriptLifecycle(options: V2LifecycleOptions, record: RunRecord
       })();
       return { id: descriptor.call_id, result, dispose: () => Promise.resolve() };
     },
+  }, taskControl: async (descriptor) => {
+    if (descriptor.operation !== 'skip-task') throw new Error('task finalization requires host-owned closure evidence');
+    const task = options.manifest.tasks.find((candidate) => candidate.task_id === descriptor.task_id);
+    if (!task || task.activation !== 'conditional' || !descriptor.task_id) throw new Error('conditional task skip requires an authorized conditional task');
+    const receipt = await new TaskClosureCoordinator({ ledger }).skipTask({ taskId: task.task_id, controlId: descriptor.control_id, controlOrdinal: descriptor.control_ordinal, activation: task.activation, requiredActionIds: [], actions: [], predecessorStates: {}, reason: descriptor.reason ?? '' });
+    const worktree = taskWorktrees.get(task.task_id);
+    if (worktree) tasks.set(task.task_id, { worktree, state: 'skipped' });
+    if (!record.blocked_tasks?.includes(task.task_id)) record.blocked_tasks = [...(record.blocked_tasks ?? []), task.task_id];
+    return { state: receipt.state, receipt_digest: objectDigest(receipt) };
   }, observer: { phase: (title) => trace.push(`phase:${title}`), log: (message) => trace.push(`log:${message}`) }, sandboxPreflight: () => { new BrokeredSandboxProvider().preflight(); }, disposeGraceMs: 5_000 });
   const workerResult = await worker.result;
   await worker.dispose();
   if (workerResult.stop_reason !== 'completed') return lifecyclePaused(options.project, record, new GateCoordinator({ directory, runId: options.runId, fencingEpoch: record.fencing_epoch, manifestDigest: options.manifest.manifest_digest }), trace, workerResult.error ?? 'lifecycle Worker failed', operator);
-  const tasks = new Map<string, { worktree: V2Worktree; state: 'finalized' | 'committed' | 'skipped' }>();
   const coordinator = new TaskClosureCoordinator({ ledger });
   for (const task of options.manifest.tasks) {
     if (task.activation === 'conditional') continue;

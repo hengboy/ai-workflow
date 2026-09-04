@@ -275,6 +275,31 @@ describe('v2 mandatory gates', () => {
     expect(result.trace).toEqual(expect.arrayContaining(['phase:generated-lifecycle']));
   });
 
+  it('requires an explicit skip control for conditional lifecycle tasks', async () => {
+    const project = await temporary();
+    await gitInit(project);
+    const runId = 'runner-v2-conditional-skip';
+    const manifest = {
+      manifest_digest: digest,
+      target_branch: 'main',
+      tasks: [{ task_id: 'task-optional', activation: 'conditional' as const, finalization_mode: 'read-only-finalize' as const, required_actions: [], depends_on: [] }],
+      actions: [],
+    };
+    const baseline = (await gitBaseline(project)).head!;
+
+    const result = await runV2Lifecycle({
+      project,
+      runId,
+      manifest,
+      script: 'await skipTask("task-optional", "feature disabled", "control/skip-optional");',
+      execute: async () => { throw new Error('conditional task must be skipped, not executed'); },
+      gateEvidence: { planValidation: { valid: true, errors: [] }, standardsReview: { findings: [] }, specReview: { findings: [] }, repairClosure: { closedFindingIds: [], expectedFindingIds: [] }, baseline: { expected: baseline, current: baseline }, integration: { observed: false, noFastForward: false } },
+    });
+
+    expect(result.run_state).toBe('paused');
+    await expect(readFile(join(project, '.ai-workflow/runs', runId, 'controls', 'control', 'skip-optional.json'), 'utf8')).resolves.toMatch(/skipped/);
+  });
+
   it('routes approved lifecycle script actions through host execution and task closure', async () => {
     const project = await temporary();
     await gitInit(project);
