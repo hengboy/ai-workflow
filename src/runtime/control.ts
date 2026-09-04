@@ -325,7 +325,7 @@ export async function requestCancelSocket(socketPath: string, request: Omit<Canc
         const value = JSON.parse(response) as { error?: { code?: string; message?: string } } | CancelOutcome;
         if ('error' in value && value.error) throw new ControlError('CANCEL_UNAUTHORIZED', value.error.message ?? 'cancel request rejected');
         resolvePromise(value as CancelOutcome);
-      } catch (error) { reject(error); }
+      } catch (error) { reject(error instanceof Error ? error : new Error(String(error))); }
     });
     socket.on('connect', () => socket.write(`${JSON.stringify(request)}\n`));
   });
