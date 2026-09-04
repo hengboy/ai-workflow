@@ -7,6 +7,8 @@ import { frozenPlan, gitInit, temporary } from '../helpers.js';
 
 const exec = promisify(execFile);
 
+function parseJson(value: string): unknown { return JSON.parse(value) as unknown; }
+
 async function workflowCli(project: string, arguments_: string[], env?: NodeJS.ProcessEnv): Promise<{ stdout: string; stderr: string }> {
   const root = process.cwd();
   return exec(process.execPath, [join(root, 'node_modules/tsx/dist/cli.mjs'), join(root, 'src/cli.ts'), ...arguments_], { cwd: project, ...(env === undefined ? {} : { env: { ...process.env, ...env } }) });
@@ -66,11 +68,11 @@ describe('v2 CLI artifacts', () => {
     expect(JSON.parse(status.stdout)).toMatchObject({ record_version: '2.0.0', run_id: record.run_id });
     const resumed = await workflowCli(project, ['run', 'resume', record.run_id, '--project', project]);
     expect(JSON.parse(resumed.stdout)).toMatchObject({ run_state: 'paused', pause_reason: 'approved Worker restart authority is unavailable' });
-    const pausedStatus = JSON.parse((await workflowCli(project, ['run', 'status', record.run_id, '--project', project])).stdout) as { resume_evidence?: Record<string, string> };
-    expect(pausedStatus.resume_evidence).toMatchObject({ manifest_digest: expect.stringMatching(/^sha256:/), script_digest: expect.stringMatching(/^sha256:/), args_digest: expect.stringMatching(/^sha256:/), approval_digest: expect.stringMatching(/^sha256:/), profile_digest: expect.stringMatching(/^sha256:/), sandbox_digest: expect.stringMatching(/^sha256:/), baseline_digest: expect.stringMatching(/^sha256:/) });
-    await expect(workflowCli(project, ['run', 'cancel', record.run_id, '--project', project])).resolves.toMatchObject({
-      stdout: expect.stringContaining('"run_state": "cancelled"'),
-    });
+    const pausedStatusValue = parseJson((await workflowCli(project, ['run', 'status', record.run_id, '--project', project])).stdout);
+    if (!pausedStatusValue || typeof pausedStatusValue !== 'object' || !('resume_evidence' in pausedStatusValue) || !pausedStatusValue.resume_evidence || typeof pausedStatusValue.resume_evidence !== 'object') throw new Error('paused status is missing resume evidence');
+    const evidence = pausedStatusValue.resume_evidence as Record<string, unknown>;
+    for (const field of ['manifest_digest', 'script_digest', 'args_digest', 'approval_digest', 'profile_digest', 'sandbox_digest', 'baseline_digest']) expect(evidence[field]).toMatch(/^sha256:/);
+    expect((await workflowCli(project, ['run', 'cancel', record.run_id, '--project', project])).stdout).toContain('"run_state": "cancelled"');
   });
 
   it('executes the approved plan-local Worker script during run start', async () => {
@@ -145,14 +147,16 @@ else result();
     const authorityDirectory = join(project, '.ai-workflow/runs', record.run_id, 'receipts', 'authority');
     const recheck = (await readdir(authorityDirectory)).find((entry) => entry.startsWith('finding-recheck-'));
     if (!recheck) throw new Error('fake host did not produce a targeted recheck receipt');
-    const receipt = JSON.parse(await readFile(join(authorityDirectory, recheck), 'utf8')) as { finding_id: string; source_review_receipt_digest: string; repair_diff_digest: string; evidence_digests: string[]; message: string };
-    const review = JSON.parse(await readFile(join(authorityDirectory, 'standards-review.json'), 'utf8')) as { receipt_digest: string; findings: Array<{ finding_id: string; message_digest: string }> };
+    const receipt = parseJson(await readFile(join(authorityDirectory, recheck), 'utf8')) as { finding_id: string; source_review_receipt_digest: string; repair_diff_digest: string; evidence_digests: string[]; message: string };
+    const review = parseJson(await readFile(join(authorityDirectory, 'standards-review.json'), 'utf8')) as { receipt_digest: string; findings: Array<{ finding_id: string; message_digest: string }> };
     expect(receipt.finding_id).toMatch(/^finding-sha256:/);
     expect(receipt.source_review_receipt_digest).toBe(review.receipt_digest);
     expect(receipt.repair_diff_digest).toMatch(/^sha256:/);
     expect(receipt.evidence_digests).toEqual([expect.stringMatching(/^sha256:/)]);
     expect(receipt.message).toBe('recheck complete');
-    expect(review.findings).toEqual([expect.objectContaining({ finding_id: receipt.finding_id, message_digest: expect.stringMatching(/^sha256:/) })]);
+    expect(review.findings).toHaveLength(1);
+    expect(review.findings[0]?.finding_id).toBe(receipt.finding_id);
+    expect(review.findings[0]?.message_digest).toMatch(/^sha256:/);
     await expect(readFile(join(project, 'src/output.ts'), 'utf8')).resolves.toBe('repaired\n');
   });
 

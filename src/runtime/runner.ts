@@ -272,7 +272,7 @@ export async function runV2Script(options: V2ScriptRunOptions): Promise<RunRecor
       const worktree = taskWorktrees.get(action.task_id);
       if (!worktree) throw new Error(`TASK_NOT_AUTHORIZED: ${action.task_id}`);
       const controlled = await runControl.admitAction({ manifest: options.manifest, action_id: action.action_id, run_id: options.runId, cwd: worktree.path, attempt: 1, task_states: taskStates, action_states: actionStates, active_hosts: [options.manifest.host] });
-      const { admission, lease } = controlled;
+      const { lease } = controlled;
       await ledger.prepareCall({ callId: descriptor.call_id, callOrdinal: descriptor.call_ordinal, descriptor: descriptor as unknown as import('./ledger.js').CallDescriptor });
       await ledger.dispatchIntent(descriptor.call_id);
       actionStates[action.action_id] = 'dispatch_intent';
@@ -377,7 +377,7 @@ async function runV2HostAuthorityLifecycle(options: V2ScriptRunOptions, record: 
   };
   try {
     const planValidation = await authority.planValidation(plan.path);
-    if ((await gates.runGate('plan-validation', { planValidation })).state !== 'passed') return pause('host plan validation authority rejected the run');
+    if ((await gates.runGate('plan-validation', { planValidation })).state !== 'passed') return await pause('host plan validation authority rejected the run');
     const standardsReview = await authority.review('standards-review', plan.path);
     const specReview = await authority.review('spec-review', plan.path);
     let standards = await gates.runGate('standards-review', { review: { findings: standardsReview.findings.map((finding) => ({ severity: finding.severity })) } });
@@ -398,27 +398,27 @@ async function runV2HostAuthorityLifecycle(options: V2ScriptRunOptions, record: 
       for (const task of options.manifest.tasks) {
         const repairTest = await repair.createRepairTest(task.task_id, completion.planHead);
         const test = await authority.repairTest(repairTest.worktree.path, task.task_id);
-        if (test.tests.some((entry) => entry.status === 'failed')) return pause(`host repair test failed: ${task.task_id}`);
+        if (test.tests.some((entry) => entry.status === 'failed')) return await pause(`host repair test failed: ${task.task_id}`);
       }
       for (const finding of started.findings) {
         const source = sourceReceipts.get(finding.sourceGate);
-        if (!source) return pause(`host review receipt is unavailable: ${finding.sourceGate}`);
+        if (!source) return await pause(`host review receipt is unavailable: ${finding.sourceGate}`);
         const recheck = await authority.recheck(finding.sourceGate, finding.finding_id, plan.path, source, repairDiffDigest);
         await repair.recheckFinding(finding.finding_id, recheck);
       }
-      if ((await repair.status()).state !== 'closed') return pause('host targeted rechecks did not close every finding');
+      if ((await repair.status()).state !== 'closed') return await pause('host targeted rechecks did not close every finding');
       closedFindingIds = started.findings.map((finding) => finding.finding_id);
       standards = await gates.runGate('standards-review', { review: { findings: [] } });
       spec = await gates.runGate('spec-review', { review: { findings: [] } });
     }
     const repairClosure = await gates.runGate('repair-closure', { repairClosure: { closedFindingIds, expectedFindingIds: closedFindingIds } });
-    if (standards.state !== 'passed' || spec.state !== 'passed' || repairClosure.state !== 'passed') return pause('host review or repair authority did not close the gates');
+    if (standards.state !== 'passed' || spec.state !== 'passed' || repairClosure.state !== 'passed') return await pause('host review or repair authority did not close the gates');
     const baseline = await gitBaseline(options.project);
-    if (!baseline.head) return pause('host baseline authority is unavailable');
-    if ((await gates.runGate('baseline-stable', { baseline: { expected: baseline.head, current: baseline.head } })).state !== 'passed') return pause('host baseline authority rejected the run');
+    if (!baseline.head) return await pause('host baseline authority is unavailable');
+    if ((await gates.runGate('baseline-stable', { baseline: { expected: baseline.head, current: baseline.head } })).state !== 'passed') return await pause('host baseline authority rejected the run');
     const mergeCommit = await operator.integratePlan(plan, { targetBranch: options.manifest.project.target_branch, expectedHead: baseline.head });
     const integration = await gates.runGate('integration', { integration: { observed: true, noFastForward: true, mergeCommit } });
-    if (integration.state !== 'passed') return pause('host integration authority did not observe a no-ff merge');
+    if (integration.state !== 'passed') return await pause('host integration authority did not observe a no-ff merge');
     record.run_state = 'complete';
     record.stop_reason = 'completed';
     record.resources = operator.resources as unknown[];

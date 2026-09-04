@@ -60,9 +60,10 @@ export class ManifestHostAuthority {
     if (value.result_type !== 'review' || value.gate_id !== gate) throw new HostAuthorityError('AUTHORITY_INVALID', `review authority returned the wrong gate: ${gate}`);
     const findings = value.findings.map((finding) => ({ severity: finding.severity, message: finding.message, path: finding.path, applicableActionIds: finding.applicable_action_ids }));
     for (const finding of findings) {
-      const actions = finding.applicableActionIds.map((actionId) => this.options.manifest.actions.find((action) => action.action_id === actionId));
-      if (!actions.length || actions.some((action) => !action)) throw new HostAuthorityError('AUTHORITY_SCOPE_INVALID', 'review finding references an action outside the manifest');
-      if (!actions.some((action) => action!.write_scope.some((scope) => finding.path === scope || finding.path.startsWith(`${scope}/`)))) throw new HostAuthorityError('AUTHORITY_SCOPE_INVALID', 'review finding path is outside applicable manifest action scope');
+      if (!finding.applicableActionIds.length) throw new HostAuthorityError('AUTHORITY_SCOPE_INVALID', 'review finding has no applicable manifest action');
+      const actions = this.options.manifest.actions.filter((action) => finding.applicableActionIds.includes(action.action_id));
+      if (actions.length !== finding.applicableActionIds.length) throw new HostAuthorityError('AUTHORITY_SCOPE_INVALID', 'review finding references an action outside the manifest');
+      if (!actions.some((action) => action.write_scope.some((scope) => finding.path === scope || finding.path.startsWith(`${scope}/`)))) throw new HostAuthorityError('AUTHORITY_SCOPE_INVALID', 'review finding path is outside applicable manifest action scope');
     }
     await this.save(`${gate}-draft.json`, { receipt_version: '2.0.0', receipt_type: 'host-review-draft', gate_id: gate, manifest_digest: objectDigest(this.options.manifest), findings });
     return { findings };
