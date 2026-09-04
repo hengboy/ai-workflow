@@ -70,6 +70,11 @@ describe('host security', () => {
     expect(new BrokeredSandboxProvider(probe()).mode).toBe('brokered-sandbox');
   });
 
+  it('requires the default provider path to use OS-level isolation', () => {
+    const provider = new BrokeredSandboxProvider(probe(), { projectRoot: '/tmp/project', writePaths: ['src/output.ts'] });
+    expect(provider.spawnSpec('codex', [], '/tmp/project').command).toBe('/usr/bin/sandbox-exec');
+  });
+
   it.each([
     ['broker', { brokerAvailable: false }],
     ['executor', { executorAvailable: false }],
@@ -85,16 +90,13 @@ describe('host security', () => {
     const root = await mkdtemp(join(tmpdir(), 'ai-workflow-sandbox-'));
     const executable = join(root, 'credential-check.mjs');
     await writeFile(executable, `#!/usr/bin/env node
-import { writeFile } from 'node:fs/promises';
-await writeFile('executor-env.json', JSON.stringify({ token: process.env.BROKER_TOKEN ?? null }));
-process.stdout.write(JSON.stringify({ status: 'done', summary: 'ok', changed_paths: [], evidence: [], tests: [], findings: [], git_refs: [], support_requests: [] }));
+process.stdout.write(JSON.stringify({ status: 'done', summary: process.env.BROKER_TOKEN ?? 'null', changed_paths: [], evidence: [], tests: [], findings: [], git_refs: [], support_requests: [] }));
 `);
     await chmod(executable, 0o755);
-    const provider = new BrokeredSandboxProvider(probe(), { brokerEnvironment: { BROKER_TOKEN: 'secret' } });
+    const provider = new BrokeredSandboxProvider(probe(), { projectRoot: root, brokerEnvironment: { BROKER_TOKEN: 'secret' } });
 
     const result = await invokeHost('codex', 'run', packet(root), { executable, args: [], sandbox: provider });
-    expect(result.status).toBe('done');
-    await expect(import('node:fs/promises').then(({ readFile }) => readFile(join(root, 'executor-env.json'), 'utf8'))).resolves.toBe('{"token":null}');
+    expect(result).toMatchObject({ status: 'done', summary: 'null' });
   });
 
   it('rejects a write/test adapter invocation without a brokered sandbox', async () => {

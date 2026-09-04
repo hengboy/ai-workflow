@@ -1,5 +1,6 @@
 import { access } from 'node:fs/promises';
 import { constants } from 'node:fs';
+import { resolve } from 'node:path';
 import { sha256 } from '../utils/hash.js';
 
 export interface SandboxProbe {
@@ -141,10 +142,10 @@ export class BrokeredSandboxProvider {
 
   spawnSpec(command: string, args: readonly string[], cwd: string): SandboxSpawnSpec {
     if (!cwd) reject('executor cwd is required');
-    const useSeatbelt = this.options.useSeatbelt ?? false;
+    const useSeatbelt = this.options.useSeatbelt ?? true;
     if (!useSeatbelt) return { command, args: [...args], env: executorEnvironment(this.options.brokerEnvironment) };
     if (!this.options.projectRoot) reject('Seatbelt executor requires projectRoot');
-    const profile = seatbeltProfile(this.options.projectRoot, this.options.writePaths ?? []);
+    const profile = seatbeltProfile(this.options.projectRoot, (this.options.writePaths ?? []).map((path) => resolve(this.options.projectRoot!, path)));
     return {
       command: '/usr/bin/sandbox-exec',
       args: ['-p', profile, '--', command, ...args],
@@ -153,7 +154,7 @@ export class BrokeredSandboxProvider {
   }
 
   async available(): Promise<boolean> {
-    if (this.options.useSeatbelt !== true) return true;
+    if (this.options.useSeatbelt === false) return false;
     try { await access('/usr/bin/sandbox-exec', constants.X_OK); return true; } catch { return false; }
   }
 }
