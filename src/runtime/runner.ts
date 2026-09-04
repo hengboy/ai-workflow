@@ -337,8 +337,10 @@ export async function cancelV2Run(project: string, runId: string): Promise<RunRe
   const digest = cancelReasonDigest(reason);
   const outcome = await control.requestCancel({ peerUid: uid, runId, fencingEpoch: record.fencing_epoch, nonce: record.manifest_digest, reason, identityDigest, proof: cancelProof(record.manifest_digest, runId, record.fencing_epoch, digest) });
   if (outcome.won) await log.append({ type: 'run/cancel-requested', payload: { state: 'cancelling', reason: outcome.intent.reason } });
-  if (outcome.won) await log.append({ type: 'run/cancelled', payload: { state: 'cancelled', stop_reason: 'cancelled' } });
-  record.run_state = 'cancelled';
+  const retained = record.resources.some((resource) => resource === null || typeof resource !== 'object' || !('resource_version' in resource) || !('resource_id' in resource));
+  const state = retained ? 'cancelled-with-retained-resources' : 'cancelled';
+  if (outcome.won) await log.append({ type: 'run/cancelled', payload: { state, stop_reason: 'cancelled' } });
+  record.run_state = state;
   record.stop_reason = 'cancelled';
   await saveV2Run(project, record);
   return record;

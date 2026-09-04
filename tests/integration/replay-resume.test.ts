@@ -150,13 +150,26 @@ describe('replay and resume', () => {
     const first = await cancelV2Run(directory, 'run-cancel-intent');
     const second = await cancelV2Run(directory, 'run-cancel-intent');
 
-    expect(first).toMatchObject({ run_state: 'cancelled', stop_reason: 'cancelled' });
-    expect(second).toMatchObject({ run_state: 'cancelled', stop_reason: 'cancelled' });
+    expect(first).toMatchObject({ run_state: 'cancelled-with-retained-resources', stop_reason: 'cancelled' });
+    expect(second).toMatchObject({ run_state: 'cancelled-with-retained-resources', stop_reason: 'cancelled' });
     await expect(readFile(join(directory, '.ai-workflow/runs/run-cancel-intent/control/cancel.json'), 'utf8')).resolves.toMatch(/run-cancel-intent/);
     await expect(readFile(join(directory, '.ai-workflow/runs/run-cancel-intent/events.jsonl'), 'utf8')).resolves.toMatch(/run\/cancel-requested/);
     expect(second.resources).toEqual([{ resource_id: 'unknown-resource' }]);
     const events = (await new EventLog({ path: join(directory, '.ai-workflow/runs/run-cancel-intent/events.jsonl'), runId: 'run-cancel-intent', fencingEpoch: 1 }).read()).events;
     expect(events.filter((event) => event.type === 'run/cancel-requested')).toHaveLength(1);
+  });
+
+  it('marks a cancelled run as retaining resources it cannot reconcile', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'ai-workflow-v2-retained-cancel-'));
+    const manifestDigest = 'sha256:' + 'f'.repeat(64);
+    const started = await startV2Run({ project: directory, runId: 'run-retained', manifestDigest, fencingEpoch: 1 });
+    started.resources = [{ resource_id: 'unknown-resource' }];
+    await saveV2Run(directory, started);
+
+    const cancelled = await cancelV2Run(directory, 'run-retained');
+
+    expect(cancelled).toMatchObject({ run_state: 'cancelled-with-retained-resources', stop_reason: 'cancelled' });
+    expect(cancelled.resources).toEqual([{ resource_id: 'unknown-resource' }]);
   });
 
   it('records a durable skip control for a conditional task in the approved script', async () => {
