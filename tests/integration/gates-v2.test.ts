@@ -157,7 +157,7 @@ describe('v2 mandatory gates', () => {
     };
 
     const baseline = (await gitBaseline(project)).head!;
-    const result = await runV2Lifecycle({ project, runId, manifest, execute: async ({ cwd }) => { await writeFile(join(cwd, 'output.txt'), 'runner lifecycle\n'); return { status: 'done', tests: [{ command: 'pnpm test', status: 'passed' }], changedPaths: ['output.txt'] }; }, gateEvidence: { planValidation: { valid: true, errors: [] }, standardsReview: { findings: [] }, specReview: { findings: [] }, repairClosure: { closedFindingIds: [], expectedFindingIds: [] }, baseline: { expected: baseline, current: baseline }, integration: { observed: true, noFastForward: true } } });
+    const result = await runV2Lifecycle({ project, runId, manifest, execute: async ({ cwd }) => { await writeFile(join(cwd, 'output.txt'), 'runner lifecycle\n'); return { status: 'done', tests: [{ command: 'pnpm test', status: 'passed' }], changedPaths: ['output.txt'] }; }, gateEvidence: { planValidation: { valid: true, errors: [] }, standardsReview: { findings: [] }, specReview: { findings: [] }, repairClosure: { closedFindingIds: [], expectedFindingIds: [] }, baseline: { expected: baseline, current: baseline }, integration: { observed: true, noFastForward: true } }, reviewAuthority: { standardsReview: async () => ({ findings: [] }), specReview: async () => ({ findings: [] }) } });
     expect(result.run_state).toBe('complete');
     expect(result.integration?.observed).toBe(true);
     expect(result.gates.integration?.state).toBe('passed');
@@ -183,6 +183,60 @@ describe('v2 mandatory gates', () => {
     expect(result.integration).toBeUndefined();
     expect(result.gates['standards-review']).toBeUndefined();
     await expect(loadV2Run(project, runId)).resolves.toMatchObject({ run_state: 'paused', stop_reason: 'blocked' });
+  });
+
+  it('does not treat plain review gate evidence as host review authority', async () => {
+    const project = await temporary();
+    await gitInit(project);
+    const runId = 'runner-v2-review-authority';
+    const manifest = {
+      manifest_digest: digest,
+      target_branch: 'main',
+      tasks: [{ task_id: 'task-001', activation: 'required' as const, finalization_mode: 'read-only-finalize' as const, required_actions: [], depends_on: [] }],
+      actions: [],
+    };
+    const baseline = (await gitBaseline(project)).head!;
+
+    const result = await runV2Lifecycle({
+      project,
+      runId,
+      manifest,
+      execute: async () => { throw new Error('no action should execute'); },
+      gateEvidence: { planValidation: { valid: true, errors: [] }, standardsReview: { findings: [] }, specReview: { findings: [] }, repairClosure: { closedFindingIds: [], expectedFindingIds: [] }, baseline: { expected: baseline, current: baseline }, integration: { observed: true, noFastForward: true } },
+    });
+
+    expect(result.run_state).toBe('paused');
+    expect(result.gates['standards-review']).toBeUndefined();
+    expect(result.integration).toBeUndefined();
+  });
+
+  it('starts one normalized repair when host review returns an error finding', async () => {
+    const project = await temporary();
+    await gitInit(project);
+    const runId = 'runner-v2-review-repair';
+    const manifest = {
+      manifest_digest: digest,
+      target_branch: 'main',
+      tasks: [{ task_id: 'task-001', activation: 'required' as const, finalization_mode: 'read-only-finalize' as const, required_actions: [], depends_on: [] }],
+      actions: [],
+    };
+    const baseline = (await gitBaseline(project)).head!;
+
+    const result = await runV2Lifecycle({
+      project,
+      runId,
+      manifest,
+      execute: async () => { throw new Error('no action should execute'); },
+      gateEvidence: { planValidation: { valid: true, errors: [] }, standardsReview: { findings: [] }, specReview: { findings: [] }, repairClosure: { closedFindingIds: [], expectedFindingIds: [] }, baseline: { expected: baseline, current: baseline }, integration: { observed: true, noFastForward: true } },
+      reviewAuthority: {
+        standardsReview: async () => ({ findings: [{ severity: 'error' as const, message: 'missing validation', path: 'src/output.ts', applicableActionIds: [] }] }),
+        specReview: async () => ({ findings: [] }),
+      },
+    });
+
+    expect(result.run_state).toBe('paused');
+    await expect(readFile(join(project, '.ai-workflow/runs', runId, 'receipts', 'repair', 'start.json'), 'utf8')).resolves.toMatch(/finding-sha256/);
+    await expect(readFile(join(project, '.ai-workflow/runs', runId, 'receipts', 'gate', 'integration.json'), 'utf8')).rejects.toThrow();
   });
 
   it('does not invent baseline or integration evidence when lifecycle authority is incomplete', async () => {

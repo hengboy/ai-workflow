@@ -31,6 +31,7 @@ import type { CallDescriptor, CodingAgentResult, TaskControlDescriptor } from '.
 import { BrokeredSandboxProvider } from '../security/sandbox.js';
 import { CancelControl, OwnerLease, cancelProof, cancelReasonDigest } from './control.js';
 import { captureWorktreeAudit, compareWorktreeAudits } from '../security/audit.js';
+import { RepairCoordinator, type ReviewFindingInput } from './repair.js';
 
 const activeControllers = new Map<string, AbortController>();
 class ReviewFindingsError extends Error {}
@@ -123,6 +124,10 @@ export interface V2LifecycleOptions {
     repairClosure: { closedFindingIds: string[]; expectedFindingIds: string[] };
     baseline: { expected: string; current: string };
     integration: { observed: boolean; noFastForward: boolean; mergeCommit?: string };
+  };
+  reviewAuthority?: {
+    standardsReview: () => Promise<{ findings: Array<{ severity: 'error' | 'warning' | 'info'; finding_id?: string; message?: string; path?: string; applicableActionIds?: string[] }> }>;
+    specReview: () => Promise<{ findings: Array<{ severity: 'error' | 'warning' | 'info'; finding_id?: string; message?: string; path?: string; applicableActionIds?: string[] }> }>;
   };
 }
 
@@ -516,8 +521,20 @@ async function runScriptLifecycle(options: V2LifecycleOptions, record: RunRecord
   const validation = await gates.runGate('plan-validation', { planValidation: options.gateEvidence.planValidation });
   if (validation.state !== 'passed') return lifecyclePaused(options.project, record, gates, trace, 'plan-validation gate failed', operator);
   trace.push('gate:plan-validation:passed');
-  const standards = await gates.runGate('standards-review', { review: options.gateEvidence.standardsReview });
-  const spec = await gates.runGate('spec-review', { review: options.gateEvidence.specReview });
+  if (!options.reviewAuthority) return lifecyclePaused(options.project, record, gates, trace, 'host-owned review authority is required', operator);
+  const standardsEvidence = await options.reviewAuthority.standardsReview();
+  const specEvidence = await options.reviewAuthority.specReview();
+  const standards = await gates.runGate('standards-review', { review: { findings: standardsEvidence.findings } });
+  const spec = await gates.runGate('spec-review', { review: { findings: specEvidence.findings } });
+  const blockingFindings = [
+    ...standardsEvidence.findings.filter((finding) => finding.severity === 'error').map((finding) => ({ sourceGate: 'standards-review' as const, severity: finding.severity, message: finding.message ?? finding.finding_id ?? 'host review finding', ...(finding.path === undefined ? {} : { path: finding.path }), applicableActionIds: finding.applicableActionIds ?? [] })),
+    ...specEvidence.findings.filter((finding) => finding.severity === 'error').map((finding) => ({ sourceGate: 'spec-review' as const, severity: finding.severity, message: finding.message ?? finding.finding_id ?? 'host review finding', ...(finding.path === undefined ? {} : { path: finding.path }), applicableActionIds: finding.applicableActionIds ?? [] })),
+  ] satisfies ReviewFindingInput[];
+  if (blockingFindings.length) {
+    const repair = new RepairCoordinator({ project: options.project, runId: options.runId, manifestDigest: options.manifest.manifest_digest, fencingEpoch: record.fencing_epoch, operator });
+    await repair.startRepair(blockingFindings);
+    return lifecyclePaused(options.project, record, gates, trace, 'review findings require aggregate repair and targeted rechecks', operator);
+  }
   const repair = await gates.runGate('repair-closure', { repairClosure: options.gateEvidence.repairClosure });
   if (standards.state !== 'passed' || spec.state !== 'passed' || repair.state !== 'passed') return lifecyclePaused(options.project, record, gates, trace, 'review or repair gate failed', operator);
   const baseline = await gitBaseline(options.project);
