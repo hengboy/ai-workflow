@@ -29,7 +29,7 @@ import type { CodingCapabilityManifest } from '../generated/coding-manifest.sche
 import type { ActionCapability, ActionCapabilityManifest } from '../security/capability.js';
 import type { CallDescriptor, CodingAgentResult, TaskControlDescriptor } from './protocol.js';
 import { BrokeredSandboxProvider } from '../security/sandbox.js';
-import { CancelControl, CancelSocket, ControlError, OwnerLease, RunControl, requestCancelSocket, cancelProof, cancelReasonDigest } from './control.js';
+import { CancelControl, CancelSocket, ControlError, OwnerLease, RunControl, createLocalCancelCapability, readLocalCancelCapability, requestCancelSocket, cancelProof, cancelReasonDigest } from './control.js';
 import { captureWorktreeAudit, compareWorktreeAudits } from '../security/audit.js';
 import { RepairCoordinator, type ReviewFindingInput } from './repair.js';
 
@@ -205,17 +205,34 @@ export async function runV2Script(options: V2ScriptRunOptions): Promise<RunRecor
   const cancelAuthority = JSON.parse(await readFile(authorityPath, 'utf8')) as import('./control.js').CancelAuthority;
   const { writeJson } = await import('../utils/fs.js');
   const identityDigest = owner.owner.identityDigest;
-  await writeJson(authorityPath, { ...cancelAuthority, owner_uid: owner.owner.osUid, owner_identity_digest: identityDigest });
-  const cancelControl = new CancelControl({ root: options.project, runId: options.runId, owner: { osUid: owner.owner.osUid, identityDigest }, fencingEpoch: record.fencing_epoch, nonce: cancelAuthority.challenge_nonce });
+  const localCapability = await createLocalCancelCapability(options.project, options.runId, record.fencing_epoch);
+  const persistedAuthority = { ...cancelAuthority, owner_uid: owner.owner.osUid, owner_identity_digest: identityDigest, local_control_path: join(directory, 'control', 'owner-capability.json') };
+  await writeJson(authorityPath, persistedAuthority);
+  const cancelControl = new CancelControl({ root: options.project, runId: options.runId, owner: { osUid: owner.owner.osUid, identityDigest }, fencingEpoch: record.fencing_epoch, nonce: cancelAuthority.challenge_nonce, socketPath: cancelAuthority.socket_path, localCapability });
   const scheduler = new ScopeScheduler({ maxConcurrent: options.manifest.limits.max_concurrent_agents });
   // The socket handler is installed before the Worker is created and observes this holder.
   // eslint-disable-next-line prefer-const
   let liveWorker: ReturnType<CodingWorkflowEngine['start']> | undefined;
+  const liveActions = new Map<string, { callId: string; controller: AbortController; completion?: Promise<void> }>();
   let cancelRequested = false;
-  const runControl = new RunControl({ ownerLease, owner, cancelControl, scheduler, abortChild: (_lease, reason) => liveWorker?.cancel(reason) });
-  const cancelSocket = options.cancelPeerUid ? new CancelSocket(cancelControl, {
+  const runControl = new RunControl({
+    ownerLease,
+    owner,
+    cancelControl,
+    scheduler,
+    abortChild: (lease, reason) => {
+      liveActions.get(lease.admission_id)?.controller.abort(reason);
+      liveWorker?.cancel(reason);
+    },
+    reapChild: async (lease) => { await liveActions.get(lease.admission_id)?.completion; },
+    reconcileChild: async (lease) => {
+      const action = liveActions.get(lease.admission_id);
+      if (action) await ledger.reconcileCall(action.callId);
+    },
+  });
+  const cancelSocket = new CancelSocket(cancelControl, {
     socketPath: cancelAuthority.socket_path,
-    peerUid: options.cancelPeerUid,
+    ...(options.cancelPeerUid === undefined ? {} : { peerUid: options.cancelPeerUid }),
     requestCancel: async (request) => {
       const outcome = await runControl.requestCancel(request);
       if (outcome.won) {
@@ -225,11 +242,20 @@ export async function runV2Script(options: V2ScriptRunOptions): Promise<RunRecor
       }
       return outcome;
     },
-  }) : undefined;
-  await cancelSocket?.start();
+    requestLocalCancel: async (request) => {
+      const outcome = await runControl.requestLocalCancel(request);
+      if (outcome.won) {
+        cancelRequested = true;
+        liveWorker?.cancel(outcome.intent.reason);
+        await liveWorker?.result;
+      }
+      return outcome;
+    },
+  });
+  await cancelSocket.start();
   await events.append({ type: 'run/lease-acquired', payload: { state: 'executing', manifest_digest: manifestDigest } });
-  const actionStates: Record<string, 'prepared' | 'dispatch_intent' | 'running' | 'observed' | 'checkpointed' | 'done'> = {};
-  const taskStates: Record<string, 'pending' | 'ready' | 'running' | 'done' | 'blocked' | 'failed' | 'cancelled' | 'finalized'> = Object.fromEntries(options.manifest.tasks.map((task) => [task.task_id, 'ready']));
+  const actionStates: Record<string, import('../security/capability.js').ActionState> = {};
+  const taskStates: Record<string, import('../security/capability.js').TaskState> = Object.fromEntries(options.manifest.tasks.map((task) => [task.task_id, 'ready']));
   const actionMap = new Map(options.manifest.actions.map((action) => [action.action_id, action]));
   const actionObservations = new Map<string, TaskActionObservation[]>();
   const operator = new V2GitOperator({ project: options.project, runId: options.runId, manifestDigest, fencingEpoch: record.fencing_epoch, targetBranch: options.manifest.project.target_branch });
@@ -244,8 +270,8 @@ export async function runV2Script(options: V2ScriptRunOptions): Promise<RunRecor
       if (!action) throw new Error(`ACTION_NOT_AUTHORIZED: ${descriptor.action_id}`);
       const worktree = taskWorktrees.get(action.task_id);
       if (!worktree) throw new Error(`TASK_NOT_AUTHORIZED: ${action.task_id}`);
-      const admission = admitAction({ manifest: options.manifest, action_id: action.action_id, run_id: options.runId, cwd: worktree.path, attempt: 1, task_states: taskStates, action_states: actionStates, active_hosts: [options.manifest.host] });
-      const lease = await scheduler.submit({ admission_id: admission.attempt_id, call_ordinal: descriptor.call_ordinal, action_id: action.action_id, task_id: action.task_id, read_scope: action.read_scope, write_scope: action.write_scope, ...(action.concurrency_group_id === undefined ? {} : { concurrency_group_id: action.concurrency_group_id }) });
+      const controlled = await runControl.admitAction({ manifest: options.manifest, action_id: action.action_id, run_id: options.runId, cwd: worktree.path, attempt: 1, task_states: taskStates, action_states: actionStates, active_hosts: [options.manifest.host] });
+      const { admission, lease } = controlled;
       await ledger.prepareCall({ callId: descriptor.call_id, callOrdinal: descriptor.call_ordinal, descriptor: descriptor as unknown as import('./ledger.js').CallDescriptor });
       await ledger.dispatchIntent(descriptor.call_id);
       actionStates[action.action_id] = 'dispatch_intent';
@@ -258,6 +284,7 @@ export async function runV2Script(options: V2ScriptRunOptions): Promise<RunRecor
       const beforeAudit = await captureWorktreeAudit(worktree.path);
       const result = invokeHost(options.manifest.host, 'Execute approved action', packet, { signal: controller.signal, sandbox: new BrokeredSandboxProvider(undefined, { projectRoot: options.project, writePaths: action.write_scope.map((path) => join(worktree.path, path)) }) }) as unknown as Promise<CodingAgentResult>;
       const observed = result.then(async (value) => {
+        if (lease.released) throw new ControlError('CANCEL_CONTROL_STALE', 'action was cancelled before the host result was observed');
         const typed = value as unknown as import('../generated/coding-agent-result.schema.js').CodingAgentResult;
         await ledger.observeCall(descriptor.call_id, typed);
         const changedPaths = value.changed_paths.filter((path): path is string => typeof path === 'string');
@@ -267,7 +294,8 @@ export async function runV2Script(options: V2ScriptRunOptions): Promise<RunRecor
         if (violations.length) {
           await events.append({ type: 'call/audit-failed', call_id: descriptor.call_id, task_id: action.task_id, payload: { action_id: action.action_id, state: 'blocked', reason: `changed paths outside scope: ${violations.join(', ')}` } });
           await events.append({ type: 'call/reconcile-required', call_id: descriptor.call_id, task_id: action.task_id, payload: { action_id: action.action_id, state: 'reconcile_required', reason: 'action result failed scope audit' } });
-          lease.release('blocked');
+          await runControl.settleAction(lease, 'blocked');
+          liveActions.delete(lease.admission_id);
           throw new Error(`ACTION_SCOPE_VIOLATION: ${violations.join(', ')}`);
         }
         await ledger.checkpointCall(descriptor.call_id, changedPaths);
@@ -277,9 +305,17 @@ export async function runV2Script(options: V2ScriptRunOptions): Promise<RunRecor
           state: value.status === 'done' ? 'checkpointed' : 'failed',
           result: { status: value.status, tests: value.tests.filter((test): test is { command: string; status: 'passed' | 'failed' | 'skipped' } => typeof test === 'object' && test !== null && typeof (test as { command?: unknown }).command === 'string' && ['passed', 'failed', 'skipped'].includes((test as { status?: unknown }).status as string)) },
         }]);
-        lease.release(value.status === 'done' ? 'completed' : 'blocked');
+        await runControl.settleAction(lease, value.status === 'done' ? 'completed' : 'blocked', value.status === 'done' ? () => undefined : async () => { await ledger.reconcileCall(descriptor.call_id); });
+        liveActions.delete(lease.admission_id);
         return value;
-      }, (error: unknown) => { lease.release('blocked'); throw error; });
+      }, async (error: unknown) => {
+        if (!lease.released) {
+          await runControl.settleAction(lease, 'blocked', async () => { await ledger.reconcileCall(descriptor.call_id); });
+          liveActions.delete(lease.admission_id);
+        }
+        throw error;
+      });
+      liveActions.set(lease.admission_id, { callId: descriptor.call_id, controller, completion: observed.then(() => undefined, () => undefined) });
       return { id: descriptor.call_id, result: observed, dispose: () => Promise.resolve(controller.abort('disposed')) };
     },
   };
@@ -327,7 +363,7 @@ export async function runV2Script(options: V2ScriptRunOptions): Promise<RunRecor
   await saveV2Run(options.project, record);
   if (record.run_state !== 'paused') await ownerLease.release(owner);
   await liveWorker.dispose();
-  await cancelSocket?.close();
+  await cancelSocket.close();
   return record;
 }
 
@@ -413,12 +449,16 @@ export async function cancelV2Run(project: string, runId: string): Promise<RunRe
   const authority = JSON.parse(await readFile(authorityPath, 'utf8')) as import('./control.js').CancelAuthority;
   if (authority.run_id !== runId || authority.fencing_epoch !== record.fencing_epoch || authority.owner_uid === undefined || !authority.owner_identity_digest) throw new ControlError('CANCEL_UNAUTHORIZED', 'cancel authority is incomplete');
   const reason = 'Cancelled by user';
+  const localCapability = await readLocalCancelCapability(project, runId, record.fencing_epoch);
+  const request = { runId, fencingEpoch: record.fencing_epoch, nonce: authority.challenge_nonce, reason, identityDigest: authority.owner_identity_digest, localCapability, proof: cancelProof(authority.challenge_nonce, runId, record.fencing_epoch, cancelReasonDigest(reason)) };
   let outcome;
   try {
-    outcome = await requestCancelSocket(authority.socket_path, { runId, fencingEpoch: record.fencing_epoch, nonce: authority.challenge_nonce, reason, identityDigest: authority.owner_identity_digest, proof: cancelProof(authority.challenge_nonce, runId, record.fencing_epoch, cancelReasonDigest(reason)) });
+    outcome = await requestCancelSocket(authority.socket_path, request);
   } catch (error) {
-    if (error instanceof ControlError) throw error;
-    throw new ControlError('CANCEL_UNAUTHORIZED', `cancel socket is unavailable: ${error instanceof Error ? error.message : String(error)}`);
+    if (error instanceof ControlError && error.code !== 'CANCEL_UNAUTHORIZED') throw error;
+    const control = new CancelControl({ root: project, runId, owner: { osUid: authority.owner_uid, identityDigest: authority.owner_identity_digest }, fencingEpoch: record.fencing_epoch, nonce: authority.challenge_nonce, socketPath: authority.socket_path, localCapability });
+    outcome = await control.requestLocalCancel(request);
+    if (outcome.won) return publishDirectCancellation(project, record, outcome.intent.reason);
   }
   if (!outcome.won) return projectV2Run(project, runId);
   const deadline = Date.now() + 10_000;
@@ -428,6 +468,19 @@ export async function cancelV2Run(project: string, runId: string): Promise<RunRe
     await new Promise((resolvePromise) => setTimeout(resolvePromise, 25));
   }
   throw new ControlError('CANCEL_CONTROL_STALE', 'owner accepted cancellation but did not publish a terminal state');
+}
+
+async function publishDirectCancellation(project: string, record: RunRecordV2, reason: string): Promise<RunRecordV2> {
+  const events = v2EventLog(project, record.run_id, record.fencing_epoch);
+  await events.append({ type: 'run/cancel-requested', payload: { state: 'cancelling', reason } });
+  await events.append({ type: 'run/cancelling', payload: { state: 'cancelling', reason } });
+  const knownResources = record.resources.every((resource) => resource !== null && typeof resource === 'object' && (resource as { resource_type?: unknown }).resource_type === 'owned-git-resource');
+  record.run_state = knownResources ? 'cancelled' : 'cancelled-with-retained-resources';
+  record.stop_reason = 'cancelled';
+  if (!knownResources) await events.append({ type: 'resource/retained', payload: { state: record.run_state, reason: 'unknown resources retained during cancellation' } });
+  await events.append({ type: 'run/cancelled', payload: { state: record.run_state, stop_reason: 'cancelled', reason } });
+  await saveV2Run(project, record);
+  return record;
 }
 
 export async function runV2Lifecycle(options: V2LifecycleOptions): Promise<V2LifecycleResult> {

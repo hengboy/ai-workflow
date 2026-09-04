@@ -882,6 +882,18 @@
         },
         {
           "file": "src/runtime/control.ts",
+          "name": "createLocalCancelCapability",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/control.ts",
+          "name": "readLocalCancelCapability",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/control.ts",
           "name": "CancelSocketOptions",
           "kind": "interface",
           "visibility": "public"
@@ -1959,6 +1971,11 @@
         {
           "kind": "imports",
           "from": "src/runtime/runner.ts#runV2Script",
+          "to": "src/runtime/control.ts#createLocalCancelCapability"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/runner.ts#runV2Script",
           "to": "src/runtime/control.ts#CancelControl"
         },
         {
@@ -2000,6 +2017,11 @@
           "kind": "imports",
           "from": "src/runtime/runner.ts#runV2Script",
           "to": "src/runtime/protocol.ts#CodingAgentResult"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/runner.ts#runV2Script",
+          "to": "src/runtime/control.ts#ControlError"
         },
         {
           "kind": "imports",
@@ -2079,7 +2101,7 @@
         {
           "kind": "imports",
           "from": "src/runtime/runner.ts#cancelV2Run",
-          "to": "src/runtime/control.ts#requestCancelSocket"
+          "to": "src/runtime/control.ts#readLocalCancelCapability"
         },
         {
           "kind": "imports",
@@ -2090,6 +2112,16 @@
           "kind": "imports",
           "from": "src/runtime/runner.ts#cancelV2Run",
           "to": "src/runtime/control.ts#cancelReasonDigest"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/runner.ts#cancelV2Run",
+          "to": "src/runtime/control.ts#requestCancelSocket"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/runner.ts#cancelV2Run",
+          "to": "src/runtime/control.ts#CancelControl"
         },
         {
           "kind": "imports",

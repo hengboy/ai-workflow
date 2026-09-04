@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { connect } from 'node:net';
@@ -230,21 +230,70 @@ describe('replay and resume', () => {
     await forged.close();
   });
 
-  it('routes an authorized live cancel through the owner socket to stop the Worker', async () => {
+  it('routes a local owner capability through the live socket to stop the Worker', async () => {
     const project = await mkdtemp(join(tmpdir(), 'ai-workflow-v2-live-cancel-'));
     await gitInit(project);
     const plan = await frozenPlan(project);
     await writeFile(join(plan, 'workflow.js'), 'await new Promise(() => {});\n');
     const manifest = await generateManifest(plan, 'codex');
-    const uid = process.getuid?.();
-    if (uid === undefined) throw new Error('local uid is unavailable');
-    const run = runV2Script({ project, runId: 'run-live-cancel', manifest, script: await readFile(join(plan, 'workflow.js'), 'utf8'), args: {}, scriptDigest: manifest.script.bytes_digest, argsDigest: manifest.args.bytes_digest, cancelPeerUid: () => uid });
+    const run = runV2Script({ project, runId: 'run-live-cancel', manifest, script: await readFile(join(plan, 'workflow.js'), 'utf8'), args: {}, scriptDigest: manifest.script.bytes_digest, argsDigest: manifest.args.bytes_digest });
     await new Promise((resolvePromise) => setTimeout(resolvePromise, 250));
 
     const authority = JSON.parse(await readFile(join(project, '.ai-workflow/runs/run-live-cancel/control/cancel-authority.json'), 'utf8')) as { socket_path?: string };
     expect(authority.socket_path).toEqual(expect.any(String));
     await expect(cancelV2Run(project, 'run-live-cancel')).resolves.toMatchObject({ run_state: 'cancelled' });
     await expect(run).resolves.toMatchObject({ run_state: 'cancelled' });
+  });
+
+  it('aborts, reaps and reconciles a live fake-host child before publishing cancellation', async () => {
+    const project = await mkdtemp(join(tmpdir(), 'ai-workflow-v2-child-cancel-'));
+    const bin = await mkdtemp(join(tmpdir(), 'ai-workflow-v2-child-host-'));
+    await gitInit(project);
+    const plan = await frozenPlan(project);
+    await writeFile(join(plan, 'workflow.js'), 'await agent("hold", { actionId: "task-001-example-explore", callId: "call/hold" });\n');
+    await writeFile(join(bin, 'codex'), '#!/bin/sh\ntrap "exit 0" TERM INT\nwhile :; do sleep 1; done\n');
+    await chmod(join(bin, 'codex'), 0o755);
+    const manifest = await generateManifest(plan, 'codex');
+    const originalPath = process.env.PATH;
+    process.env.PATH = `${bin}:${originalPath ?? ''}`;
+    try {
+      const run = runV2Script({ project, runId: 'run-child-cancel', manifest, script: await readFile(join(plan, 'workflow.js'), 'utf8'), args: {}, scriptDigest: manifest.script.bytes_digest, argsDigest: manifest.args.bytes_digest });
+      await waitFor(async () => (await readFile(join(project, '.ai-workflow/runs/run-child-cancel/events.jsonl'), 'utf8')).includes('"call/running"'));
+
+      await expect(cancelV2Run(project, 'run-child-cancel')).resolves.toMatchObject({ run_state: 'cancelled' });
+      await expect(run).resolves.toMatchObject({ run_state: 'cancelled' });
+      const projected = await projectV2Run(project, 'run-child-cancel');
+      expect(projected.call_ledger).toEqual(expect.arrayContaining([expect.objectContaining({ call_id: 'call/hold', state: 'reconcile_required' })]));
+      await expect(readFile(join(project, '.ai-workflow/runs/run-child-cancel/events.jsonl'), 'utf8')).resolves.toMatch(/call\/reconcile-required/);
+    } finally {
+      process.env.PATH = originalPath;
+    }
+  });
+
+  it('fails closed when the local owner capability is not private to the cancelling user', async () => {
+    const project = await mkdtemp(join(tmpdir(), 'ai-workflow-v2-local-capability-'));
+    await gitInit(project);
+    const plan = await frozenPlan(project);
+    const manifest = await generateManifest(plan, 'codex');
+    const record = await runV2Script({ project, runId: 'run-local-capability', manifest, script: await readFile(join(plan, 'workflow.js'), 'utf8'), args: {}, scriptDigest: manifest.script.bytes_digest, argsDigest: manifest.args.bytes_digest });
+    const capabilityPath = join(project, '.ai-workflow/runs', record.run_id, 'control', 'owner-capability.json');
+    await chmod(capabilityPath, 0o644);
+
+    await expect(cancelV2Run(project, record.run_id)).rejects.toMatchObject({ code: 'CANCEL_UNAUTHORIZED' });
+    await expect(projectV2Run(project, record.run_id)).resolves.toMatchObject({ run_state: 'paused' });
+  });
+
+  it('retains unknown resources when a paused run is cancelled through its local owner capability', async () => {
+    const project = await mkdtemp(join(tmpdir(), 'ai-workflow-v2-retained-capability-'));
+    await gitInit(project);
+    const plan = await frozenPlan(project);
+    const manifest = await generateManifest(plan, 'codex');
+    const record = await runV2Script({ project, runId: 'run-retained-capability', manifest, script: await readFile(join(plan, 'workflow.js'), 'utf8'), args: {}, scriptDigest: manifest.script.bytes_digest, argsDigest: manifest.args.bytes_digest });
+    record.resources = [{ resource_id: 'unknown-resource' }];
+    await saveV2Run(project, record);
+
+    await expect(cancelV2Run(project, record.run_id)).resolves.toMatchObject({ run_state: 'cancelled-with-retained-resources', resources: [{ resource_id: 'unknown-resource' }] });
+    await expect(readFile(join(project, '.ai-workflow/runs', record.run_id, 'events.jsonl'), 'utf8')).resolves.toMatch(/resource\/retained/);
   });
 
   it('records a durable skip control for a conditional task in the approved script', async () => {
@@ -304,4 +353,15 @@ async function socketRequest(socketPath: string, request: object): Promise<unkno
     client.on('error', reject);
     client.on('connect', () => client.write(`${JSON.stringify(request)}\n`));
   });
+}
+
+async function waitFor(predicate: () => Promise<boolean>, timeoutMs = 5_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      if (await predicate()) return;
+    } catch { /* state is not written yet */ }
+    await new Promise((resolvePromise) => setTimeout(resolvePromise, 25));
+  }
+  throw new Error('timed out waiting for live child');
 }
