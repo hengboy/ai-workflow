@@ -307,23 +307,29 @@ export class V2GitOperator {
     const toRemove: GitResourceReceipt[] = [];
     for (const resource of resources) {
       this.assertReceipt(resource);
-      const entry = entries.find((candidate) => candidate.path === canonicalPath(resolve(this.options.project, resource.canonical_path!)) || candidate.path === canonicalPath(resolve(projectPath, resource.canonical_path!)));
+      const resourcePath = resource.canonical_path;
+      if (!resourcePath) continue;
+      const entry = entries.find((candidate) => candidate.path === canonicalPath(resolve(this.options.project, resourcePath)) || candidate.path === canonicalPath(resolve(projectPath, resourcePath)));
       if (!entry) continue;
       if (entry.branch !== resource.branch) throw new V2GitOperatorError('RESOURCE_TAMPERED', `worktree branch does not match receipt: ${resource.resource_id}`);
-      const status = await git(resource.canonical_path!.startsWith('.') ? resolve(this.options.project, resource.canonical_path!) : canonicalPath(resource.canonical_path!), ['status', '--porcelain=v1', '--untracked-files=all']);
+      const status = await git(resourcePath.startsWith('.') ? resolve(this.options.project, resourcePath) : canonicalPath(resourcePath), ['status', '--porcelain=v1', '--untracked-files=all']);
       if (status) throw new V2GitOperatorError('RESOURCE_DIRTY', `owned resource is dirty: ${resource.resource_id}`);
       toRemove.push(resource);
     }
     for (const resource of toRemove) {
       const tx = transactionId('cleanup', resource.resource_id);
       await this.emit('git/cleanup-intent', { resource_id: resource.resource_id, path: resource.canonical_path ?? '', branch: resource.branch }, tx);
-      await this.withGitMutation(() => git(this.options.project, ['worktree', 'remove', resource.canonical_path! ]));
+      const resourcePath = resource.canonical_path;
+      if (!resourcePath) continue;
+      await this.withGitMutation(() => git(this.options.project, ['worktree', 'remove', resourcePath]));
       await this.emit('git/cleanup-observed', { resource_id: resource.resource_id, path: resource.canonical_path ?? '', branch: resource.branch }, tx);
     }
     const branches = this.resources.filter((resource) => resource.branch && !resource.canonical_path);
     for (const resource of branches) {
-      if (!resource.branch!.startsWith(`ai-workflow/v2/${safeName(this.options.runId)}/`)) throw new V2GitOperatorError('RESOURCE_TAMPERED', `branch is outside ownership namespace: ${resource.resource_id}`);
-      try { await this.withGitMutation(() => git(this.options.project, ['branch', '-D', resource.branch!])); } catch (error) {
+      const branch = resource.branch;
+      if (!branch) continue;
+      if (!branch.startsWith(`ai-workflow/v2/${safeName(this.options.runId)}/`)) throw new V2GitOperatorError('RESOURCE_TAMPERED', `branch is outside ownership namespace: ${resource.resource_id}`);
+      try { await this.withGitMutation(() => git(this.options.project, ['branch', '-D', branch])); } catch (error) {
         if (!String(error).includes('not found')) throw error;
       }
     }
@@ -340,7 +346,7 @@ export class V2GitOperator {
     if (await exists(path)) throw new V2GitOperatorError('RESOURCE_TAMPERED', `resource path already exists: ${path}`);
     await this.withGitMutation(() => git(this.options.project, ['worktree', 'add', '-b', branch, path, base]));
     const createdHead = await git(path, ['rev-parse', 'HEAD']);
-    const commonDir = await this.gitCommonDir();
+    await this.gitCommonDir();
     const ownerTrailer = `AI-Workflow-Resource: ${worktreeId}`;
     const resource = this.receipt(worktreeId, worktreeKind, path, branch, baseRef, createdHead, ownerTrailer, tx, objectDigest(intent));
     const branchResource = this.receipt(branchResourceId, branchKind, undefined, branch, baseRef, createdHead, ownerTrailer, tx, objectDigest(intent));
@@ -385,7 +391,9 @@ export class V2GitOperator {
 
   private async inspectReceipt(resource: GitResourceReceipt): Promise<ReconcileResult> {
     if (!resource.canonical_path) {
-      try { const head = await git(this.options.project, ['rev-parse', resource.branch!]); if (!head) throw new Error('missing'); return { resource_id: resource.resource_id, state: 'observed', branch: resource.branch }; }
+      const branch = resource.branch;
+      if (!branch) throw new V2GitOperatorError('RESOURCE_TAMPERED', `branch is missing: ${resource.resource_id}`);
+      try { const head = await git(this.options.project, ['rev-parse', branch]); if (!head) throw new Error('missing'); return { resource_id: resource.resource_id, state: 'observed', branch }; }
       catch { return { resource_id: resource.resource_id, state: 'already-cleaned', branch: resource.branch }; }
     }
     const entries = await this.worktrees();

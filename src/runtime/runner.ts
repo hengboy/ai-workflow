@@ -195,7 +195,9 @@ export async function runV2Lifecycle(options: V2LifecycleOptions): Promise<V2Lif
     const worktree = tasks.get(task.task_id)?.worktree;
     if (!worktree) throw new Error(`Missing task worktree: ${task.task_id}`);
     const finalized = await coordinator.finalizeTask({ taskId: task.task_id, controlId: `finalize-${task.task_id}`, controlOrdinal: tasks.size, activation: task.activation, requiredActionIds: task.required_actions, actions: actionObservations.get(task.task_id) ?? [], predecessorStates, finalizationMode: task.finalization_mode, taskWorktree: worktree, planWorktree: plan, writeScope: options.manifest.actions.filter((action) => action.task_id === task.task_id).flatMap((action) => action.write_scope), operator });
-    tasks.set(task.task_id, { worktree: tasks.get(task.task_id)!.worktree, state: finalized.state });
+    const currentTask = tasks.get(task.task_id);
+    if (!currentTask) throw new Error(`Missing task worktree: ${task.task_id}`);
+    tasks.set(task.task_id, { worktree: currentTask.worktree, state: finalized.state });
     trace.push(`task-${task.task_id}:${finalized.state}`);
   }
   const gates = new GateCoordinator({ directory, runId: options.runId, fencingEpoch, manifestDigest: options.manifest.manifest_digest });
@@ -216,7 +218,11 @@ export async function runV2Lifecycle(options: V2LifecycleOptions): Promise<V2Lif
   await saveV2Run(options.project, record);
   trace.push('run:complete');
   const gateIds = ['task-closure', 'plan-validation', 'standards-review', 'spec-review', 'repair-closure', 'baseline-stable', 'integration'] as const;
-  const gateEntries = await Promise.all(gateIds.map(async (gateId) => [gateId, (await gates.readGate(gateId))!] as const));
+  const gateEntries = await Promise.all(gateIds.map(async (gateId) => {
+    const receipt = await gates.readGate(gateId);
+    if (!receipt) throw new Error(`Missing gate receipt: ${gateId}`);
+    return [gateId, receipt] as const;
+  }));
   return { run_state: record.run_state, gates: Object.fromEntries(gateEntries), integration, trace };
 }
 

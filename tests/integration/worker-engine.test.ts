@@ -69,7 +69,7 @@ describe('worker workflow engine lifecycle', () => {
     const run = start(`await new Promise(() => {}); return 'never';`, undefined);
     await run.terminateWorkerForTest();
 
-    await expect(run.result).resolves.toMatchObject({ stop_reason: 'error', error: expect.stringMatching(/worker/i) });
+    await expect(run.result).resolves.toMatchObject({ stop_reason: 'error', error: expect.stringMatching(/worker/i) as unknown });
     await run.dispose();
   });
 
@@ -92,7 +92,7 @@ describe('worker workflow engine lifecycle', () => {
   it('returns an error result for an unserializable workflow value', async () => {
     const run = start(`return { bad: undefined };`);
 
-    await expect(run.result).resolves.toMatchObject({ stop_reason: 'error', error: expect.stringMatching(/undefined/i) });
+    await expect(run.result).resolves.toMatchObject({ stop_reason: 'error', error: expect.stringMatching(/undefined/i) as unknown });
     await run.dispose();
   });
 

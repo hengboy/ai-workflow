@@ -35,7 +35,8 @@ describe('v2 CLI artifacts', () => {
     await gitInit(project);
     const plan = await frozenPlan(project);
     const generated = await workflowCli(project, ['workflow', 'generate', '--plan', plan, '--host', 'codex']);
-    const workflow = JSON.parse(generated.stdout).workflow as string;
+    const generatedOutput = JSON.parse(generated.stdout) as { workflow: string };
+    const workflow = generatedOutput.workflow;
 
     const validation = await workflowCli(project, ['workflow', 'validate', workflow, '--project', project]);
     expect(JSON.parse(validation.stdout)).toMatchObject({ valid: true });
@@ -53,7 +54,8 @@ describe('v2 CLI artifacts', () => {
     await gitInit(project);
     const plan = await frozenPlan(project);
     const generated = await workflowCli(project, ['workflow', 'generate', '--plan', plan, '--host', 'codex']);
-    const workflow = JSON.parse(generated.stdout).workflow as string;
+    const generatedOutput = JSON.parse(generated.stdout) as { workflow: string };
+    const workflow = generatedOutput.workflow;
     await workflowCli(project, ['workflow', 'approve', workflow, '--project', project]);
 
     const started = await workflowCli(project, ['run', 'start', '--workflow', workflow, '--host', 'codex', '--project', project]);
@@ -73,7 +75,8 @@ describe('v2 CLI artifacts', () => {
     await gitInit(project);
     const plan = await frozenPlan(project);
     const generated = await workflowCli(project, ['workflow', 'generate', '--plan', plan, '--host', 'codex']);
-    const workflow = JSON.parse(generated.stdout).workflow as string;
+    const generatedOutput = JSON.parse(generated.stdout) as { workflow: string };
+    const workflow = generatedOutput.workflow;
     await workflowCli(project, ['workflow', 'approve', workflow, '--project', project]);
     await writeFile(join(plan, 'workflow.args.json'), '{"changed":true}\n');
 

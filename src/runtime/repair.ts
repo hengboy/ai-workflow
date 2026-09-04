@@ -115,7 +115,7 @@ export class RepairCoordinator {
     if (this.startReceipt?.receipt_digest !== start.receipt_digest || this.currentState !== 'started') throw new RepairError('REPAIR_RECEIPT_TAMPERED', 'repair start receipt is not the current host receipt');
     if (writeScope.some((path) => !start.findings.some((finding) => !finding.path || path === finding.path || path.startsWith(`${finding.path}/`)))) throw new RepairError('REPAIR_SCOPE_INVALID', 'repair changed path is outside finding scope');
     const commit = await this.options.operator.commitTask(start.worktree, 'plan-aggregate-repair', writeScope);
-    const plan = await this.planWorktree();
+    const plan = this.planWorktree();
     const planHead = await this.options.operator.mergeTask(plan, commit.commit);
     const receipt: RepairCompletionReceipt = { repair_transaction_id: start.repair_transaction_id, state: 'completed', findings: start.findings, repairCommit: commit.commit, planHead, receipt_digest: '' };
     receipt.receipt_digest = objectDigest({ ...receipt, receipt_digest: undefined });
@@ -159,7 +159,7 @@ export class RepairCoordinator {
 
   private async planHead(): Promise<string> { return this.options.operator.resources.find((resource) => resource.kind === 'plan-worktree')?.created_head ?? await this.options.operator.reconcile().then(() => this.options.operator.resources.find((resource) => resource.kind === 'plan-worktree')?.created_head ?? (() => { throw new RepairError('REPAIR_STATE_INVALID', 'plan worktree receipt is missing'); })()); }
 
-  private async planWorktree(): Promise<V2Worktree> {
+  private planWorktree(): V2Worktree {
     const resource = this.options.operator.resources.find((candidate) => candidate.kind === 'plan-worktree');
     if (!resource?.canonical_path || !resource.branch) throw new RepairError('REPAIR_STATE_INVALID', 'plan worktree receipt is missing');
     return { path: join(this.options.project, resource.canonical_path), branch: resource.branch, base: resource.base_ref, resource, branchResource: this.options.operator.resources.find((candidate) => candidate.kind === 'plan-branch' && candidate.branch === resource.branch) ?? resource };

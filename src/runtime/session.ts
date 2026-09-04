@@ -3,7 +3,7 @@ import type { MessagePort } from 'node:worker_threads';
 import { MessageLedger, ProtocolError, encodeMessage, type HostToWorkerMessage, type WorkerToHostMessage } from './protocol.js';
 import { WorkerRuntime, type WorkerRuntimeOptions } from './worker-runtime.js';
 
-export interface WorkerInit extends Omit<WorkerRuntimeOptions, 'send'> {}
+export type WorkerInit = Omit<WorkerRuntimeOptions, 'send'>;
 
 type WorkerMessageBody = WorkerToHostMessage extends infer Message
   ? Message extends WorkerToHostMessage

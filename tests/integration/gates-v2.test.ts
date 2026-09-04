@@ -89,7 +89,7 @@ describe('v2 mandatory gates', () => {
     const initial = (await gitBaseline(project)).head!;
     const runId = 'repair-once';
     const operator = new V2GitOperator({ project, runId, manifestDigest: digest, fencingEpoch: 1 });
-    const plan = await operator.createPlanWorktree({ baseBranch: 'main', expectedHead: initial });
+    await operator.createPlanWorktree({ baseBranch: 'main', expectedHead: initial });
     const repair = new RepairCoordinator({ project, runId, manifestDigest: digest, fencingEpoch: 1, operator });
     const findings: ReviewFindingInput[] = [{ sourceGate: 'standards-review', severity: 'error', message: 'missing validation', path: 'src/output.ts', applicableActionIds: ['task-001-test'] }];
 
@@ -113,7 +113,7 @@ describe('v2 mandatory gates', () => {
     const initial = (await gitBaseline(project)).head!;
     const runId = 'repair-budget';
     const operator = new V2GitOperator({ project, runId, manifestDigest: digest, fencingEpoch: 1 });
-    const plan = await operator.createPlanWorktree({ baseBranch: 'main', expectedHead: initial });
+    await operator.createPlanWorktree({ baseBranch: 'main', expectedHead: initial });
     const repair = new RepairCoordinator({ project, runId, manifestDigest: digest, fencingEpoch: 1, operator });
     const started = await repair.startRepair([
       { sourceGate: 'standards-review', severity: 'error', message: 'one', applicableActionIds: ['a'] },
@@ -130,7 +130,7 @@ describe('v2 mandatory gates', () => {
     const initial = (await gitBaseline(project)).head!;
     const runId = 'repair-replay';
     const operator = new V2GitOperator({ project, runId, manifestDigest: digest, fencingEpoch: 1 });
-    const plan = await operator.createPlanWorktree({ baseBranch: 'main', expectedHead: initial });
+    await operator.createPlanWorktree({ baseBranch: 'main', expectedHead: initial });
     const repair = new RepairCoordinator({ project, runId, manifestDigest: digest, fencingEpoch: 1, operator });
     const started = await repair.startRepair([{ sourceGate: 'standards-review', severity: 'error', message: 'replay me', path: 'output.txt', applicableActionIds: ['task-001-test'] }]);
     await writeFile(join(started.worktree.path, 'output.txt'), 'replayed repair\n');

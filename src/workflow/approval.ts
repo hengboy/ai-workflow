@@ -121,5 +121,12 @@ export class TaskClosureCoordinator {
     return result as TaskClosureReceipt;
   }
 
-  async replayFinalize(controlId: string): Promise<ControlLedgerEntry> { return this.options.ledger.controls.get(controlId) ?? await this.options.ledger.replayControl(controlId).then(() => this.options.ledger.controls.get(controlId)!); }
+  async replayFinalize(controlId: string): Promise<ControlLedgerEntry> {
+    const existing = this.options.ledger.controls.get(controlId);
+    if (existing) return existing;
+    await this.options.ledger.replayControl(controlId);
+    const replayed = this.options.ledger.controls.get(controlId);
+    if (!replayed) throw new Error(`Missing replayed control: ${controlId}`);
+    return replayed;
+  }
 }

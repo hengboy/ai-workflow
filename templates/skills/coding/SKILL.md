@@ -23,6 +23,11 @@ Run `ai-workflow plan validate --plan <directory>` before generating the artifac
 Do not silently repair frozen inputs. Return to planning or task splitting when the
 requirements, task graph, host or scope must change.
 
+Use the shared frozen-plan digest protocol: validate the frozen plan and its
+`read_scope` before generating any coding artifact. A task's `read_scope` must be
+fixed context plus exact locator paths; it must not be `src/`, `tests/` or the
+project root.
+
 ## Navigation-first context
 
 Read `MEMORY.md`, `.ai-workflow/index/navigation.json` and
@@ -62,7 +67,7 @@ Explain and validate before asking for explicit user approval:
 
 `ai-workflow workflow explain <directory>/workflow.json`
 
-`ai-workflow workflow validate <directory>/workflow.json --project <project>`
+`ai-workflow workflow validate <directory>/workflow.json --project <absolute-project-root>`
 
 After confirmation, run `ai-workflow workflow approve <directory>/workflow.json`.
 The v2 receipt binds the manifest, script, args, input artifacts, profile route,
@@ -81,7 +86,7 @@ If the required brokered sandbox capability is unavailable, fail closed.
 
 Start only the approved artifact:
 
-`ai-workflow run start --workflow <directory>/workflow.json --host <host> --project <project>`
+`ai-workflow run start --workflow <directory>/workflow.json --host <host> --project <absolute-project-root>`
 
 v2 resources use only these paths:
 
@@ -98,13 +103,13 @@ reset, clean, stash or remote mutation is allowed.
 
 Use durable evidence for `status`, `resume`, `cancel` and `cleanup`:
 
-`ai-workflow run status <runId> --project <project>`
+`ai-workflow run status <runId> --project <absolute-project-root>`
 
-`ai-workflow run resume <runId> --project <project>`
+`ai-workflow run resume <runId> --project <absolute-project-root>`
 
-`ai-workflow run cancel <runId> --project <project>`
+`ai-workflow run cancel <runId> --project <absolute-project-root>`
 
-`ai-workflow run cleanup <runId> --project <project>`
+`ai-workflow run cleanup <runId> --project <absolute-project-root>`
 
 Resume only after checkpoint, digest, baseline, resource and idempotency evidence is
 reconciled. Cancel stops new scheduling and preserves evidence. Cleanup removes only
