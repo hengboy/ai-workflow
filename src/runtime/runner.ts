@@ -210,6 +210,12 @@ export async function resumeV2Run(project: string, runId: string, fingerprints?:
   const record = await projectV2Run(project, runId);
   if (record.run_state !== 'paused') throw new Error('Only paused v2 runs may resume');
   const log = v2EventLog(project, runId, record.fencing_epoch);
+  if (!fingerprints) {
+    await log.append({ type: 'resume/diverged', payload: { state: 'paused', reason: 'complete resume fingerprint and authority are required' } });
+    record.run_state = 'paused';
+    await saveV2Run(project, record);
+    throw new Error('Complete resume fingerprint and authority are required');
+  }
   if (fingerprints) {
     try { assertResumeFingerprint(fingerprints.expected, fingerprints.current); }
     catch (error) {

@@ -108,4 +108,16 @@ describe('replay and resume', () => {
     await expect(cancelV2Run(directory, 'run-lifecycle')).resolves.toMatchObject({ run_state: 'cancelled', stop_reason: 'cancelled' });
     await expect(resumeV2Run(directory, 'run-lifecycle')).rejects.toThrow(/paused v2/i);
   });
+
+  it('keeps a paused v2 run paused when resume authority is incomplete', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'ai-workflow-v2-resume-guard-'));
+    const manifestDigest = 'sha256:' + 'c'.repeat(64);
+    await startV2Run({ project: directory, runId: 'run-guard', manifestDigest, fencingEpoch: 1 });
+    const log = new EventLog({ path: join(directory, '.ai-workflow/runs/run-guard/events.jsonl'), runId: 'run-guard', fencingEpoch: 1 });
+    await log.append({ type: 'run/error', payload: { state: 'paused', reason: 'worker exited' } });
+
+    await expect(resumeV2Run(directory, 'run-guard')).rejects.toThrow(/fingerprint|authority/i);
+    await expect(projectV2Run(directory, 'run-guard')).resolves.toMatchObject({ run_state: 'paused' });
+    await expect(log.read()).resolves.toMatchObject({ events: expect.arrayContaining([expect.objectContaining({ type: 'resume/diverged' })]) });
+  });
 });
