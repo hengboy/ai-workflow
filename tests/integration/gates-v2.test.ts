@@ -231,6 +231,31 @@ describe('v2 mandatory gates', () => {
     expect(result.trace).toEqual(expect.arrayContaining(['phase:script-phase', 'log:script-log']));
   });
 
+  it('does not bypass the lifecycle Worker with a direct execute callback', async () => {
+    const project = await temporary();
+    await gitInit(project);
+    const runId = 'runner-v2-no-direct-execute';
+    const manifest = {
+      manifest_digest: digest,
+      target_branch: 'main',
+      tasks: [{ task_id: 'task-001', activation: 'required' as const, finalization_mode: 'read-only-finalize' as const, required_actions: ['task-001-test'], depends_on: [] }],
+      actions: [{ action_id: 'task-001-test', task_id: 'task-001', operation: 'test', write_scope: [] }],
+    };
+    const baseline = (await gitBaseline(project)).head!;
+
+    const result = await runV2Lifecycle({
+      project,
+      runId,
+      manifest,
+      script: "phase('worker-only'); return { executed: true };",
+      execute: async () => { throw new Error('direct execute callback must not be used'); },
+      gateEvidence: { planValidation: { valid: true, errors: [] }, standardsReview: { findings: [] }, specReview: { findings: [] }, repairClosure: { closedFindingIds: [], expectedFindingIds: [] }, baseline: { expected: baseline, current: baseline }, integration: { observed: false, noFastForward: false } },
+    });
+
+    expect(result.run_state).toBe('paused');
+    expect(result.trace).toEqual(expect.arrayContaining(['phase:worker-only']));
+  });
+
   it('cancels a deferred v2 run and reconciles its durable projection without deleting resources', async () => {
     const project = await temporary();
     await gitInit(project);

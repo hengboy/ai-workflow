@@ -335,9 +335,19 @@ export async function runV2Lifecycle(options: V2LifecycleOptions): Promise<V2Lif
     const result = await worker.result;
     await worker.dispose();
     if (result.stop_reason !== 'completed') return lifecyclePaused(options.project, record, new GateCoordinator({ directory, runId: options.runId, fencingEpoch, manifestDigest: options.manifest.manifest_digest }), trace, result.error ?? 'approved lifecycle script failed', operator);
+    return lifecyclePaused(options.project, record, new GateCoordinator({ directory, runId: options.runId, fencingEpoch, manifestDigest: options.manifest.manifest_digest }), trace, 'approved script completed; host action closure evidence is required', operator);
   }
   const tasks = new Map<string, { worktree: V2Worktree; state: 'finalized' | 'committed' | 'skipped' }>();
   const actionObservations = new Map<string, TaskActionObservation[]>();
+  const lifecycleActions = options.manifest.actions;
+  const actionResults = new Map<string, V2LifecycleActionResult>();
+  if (options.script === undefined) {
+    const script = lifecycleActions.map((action, index) => `await agent(${JSON.stringify(`Execute ${action.action_id}`)}, { actionId: ${JSON.stringify(action.action_id)}, callId: ${JSON.stringify(`lifecycle/${index + 1}/${action.action_id}`)} });`).join('\n');
+    const worker = new CodingWorkflowEngine().start({ runId: options.runId, script, args: options.args ?? {}, manifestDigest: options.manifest.manifest_digest, scriptDigest: options.scriptDigest ?? options.manifest.manifest_digest, argsDigest: options.argsDigest ?? options.manifest.manifest_digest, actions: lifecycleActions.map((action) => ({ action_id: action.action_id, task_id: action.task_id })), childExecutor: { start: (descriptor) => Promise.resolve({ id: descriptor.call_id, result: (async () => { const action = lifecycleActions.find((candidate) => candidate.action_id === descriptor.action_id); if (!action) throw new Error(`ACTION_NOT_AUTHORIZED: ${descriptor.action_id}`); const task = options.manifest.tasks.find((candidate) => candidate.task_id === action.task_id); const worktree = task && (await operator.createTaskWorktree(plan, task.task_id)); if (!worktree) throw new Error(`TASK_NOT_AUTHORIZED: ${action.task_id}`); const result = await options.execute({ cwd: worktree.path, taskId: action.task_id, actionId: action.action_id }); actionResults.set(action.action_id, result); return { result_version: '2.0.0' as const, status: result.status, summary: result.status, changed_paths: result.changedPaths, evidence: [], tests: result.tests, findings: [], git_refs: [], support_requests: [] }; })(), dispose: () => Promise.resolve() }) }, observer: { phase: (title) => trace.push(`phase:${title}`), log: (message) => trace.push(`log:${message}`) }, disposeGraceMs: 5_000 });
+    const result = await worker.result;
+    await worker.dispose();
+    if (result.stop_reason !== 'completed') return lifecyclePaused(options.project, record, new GateCoordinator({ directory, runId: options.runId, fencingEpoch, manifestDigest: options.manifest.manifest_digest }), trace, result.error ?? 'lifecycle Worker failed', operator);
+  }
   for (const task of options.manifest.tasks) {
     if (task.activation === 'conditional') continue;
     for (const actionId of task.required_actions) {
@@ -345,7 +355,7 @@ export async function runV2Lifecycle(options: V2LifecycleOptions): Promise<V2Lif
       if (!action) throw new Error(`Missing action capability: ${actionId}`);
       const worktree = tasks.get(task.task_id)?.worktree ?? await operator.createTaskWorktree(plan, task.task_id);
       tasks.set(task.task_id, { worktree, state: task.finalization_mode === 'read-only-finalize' ? 'finalized' : 'committed' });
-      const result = await options.execute({ cwd: worktree.path, taskId: task.task_id, actionId });
+      const result = actionResults.get(actionId) ?? await options.execute({ cwd: worktree.path, taskId: task.task_id, actionId });
       actionObservations.set(task.task_id, [...(actionObservations.get(task.task_id) ?? []), { action_id: actionId, state: result.status === 'done' ? 'checkpointed' : 'failed', result: { status: result.status, tests: result.tests } }]);
     }
     const ledger = new RunLedger({ directory, runId: options.runId, fencingEpoch });
