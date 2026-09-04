@@ -2,10 +2,10 @@ import { basename, dirname, join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { readFile, rm } from 'node:fs/promises';
 import type { Workflow } from '../workflow/types.js';
-import { objectDigest } from '../utils/hash.js';
+import { objectDigest, sha256 } from '../utils/hash.js';
 import { verifyApproval } from '../workflow/approval.js';
 import { validateWorkflow } from '../workflow/validate.js';
-import { assertResumeFingerprint, loadRun, loadV2Run, saveRun, saveV2Run, type RunRecord, type RunRecordV2, type ResumeFingerprint } from './store.js';
+import { assertResumeFingerprint, loadRun, loadV2Run, saveRun, saveV2Run, type RunRecord, type RunRecordV2, type ResumeFingerprint, type V2AuthorityDescriptor } from './store.js';
 import { EventLog } from './events.js';
 import { RunLedger } from './ledger.js';
 import { assertTransition, type RunState } from './state.js';
@@ -29,7 +29,7 @@ import type { CodingCapabilityManifest } from '../generated/coding-manifest.sche
 import type { ActionCapability, ActionCapabilityManifest } from '../security/capability.js';
 import type { CallDescriptor, CodingAgentResult, TaskControlDescriptor } from './protocol.js';
 import { BrokeredSandboxProvider } from '../security/sandbox.js';
-import { CancelControl, ControlError, OwnerLease, cancelProof, cancelReasonDigest } from './control.js';
+import { CancelControl, ControlError, OwnerLease } from './control.js';
 import { captureWorktreeAudit, compareWorktreeAudits } from '../security/audit.js';
 import { RepairCoordinator, type ReviewFindingInput } from './repair.js';
 
@@ -103,6 +103,7 @@ export interface StartV2RunOptions {
   manifestDigest: string;
   fencingEpoch: number;
   parentRun?: string;
+  authority?: V2AuthorityDescriptor;
 }
 
 export interface V2LifecycleActionContext { cwd: string; taskId: string; actionId: string }
@@ -163,7 +164,7 @@ export async function startV2Run(options: StartV2RunOptions): Promise<RunRecordV
   if (await exists(join(directory, 'state.json')) || await exists(join(directory, 'events.jsonl'))) throw new Error(`Run already exists: ${options.runId}`);
   const now = new Date().toISOString();
   const cancelControl = new CancelControl({ root: options.project, runId: options.runId, owner: { osUid: -1, identityDigest: 'unbound' }, fencingEpoch: options.fencingEpoch });
-  const record: RunRecordV2 = { record_version: '2.0.0', engine: 'worker-thread-trusted', run_id: options.runId, manifest_digest: options.manifestDigest, fencing_epoch: options.fencingEpoch, run_state: 'preflight', parent_run: options.parentRun ?? 'root', started_at: now, updated_at: now, call_ledger: [], control_ledger: [], resources: [], completed_tasks: [], blocked_tasks: [] };
+  const record: RunRecordV2 = { record_version: '2.0.0', engine: 'worker-thread-trusted', run_id: options.runId, manifest_digest: options.manifestDigest, fencing_epoch: options.fencingEpoch, run_state: 'preflight', parent_run: options.parentRun ?? 'root', started_at: now, updated_at: now, call_ledger: [], control_ledger: [], resources: [], completed_tasks: [], blocked_tasks: [], ...(options.authority === undefined ? {} : { authority: options.authority }) };
   const log = v2EventLog(options.project, options.runId, options.fencingEpoch);
   await log.append({ type: 'run/start', payload: { engine: 'worker-thread-trusted', manifest_digest: options.manifestDigest, state: 'preflight' } });
   await saveV2Run(options.project, record);
@@ -174,7 +175,23 @@ export async function startV2Run(options: StartV2RunOptions): Promise<RunRecordV
 
 export async function runV2Script(options: V2ScriptRunOptions): Promise<RunRecordV2> {
   const manifestDigest = objectDigest(options.manifest);
-  const record = await startV2Run({ project: options.project, runId: options.runId, manifestDigest, fencingEpoch: 1 });
+  const planDirectory = join(options.project, '.ai-workflow', 'plans', options.manifest.plan_id);
+  const manifestPath = join(planDirectory, 'workflow.json');
+  const scriptPath = join(planDirectory, options.manifest.script.path);
+  const argsPath = join(planDirectory, options.manifest.args.path);
+  const approvalPath = join(planDirectory, 'approval.receipt.json');
+  const baseline = await gitBaseline(options.project);
+  const approvalDigest = await exists(approvalPath) ? objectDigest(JSON.parse(await readFile(approvalPath, 'utf8')) as unknown) : 'missing';
+  const authority: V2AuthorityDescriptor = {
+    authority_version: '1.0.0', manifest_path: manifestPath, manifest_digest: manifestDigest,
+    script_path: scriptPath, script_digest: options.scriptDigest, args_path: argsPath, args_digest: options.argsDigest,
+    approval_path: approvalPath, approval_digest: approvalDigest,
+    profile_digest: objectDigest({ host: options.manifest.host, adapter: options.manifest.host_execution.adapter, engine: options.manifest.engine }),
+    sandbox_digest: objectDigest(options.manifest.host_execution),
+    baseline_digest: objectDigest({ branch: baseline.branch, head: baseline.head }), fencing_epoch: 1,
+    restart_capability: 'worker-thread-trusted-v2',
+  };
+  const record = await startV2Run({ project: options.project, runId: options.runId, manifestDigest, fencingEpoch: 1, authority });
   const directory = join(options.project, '.ai-workflow/runs', options.runId);
   const events = v2EventLog(options.project, options.runId, record.fencing_epoch);
   const ledger = new RunLedger({ directory, runId: options.runId, fencingEpoch: record.fencing_epoch, eventLog: events });
@@ -300,10 +317,43 @@ export async function projectV2Run(project: string, runId: string): Promise<RunR
   return record;
 }
 
-export async function resumeV2Run(project: string, runId: string, fingerprints?: { expected: ResumeFingerprint; current: ResumeFingerprint }): Promise<RunRecordV2> {
+export interface ResumeV2RunOptions {
+  fingerprints?: { expected: ResumeFingerprint; current: ResumeFingerprint };
+  restart?: (input: { project: string; runId: string; authority: V2AuthorityDescriptor }) => Promise<'executing'>;
+}
+
+export async function resumeV2Run(project: string, runId: string, options?: ResumeV2RunOptions | { expected: ResumeFingerprint; current: ResumeFingerprint }): Promise<RunRecordV2> {
   const record = await projectV2Run(project, runId);
   if (record.run_state !== 'paused') throw new Error('Only paused v2 runs may resume');
   const log = v2EventLog(project, runId, record.fencing_epoch);
+  const fingerprints = options && 'expected' in options ? options : options?.fingerprints;
+  if (record.authority) {
+    const authority = record.authority;
+    const digest = async (path: string): Promise<string> => objectDigest(JSON.parse(await readFile(path, 'utf8')) as unknown);
+    const actual = {
+      manifest: await digest(authority.manifest_path),
+      script: sha256(await readFile(authority.script_path)),
+      args: sha256(await readFile(authority.args_path)),
+      approval: await exists(authority.approval_path) ? await digest(authority.approval_path) : 'missing',
+      baseline: objectDigest({ branch: (await gitBaseline(project)).branch, head: (await gitBaseline(project)).head }),
+    };
+    const drift = actual.manifest !== authority.manifest_digest ? 'manifest' : actual.script !== authority.script_digest ? 'script' : actual.args !== authority.args_digest ? 'args' : actual.approval !== authority.approval_digest ? 'approval' : actual.baseline !== authority.baseline_digest ? 'baseline' : undefined;
+    if (drift) {
+      await log.append({ type: 'resume/diverged', payload: { state: 'paused', reason: `${drift} drift prevents resume` } });
+      await saveV2Run(project, record);
+      throw new Error(`${drift} drift prevents resume`);
+    }
+    if (!options || 'expected' in options || !options.restart) {
+      await log.append({ type: 'resume/diverged', payload: { state: 'paused', reason: 'approved Worker restart authority is unavailable' } });
+      await saveV2Run(project, record);
+      return record;
+    }
+    await options.restart({ project, runId, authority });
+    record.run_state = 'executing';
+    await log.append({ type: 'resume/replayed', payload: { state: 'executing', manifest_digest: record.manifest_digest } });
+    await saveV2Run(project, record);
+    return record;
+  }
   if (!fingerprints) {
     await log.append({ type: 'resume/diverged', payload: { state: 'paused', reason: 'complete resume fingerprint and authority are required' } });
     record.run_state = 'paused';
@@ -332,7 +382,6 @@ export async function resumeV2Run(project: string, runId: string, fingerprints?:
 export async function cancelV2Run(project: string, runId: string): Promise<RunRecordV2> {
   const record = await projectV2Run(project, runId);
   if (['complete', 'cancelled', 'cancelled-with-retained-resources'].includes(record.run_state)) return record;
-  const log = v2EventLog(project, runId, record.fencing_epoch);
   throw new ControlError('CANCEL_UNAUTHORIZED', 'cancel requires a verified local Unix socket peer-credential adapter');
 }
 
