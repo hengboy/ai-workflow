@@ -28,6 +28,7 @@ import { admitAction } from '../security/capability.js';
 import type { CodingCapabilityManifest } from '../generated/coding-manifest.schema.js';
 import type { CallDescriptor, CodingAgentResult } from './protocol.js';
 import { BrokeredSandboxProvider } from '../security/sandbox.js';
+import { CancelControl, cancelProof, cancelReasonDigest } from './control.js';
 
 const activeControllers = new Map<string, AbortController>();
 class ReviewFindingsError extends Error {}
@@ -234,8 +235,15 @@ export async function cancelV2Run(project: string, runId: string): Promise<RunRe
   const record = await projectV2Run(project, runId);
   if (['complete', 'cancelled', 'cancelled-with-retained-resources'].includes(record.run_state)) return record;
   const log = v2EventLog(project, runId, record.fencing_epoch);
-  await log.append({ type: 'run/cancel-requested', payload: { state: 'cancelling', reason: 'Cancelled by user' } });
-  await log.append({ type: 'run/cancelled', payload: { state: 'cancelled', stop_reason: 'cancelled' } });
+  const uid = process.getuid?.();
+  if (uid === undefined) throw new Error('CANCEL_UNAUTHORIZED: local process identity is unavailable');
+  const identityDigest = objectDigest({ runId, manifest: record.manifest_digest });
+  const control = new CancelControl({ root: project, runId, owner: { osUid: uid, identityDigest }, fencingEpoch: record.fencing_epoch, nonce: record.manifest_digest });
+  const reason = 'Cancelled by user';
+  const digest = cancelReasonDigest(reason);
+  const outcome = await control.requestCancel({ peerUid: uid, runId, fencingEpoch: record.fencing_epoch, nonce: record.manifest_digest, reason, identityDigest, proof: cancelProof(record.manifest_digest, runId, record.fencing_epoch, digest) });
+  if (outcome.won) await log.append({ type: 'run/cancel-requested', payload: { state: 'cancelling', reason: outcome.intent.reason } });
+  if (outcome.won) await log.append({ type: 'run/cancelled', payload: { state: 'cancelled', stop_reason: 'cancelled' } });
   record.run_state = 'cancelled';
   record.stop_reason = 'cancelled';
   await saveV2Run(project, record);

@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { mkdtemp } from 'node:fs/promises';
+import { mkdtemp, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { RunLedger, type CallDescriptor, type RecordedAgentResult } from '../../src/runtime/ledger.js';
-import { assertResumeFingerprint, loadRun, loadV2Run, saveRun, type ResumeFingerprint, type RunRecord } from '../../src/runtime/store.js';
+import { assertResumeFingerprint, loadRun, loadV2Run, saveRun, saveV2Run, type ResumeFingerprint, type RunRecord } from '../../src/runtime/store.js';
 import { EventLog } from '../../src/runtime/events.js';
 import { cancelV2Run, projectV2Run, resumeV2Run, startV2Run } from '../../src/runtime/runner.js';
 
@@ -119,5 +119,22 @@ describe('replay and resume', () => {
     await expect(resumeV2Run(directory, 'run-guard')).rejects.toThrow(/fingerprint|authority/i);
     await expect(projectV2Run(directory, 'run-guard')).resolves.toMatchObject({ run_state: 'paused' });
     await expect(log.read()).resolves.toMatchObject({ events: expect.arrayContaining([expect.objectContaining({ type: 'resume/diverged' })]) });
+  });
+
+  it('persists the first v2 cancel intent and retains unknown resources', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'ai-workflow-v2-cancel-intent-'));
+    const manifestDigest = 'sha256:' + 'd'.repeat(64);
+    const started = await startV2Run({ project: directory, runId: 'run-cancel-intent', manifestDigest, fencingEpoch: 1 });
+    started.resources = [{ resource_id: 'unknown-resource' }];
+    await saveV2Run(directory, started);
+
+    const first = await cancelV2Run(directory, 'run-cancel-intent');
+    const second = await cancelV2Run(directory, 'run-cancel-intent');
+
+    expect(first).toMatchObject({ run_state: 'cancelled', stop_reason: 'cancelled' });
+    expect(second).toMatchObject({ run_state: 'cancelled', stop_reason: 'cancelled' });
+    await expect(readFile(join(directory, '.ai-workflow/runs/run-cancel-intent/control/cancel.json'), 'utf8')).resolves.toMatch(/run-cancel-intent/);
+    await expect(readFile(join(directory, '.ai-workflow/runs/run-cancel-intent/events.jsonl'), 'utf8')).resolves.toMatch(/run\/cancel-requested/);
+    expect(second.resources).toEqual([{ resource_id: 'unknown-resource' }]);
   });
 });
