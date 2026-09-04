@@ -18,7 +18,7 @@ describe('v2 CLI artifacts', () => {
     const plan = await frozenPlan(project);
     const script = join(plan, 'custom-workflow.js');
     const args = join(plan, 'custom-args.json');
-    await writeFile(script, 'workflow.action("task-001-example-explore", "call/explore");\n');
+    await writeFile(script, 'await agent("explore", { actionId: "task-001-example-explore", callId: "call/explore" });\n');
     await writeFile(args, '{"mode":"test"}\n');
 
     const generated = await workflowCli(project, ['workflow', 'generate', '--plan', plan, '--host', 'codex', '--script', script, '--args', args]);
@@ -60,7 +60,7 @@ describe('v2 CLI artifacts', () => {
 
     const started = await workflowCli(project, ['run', 'start', '--workflow', workflow, '--host', 'codex', '--project', project]);
     const record = JSON.parse(started.stdout) as { record_version: string; run_id: string; engine: string; run_state: string };
-    expect(record).toMatchObject({ record_version: '2.0.0', engine: 'worker-thread-trusted', run_state: 'preflight' });
+    expect(record).toMatchObject({ record_version: '2.0.0', engine: 'worker-thread-trusted', run_state: 'paused' });
 
     const status = await workflowCli(project, ['run', 'status', record.run_id, '--project', project]);
     expect(JSON.parse(status.stdout)).toMatchObject({ record_version: '2.0.0', run_id: record.run_id });
@@ -68,6 +68,21 @@ describe('v2 CLI artifacts', () => {
     expect(JSON.parse(cancelled.stdout)).toMatchObject({ run_state: 'cancelled', stop_reason: 'cancelled' });
     const cleanup = await workflowCli(project, ['run', 'cleanup', record.run_id, '--project', project]);
     expect(JSON.parse(cleanup.stdout)).toMatchObject({ cleaned: record.run_id });
+  });
+
+  it('executes the approved plan-local Worker script during run start', async () => {
+    const project = await temporary('ai-workflow-cli-v2-');
+    await gitInit(project);
+    const plan = await frozenPlan(project);
+    await writeFile(join(plan, 'workflow.js'), `phase('cli-started'); log('script-ran'); return { started: true };\n`);
+    const generated = await workflowCli(project, ['workflow', 'generate', '--plan', plan, '--host', 'codex']);
+    const workflow = (JSON.parse(generated.stdout) as { workflow: string }).workflow;
+    await workflowCli(project, ['workflow', 'approve', workflow, '--project', project]);
+
+    const started = await workflowCli(project, ['run', 'start', '--workflow', workflow, '--host', 'codex', '--project', project]);
+    const record = JSON.parse(started.stdout) as { run_id: string; run_state: string };
+    expect(record.run_state).toBe('paused');
+    await expect(readFile(join(project, '.ai-workflow/runs', record.run_id, 'events.jsonl'), 'utf8')).resolves.toMatch(/cli-started|script-ran/);
   });
 
   it('fails closed when an approved v2 artifact changes before start', async () => {

@@ -3,6 +3,7 @@ import type { ActionProjection } from './worker-runtime.js';
 import { WorkerRun, type HostAuditCallback, type HostChildExecutor, type ProcessRegistryCallback, type SandboxPreflightCallback, type WorkflowObserver } from './worker-host.js';
 
 export interface CodingWorkflowStartOptions {
+  runId?: string;
   script: string;
   args?: unknown;
   manifestDigest: string;
@@ -25,7 +26,7 @@ export interface CodingWorkflowStartOptions {
 
 export class CodingWorkflowEngine {
   start(options: CodingWorkflowStartOptions): WorkerRun {
-    const runId = `run-${randomUUID()}`;
+    const runId = options.runId ?? `run-${randomUUID()}`;
     return new WorkerRun({
       runId,
       worker: {

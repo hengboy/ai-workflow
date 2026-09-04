@@ -147,7 +147,7 @@ function parseScript(source: string, actionIds: string[]): ScriptCall[] {
 }
 
 function defaultScript(actionIds: string[]): Buffer {
-  return Buffer.from(`${actionIds.map((actionId, index) => `agent(${JSON.stringify(`Execute ${actionId}`)}, { actionId: ${JSON.stringify(actionId)}, callId: ${JSON.stringify(`action/${String(index + 1).padStart(4, '0')}/${actionId}`)} });`).join('\n')}\n`, 'utf8');
+  return Buffer.from(`${actionIds.map((actionId, index) => `await agent(${JSON.stringify(`Execute ${actionId}`)}, { actionId: ${JSON.stringify(actionId)}, callId: ${JSON.stringify(`action/${String(index + 1).padStart(4, '0')}/${actionId}`)} });`).join('\n')}\n`, 'utf8');
 }
 
 function defaultMeta(planId: string): CodingWorkflowMeta {

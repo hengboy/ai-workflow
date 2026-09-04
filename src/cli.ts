@@ -15,7 +15,7 @@ import { createNavigationCandidate, refreshContext, validateContext, verifyNavig
 import { locateContext } from './context/locate.js';
 import { discoverFallback, type FallbackPacket } from './context/fallback.js';
 import { resolveCandidatePath, resolveProjectRoot } from './context/paths.js';
-import { cancelV2Run, cleanupV2Run, projectV2Run, resumeV2Run, startV2Run } from './runtime/runner.js';
+import { cancelV2Run, cleanupV2Run, projectV2Run, resumeV2Run, runV2Script, startV2Run } from './runtime/runner.js';
 import { RunVersionError } from './runtime/store.js';
 import { readPlan } from './workflow/parse.js';
 import { gitBaseline } from './git/operator.js';
@@ -180,8 +180,11 @@ run.command('start').requiredOption('--workflow <path>').requiredOption('--host 
   if (manifest.host !== options.host) throw new Error(`Host mismatch: manifest=${manifest.host}, requested=${options.host}`);
   const project = resolveProjectRoot(options.project); const validation = await validateWorkflow(manifest, project); if (!validation.valid) throw new Error(validation.errors.join('; '));
   await verifyV2Approval(resolve(options.workflow), manifest, project);
-  const runId = `run-${manifest.plan_id}-${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
-  print(await startV2Run({ project, runId, manifestDigest: objectDigest(manifest), fencingEpoch: 1 }));
+   const planDirectory = resolve(options.workflow, '..');
+   const script = await readFile(join(planDirectory, manifest.script.path), 'utf8');
+   const args = JSON.parse(await readFile(join(planDirectory, manifest.args.path), 'utf8')) as unknown;
+   const runId = `run-${manifest.plan_id}-${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
+   print(await runV2Script({ project, runId, manifest, script, args, scriptDigest: manifest.script.bytes_digest, argsDigest: manifest.args.bytes_digest }));
 });
 run.command('status').argument('<runId>').requiredOption('--project <project>').action(async (runId: string, { project }: { project: string }) => print(await v2RunCommand(() => projectV2Run(resolveProjectRoot(project), runId))));
 run.command('resume').argument('<runId>').requiredOption('--project <project>').action(async (runId: string, { project }: { project: string }) => print(await v2RunCommand(() => resumeV2Run(resolveProjectRoot(project), runId))));

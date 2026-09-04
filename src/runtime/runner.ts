@@ -22,6 +22,12 @@ import { exists } from '../utils/fs.js';
 import { TaskClosureCoordinator, type TaskActionObservation } from '../workflow/approval.js';
 import { GateCoordinator, type GateReceipt } from './gates.js';
 import { V2GitOperator, type V2Worktree } from '../git/operator.js';
+import { CodingWorkflowEngine, type ChildRun } from './engine.js';
+import { ScopeScheduler } from './scheduler.js';
+import { admitAction } from '../security/capability.js';
+import type { CodingCapabilityManifest } from '../generated/coding-manifest.schema.js';
+import type { CallDescriptor, CodingAgentResult } from './protocol.js';
+import { BrokeredSandboxProvider } from '../security/sandbox.js';
 
 const activeControllers = new Map<string, AbortController>();
 class ReviewFindingsError extends Error {}
@@ -105,6 +111,16 @@ export interface V2LifecycleOptions {
   execute: (context: V2LifecycleActionContext) => Promise<V2LifecycleActionResult>;
 }
 
+export interface V2ScriptRunOptions {
+  project: string;
+  runId: string;
+  manifest: CodingCapabilityManifest;
+  script: string;
+  args: unknown;
+  scriptDigest: string;
+  argsDigest: string;
+}
+
 export interface V2LifecycleResult {
   run_state: RunRecordV2['run_state'];
   gates: Record<string, GateReceipt>;
@@ -123,6 +139,56 @@ export async function startV2Run(options: StartV2RunOptions): Promise<RunRecordV
   const record: RunRecordV2 = { record_version: '2.0.0', engine: 'worker-thread-trusted', run_id: options.runId, manifest_digest: options.manifestDigest, fencing_epoch: options.fencingEpoch, run_state: 'preflight', parent_run: options.parentRun ?? 'root', started_at: now, updated_at: now, call_ledger: [], control_ledger: [], resources: [], completed_tasks: [], blocked_tasks: [] };
   const log = v2EventLog(options.project, options.runId, options.fencingEpoch);
   await log.append({ type: 'run/start', payload: { engine: 'worker-thread-trusted', manifest_digest: options.manifestDigest, state: 'preflight' } });
+  await saveV2Run(options.project, record);
+  return record;
+}
+
+export async function runV2Script(options: V2ScriptRunOptions): Promise<RunRecordV2> {
+  const manifestDigest = objectDigest(options.manifest);
+  const record = await startV2Run({ project: options.project, runId: options.runId, manifestDigest, fencingEpoch: 1 });
+  const directory = join(options.project, '.ai-workflow/runs', options.runId);
+  const events = v2EventLog(options.project, options.runId, record.fencing_epoch);
+  const ledger = new RunLedger({ directory, runId: options.runId, fencingEpoch: record.fencing_epoch, eventLog: events });
+  const scheduler = new ScopeScheduler({ maxConcurrent: options.manifest.limits.max_concurrent_agents });
+  const actionStates: Record<string, 'prepared' | 'dispatch_intent' | 'running' | 'observed' | 'checkpointed' | 'done'> = {};
+  const taskStates: Record<string, 'pending' | 'ready' | 'running' | 'done' | 'blocked' | 'failed' | 'cancelled' | 'finalized'> = Object.fromEntries(options.manifest.tasks.map((task) => [task.task_id, 'ready']));
+  const actionMap = new Map(options.manifest.actions.map((action) => [action.action_id, action]));
+  const childExecutor = {
+    start: async (descriptor: CallDescriptor, signal: AbortSignal): Promise<ChildRun> => {
+      const action = actionMap.get(descriptor.action_id);
+      if (!action) throw new Error(`ACTION_NOT_AUTHORIZED: ${descriptor.action_id}`);
+      const admission = admitAction({ manifest: options.manifest, action_id: action.action_id, run_id: options.runId, cwd: options.project, attempt: 1, task_states: taskStates, action_states: actionStates, active_hosts: [options.manifest.host] });
+      const lease = await scheduler.submit({ admission_id: admission.attempt_id, call_ordinal: descriptor.call_ordinal, action_id: action.action_id, task_id: action.task_id, read_scope: action.read_scope, write_scope: action.write_scope, ...(action.concurrency_group_id === undefined ? {} : { concurrency_group_id: action.concurrency_group_id }) });
+      await ledger.prepareCall({ callId: descriptor.call_id, callOrdinal: descriptor.call_ordinal, descriptor: descriptor as unknown as import('./ledger.js').CallDescriptor });
+      await ledger.dispatchIntent(descriptor.call_id);
+      actionStates[action.action_id] = 'dispatch_intent';
+      const controller = new AbortController();
+      if (signal.aborted) controller.abort(signal.reason);
+      signal.addEventListener('abort', () => controller.abort(signal.reason), { once: true });
+      await ledger.markRunning(descriptor.call_id);
+      actionStates[action.action_id] = 'running';
+      const packet: AgentPacket = { packet_version: '1.0.0', run_id: options.runId, plan_id: options.manifest.plan_id, task_id: action.task_id, role: action.role, objective: `Execute approved action ${action.action_id}`, cwd: options.project, read_paths: action.read_scope, write_paths: action.write_scope, evidence: action.requires_actions, screenshot_dir: `.ai-workflow/plans/${options.manifest.plan_id}/screenshot/`, allowed_commands: action.allowed_commands, timeout_ms: options.manifest.limits.sync_timeout_ms, result_schema: 'schemas/result.schema.json' };
+      const result = invokeHost(options.manifest.host, 'Execute approved action', packet, { signal: controller.signal, sandbox: new BrokeredSandboxProvider() }) as unknown as Promise<CodingAgentResult>;
+      const observed = result.then(async (value) => {
+        await ledger.observeCall(descriptor.call_id, value as unknown as import('../generated/coding-agent-result.schema.js').CodingAgentResult);
+        await ledger.checkpointCall(descriptor.call_id, value.changed_paths.filter((path): path is string => typeof path === 'string'));
+        actionStates[action.action_id] = value.status === 'done' ? 'checkpointed' : 'observed';
+        lease.release(value.status === 'done' ? 'completed' : 'blocked');
+        return value;
+      }, async (error) => { lease.release('blocked'); throw error; });
+      return { id: descriptor.call_id, result: observed, dispose: async () => controller.abort('disposed') };
+    },
+  };
+  const trace: string[] = [];
+  const worker = new CodingWorkflowEngine().start({ runId: options.runId, script: options.script, args: options.args, manifestDigest, scriptDigest: options.scriptDigest, argsDigest: options.argsDigest, actions: options.manifest.actions.map((action) => ({ action_id: action.action_id, task_id: action.task_id, action_digest: objectDigest(action) })), maxConcurrentAgents: options.manifest.limits.max_concurrent_agents, maxTotalAgents: options.manifest.limits.max_total_agents, maxItemsPerCall: options.manifest.limits.max_items_per_call, maxScriptBytes: options.manifest.limits.max_script_bytes, maxResultBytes: options.manifest.limits.max_result_bytes, syncTimeoutMs: options.manifest.limits.sync_timeout_ms, disposeGraceMs: options.manifest.limits.dispose_grace_ms, childExecutor, observer: { phase: (title) => trace.push(`phase:${title}`), log: (message) => trace.push(`log:${message}`) }, sandboxPreflight: () => { new BrokeredSandboxProvider().preflight(); } });
+  await events.append({ type: 'run/lease-acquired', payload: { state: 'executing', manifest_digest: record.manifest_digest } });
+  record.run_state = 'executing';
+  const result = await worker.result;
+  for (const entry of trace) await events.append({ type: entry.startsWith('phase:') ? 'workflow/phase' : 'workflow/log', payload: entry.startsWith('phase:') ? { title: entry.slice('phase:'.length) } : { message: entry.slice('log:'.length) } });
+  if (result.stop_reason === 'cancelled') { record.run_state = 'cancelled'; record.stop_reason = 'cancelled'; await events.append({ type: 'run/cancelled', payload: { state: 'cancelled', stop_reason: 'cancelled' } }); }
+  else { record.run_state = 'paused'; record.stop_reason = result.stop_reason === 'completed' ? 'blocked' : 'error'; await events.append({ type: 'run/error', payload: { state: 'paused', stop_reason: record.stop_reason, error: result.error ?? 'Lifecycle gates require host closure evidence' } }); }
+  record.call_ledger = await ledger.replaySubmissionOrder();
+  record.control_ledger = await ledger.replayControlOrder();
   await saveV2Run(options.project, record);
   return record;
 }

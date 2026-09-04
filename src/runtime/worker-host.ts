@@ -44,6 +44,7 @@ export interface WorkerRunOptions {
   audit?: HostAuditCallback | undefined;
   sandboxPreflight?: SandboxPreflightCallback | undefined;
   processRegistry?: ProcessRegistryCallback | undefined;
+  taskControl?: (descriptor: import('./protocol.js').TaskControlDescriptor) => Promise<{ state: 'finalized' | 'committed' | 'skipped'; receipt_digest: string }>;
   disposeGraceMs: number;
 }
 
@@ -145,8 +146,21 @@ export class WorkerRun {
       case 'log': if (!this.cancelReason) this.options.observer?.log?.(message.message); break;
       case 'agent-start': void this.startChild(message.request_id, message.descriptor); break;
       case 'agent-dispose': void this.disposeChild(message.request_id, message.call_id); break;
-      case 'task-control': this.send({ type: 'task-control-error', request_id: message.request_id, control_id: message.control_descriptor.control_id, error: { code: 'ACTION_NOT_READY', message: 'task-control host adapter is not installed', fatal: true } }); break;
+      case 'task-control': void this.handleTaskControl(message.request_id, message.control_descriptor); break;
       case 'result': this.onResult(message.result); break;
+    }
+  }
+
+  private async handleTaskControl(requestId: string, descriptor: import('./protocol.js').TaskControlDescriptor): Promise<void> {
+    if (!this.options.taskControl) {
+      this.send({ type: 'task-control-error', request_id: requestId, control_id: descriptor.control_id, error: { code: 'ACTION_NOT_READY', message: 'task-control host adapter is not installed', fatal: true } });
+      return;
+    }
+    try {
+      const result = await this.options.taskControl(descriptor);
+      this.send({ type: 'task-control-settled', request_id: requestId, control_id: descriptor.control_id, state: result.state, receipt_digest: result.receipt_digest });
+    } catch (error) {
+      this.send({ type: 'task-control-error', request_id: requestId, control_id: descriptor.control_id, error: { code: 'ACTION_NOT_READY', message: error instanceof Error ? error.message : String(error), fatal: true } });
     }
   }
 
