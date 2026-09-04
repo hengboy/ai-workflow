@@ -164,6 +164,11 @@ export async function runV2Script(options: V2ScriptRunOptions): Promise<RunRecor
   const directory = join(options.project, '.ai-workflow/runs', options.runId);
   const events = v2EventLog(options.project, options.runId, record.fencing_epoch);
   const ledger = new RunLedger({ directory, runId: options.runId, fencingEpoch: record.fencing_epoch, eventLog: events });
+  const uid = process.getuid?.();
+  if (uid === undefined) throw new Error('CANCEL_UNAUTHORIZED: local process identity is unavailable');
+  const ownerLease = new OwnerLease({ root: options.project, runId: options.runId, owner: { osUid: uid, identityDigest: objectDigest({ runId: options.runId, manifest: manifestDigest }) }, process: { pid: process.pid, pgid: process.pid, startIdentity: `${process.pid}:${record.started_at}`, spawnNonce: record.run_id }, leaseMs: 30_000 });
+  const owner = await ownerLease.acquire({ wait: false });
+  await events.append({ type: 'run/lease-acquired', payload: { state: 'executing', manifest_digest: manifestDigest } });
   const scheduler = new ScopeScheduler({ maxConcurrent: options.manifest.limits.max_concurrent_agents });
   const actionStates: Record<string, 'prepared' | 'dispatch_intent' | 'running' | 'observed' | 'checkpointed' | 'done'> = {};
   const taskStates: Record<string, 'pending' | 'ready' | 'running' | 'done' | 'blocked' | 'failed' | 'cancelled' | 'finalized'> = Object.fromEntries(options.manifest.tasks.map((task) => [task.task_id, 'ready']));
@@ -264,6 +269,7 @@ export async function runV2Script(options: V2ScriptRunOptions): Promise<RunRecor
     }
   }
   await saveV2Run(options.project, record);
+  if (record.run_state !== 'paused') await ownerLease.release(owner);
   await worker.dispose();
   return record;
 }

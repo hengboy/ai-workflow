@@ -145,6 +145,25 @@ describe('v2 CLI artifacts', () => {
     expect(record.call_ledger[0]?.result?.summary?.includes('worktrees/tasks/task-001-example')).toBe(true);
   });
 
+  it('acquires the v2 owner lease before CLI dynamic actions execute', async () => {
+    const project = await temporary('ai-workflow-cli-v2-');
+    const bin = await temporary('ai-workflow-host-');
+    await gitInit(project);
+    const plan = await frozenPlan(project);
+    await writeFile(join(plan, 'workflow.js'), 'await agent("explore", { actionId: "task-001-example-explore", callId: "call/owner-lease" });\n');
+    const host = join(bin, 'codex');
+    await writeFile(host, '#!/bin/sh\nif test -f "$PWD/../../../control/owner.json"; then summary=active; else summary=missing; fi\nprintf \'%s\\n\' "{\\"result_version\\":\\"2.0.0\\",\\"status\\":\\"done\\",\\"summary\\":\\"$summary\\",\\"changed_paths\\":[],\\"evidence\\":[],\\"tests\\":[],\\"findings\\":[],\\"git_refs\\":[],\\"support_requests\\":[]}"\n');
+    await chmod(host, 0o755);
+    const generated = await workflowCli(project, ['workflow', 'generate', '--plan', plan, '--host', 'codex']);
+    const workflow = (JSON.parse(generated.stdout) as { workflow: string }).workflow;
+    await workflowCli(project, ['workflow', 'approve', workflow, '--project', project]);
+
+    const started = await workflowCli(project, ['run', 'start', '--workflow', workflow, '--host', 'codex', '--project', project], { PATH: `${bin}:${process.env.PATH ?? ''}` });
+    const record = JSON.parse(started.stdout) as { run_state: string; call_ledger: Array<{ call_id: string; result?: { summary?: string } }> };
+    expect(record.run_state).toBe('paused');
+    expect(record.call_ledger.find((entry) => entry.call_id === 'call/owner-lease')?.result?.summary).toBe('active');
+  });
+
   it('fails closed when an approved v2 artifact changes before start', async () => {
     const project = await temporary('ai-workflow-cli-v2-');
     await gitInit(project);
