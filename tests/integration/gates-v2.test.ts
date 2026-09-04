@@ -282,6 +282,34 @@ describe('v2 mandatory gates', () => {
     await expect(readFile(join(project, 'output.txt'), 'utf8')).resolves.toBe('script action\n');
   });
 
+  it('acquires a durable owner lease before lifecycle actions execute', async () => {
+    const project = await temporary();
+    await gitInit(project);
+    const runId = 'runner-v2-owner-lease';
+    const manifest = {
+      manifest_digest: digest,
+      target_branch: 'main',
+      tasks: [{ task_id: 'task-001', activation: 'required' as const, finalization_mode: 'read-only-finalize' as const, required_actions: ['task-001-test'], depends_on: [] }],
+      actions: [{ action_id: 'task-001-test', task_id: 'task-001', operation: 'test', write_scope: [] }],
+    };
+    const baseline = (await gitBaseline(project)).head!;
+
+    const result = await runV2Lifecycle({
+      project,
+      runId,
+      manifest,
+      execute: async () => {
+        const owner = JSON.parse(await readFile(join(project, '.ai-workflow/runs', runId, 'control', 'owner.json'), 'utf8')) as { runId?: string; status?: string };
+        expect(owner).toMatchObject({ runId, status: 'active' });
+        return { status: 'done', tests: [{ command: 'pnpm test', status: 'passed' }], changedPaths: [] };
+      },
+      gateEvidence: { planValidation: { valid: true, errors: [] }, standardsReview: { findings: [] }, specReview: { findings: [] }, repairClosure: { closedFindingIds: [], expectedFindingIds: [] }, baseline: { expected: baseline, current: baseline }, integration: { observed: false, noFastForward: false } },
+    });
+
+    expect(result.run_state).toBe('paused');
+    await expect(readFile(join(project, '.ai-workflow/runs', runId, 'control', 'owner.json'), 'utf8')).resolves.toMatch(/"status":"active"/);
+  });
+
   it('cancels a deferred v2 run and reconciles its durable projection without deleting resources', async () => {
     const project = await temporary();
     await gitInit(project);

@@ -29,7 +29,7 @@ import type { CodingCapabilityManifest } from '../generated/coding-manifest.sche
 import type { ActionCapability, ActionCapabilityManifest } from '../security/capability.js';
 import type { CallDescriptor, CodingAgentResult, TaskControlDescriptor } from './protocol.js';
 import { BrokeredSandboxProvider } from '../security/sandbox.js';
-import { CancelControl, cancelProof, cancelReasonDigest } from './control.js';
+import { CancelControl, OwnerLease, cancelProof, cancelReasonDigest } from './control.js';
 import { captureWorktreeAudit, compareWorktreeAudits } from '../security/audit.js';
 
 const activeControllers = new Map<string, AbortController>();
@@ -329,10 +329,15 @@ export async function runV2Lifecycle(options: V2LifecycleOptions): Promise<V2Lif
   const directory = join(options.project, '.ai-workflow/runs', options.runId);
   const trace = ['run:start'];
   const operator = new V2GitOperator({ project: options.project, runId: options.runId, manifestDigest: options.manifest.manifest_digest, fencingEpoch, targetBranch: options.manifest.target_branch ?? 'main' });
+  const uid = process.getuid?.();
+  if (uid === undefined) throw new Error('CANCEL_UNAUTHORIZED: local process identity is unavailable');
+  const ownerLease = new OwnerLease({ root: options.project, runId: options.runId, owner: { osUid: uid, identityDigest: objectDigest({ runId: options.runId, manifest: options.manifest.manifest_digest }) }, process: { pid: process.pid, pgid: process.pid, startIdentity: `${process.pid}:${record.started_at}`, spawnNonce: record.run_id }, leaseMs: 30_000 });
+  const owner = await ownerLease.acquire({ wait: false });
+  await v2EventLog(options.project, options.runId, record.fencing_epoch).append({ type: 'run/lease-acquired', payload: { state: 'executing', manifest_digest: options.manifest.manifest_digest } });
   const plan = await operator.createPlanWorktree({ baseBranch: options.manifest.target_branch ?? 'main' });
   trace.push('resource:plan-created');
   if (options.script !== undefined) {
-    return runScriptLifecycle(options, record, directory, trace, operator, plan);
+    return runScriptLifecycle(options, record, directory, trace, operator, plan, ownerLease, owner);
   }
   const tasks = new Map<string, { worktree: V2Worktree; state: 'finalized' | 'committed' | 'skipped' }>();
   const actionObservations = new Map<string, TaskActionObservation[]>();
@@ -392,6 +397,7 @@ export async function runV2Lifecycle(options: V2LifecycleOptions): Promise<V2Lif
   record.completed_tasks = [...tasks.keys()];
   await v2EventLog(options.project, options.runId, fencingEpoch).append({ type: 'run/end', payload: { state: 'complete', stop_reason: 'completed' } });
   await saveV2Run(options.project, record);
+  await ownerLease.release(owner);
   trace.push('run:complete');
   const gateIds = ['task-closure', 'plan-validation', 'standards-review', 'spec-review', 'repair-closure', 'baseline-stable', 'integration'] as const;
   const gateEntries = await Promise.all(gateIds.map(async (gateId) => {
@@ -402,7 +408,7 @@ export async function runV2Lifecycle(options: V2LifecycleOptions): Promise<V2Lif
   return { run_state: record.run_state, gates: Object.fromEntries(gateEntries), integration, trace };
 }
 
-async function runScriptLifecycle(options: V2LifecycleOptions, record: RunRecordV2, directory: string, trace: string[], operator: V2GitOperator, plan: V2Worktree): Promise<V2LifecycleResult> {
+async function runScriptLifecycle(options: V2LifecycleOptions, record: RunRecordV2, directory: string, trace: string[], operator: V2GitOperator, plan: V2Worktree, ownerLease: OwnerLease, owner: import('./control.js').OwnerLeaseRecord): Promise<V2LifecycleResult> {
   const script = options.script;
   if (script === undefined) throw new Error('approved lifecycle script is required');
   const ledger = new RunLedger({ directory, runId: options.runId, fencingEpoch: record.fencing_epoch });
@@ -505,6 +511,7 @@ async function runScriptLifecycle(options: V2LifecycleOptions, record: RunRecord
   record.run_state = 'complete'; record.stop_reason = 'completed'; record.resources = operator.resources as unknown[]; record.completed_tasks = [...tasks.keys()];
   await v2EventLog(options.project, options.runId, record.fencing_epoch).append({ type: 'run/end', payload: { state: 'complete', stop_reason: 'completed' } });
   await saveV2Run(options.project, record);
+  await ownerLease.release(owner);
   const gateIds = ['task-closure', 'plan-validation', 'standards-review', 'spec-review', 'repair-closure', 'baseline-stable', 'integration'] as const;
   const gateEntries = await Promise.all(gateIds.map(async (gateId) => [gateId, await gates.readGate(gateId)] as const));
   return { run_state: record.run_state, gates: Object.fromEntries(gateEntries.filter((entry): entry is [typeof entry[0], GateReceipt] => entry[1] !== undefined).map(([gateId, receipt]) => [gateId, receipt])), integration, trace: [...trace, 'gate:integration:passed', 'run:complete'] };
