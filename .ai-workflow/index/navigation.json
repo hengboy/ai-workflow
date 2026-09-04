@@ -1915,6 +1915,11 @@
         {
           "kind": "imports",
           "from": "src/runtime/runner.ts#runV2Script",
+          "to": "src/runtime/control.ts#OwnerLease"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/runner.ts#runV2Script",
           "to": "src/runtime/scheduler.ts#ScopeScheduler"
         },
         {
@@ -2016,6 +2021,11 @@
           "kind": "imports",
           "from": "src/runtime/runner.ts#cancelV2Run",
           "to": "src/runtime/store.ts#saveV2Run"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/runner.ts#runV2Lifecycle",
+          "to": "src/runtime/control.ts#OwnerLease"
         },
         {
           "kind": "imports",
