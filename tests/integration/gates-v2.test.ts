@@ -478,11 +478,8 @@ describe('v2 mandatory gates', () => {
     await gitInit(project);
     const runId = 'runner-v2-cancel';
     await startV2Run({ project, runId, manifestDigest: digest, fencingEpoch: 1 });
-    const cancelled = await cancelV2Run(project, runId);
-    expect(cancelled.run_state).toBe('cancelled');
-    const projected = await projectV2Run(project, runId);
-    expect(projected.run_state).toBe('cancelled');
-    expect(await readFile(join(project, '.ai-workflow/runs', runId, 'events.jsonl'), 'utf8')).toContain('run/cancelled');
+    await expect(cancelV2Run(project, runId)).rejects.toMatchObject({ code: 'CANCEL_UNAUTHORIZED' });
+    await expect(projectV2Run(project, runId)).resolves.toMatchObject({ run_state: 'preflight' });
   });
 
   it('cleans a completed v2 run only through its owned resource receipts', async () => {
