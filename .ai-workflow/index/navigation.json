@@ -840,6 +840,12 @@
         },
         {
           "file": "src/runtime/control.ts",
+          "name": "CancelAuthority",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/control.ts",
           "name": "CancelOutcome",
           "kind": "interface",
           "visibility": "public"
@@ -884,6 +890,12 @@
           "file": "src/runtime/control.ts",
           "name": "CancelSocket",
           "kind": "class",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/control.ts",
+          "name": "requestCancelSocket",
+          "kind": "function",
           "visibility": "public"
         },
         {
@@ -1392,6 +1404,12 @@
         },
         {
           "file": "src/runtime/runner.ts",
+          "name": "ResumeV2RunOptions",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/runner.ts",
           "name": "resumeV2Run",
           "kind": "function",
           "visibility": "public"
@@ -1579,6 +1597,12 @@
         {
           "file": "src/runtime/store.ts",
           "name": "RunRecordV2",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/store.ts",
+          "name": "V2AuthorityDescriptor",
           "kind": "interface",
           "visibility": "public"
         },
@@ -1884,6 +1908,11 @@
         },
         {
           "kind": "imports",
+          "from": "src/runtime/runner.ts#StartV2RunOptions",
+          "to": "src/runtime/store.ts#V2AuthorityDescriptor"
+        },
+        {
+          "kind": "imports",
           "from": "src/runtime/runner.ts#V2LifecycleResult",
           "to": "src/runtime/store.ts#RunRecordV2"
         },
@@ -1900,12 +1929,22 @@
         {
           "kind": "imports",
           "from": "src/runtime/runner.ts#startV2Run",
+          "to": "src/runtime/control.ts#CancelControl"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/runner.ts#startV2Run",
           "to": "src/runtime/store.ts#saveV2Run"
         },
         {
           "kind": "imports",
           "from": "src/runtime/runner.ts#runV2Script",
           "to": "src/runtime/store.ts#RunRecordV2"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/runner.ts#runV2Script",
+          "to": "src/runtime/store.ts#V2AuthorityDescriptor"
         },
         {
           "kind": "imports",
@@ -1920,7 +1959,27 @@
         {
           "kind": "imports",
           "from": "src/runtime/runner.ts#runV2Script",
+          "to": "src/runtime/control.ts#CancelControl"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/runner.ts#runV2Script",
           "to": "src/runtime/scheduler.ts#ScopeScheduler"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/runner.ts#runV2Script",
+          "to": "src/runtime/engine.ts#CodingWorkflowEngine"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/runner.ts#runV2Script",
+          "to": "src/runtime/control.ts#RunControl"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/runner.ts#runV2Script",
+          "to": "src/runtime/control.ts#CancelSocket"
         },
         {
           "kind": "imports",
@@ -1941,11 +2000,6 @@
           "kind": "imports",
           "from": "src/runtime/runner.ts#runV2Script",
           "to": "src/runtime/protocol.ts#CodingAgentResult"
-        },
-        {
-          "kind": "imports",
-          "from": "src/runtime/runner.ts#runV2Script",
-          "to": "src/runtime/engine.ts#CodingWorkflowEngine"
         },
         {
           "kind": "imports",
@@ -1976,6 +2030,16 @@
           "kind": "imports",
           "from": "src/runtime/runner.ts#projectV2Run",
           "to": "src/runtime/store.ts#saveV2Run"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/runner.ts#ResumeV2RunOptions",
+          "to": "src/runtime/store.ts#ResumeFingerprint"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/runner.ts#ResumeV2RunOptions",
+          "to": "src/runtime/store.ts#V2AuthorityDescriptor"
         },
         {
           "kind": "imports",
@@ -2010,12 +2074,12 @@
         {
           "kind": "imports",
           "from": "src/runtime/runner.ts#cancelV2Run",
-          "to": "src/runtime/control.ts#CancelControl"
+          "to": "src/runtime/control.ts#ControlError"
         },
         {
           "kind": "imports",
           "from": "src/runtime/runner.ts#cancelV2Run",
-          "to": "src/runtime/control.ts#cancelReasonDigest"
+          "to": "src/runtime/control.ts#requestCancelSocket"
         },
         {
           "kind": "imports",
@@ -2025,7 +2089,7 @@
         {
           "kind": "imports",
           "from": "src/runtime/runner.ts#cancelV2Run",
-          "to": "src/runtime/store.ts#saveV2Run"
+          "to": "src/runtime/control.ts#cancelReasonDigest"
         },
         {
           "kind": "imports",
