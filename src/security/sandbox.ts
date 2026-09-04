@@ -1,5 +1,5 @@
 import { access } from 'node:fs/promises';
-import { constants } from 'node:fs';
+import { constants, realpathSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { sha256 } from '../utils/hash.js';
 
@@ -95,11 +95,15 @@ function quoteProfilePath(value: string): string {
   return JSON.stringify(value).replaceAll('\\', '\\\\');
 }
 
+function physicalPath(path: string): string {
+  try { return realpathSync.native(path); } catch { return path; }
+}
+
 function seatbeltProfile(projectRoot: string, writePaths: readonly string[]): string {
   const writes = writePaths.length
-    ? writePaths.map((path) => `  (allow file-write* (subpath ${quoteProfilePath(path)}))`).join('\n')
+    ? writePaths.map((path) => `  (allow file-write* (literal ${quoteProfilePath(physicalPath(path))}))\n  (allow file-write* (subpath ${quoteProfilePath(physicalPath(path))}))`).join('\n')
     : '';
-  const git = `${projectRoot}/.git`;
+  const git = physicalPath(`${projectRoot}/.git`);
   return [
     '(version 1)',
     '(deny default)',

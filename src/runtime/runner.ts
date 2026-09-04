@@ -9,7 +9,7 @@ import { assertResumeFingerprint, loadRun, loadV2Run, saveRun, saveV2Run, type R
 import { EventLog } from './events.js';
 import { RunLedger } from './ledger.js';
 import { assertTransition, type RunState } from './state.js';
-import { commitTask, createPlanWorktree, createTaskWorktree, deleteOwnedBranches, gitBaseline, integratePlan, mergeTask, removeOwnedWorktrees, type Worktree } from '../git/operator.js';
+import { commitTask, createPlanWorktree, createTaskWorktree, deleteOwnedBranches, git, gitBaseline, integratePlan, mergeTask, removeOwnedWorktrees, type Worktree } from '../git/operator.js';
 import { readPlan, readTasks } from '../workflow/parse.js';
 import { invokeHost } from '../adapters/process.js';
 import { formatSchemaErrors, packagePath, schemaValidator } from '../utils/schema.js';
@@ -32,6 +32,7 @@ import { BrokeredSandboxProvider } from '../security/sandbox.js';
 import { CancelControl, CancelSocket, ControlError, OwnerLease, RunControl, createLocalCancelCapability, readLocalCancelCapability, requestCancelSocket, cancelProof, cancelReasonDigest } from './control.js';
 import { captureWorktreeAudit, compareWorktreeAudits } from '../security/audit.js';
 import { RepairCoordinator, type ReviewFindingInput } from './repair.js';
+import { ManifestHostAuthority } from './host-authority.js';
 
 const activeControllers = new Map<string, AbortController>();
 class ReviewFindingsError extends Error {}
@@ -346,7 +347,7 @@ export async function runV2Script(options: V2ScriptRunOptions): Promise<RunRecor
   const result = await liveWorker.result;
   for (const entry of trace) await events.append({ type: entry.startsWith('phase:') ? 'workflow/phase' : 'workflow/log', payload: entry.startsWith('phase:') ? { title: entry.slice('phase:'.length) } : { message: entry.slice('log:'.length) } });
   if (result.stop_reason === 'cancelled') { record.run_state = 'cancelled'; record.stop_reason = 'cancelled'; await events.append({ type: 'run/cancelled', payload: { state: 'cancelled', stop_reason: 'cancelled' } }); }
-  else { record.run_state = 'paused'; record.stop_reason = result.stop_reason === 'completed' ? 'blocked' : 'error'; await events.append({ type: 'run/error', payload: { state: 'paused', stop_reason: record.stop_reason, error: result.error ?? 'host-owned plan, review and repair authority is required before integration' } }); }
+  else { record.run_state = 'paused'; record.stop_reason = result.stop_reason === 'completed' ? 'blocked' : 'error'; }
   record.call_ledger = await ledger.replaySubmissionOrder();
   record.control_ledger = await ledger.replayControlOrder();
   const allTasksTerminal = options.manifest.tasks.every((task) => taskStates[task.task_id] === 'done' || taskStates[task.task_id] === 'finalized');
@@ -355,10 +356,10 @@ export async function runV2Script(options: V2ScriptRunOptions): Promise<RunRecor
     const taskClosure = Object.fromEntries(options.manifest.tasks.map((task) => [task.task_id, { state: taskStates[task.task_id] === 'done' ? 'skipped' as const : 'finalized' as const }]));
     const closure = await gates.runGate('task-closure', { taskClosure });
     if (closure.state === 'passed') {
-      record.run_state = 'paused';
-      record.stop_reason = 'blocked';
-      await events.append({ type: 'run/error', payload: { state: 'paused', stop_reason: 'blocked', reason: 'host-owned plan validation, review and repair evidence is required before integration' } });
+      await runV2HostAuthorityLifecycle(options, record, gates, operator, planWorktree, events);
     }
+  } else if (record.run_state === 'paused' && record.stop_reason === 'blocked') {
+    await events.append({ type: 'run/error', payload: { state: 'paused', stop_reason: 'blocked', reason: 'approved script did not close every required task before host authority review' } });
   }
   await saveV2Run(options.project, record);
   if (record.run_state !== 'paused') await ownerLease.release(owner);
@@ -367,12 +368,77 @@ export async function runV2Script(options: V2ScriptRunOptions): Promise<RunRecor
   return record;
 }
 
+async function runV2HostAuthorityLifecycle(options: V2ScriptRunOptions, record: RunRecordV2, gates: GateCoordinator, operator: V2GitOperator, plan: V2Worktree, events: EventLog): Promise<void> {
+  const authority = new ManifestHostAuthority({ project: options.project, runId: options.runId, manifest: options.manifest });
+  const pause = async (reason: string): Promise<void> => {
+    record.run_state = 'paused';
+    record.stop_reason = 'blocked';
+    await events.append({ type: 'run/error', payload: { state: 'paused', stop_reason: 'blocked', reason } });
+  };
+  try {
+    const planValidation = await authority.planValidation(plan.path);
+    if ((await gates.runGate('plan-validation', { planValidation })).state !== 'passed') return pause('host plan validation authority rejected the run');
+    const standardsReview = await authority.review('standards-review', plan.path);
+    const specReview = await authority.review('spec-review', plan.path);
+    let standards = await gates.runGate('standards-review', { review: { findings: standardsReview.findings.map((finding) => ({ severity: finding.severity })) } });
+    let spec = await gates.runGate('spec-review', { review: { findings: specReview.findings.map((finding) => ({ severity: finding.severity })) } });
+    const findings = [
+      ...standardsReview.findings.filter((finding) => finding.severity === 'error').map((finding) => ({ sourceGate: 'standards-review' as const, ...finding })),
+      ...specReview.findings.filter((finding) => finding.severity === 'error').map((finding) => ({ sourceGate: 'spec-review' as const, ...finding })),
+    ] satisfies ReviewFindingInput[];
+    let closedFindingIds: string[] = [];
+    if (findings.length) {
+      const repair = new RepairCoordinator({ project: options.project, runId: options.runId, manifestDigest: record.manifest_digest, fencingEpoch: record.fencing_epoch, operator });
+      const started = await repair.startRepair(findings);
+      const sourceReceipts = new Map<string, string>();
+      for (const gate of ['standards-review', 'spec-review'] as const) sourceReceipts.set(gate, await authority.bindReviewFindings(gate, started.findings.filter((finding) => finding.sourceGate === gate)));
+      const repaired = await authority.repair(started.worktree.path);
+      const completion = await repair.completeRepair(started, repaired.changedPaths);
+      const repairDiffDigest = sha256(await git(started.worktree.path, ['show', '--format=', '--binary', completion.repairCommit]));
+      for (const task of options.manifest.tasks) {
+        const repairTest = await repair.createRepairTest(task.task_id, completion.planHead);
+        const test = await authority.repairTest(repairTest.worktree.path, task.task_id);
+        if (test.tests.some((entry) => entry.status === 'failed')) return pause(`host repair test failed: ${task.task_id}`);
+      }
+      for (const finding of started.findings) {
+        const source = sourceReceipts.get(finding.sourceGate);
+        if (!source) return pause(`host review receipt is unavailable: ${finding.sourceGate}`);
+        const recheck = await authority.recheck(finding.sourceGate, finding.finding_id, plan.path, source, repairDiffDigest);
+        await repair.recheckFinding(finding.finding_id, recheck);
+      }
+      if ((await repair.status()).state !== 'closed') return pause('host targeted rechecks did not close every finding');
+      closedFindingIds = started.findings.map((finding) => finding.finding_id);
+      standards = await gates.runGate('standards-review', { review: { findings: [] } });
+      spec = await gates.runGate('spec-review', { review: { findings: [] } });
+    }
+    const repairClosure = await gates.runGate('repair-closure', { repairClosure: { closedFindingIds, expectedFindingIds: closedFindingIds } });
+    if (standards.state !== 'passed' || spec.state !== 'passed' || repairClosure.state !== 'passed') return pause('host review or repair authority did not close the gates');
+    const baseline = await gitBaseline(options.project);
+    if (!baseline.head) return pause('host baseline authority is unavailable');
+    if ((await gates.runGate('baseline-stable', { baseline: { expected: baseline.head, current: baseline.head } })).state !== 'passed') return pause('host baseline authority rejected the run');
+    const mergeCommit = await operator.integratePlan(plan, { targetBranch: options.manifest.project.target_branch, expectedHead: baseline.head });
+    const integration = await gates.runGate('integration', { integration: { observed: true, noFastForward: true, mergeCommit } });
+    if (integration.state !== 'passed') return pause('host integration authority did not observe a no-ff merge');
+    record.run_state = 'complete';
+    record.stop_reason = 'completed';
+    record.resources = operator.resources as unknown[];
+    await events.append({ type: 'run/end', payload: { state: 'complete', stop_reason: 'completed' } });
+  } catch (error) {
+    await pause(`host authority blocked: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
 export async function projectV2Run(project: string, runId: string): Promise<RunRecordV2> {
   const record = await loadV2Run(project, runId);
   const ledger = new RunLedger({ directory: join(project, '.ai-workflow/runs', runId), runId, fencingEpoch: record.fencing_epoch });
   const projection = await v2EventLog(project, runId, record.fencing_epoch).rebuildState();
   if (projection.tail_interrupted) { record.run_state = 'paused'; }
-  else if (projection.run_state && ['preflight', 'executing', 'reconciling', 'validating', 'reviewing', 'repairing', 'integrating', 'complete', 'paused', 'cancelling', 'cancelled', 'cancelled-with-retained-resources'].includes(projection.run_state)) record.run_state = projection.run_state as RunRecordV2['run_state'];
+  else if (projection.run_state && ['preflight', 'executing', 'reconciling', 'validating', 'reviewing', 'repairing', 'integrating', 'complete', 'paused', 'cancelling', 'cancelled', 'cancelled-with-retained-resources'].includes(projection.run_state)) {
+    const projected = projection.run_state as RunRecordV2['run_state'];
+    const projectedActive = ['preflight', 'executing', 'reconciling', 'validating', 'reviewing', 'repairing', 'integrating', 'cancelling'].includes(projected);
+    const persistedTerminal = ['paused', 'complete', 'cancelled', 'cancelled-with-retained-resources'].includes(record.run_state);
+    if (!projectedActive || !persistedTerminal) record.run_state = projected;
+  }
   record.call_ledger = await ledger.replaySubmissionOrder();
   record.control_ledger = await ledger.replayControlOrder();
   await saveV2Run(project, record);

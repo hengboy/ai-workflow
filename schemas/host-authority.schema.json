@@ -1,0 +1,74 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://ai-workflow.local/schemas/host-authority.schema.json",
+  "title": "HostAuthorityResult",
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["result_version", "result_type", "valid", "errors"],
+      "properties": {
+        "result_version": { "const": "2.0.0" },
+        "result_type": { "const": "plan-validation" },
+        "valid": { "type": "boolean" },
+        "errors": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["result_version", "result_type", "gate_id", "findings"],
+      "properties": {
+        "result_version": { "const": "2.0.0" },
+        "result_type": { "const": "review" },
+        "gate_id": { "enum": ["standards-review", "spec-review"] },
+        "findings": { "type": "array", "items": { "$ref": "#/definitions/finding" } }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["result_version", "result_type", "changed_paths"],
+      "properties": {
+        "result_version": { "const": "2.0.0" },
+        "result_type": { "const": "aggregate-repair" },
+        "changed_paths": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/definitions/path" } }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["result_version", "result_type", "task_id", "tests"],
+      "properties": {
+        "result_version": { "const": "2.0.0" },
+        "result_type": { "const": "repair-test" },
+        "task_id": { "type": "string", "minLength": 1 },
+        "tests": { "type": "array", "items": { "$ref": "#/definitions/test" } }
+      }
+    }
+  ],
+  "definitions": {
+    "path": { "type": "string", "minLength": 1, "pattern": "^(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*//)(?!.*\\\\)[^\\u0000]+$" },
+    "actionId": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["severity", "message", "path", "applicable_action_ids"],
+      "properties": {
+        "severity": { "enum": ["error", "warning", "info"] },
+        "message": { "type": "string", "minLength": 1, "maxLength": 20000 },
+        "path": { "$ref": "#/definitions/path" },
+        "applicable_action_ids": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/definitions/actionId" } }
+      }
+    },
+    "test": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["command", "status"],
+      "properties": {
+        "command": { "type": "string", "minLength": 1 },
+        "status": { "enum": ["passed", "failed", "skipped"] }
+      }
+    }
+  }
+}

@@ -789,6 +789,7 @@
         "src/runtime/engine.ts",
         "src/runtime/events.ts",
         "src/runtime/gates.ts",
+        "src/runtime/host-authority.ts",
         "src/runtime/ledger.ts",
         "src/runtime/protocol.ts",
         "src/runtime/realm.ts",
@@ -1057,6 +1058,18 @@
         {
           "file": "src/runtime/gates.ts",
           "name": "GateCoordinator",
+          "kind": "class",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/host-authority.ts",
+          "name": "HostAuthorityError",
+          "kind": "class",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/host-authority.ts",
+          "name": "ManifestHostAuthority",
           "kind": "class",
           "visibility": "public"
         },
@@ -1840,6 +1853,11 @@
         },
         {
           "kind": "imports",
+          "from": "src/runtime/host-authority.ts#ManifestHostAuthority",
+          "to": "src/runtime/repair.ts#ReviewFindingReceipt"
+        },
+        {
+          "kind": "imports",
           "from": "src/runtime/ledger.ts#LedgerOptions",
           "to": "src/runtime/events.ts#EventLog"
         },
@@ -2301,6 +2319,7 @@
         "src/runtime/engine.ts",
         "src/runtime/events.ts",
         "src/runtime/gates.ts",
+        "src/runtime/host-authority.ts",
         "src/runtime/ledger.ts",
         "src/runtime/protocol.ts",
         "src/runtime/realm.ts",

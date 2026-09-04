@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { execFile } from 'node:child_process';
-import { chmod, readFile, writeFile } from 'node:fs/promises';
+import { chmod, readFile, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { frozenPlan, gitInit, temporary } from '../helpers.js';
@@ -96,7 +96,60 @@ describe('v2 CLI artifacts', () => {
     const started = await workflowCli(project, ['run', 'start', '--workflow', workflow, '--host', 'codex', '--project', project]);
     const record = JSON.parse(started.stdout) as { run_id: string; run_state: string; stop_reason?: string };
     expect(record).toMatchObject({ run_state: 'paused', stop_reason: 'blocked' });
-    await expect(readFile(join(project, '.ai-workflow/runs', record.run_id, 'events.jsonl'), 'utf8')).resolves.toMatch(/host-owned plan, review and repair authority is required/);
+    await expect(readFile(join(project, '.ai-workflow/runs', record.run_id, 'events.jsonl'), 'utf8')).resolves.toMatch(/approved script did not close every required task before host authority review/);
+  });
+
+  it('completes manifest-scoped plan, review, repair, test and targeted recheck authority through a temporary host', async () => {
+    const project = await temporary('ai-workflow-cli-v2-');
+    const bin = await temporary('ai-workflow-authority-host-');
+    await gitInit(project);
+    const plan = await frozenPlan(project);
+    await writeFile(join(project, 'src/output.ts'), 'baseline\n');
+    await exec('git', ['add', 'MEMORY.md', 'src/input.ts', 'src/output.ts'], { cwd: project });
+    await exec('git', ['commit', '-m', 'fixture source'], { cwd: project });
+    await writeFile(join(plan, 'workflow.js'), 'await skipTask("task-001-example", "authority fixture", "control/skip");\n');
+    const host = join(bin, 'codex');
+    await writeFile(host, `#!/usr/bin/env node
+const { createHash } = require('node:crypto');
+const { readFileSync, writeFileSync } = require('node:fs');
+const input = readFileSync(0, 'utf8');
+const packet = JSON.parse(input.split('PACKET:\\n')[1].split('\\n\\nRespond')[0]);
+const result = (value = {}, changed_paths = [], tests = []) => process.stdout.write(JSON.stringify({ result_version: '2.0.0', status: 'done', summary: 'fake authority', changed_paths, evidence: [], tests, findings: [], git_refs: [], support_requests: [], value }));
+const digest = (value) => 'sha256:' + createHash('sha256').update(value).digest('hex');
+if (packet.objective.includes('Host authority plan validation')) result({ result_version: '2.0.0', result_type: 'plan-validation', valid: true, errors: [] });
+else if (packet.objective.includes('Host authority review standards-review')) result({ result_version: '2.0.0', result_type: 'review', gate_id: 'standards-review', findings: [{ severity: 'error', message: 'repair src output', path: 'src/output.ts', applicable_action_ids: ['task-001-example-implement'] }] });
+else if (packet.objective.includes('Host authority review spec-review')) result({ result_version: '2.0.0', result_type: 'review', gate_id: 'spec-review', findings: [] });
+else if (packet.objective.includes('Host authority aggregate repair')) { writeFileSync('src/output.ts', 'repaired\\n'); result({ result_version: '2.0.0', result_type: 'aggregate-repair', changed_paths: ['src/output.ts'] }, ['src/output.ts']); }
+else if (packet.objective.includes('Host authority repair test')) result({ result_version: '2.0.0', result_type: 'repair-test', task_id: 'task-001-example', tests: [{ command: 'pnpm test', status: 'passed' }] }, [], [{ command: 'pnpm test', status: 'passed' }]);
+else if (packet.objective.includes('Host authority finding recheck')) { const [source, repair] = packet.evidence; const finding = /finding-sha256:[a-f0-9]{64}/.exec(packet.objective)[0]; const evidence = readFileSync('src/output.ts'); result({ result_version: '2.0.0', result_type: 'finding-recheck', finding_id: finding, status: 'closed', evidence_paths: ['src/output.ts'], evidence_digests: [digest(evidence)], repair_diff_digest: repair, source_review_receipt_digest: source, message: 'recheck complete' }); }
+else if (packet.write_paths.length) { writeFileSync('src/output.ts', 'implemented\\n'); result({}, ['src/output.ts']); }
+else if (packet.role === 'test') result({}, [], [{ command: 'pnpm test', status: 'passed' }]);
+else result();
+`);
+    await chmod(host, 0o755);
+    const workflow = (JSON.parse((await workflowCli(project, ['workflow', 'generate', '--plan', plan, '--host', 'codex'])).stdout) as { workflow: string }).workflow;
+    const manifest = JSON.parse(await readFile(workflow, 'utf8')) as { tasks: Array<{ activation: string }> };
+    manifest.tasks[0]!.activation = 'conditional';
+    await writeFile(workflow, `${JSON.stringify(manifest, null, 2)}\n`);
+    await workflowCli(project, ['workflow', 'approve', workflow, '--project', project]);
+
+    const started = await workflowCli(project, ['run', 'start', '--workflow', workflow, '--host', 'codex', '--project', project], { PATH: `${bin}:${process.env.PATH ?? ''}` });
+    const record = JSON.parse(started.stdout) as { run_id: string; run_state: string };
+
+    const events = await readFile(join(project, '.ai-workflow/runs', record.run_id, 'events.jsonl'), 'utf8');
+    expect(record.run_state, events).toBe('complete');
+    const authorityDirectory = join(project, '.ai-workflow/runs', record.run_id, 'receipts', 'authority');
+    const recheck = (await readdir(authorityDirectory)).find((entry) => entry.startsWith('finding-recheck-'));
+    if (!recheck) throw new Error('fake host did not produce a targeted recheck receipt');
+    const receipt = JSON.parse(await readFile(join(authorityDirectory, recheck), 'utf8')) as { finding_id: string; source_review_receipt_digest: string; repair_diff_digest: string; evidence_digests: string[]; message: string };
+    const review = JSON.parse(await readFile(join(authorityDirectory, 'standards-review.json'), 'utf8')) as { receipt_digest: string; findings: Array<{ finding_id: string; message_digest: string }> };
+    expect(receipt.finding_id).toMatch(/^finding-sha256:/);
+    expect(receipt.source_review_receipt_digest).toBe(review.receipt_digest);
+    expect(receipt.repair_diff_digest).toMatch(/^sha256:/);
+    expect(receipt.evidence_digests).toEqual([expect.stringMatching(/^sha256:/)]);
+    expect(receipt.message).toBe('recheck complete');
+    expect(review.findings).toEqual([expect.objectContaining({ finding_id: receipt.finding_id, message_digest: expect.stringMatching(/^sha256:/) })]);
+    await expect(readFile(join(project, 'src/output.ts'), 'utf8')).resolves.toBe('repaired\n');
   });
 
   it('records an approved Worker action through the durable call ledger before pausing for lifecycle gates', async () => {
