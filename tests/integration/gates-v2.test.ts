@@ -256,6 +256,32 @@ describe('v2 mandatory gates', () => {
     expect(result.trace).toEqual(expect.arrayContaining(['phase:worker-only']));
   });
 
+  it('routes approved lifecycle script actions through host execution and task closure', async () => {
+    const project = await temporary();
+    await gitInit(project);
+    const runId = 'runner-v2-script-action-closure';
+    const manifest = {
+      manifest_digest: digest,
+      target_branch: 'main',
+      tasks: [{ task_id: 'task-001', activation: 'required' as const, finalization_mode: 'commit-and-merge' as const, required_actions: ['task-001-test'], depends_on: [] }],
+      actions: [{ action_id: 'task-001-test', task_id: 'task-001', operation: 'test', write_scope: ['output.txt'] }],
+    };
+    const baseline = (await gitBaseline(project)).head!;
+
+    const result = await runV2Lifecycle({
+      project,
+      runId,
+      manifest,
+      script: 'await agent("test", { actionId: "task-001-test", callId: "script/test" });',
+      execute: async ({ cwd }) => { await writeFile(join(cwd, 'output.txt'), 'script action\n'); return { status: 'done', tests: [{ command: 'pnpm test', status: 'passed' }], changedPaths: ['output.txt'] }; },
+      gateEvidence: { planValidation: { valid: true, errors: [] }, standardsReview: { findings: [] }, specReview: { findings: [] }, repairClosure: { closedFindingIds: [], expectedFindingIds: [] }, baseline: { expected: baseline, current: baseline }, integration: { observed: true, noFastForward: true } },
+    });
+
+    expect(result.run_state).toBe('complete');
+    expect(result.gates.integration?.state).toBe('passed');
+    await expect(readFile(join(project, 'output.txt'), 'utf8')).resolves.toBe('script action\n');
+  });
+
   it('cancels a deferred v2 run and reconciles its durable projection without deleting resources', async () => {
     const project = await temporary();
     await gitInit(project);

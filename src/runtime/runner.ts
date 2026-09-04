@@ -26,6 +26,7 @@ import { CodingWorkflowEngine, type ChildRun } from './engine.js';
 import { ScopeScheduler } from './scheduler.js';
 import { admitAction } from '../security/capability.js';
 import type { CodingCapabilityManifest } from '../generated/coding-manifest.schema.js';
+import type { ActionCapability, ActionCapabilityManifest } from '../security/capability.js';
 import type { CallDescriptor, CodingAgentResult, TaskControlDescriptor } from './protocol.js';
 import { BrokeredSandboxProvider } from '../security/sandbox.js';
 import { CancelControl, cancelProof, cancelReasonDigest } from './control.js';
@@ -331,11 +332,7 @@ export async function runV2Lifecycle(options: V2LifecycleOptions): Promise<V2Lif
   const plan = await operator.createPlanWorktree({ baseBranch: options.manifest.target_branch ?? 'main' });
   trace.push('resource:plan-created');
   if (options.script !== undefined) {
-    const worker = new CodingWorkflowEngine().start({ runId: options.runId, script: options.script, args: options.args ?? {}, manifestDigest: options.manifest.manifest_digest, scriptDigest: options.scriptDigest ?? options.manifest.manifest_digest, argsDigest: options.argsDigest ?? options.manifest.manifest_digest, actions: options.manifest.actions.map((action) => ({ action_id: action.action_id, task_id: action.task_id })), observer: { phase: (title) => trace.push(`phase:${title}`), log: (message) => trace.push(`log:${message}`) }, disposeGraceMs: 5_000 });
-    const result = await worker.result;
-    await worker.dispose();
-    if (result.stop_reason !== 'completed') return lifecyclePaused(options.project, record, new GateCoordinator({ directory, runId: options.runId, fencingEpoch, manifestDigest: options.manifest.manifest_digest }), trace, result.error ?? 'approved lifecycle script failed', operator);
-    return lifecyclePaused(options.project, record, new GateCoordinator({ directory, runId: options.runId, fencingEpoch, manifestDigest: options.manifest.manifest_digest }), trace, 'approved script completed; host action closure evidence is required', operator);
+    return runScriptLifecycle(options, record, directory, trace, operator, plan);
   }
   const tasks = new Map<string, { worktree: V2Worktree; state: 'finalized' | 'committed' | 'skipped' }>();
   const actionObservations = new Map<string, TaskActionObservation[]>();
@@ -343,7 +340,7 @@ export async function runV2Lifecycle(options: V2LifecycleOptions): Promise<V2Lif
   const actionResults = new Map<string, V2LifecycleActionResult>();
   if (options.script === undefined) {
     const script = lifecycleActions.map((action, index) => `await agent(${JSON.stringify(`Execute ${action.action_id}`)}, { actionId: ${JSON.stringify(action.action_id)}, callId: ${JSON.stringify(`lifecycle/${index + 1}/${action.action_id}`)} });`).join('\n');
-    const worker = new CodingWorkflowEngine().start({ runId: options.runId, script, args: options.args ?? {}, manifestDigest: options.manifest.manifest_digest, scriptDigest: options.scriptDigest ?? options.manifest.manifest_digest, argsDigest: options.argsDigest ?? options.manifest.manifest_digest, actions: lifecycleActions.map((action) => ({ action_id: action.action_id, task_id: action.task_id })), childExecutor: { start: (descriptor) => Promise.resolve({ id: descriptor.call_id, result: (async () => { const action = lifecycleActions.find((candidate) => candidate.action_id === descriptor.action_id); if (!action) throw new Error(`ACTION_NOT_AUTHORIZED: ${descriptor.action_id}`); const task = options.manifest.tasks.find((candidate) => candidate.task_id === action.task_id); const worktree = task && (await operator.createTaskWorktree(plan, task.task_id)); if (!worktree) throw new Error(`TASK_NOT_AUTHORIZED: ${action.task_id}`); const result = await options.execute({ cwd: worktree.path, taskId: action.task_id, actionId: action.action_id }); actionResults.set(action.action_id, result); return { result_version: '2.0.0' as const, status: result.status, summary: result.status, changed_paths: result.changedPaths, evidence: [], tests: result.tests, findings: [], git_refs: [], support_requests: [] }; })(), dispose: () => Promise.resolve() }) }, observer: { phase: (title) => trace.push(`phase:${title}`), log: (message) => trace.push(`log:${message}`) }, disposeGraceMs: 5_000 });
+    const worker = new CodingWorkflowEngine().start({ runId: options.runId, script, args: options.args ?? {}, manifestDigest: options.manifest.manifest_digest, scriptDigest: options.scriptDigest ?? options.manifest.manifest_digest, argsDigest: options.argsDigest ?? options.manifest.manifest_digest, actions: lifecycleActions.map((action) => ({ action_id: action.action_id, task_id: action.task_id })), childExecutor: { start: (descriptor) => Promise.resolve({ id: descriptor.call_id, result: (async () => { const action = lifecycleActions.find((candidate) => candidate.action_id === descriptor.action_id); if (!action) throw new Error(`ACTION_NOT_AUTHORIZED: ${descriptor.action_id}`); const task = options.manifest.tasks.find((candidate) => candidate.task_id === action.task_id); if (!task) throw new Error(`TASK_NOT_AUTHORIZED: ${action.task_id}`); const worktree = tasks.get(task.task_id)?.worktree ?? await operator.createTaskWorktree(plan, task.task_id); tasks.set(task.task_id, { worktree, state: task.finalization_mode === 'read-only-finalize' ? 'finalized' : 'committed' }); const result = await options.execute({ cwd: worktree.path, taskId: action.task_id, actionId: action.action_id }); actionResults.set(action.action_id, result); return { result_version: '2.0.0' as const, status: result.status, summary: result.status, changed_paths: result.changedPaths, evidence: [], tests: result.tests, findings: [], git_refs: [], support_requests: [] }; })(), dispose: () => Promise.resolve() }) }, observer: { phase: (title) => trace.push(`phase:${title}`), log: (message) => trace.push(`log:${message}`) }, disposeGraceMs: 5_000 });
     const result = await worker.result;
     await worker.dispose();
     if (result.stop_reason !== 'completed') return lifecyclePaused(options.project, record, new GateCoordinator({ directory, runId: options.runId, fencingEpoch, manifestDigest: options.manifest.manifest_digest }), trace, result.error ?? 'lifecycle Worker failed', operator);
@@ -403,6 +400,114 @@ export async function runV2Lifecycle(options: V2LifecycleOptions): Promise<V2Lif
     return [gateId, receipt] as const;
   }));
   return { run_state: record.run_state, gates: Object.fromEntries(gateEntries), integration, trace };
+}
+
+async function runScriptLifecycle(options: V2LifecycleOptions, record: RunRecordV2, directory: string, trace: string[], operator: V2GitOperator, plan: V2Worktree): Promise<V2LifecycleResult> {
+  const script = options.script;
+  if (script === undefined) throw new Error('approved lifecycle script is required');
+  const ledger = new RunLedger({ directory, runId: options.runId, fencingEpoch: record.fencing_epoch });
+  const scheduler = new ScopeScheduler({ maxConcurrent: Math.max(1, options.manifest.actions.length) });
+  const taskWorktrees = new Map<string, V2Worktree>();
+  for (const task of options.manifest.tasks) taskWorktrees.set(task.task_id, await operator.createTaskWorktree(plan, task.task_id));
+  const taskStates = Object.fromEntries(options.manifest.tasks.map((task) => [task.task_id, 'ready' as const]));
+  const actionStates: Record<string, 'prepared' | 'dispatch_intent' | 'running' | 'observed' | 'checkpointed' | 'done'> = {};
+  const observations = new Map<string, TaskActionObservation[]>();
+  const actions: ActionCapability[] = options.manifest.actions.map((action) => ({
+    action_id: action.action_id,
+    task_id: action.task_id,
+    operation: action.operation as ActionCapability['operation'],
+    role: 'task-worker' as const,
+    locator_read_order: [],
+    read_scope: [],
+    write_scope: [...action.write_scope],
+    new_module_directories: [],
+    allowed_commands: [],
+    test_commands: [],
+    requires_actions: [],
+    max_attempts: 1,
+    optional: false,
+    write_access: action.write_scope.length > 0,
+    host_only: false,
+  } satisfies ActionCapability));
+  const capabilityManifest: ActionCapabilityManifest = {
+    plan_id: options.runId,
+    host: 'codex',
+    host_execution: {
+      adapter: 'codex', mode: 'brokered-sandbox',
+      model_transport: { owner: 'host-native-broker', network_allowed: true, project_write_allowed: false, credential_visibility: 'broker-only' },
+      action_executor: { process_group: true, network_allowed: false, project_write_enforced: true, git_metadata_write_allowed: false },
+      native_tool_authorization: 'unavailable', capability_digest: options.manifest.manifest_digest,
+    },
+    tasks: options.manifest.tasks,
+    actions,
+  };
+  const worker = new CodingWorkflowEngine().start({ runId: options.runId, script, args: options.args ?? {}, manifestDigest: options.manifest.manifest_digest, scriptDigest: options.scriptDigest ?? options.manifest.manifest_digest, argsDigest: options.argsDigest ?? options.manifest.manifest_digest, actions: actions.map((action) => ({ action_id: action.action_id, task_id: action.task_id })), childExecutor: {
+    start: async (descriptor) => {
+      const action = actions.find((candidate) => candidate.action_id === descriptor.action_id);
+      if (!action) throw new Error(`ACTION_NOT_AUTHORIZED: ${descriptor.action_id}`);
+      const worktree = taskWorktrees.get(action.task_id);
+      if (!worktree) throw new Error(`TASK_NOT_AUTHORIZED: ${action.task_id}`);
+      const admission = admitAction({ manifest: capabilityManifest, action_id: action.action_id, run_id: options.runId, cwd: worktree.path, attempt: 1, task_states: taskStates, action_states: actionStates, active_hosts: ['codex'] });
+      const lease = await scheduler.submit({ admission_id: admission.attempt_id, call_ordinal: descriptor.call_ordinal, action_id: action.action_id, task_id: action.task_id, read_scope: action.read_scope, write_scope: action.write_scope });
+      await ledger.prepareCall({ callId: descriptor.call_id, callOrdinal: descriptor.call_ordinal, descriptor: descriptor as unknown as import('./ledger.js').CallDescriptor });
+      await ledger.dispatchIntent(descriptor.call_id);
+      actionStates[action.action_id] = 'dispatch_intent';
+      await ledger.markRunning(descriptor.call_id);
+      actionStates[action.action_id] = 'running';
+      const before = await captureWorktreeAudit(worktree.path);
+      const result = (async () => {
+        const value = await options.execute({ cwd: worktree.path, taskId: action.task_id, actionId: action.action_id });
+        const codingResult: CodingAgentResult = { result_version: '2.0.0', status: value.status, summary: value.status, changed_paths: value.changedPaths, evidence: [], tests: value.tests, findings: [], git_refs: [], support_requests: [] };
+        await ledger.observeCall(descriptor.call_id, codingResult as unknown as import('../generated/coding-agent-result.schema.js').CodingAgentResult);
+        const after = await captureWorktreeAudit(worktree.path);
+        const audit = compareWorktreeAudits(before, after, action.write_scope);
+        if (audit.status !== 'clean') throw new Error(`ACTION_SCOPE_VIOLATION: ${audit.out_of_scope_paths.join(', ') || audit.errors.join(', ')}`);
+        await ledger.checkpointCall(descriptor.call_id, value.changedPaths);
+        actionStates[action.action_id] = value.status === 'done' ? 'checkpointed' : 'observed';
+        observations.set(action.task_id, [...(observations.get(action.task_id) ?? []), { action_id: action.action_id, state: value.status === 'done' ? 'checkpointed' : 'failed', result: { status: value.status, tests: value.tests } }]);
+        lease.release(value.status === 'done' ? 'completed' : 'blocked');
+        return codingResult;
+      })();
+      return { id: descriptor.call_id, result, dispose: () => Promise.resolve() };
+    },
+  }, observer: { phase: (title) => trace.push(`phase:${title}`), log: (message) => trace.push(`log:${message}`) }, sandboxPreflight: () => { new BrokeredSandboxProvider().preflight(); }, disposeGraceMs: 5_000 });
+  const workerResult = await worker.result;
+  await worker.dispose();
+  if (workerResult.stop_reason !== 'completed') return lifecyclePaused(options.project, record, new GateCoordinator({ directory, runId: options.runId, fencingEpoch: record.fencing_epoch, manifestDigest: options.manifest.manifest_digest }), trace, workerResult.error ?? 'lifecycle Worker failed', operator);
+  const tasks = new Map<string, { worktree: V2Worktree; state: 'finalized' | 'committed' | 'skipped' }>();
+  const coordinator = new TaskClosureCoordinator({ ledger });
+  for (const task of options.manifest.tasks) {
+    if (task.activation === 'conditional') continue;
+    const worktree = taskWorktrees.get(task.task_id);
+    if (!worktree || task.required_actions.some((actionId) => !observations.get(task.task_id)?.some((observation) => observation.action_id === actionId))) return lifecyclePaused(options.project, record, new GateCoordinator({ directory, runId: options.runId, fencingEpoch: record.fencing_epoch, manifestDigest: options.manifest.manifest_digest }), trace, `approved script did not close task actions: ${task.task_id}`, operator);
+    const finalized = await coordinator.finalizeTask({ taskId: task.task_id, controlId: `finalize-${task.task_id}`, controlOrdinal: tasks.size + 1, activation: task.activation, requiredActionIds: task.required_actions, actions: observations.get(task.task_id) ?? [], predecessorStates: {}, finalizationMode: task.finalization_mode, ...(task.finalization_mode === 'commit-and-merge' ? { taskWorktree: worktree, planWorktree: plan, writeScope: actions.filter((action) => action.task_id === task.task_id).flatMap((action) => action.write_scope), operator } : {}) });
+    tasks.set(task.task_id, { worktree, state: finalized.state });
+    trace.push(`task-${task.task_id}:${finalized.state}`);
+  }
+  const gates = new GateCoordinator({ directory, runId: options.runId, fencingEpoch: record.fencing_epoch, manifestDigest: options.manifest.manifest_digest });
+  const taskClosure = await gates.runGate('task-closure', { taskClosure: Object.fromEntries([...tasks].map(([taskId, task]) => [taskId, { state: task.state }])) });
+  if (taskClosure.state !== 'passed') return lifecyclePaused(options.project, record, gates, trace, 'task-closure gate failed', operator);
+  trace.push('gate:task-closure:passed');
+  const validation = await gates.runGate('plan-validation', { planValidation: options.gateEvidence.planValidation });
+  if (validation.state !== 'passed') return lifecyclePaused(options.project, record, gates, trace, 'plan-validation gate failed', operator);
+  trace.push('gate:plan-validation:passed');
+  const standards = await gates.runGate('standards-review', { review: options.gateEvidence.standardsReview });
+  const spec = await gates.runGate('spec-review', { review: options.gateEvidence.specReview });
+  const repair = await gates.runGate('repair-closure', { repairClosure: options.gateEvidence.repairClosure });
+  if (standards.state !== 'passed' || spec.state !== 'passed' || repair.state !== 'passed') return lifecyclePaused(options.project, record, gates, trace, 'review or repair gate failed', operator);
+  const baseline = await gitBaseline(options.project);
+  if (options.gateEvidence.baseline.expected !== baseline.head || options.gateEvidence.baseline.current !== baseline.head) return lifecyclePaused(options.project, record, gates, trace, 'baseline evidence drifted', operator);
+  await gates.runGate('baseline-stable', { baseline: options.gateEvidence.baseline });
+  if (!options.gateEvidence.integration.observed || !options.gateEvidence.integration.noFastForward) return lifecyclePaused(options.project, record, gates, trace, 'integration evidence is required', operator);
+  const mergeCommit = await operator.integratePlan(plan, { targetBranch: options.manifest.target_branch ?? 'main', expectedHead: baseline.head });
+  const integration = { observed: true, noFastForward: true, mergeCommit };
+  await gates.runGate('integration', { integration });
+  record.run_state = 'complete'; record.stop_reason = 'completed'; record.resources = operator.resources as unknown[]; record.completed_tasks = [...tasks.keys()];
+  await v2EventLog(options.project, options.runId, record.fencing_epoch).append({ type: 'run/end', payload: { state: 'complete', stop_reason: 'completed' } });
+  await saveV2Run(options.project, record);
+  const gateIds = ['task-closure', 'plan-validation', 'standards-review', 'spec-review', 'repair-closure', 'baseline-stable', 'integration'] as const;
+  const gateEntries = await Promise.all(gateIds.map(async (gateId) => [gateId, await gates.readGate(gateId)] as const));
+  return { run_state: record.run_state, gates: Object.fromEntries(gateEntries.filter((entry): entry is [typeof entry[0], GateReceipt] => entry[1] !== undefined).map(([gateId, receipt]) => [gateId, receipt])), integration, trace: [...trace, 'gate:integration:passed', 'run:complete'] };
 }
 
 async function lifecyclePaused(project: string, record: RunRecordV2, gates: GateCoordinator, trace: string[], reason: string, operator: V2GitOperator): Promise<V2LifecycleResult> {
