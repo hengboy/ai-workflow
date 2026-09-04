@@ -141,6 +141,8 @@ describe('replay and resume', () => {
     await expect(readFile(join(directory, '.ai-workflow/runs/run-cancel-intent/control/cancel.json'), 'utf8')).resolves.toMatch(/run-cancel-intent/);
     await expect(readFile(join(directory, '.ai-workflow/runs/run-cancel-intent/events.jsonl'), 'utf8')).resolves.toMatch(/run\/cancel-requested/);
     expect(second.resources).toEqual([{ resource_id: 'unknown-resource' }]);
+    const events = (await new EventLog({ path: join(directory, '.ai-workflow/runs/run-cancel-intent/events.jsonl'), runId: 'run-cancel-intent', fencingEpoch: 1 }).read()).events;
+    expect(events.filter((event) => event.type === 'run/cancel-requested')).toHaveLength(1);
   });
 
   it('records a durable skip control for a conditional task in the approved script', async () => {
