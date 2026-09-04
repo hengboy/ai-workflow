@@ -1633,6 +1633,12 @@
         },
         {
           "file": "src/runtime/store.ts",
+          "name": "ResumeAuthorityEvidence",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/store.ts",
           "name": "saveV2Run",
           "kind": "function",
           "visibility": "public"
@@ -2090,6 +2096,11 @@
           "kind": "imports",
           "from": "src/runtime/runner.ts#resumeV2Run",
           "to": "src/runtime/store.ts#RunRecordV2"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/runner.ts#resumeV2Run",
+          "to": "src/runtime/store.ts#ResumeAuthorityEvidence"
         },
         {
           "kind": "imports",

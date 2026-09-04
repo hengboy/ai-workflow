@@ -64,6 +64,10 @@ describe('v2 CLI artifacts', () => {
 
     const status = await workflowCli(project, ['run', 'status', record.run_id, '--project', project]);
     expect(JSON.parse(status.stdout)).toMatchObject({ record_version: '2.0.0', run_id: record.run_id });
+    const resumed = await workflowCli(project, ['run', 'resume', record.run_id, '--project', project]);
+    expect(JSON.parse(resumed.stdout)).toMatchObject({ run_state: 'paused', pause_reason: 'approved Worker restart authority is unavailable' });
+    const pausedStatus = JSON.parse((await workflowCli(project, ['run', 'status', record.run_id, '--project', project])).stdout) as { resume_evidence?: Record<string, string> };
+    expect(pausedStatus.resume_evidence).toMatchObject({ manifest_digest: expect.stringMatching(/^sha256:/), script_digest: expect.stringMatching(/^sha256:/), args_digest: expect.stringMatching(/^sha256:/), approval_digest: expect.stringMatching(/^sha256:/), profile_digest: expect.stringMatching(/^sha256:/), sandbox_digest: expect.stringMatching(/^sha256:/), baseline_digest: expect.stringMatching(/^sha256:/) });
     await expect(workflowCli(project, ['run', 'cancel', record.run_id, '--project', project])).resolves.toMatchObject({
       stdout: expect.stringContaining('"run_state": "cancelled"'),
     });

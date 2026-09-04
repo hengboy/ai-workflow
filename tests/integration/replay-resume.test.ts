@@ -168,6 +168,36 @@ describe('replay and resume', () => {
     expect(events.events.some((event) => event.type === 'resume/diverged' && event.payload.reason === 'approved Worker restart authority is unavailable')).toBe(true);
   });
 
+  it.each([
+    ['profile', (manifest: { host_execution: { adapter: string } }) => { manifest.host_execution.adapter = 'claude'; }],
+    ['sandbox', (manifest: { host_execution: { action_executor: { network_allowed: boolean } } }) => { manifest.host_execution.action_executor.network_allowed = true; }],
+  ] as const)('pauses authoritative resume when the persisted %s authority digest drifts', async (field, mutate) => {
+    const project = await mkdtemp(join(tmpdir(), 'ai-workflow-v2-resume-authority-drift-'));
+    await gitInit(project);
+    const plan = await frozenPlan(project);
+    await writeFile(join(plan, 'workflow.js'), 'return true;\n');
+    const manifest = await generateManifest(plan, 'codex');
+    const record = await runV2Script({ project, runId: `run-resume-${field}-drift`, manifest, script: await readFile(join(plan, 'workflow.js'), 'utf8'), args: {}, scriptDigest: manifest.script.bytes_digest, argsDigest: manifest.args.bytes_digest });
+    const manifestPath = join(plan, 'workflow.json');
+    const persisted = JSON.parse(await readFile(manifestPath, 'utf8')) as typeof manifest;
+    mutate(persisted as never);
+    await writeFile(manifestPath, `${JSON.stringify(persisted, null, 2)}\n`);
+
+    await expect(resumeV2Run(project, record.run_id)).rejects.toThrow(new RegExp(`${field}.*drift`, 'i'));
+    await expect(projectV2Run(project, record.run_id)).resolves.toMatchObject({ run_state: 'paused' });
+  });
+
+  it('does not mark an authoritative run executing when the restart adapter declines execution', async () => {
+    const project = await mkdtemp(join(tmpdir(), 'ai-workflow-v2-resume-restart-'));
+    await gitInit(project);
+    const plan = await frozenPlan(project);
+    const manifest = await generateManifest(plan, 'codex');
+    const record = await runV2Script({ project, runId: 'run-resume-restart', manifest, script: await readFile(join(plan, 'workflow.js'), 'utf8'), args: {}, scriptDigest: manifest.script.bytes_digest, argsDigest: manifest.args.bytes_digest });
+
+    await expect(resumeV2Run(project, record.run_id, { restart: async () => 'paused' as never })).rejects.toThrow(/restart.*executing/i);
+    await expect(projectV2Run(project, record.run_id)).resolves.toMatchObject({ run_state: 'paused' });
+  });
+
   it('fences a crashed lifecycle owner before a replacement owner resumes', async () => {
     const project = await mkdtemp(join(tmpdir(), 'ai-workflow-v2-owner-takeover-'));
     const manifestDigest = 'sha256:' + 'e'.repeat(64);

@@ -5,7 +5,7 @@ import type { Workflow } from '../workflow/types.js';
 import { objectDigest, sha256 } from '../utils/hash.js';
 import { verifyApproval } from '../workflow/approval.js';
 import { validateWorkflow } from '../workflow/validate.js';
-import { assertResumeFingerprint, loadRun, loadV2Run, saveRun, saveV2Run, type RunRecord, type RunRecordV2, type ResumeFingerprint, type V2AuthorityDescriptor } from './store.js';
+import { assertResumeFingerprint, loadRun, loadV2Run, saveRun, saveV2Run, type RunRecord, type RunRecordV2, type ResumeAuthorityEvidence, type ResumeFingerprint, type V2AuthorityDescriptor } from './store.js';
 import { EventLog } from './events.js';
 import { RunLedger } from './ledger.js';
 import { assertTransition, type RunState } from './state.js';
@@ -458,26 +458,43 @@ export async function resumeV2Run(project: string, runId: string, options?: Resu
   if (record.authority) {
     const authority = record.authority;
     const digest = async (path: string): Promise<string> => objectDigest(JSON.parse(await readFile(path, 'utf8')) as unknown);
-    const actual = {
-      manifest: await digest(authority.manifest_path),
-      script: sha256(await readFile(authority.script_path)),
-      args: sha256(await readFile(authority.args_path)),
-      approval: await exists(authority.approval_path) ? await digest(authority.approval_path) : 'missing',
-      baseline: objectDigest({ branch: (await gitBaseline(project)).branch, head: (await gitBaseline(project)).head }),
+    const manifest = JSON.parse(await readFile(authority.manifest_path, 'utf8')) as CodingCapabilityManifest;
+    const baseline = await gitBaseline(project);
+    const actual: ResumeAuthorityEvidence = {
+      manifest_digest: objectDigest(manifest),
+      script_digest: sha256(await readFile(authority.script_path)),
+      args_digest: sha256(await readFile(authority.args_path)),
+      approval_digest: await exists(authority.approval_path) ? await digest(authority.approval_path) : 'missing',
+      profile_digest: objectDigest({ host: manifest.host, adapter: manifest.host_execution.adapter, engine: manifest.engine }),
+      sandbox_digest: objectDigest(manifest.host_execution),
+      baseline_digest: objectDigest({ branch: baseline.branch, head: baseline.head }),
     };
-    const drift = actual.manifest !== authority.manifest_digest ? 'manifest' : actual.script !== authority.script_digest ? 'script' : actual.args !== authority.args_digest ? 'args' : actual.approval !== authority.approval_digest ? 'approval' : actual.baseline !== authority.baseline_digest ? 'baseline' : undefined;
+    const drift = actual.profile_digest !== authority.profile_digest ? 'profile' : actual.sandbox_digest !== authority.sandbox_digest ? 'sandbox' : actual.manifest_digest !== authority.manifest_digest ? 'manifest' : actual.script_digest !== authority.script_digest ? 'script' : actual.args_digest !== authority.args_digest ? 'args' : actual.approval_digest !== authority.approval_digest ? 'approval' : actual.baseline_digest !== authority.baseline_digest ? 'baseline' : undefined;
     if (drift) {
-      await log.append({ type: 'resume/diverged', payload: { state: 'paused', reason: `${drift} drift prevents resume` } });
+      record.pause_reason = `${drift} drift prevents resume`;
+      record.resume_evidence = actual;
+      await log.append({ type: 'resume/diverged', payload: { state: 'paused', reason: record.pause_reason } });
       await saveV2Run(project, record);
-      throw new Error(`${drift} drift prevents resume`);
+      throw new Error(record.pause_reason);
     }
     if (!options || 'expected' in options || !options.restart) {
-      await log.append({ type: 'resume/diverged', payload: { state: 'paused', reason: 'approved Worker restart authority is unavailable' } });
+      record.pause_reason = 'approved Worker restart authority is unavailable';
+      record.resume_evidence = actual;
+      await log.append({ type: 'resume/diverged', payload: { state: 'paused', reason: record.pause_reason } });
       await saveV2Run(project, record);
       return record;
     }
-    await options.restart({ project, runId, authority });
+    const restarted = await options.restart({ project, runId, authority });
+    if (restarted !== 'executing') {
+      record.pause_reason = 'approved Worker restart adapter did not confirm executing';
+      record.resume_evidence = actual;
+      await log.append({ type: 'resume/diverged', payload: { state: 'paused', reason: record.pause_reason } });
+      await saveV2Run(project, record);
+      throw new Error(record.pause_reason);
+    }
     record.run_state = 'executing';
+    delete record.pause_reason;
+    delete record.resume_evidence;
     await log.append({ type: 'resume/replayed', payload: { state: 'executing', manifest_digest: record.manifest_digest } });
     await saveV2Run(project, record);
     return record;
