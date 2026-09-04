@@ -171,8 +171,17 @@ export async function runV2Script(options: V2ScriptRunOptions): Promise<RunRecor
       const packet: AgentPacket = { packet_version: '1.0.0', run_id: options.runId, plan_id: options.manifest.plan_id, task_id: action.task_id, role: action.role, objective: `Execute approved action ${action.action_id}`, cwd: options.project, read_paths: action.read_scope, write_paths: action.write_scope, evidence: action.requires_actions, screenshot_dir: `.ai-workflow/plans/${options.manifest.plan_id}/screenshot/`, allowed_commands: action.allowed_commands, timeout_ms: options.manifest.limits.sync_timeout_ms, result_schema: 'schemas/result.schema.json' };
       const result = invokeHost(options.manifest.host, 'Execute approved action', packet, { signal: controller.signal, sandbox: new BrokeredSandboxProvider(undefined, { projectRoot: options.project, writePaths: action.write_scope }) }) as unknown as Promise<CodingAgentResult>;
       const observed = result.then(async (value) => {
-        await ledger.observeCall(descriptor.call_id, value as unknown as import('../generated/coding-agent-result.schema.js').CodingAgentResult);
-        await ledger.checkpointCall(descriptor.call_id, value.changed_paths.filter((path): path is string => typeof path === 'string'));
+        const typed = value as unknown as import('../generated/coding-agent-result.schema.js').CodingAgentResult;
+        await ledger.observeCall(descriptor.call_id, typed);
+        const changedPaths = value.changed_paths.filter((path): path is string => typeof path === 'string');
+        const violations = changedPaths.filter((path) => !action.write_scope.some((scope) => path === scope || path.startsWith(`${scope}/`)));
+        if (violations.length) {
+          await events.append({ type: 'call/audit-failed', call_id: descriptor.call_id, task_id: action.task_id, payload: { action_id: action.action_id, state: 'blocked', reason: `changed paths outside scope: ${violations.join(', ')}` } });
+          await events.append({ type: 'call/reconcile-required', call_id: descriptor.call_id, task_id: action.task_id, payload: { action_id: action.action_id, state: 'reconcile_required', reason: 'action result failed scope audit' } });
+          lease.release('blocked');
+          throw new Error(`ACTION_SCOPE_VIOLATION: ${violations.join(', ')}`);
+        }
+        await ledger.checkpointCall(descriptor.call_id, changedPaths);
         actionStates[action.action_id] = value.status === 'done' ? 'checkpointed' : 'observed';
         lease.release(value.status === 'done' ? 'completed' : 'blocked');
         return value;

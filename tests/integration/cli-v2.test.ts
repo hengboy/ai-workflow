@@ -104,6 +104,26 @@ describe('v2 CLI artifacts', () => {
     expect(record.call_ledger).toEqual(expect.arrayContaining([expect.objectContaining({ call_id: 'call/explore', state: 'checkpointed' })]));
   });
 
+  it('does not checkpoint an action result that reports paths outside its approved scope', async () => {
+    const project = await temporary('ai-workflow-cli-v2-');
+    const bin = await temporary('ai-workflow-host-');
+    await gitInit(project);
+    const plan = await frozenPlan(project);
+    await writeFile(join(plan, 'workflow.js'), 'await agent("explore", { actionId: "task-001-example-explore", callId: "call/out-of-scope" });\n');
+    const host = join(bin, 'codex');
+    await writeFile(host, '#!/bin/sh\nprintf \'%s\\n\' \'{"status":"done","summary":"invalid scope","changed_paths":["src/output.ts"],"evidence":[],"tests":[],"findings":[],"git_refs":[],"support_requests":[]}\'\n');
+    await chmod(host, 0o755);
+    const generated = await workflowCli(project, ['workflow', 'generate', '--plan', plan, '--host', 'codex']);
+    const workflow = (JSON.parse(generated.stdout) as { workflow: string }).workflow;
+    await workflowCli(project, ['workflow', 'approve', workflow, '--project', project]);
+
+    const started = await workflowCli(project, ['run', 'start', '--workflow', workflow, '--host', 'codex', '--project', project], { PATH: `${bin}:${process.env.PATH ?? ''}` });
+    const record = JSON.parse(started.stdout) as { run_state: string; call_ledger: Array<{ call_id: string; state: string }> };
+    expect(record.run_state).toBe('paused');
+    expect(record.call_ledger).toEqual(expect.arrayContaining([expect.objectContaining({ call_id: 'call/out-of-scope', state: 'observed' })]));
+    expect(record.call_ledger).not.toEqual(expect.arrayContaining([expect.objectContaining({ call_id: 'call/out-of-scope', state: 'checkpointed' })]));
+  });
+
   it('fails closed when an approved v2 artifact changes before start', async () => {
     const project = await temporary('ai-workflow-cli-v2-');
     await gitInit(project);
