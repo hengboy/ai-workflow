@@ -29,6 +29,7 @@ import type { CodingCapabilityManifest } from '../generated/coding-manifest.sche
 import type { CallDescriptor, CodingAgentResult, TaskControlDescriptor } from './protocol.js';
 import { BrokeredSandboxProvider } from '../security/sandbox.js';
 import { CancelControl, cancelProof, cancelReasonDigest } from './control.js';
+import { captureWorktreeAudit, compareWorktreeAudits } from '../security/audit.js';
 
 const activeControllers = new Map<string, AbortController>();
 class ReviewFindingsError extends Error {}
@@ -154,11 +155,19 @@ export async function runV2Script(options: V2ScriptRunOptions): Promise<RunRecor
   const actionStates: Record<string, 'prepared' | 'dispatch_intent' | 'running' | 'observed' | 'checkpointed' | 'done'> = {};
   const taskStates: Record<string, 'pending' | 'ready' | 'running' | 'done' | 'blocked' | 'failed' | 'cancelled' | 'finalized'> = Object.fromEntries(options.manifest.tasks.map((task) => [task.task_id, 'ready']));
   const actionMap = new Map(options.manifest.actions.map((action) => [action.action_id, action]));
+  const operator = new V2GitOperator({ project: options.project, runId: options.runId, manifestDigest, fencingEpoch: record.fencing_epoch, targetBranch: options.manifest.project.target_branch });
+  const planWorktree = await operator.createPlanWorktree({ baseBranch: options.manifest.project.target_branch });
+  const taskWorktrees = new Map<string, V2Worktree>();
+  for (const task of options.manifest.tasks) taskWorktrees.set(task.task_id, await operator.createTaskWorktree(planWorktree, task.task_id));
+  record.resources = operator.resources as unknown[];
+  await saveV2Run(options.project, record);
   const childExecutor = {
     start: async (descriptor: CallDescriptor, signal: AbortSignal): Promise<ChildRun> => {
       const action = actionMap.get(descriptor.action_id);
       if (!action) throw new Error(`ACTION_NOT_AUTHORIZED: ${descriptor.action_id}`);
-      const admission = admitAction({ manifest: options.manifest, action_id: action.action_id, run_id: options.runId, cwd: options.project, attempt: 1, task_states: taskStates, action_states: actionStates, active_hosts: [options.manifest.host] });
+      const worktree = taskWorktrees.get(action.task_id);
+      if (!worktree) throw new Error(`TASK_NOT_AUTHORIZED: ${action.task_id}`);
+      const admission = admitAction({ manifest: options.manifest, action_id: action.action_id, run_id: options.runId, cwd: worktree.path, attempt: 1, task_states: taskStates, action_states: actionStates, active_hosts: [options.manifest.host] });
       const lease = await scheduler.submit({ admission_id: admission.attempt_id, call_ordinal: descriptor.call_ordinal, action_id: action.action_id, task_id: action.task_id, read_scope: action.read_scope, write_scope: action.write_scope, ...(action.concurrency_group_id === undefined ? {} : { concurrency_group_id: action.concurrency_group_id }) });
       await ledger.prepareCall({ callId: descriptor.call_id, callOrdinal: descriptor.call_ordinal, descriptor: descriptor as unknown as import('./ledger.js').CallDescriptor });
       await ledger.dispatchIntent(descriptor.call_id);
@@ -168,13 +177,16 @@ export async function runV2Script(options: V2ScriptRunOptions): Promise<RunRecor
       signal.addEventListener('abort', () => controller.abort(signal.reason), { once: true });
       await ledger.markRunning(descriptor.call_id);
       actionStates[action.action_id] = 'running';
-      const packet: AgentPacket = { packet_version: '1.0.0', run_id: options.runId, plan_id: options.manifest.plan_id, task_id: action.task_id, role: action.role, objective: `Execute approved action ${action.action_id}`, cwd: options.project, read_paths: action.read_scope, write_paths: action.write_scope, evidence: action.requires_actions, screenshot_dir: `.ai-workflow/plans/${options.manifest.plan_id}/screenshot/`, allowed_commands: action.allowed_commands, timeout_ms: options.manifest.limits.sync_timeout_ms, result_schema: 'schemas/result.schema.json' };
-      const result = invokeHost(options.manifest.host, 'Execute approved action', packet, { signal: controller.signal, sandbox: new BrokeredSandboxProvider(undefined, { projectRoot: options.project, writePaths: action.write_scope }) }) as unknown as Promise<CodingAgentResult>;
+      const packet: AgentPacket = { packet_version: '1.0.0', run_id: options.runId, plan_id: options.manifest.plan_id, task_id: action.task_id, role: action.role, objective: `Execute approved action ${action.action_id}`, cwd: worktree.path, read_paths: action.read_scope, write_paths: action.write_scope, evidence: action.requires_actions, screenshot_dir: `.ai-workflow/plans/${options.manifest.plan_id}/screenshot/`, allowed_commands: action.allowed_commands, timeout_ms: options.manifest.limits.sync_timeout_ms, result_schema: 'schemas/result.schema.json' };
+      const beforeAudit = await captureWorktreeAudit(worktree.path);
+      const result = invokeHost(options.manifest.host, 'Execute approved action', packet, { signal: controller.signal, sandbox: new BrokeredSandboxProvider(undefined, { projectRoot: options.project, writePaths: action.write_scope.map((path) => join(worktree.path, path)) }) }) as unknown as Promise<CodingAgentResult>;
       const observed = result.then(async (value) => {
         const typed = value as unknown as import('../generated/coding-agent-result.schema.js').CodingAgentResult;
         await ledger.observeCall(descriptor.call_id, typed);
         const changedPaths = value.changed_paths.filter((path): path is string => typeof path === 'string');
-        const violations = changedPaths.filter((path) => !action.write_scope.some((scope) => path === scope || path.startsWith(`${scope}/`)));
+        const afterAudit = await captureWorktreeAudit(worktree.path);
+        const audit = compareWorktreeAudits(beforeAudit, afterAudit, action.write_scope, [` .ai-workflow/plans/${options.manifest.plan_id}/screenshot/`.trim()]);
+        const violations = [...changedPaths.filter((path) => !action.write_scope.some((scope) => path === scope || path.startsWith(`${scope}/`))), ...audit.out_of_scope_paths];
         if (violations.length) {
           await events.append({ type: 'call/audit-failed', call_id: descriptor.call_id, task_id: action.task_id, payload: { action_id: action.action_id, state: 'blocked', reason: `changed paths outside scope: ${violations.join(', ')}` } });
           await events.append({ type: 'call/reconcile-required', call_id: descriptor.call_id, task_id: action.task_id, payload: { action_id: action.action_id, state: 'reconcile_required', reason: 'action result failed scope audit' } });

@@ -7,7 +7,7 @@ import { assertResumeFingerprint, loadRun, loadV2Run, saveRun, saveV2Run, type R
 import { EventLog } from '../../src/runtime/events.js';
 import { cancelV2Run, projectV2Run, resumeV2Run, startV2Run } from '../../src/runtime/runner.js';
 import { generateManifest } from '../../src/workflow/generate.js';
-import { frozenPlan } from '../helpers.js';
+import { frozenPlan, gitInit } from '../helpers.js';
 import { writeFile } from 'node:fs/promises';
 import { runV2Script } from '../../src/runtime/runner.js';
 
@@ -122,7 +122,8 @@ describe('replay and resume', () => {
 
     await expect(resumeV2Run(directory, 'run-guard')).rejects.toThrow(/fingerprint|authority/i);
     await expect(projectV2Run(directory, 'run-guard')).resolves.toMatchObject({ run_state: 'paused' });
-    await expect(log.read()).resolves.toMatchObject({ events: expect.arrayContaining([expect.objectContaining({ type: 'resume/diverged' })]) });
+    const events = await log.read();
+    expect(events.events.some((event) => event.type === 'resume/diverged')).toBe(true);
   });
 
   it('persists the first v2 cancel intent and retains unknown resources', async () => {
@@ -144,6 +145,7 @@ describe('replay and resume', () => {
 
   it('records a durable skip control for a conditional task in the approved script', async () => {
     const project = await mkdtemp(join(tmpdir(), 'ai-workflow-v2-skip-control-'));
+    await gitInit(project);
     const plan = await frozenPlan(project);
     await writeFile(join(plan, 'workflow.js'), 'await skipTask("task-001-example", "not activated", "control/skip-task");\n');
     const manifest = await generateManifest(plan, 'codex');
@@ -152,6 +154,9 @@ describe('replay and resume', () => {
     const record = await runV2Script({ project, runId: 'run-skip-control', manifest, script: await readFile(join(plan, 'workflow.js'), 'utf8'), args: {}, scriptDigest: manifest.script.bytes_digest, argsDigest: manifest.args.bytes_digest });
 
     expect(record.run_state).toBe('paused');
-    expect(record.control_ledger).toEqual(expect.arrayContaining([expect.objectContaining({ control_id: 'control/skip-task', state: 'observed', result: expect.objectContaining({ state: 'skipped' }) })]));
+    const skipControl = record.control_ledger.find((entry) => entry.control_id === 'control/skip-task');
+    expect(skipControl?.state).toBe('observed');
+    const skipResult = skipControl?.result;
+    expect(skipResult !== null && typeof skipResult === 'object' && !Array.isArray(skipResult) && 'state' in skipResult && skipResult.state === 'skipped').toBe(true);
   });
 });
