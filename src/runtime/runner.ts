@@ -111,6 +111,10 @@ export interface V2LifecycleOptions {
   manifest: { manifest_digest: string; target_branch?: string; tasks: Array<{ task_id: string; activation: 'required' | 'conditional'; finalization_mode: 'read-only-finalize' | 'commit-and-merge'; required_actions: string[]; depends_on: string[] }>; actions: Array<{ action_id: string; task_id: string; operation: string; write_scope: string[] }> };
   fencingEpoch?: number;
   execute: (context: V2LifecycleActionContext) => Promise<V2LifecycleActionResult>;
+  script?: string;
+  args?: unknown;
+  scriptDigest?: string;
+  argsDigest?: string;
   gateEvidence: {
     planValidation: { valid: boolean; errors: string[] };
     standardsReview: { findings: Array<{ severity: 'error' | 'warning' | 'info'; finding_id?: string }> };
@@ -326,6 +330,12 @@ export async function runV2Lifecycle(options: V2LifecycleOptions): Promise<V2Lif
   const operator = new V2GitOperator({ project: options.project, runId: options.runId, manifestDigest: options.manifest.manifest_digest, fencingEpoch, targetBranch: options.manifest.target_branch ?? 'main' });
   const plan = await operator.createPlanWorktree({ baseBranch: options.manifest.target_branch ?? 'main' });
   trace.push('resource:plan-created');
+  if (options.script !== undefined) {
+    const worker = new CodingWorkflowEngine().start({ runId: options.runId, script: options.script, args: options.args ?? {}, manifestDigest: options.manifest.manifest_digest, scriptDigest: options.scriptDigest ?? options.manifest.manifest_digest, argsDigest: options.argsDigest ?? options.manifest.manifest_digest, actions: options.manifest.actions.map((action) => ({ action_id: action.action_id, task_id: action.task_id })), observer: { phase: (title) => trace.push(`phase:${title}`), log: (message) => trace.push(`log:${message}`) }, disposeGraceMs: 5_000 });
+    const result = await worker.result;
+    await worker.dispose();
+    if (result.stop_reason !== 'completed') return lifecyclePaused(options.project, record, new GateCoordinator({ directory, runId: options.runId, fencingEpoch, manifestDigest: options.manifest.manifest_digest }), trace, result.error ?? 'approved lifecycle script failed', operator);
+  }
   const tasks = new Map<string, { worktree: V2Worktree; state: 'finalized' | 'committed' | 'skipped' }>();
   const actionObservations = new Map<string, TaskActionObservation[]>();
   for (const task of options.manifest.tasks) {

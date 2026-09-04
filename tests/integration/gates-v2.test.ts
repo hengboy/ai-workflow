@@ -206,6 +206,31 @@ describe('v2 mandatory gates', () => {
     await expect(loadV2Run(project, runId)).resolves.toMatchObject({ run_state: 'paused', stop_reason: 'blocked' });
   });
 
+  it('executes the approved lifecycle script through the Worker engine', async () => {
+    const project = await temporary();
+    await gitInit(project);
+    const runId = 'runner-v2-script-engine';
+    const manifest = {
+      manifest_digest: digest,
+      target_branch: 'main',
+      tasks: [],
+      actions: [],
+    };
+    const baseline = (await gitBaseline(project)).head!;
+
+    const result = await runV2Lifecycle({
+      project,
+      runId,
+      manifest,
+      script: "phase('script-phase'); log('script-log'); return { executed: true };",
+      execute: async () => { throw new Error('direct execute callback must not be used'); },
+      gateEvidence: { planValidation: { valid: true, errors: [] }, standardsReview: { findings: [] }, specReview: { findings: [] }, repairClosure: { closedFindingIds: [], expectedFindingIds: [] }, baseline: { expected: baseline, current: baseline }, integration: { observed: false, noFastForward: false } },
+    });
+
+    expect(result.run_state).toBe('paused');
+    expect(result.trace).toEqual(expect.arrayContaining(['phase:script-phase', 'log:script-log']));
+  });
+
   it('cancels a deferred v2 run and reconciles its durable projection without deleting resources', async () => {
     const project = await temporary();
     await gitInit(project);
