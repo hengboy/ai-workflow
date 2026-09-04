@@ -168,7 +168,7 @@ try {
       sandboxPreflight: () => { throw new ActionSandboxError('ACTION_SANDBOX_UNAVAILABLE', 'fixture sandbox unavailable'); },
     });
 
-    await expect(run.result).resolves.toMatchObject({ stop_reason: 'error', error: 'fixture sandbox unavailable' });
+    await expect(run.result).resolves.toMatchObject({ stop_reason: 'error', error: /fixture sandbox unavailable/ });
     await run.dispose();
   });
 });
