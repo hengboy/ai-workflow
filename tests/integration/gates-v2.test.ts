@@ -157,7 +157,7 @@ describe('v2 mandatory gates', () => {
     };
 
     const baseline = (await gitBaseline(project)).head!;
-    const result = await runV2Lifecycle({ project, runId, manifest, execute: async ({ cwd }) => { await writeFile(join(cwd, 'output.txt'), 'runner lifecycle\n'); return { status: 'done', tests: [{ command: 'pnpm test', status: 'passed' }], changedPaths: ['output.txt'] }; }, gateEvidence: { planValidation: { valid: true, errors: [] }, standardsReview: { findings: [] }, specReview: { findings: [] }, repairClosure: { closedFindingIds: [], expectedFindingIds: [] }, baseline: { expected: baseline, current: baseline }, integration: { observed: true, noFastForward: true } }, reviewAuthority: { standardsReview: async () => ({ findings: [] }), specReview: async () => ({ findings: [] }) } });
+    const result = await runV2Lifecycle({ project, runId, manifest, execute: async ({ cwd }) => { await writeFile(join(cwd, 'output.txt'), 'runner lifecycle\n'); return { status: 'done', tests: [{ command: 'pnpm test', status: 'passed' }], changedPaths: ['output.txt'] }; }, gateEvidence: { planValidation: { valid: true, errors: [] }, standardsReview: { findings: [] }, specReview: { findings: [] }, repairClosure: { closedFindingIds: [], expectedFindingIds: [] }, baseline: { expected: baseline, current: baseline }, integration: { observed: true, noFastForward: true } }, planAuthority: async () => ({ valid: true, errors: [] }), reviewAuthority: { standardsReview: async () => ({ findings: [] }), specReview: async () => ({ findings: [] }) } });
     expect(result.run_state).toBe('complete');
     expect(result.integration?.observed).toBe(true);
     expect(result.gates.integration?.state).toBe('passed');
@@ -210,6 +210,31 @@ describe('v2 mandatory gates', () => {
     expect(result.integration).toBeUndefined();
   });
 
+  it('does not treat plain plan gate evidence as host validation authority', async () => {
+    const project = await temporary();
+    await gitInit(project);
+    const runId = 'runner-v2-plan-authority';
+    const manifest = {
+      manifest_digest: digest,
+      target_branch: 'main',
+      tasks: [{ task_id: 'task-001', activation: 'required' as const, finalization_mode: 'read-only-finalize' as const, required_actions: [], depends_on: [] }],
+      actions: [],
+    };
+    const baseline = (await gitBaseline(project)).head!;
+
+    const result = await runV2Lifecycle({
+      project,
+      runId,
+      manifest,
+      execute: async () => { throw new Error('no action should execute'); },
+      gateEvidence: { planValidation: { valid: true, errors: [] }, standardsReview: { findings: [] }, specReview: { findings: [] }, repairClosure: { closedFindingIds: [], expectedFindingIds: [] }, baseline: { expected: baseline, current: baseline }, integration: { observed: true, noFastForward: true } },
+    });
+
+    expect(result.run_state).toBe('paused');
+    expect(result.gates['plan-validation']).toBeUndefined();
+    expect(result.integration).toBeUndefined();
+  });
+
   it('starts one normalized repair when host review returns an error finding', async () => {
     const project = await temporary();
     await gitInit(project);
@@ -228,6 +253,7 @@ describe('v2 mandatory gates', () => {
       manifest,
       execute: async () => { throw new Error('no action should execute'); },
       gateEvidence: { planValidation: { valid: true, errors: [] }, standardsReview: { findings: [] }, specReview: { findings: [] }, repairClosure: { closedFindingIds: [], expectedFindingIds: [] }, baseline: { expected: baseline, current: baseline }, integration: { observed: true, noFastForward: true } },
+      planAuthority: async () => ({ valid: true, errors: [] }),
       reviewAuthority: {
         standardsReview: async () => ({ findings: [{ severity: 'error' as const, message: 'missing validation', path: 'src/output.ts', applicableActionIds: [] }] }),
         specReview: async () => ({ findings: [] }),
@@ -256,6 +282,7 @@ describe('v2 mandatory gates', () => {
       manifest,
       execute: async () => { throw new Error('no action should execute'); },
       gateEvidence: { planValidation: { valid: true, errors: [] }, standardsReview: { findings: [] }, specReview: { findings: [] }, repairClosure: { closedFindingIds: [], expectedFindingIds: [] }, baseline: { expected: baseline, current: baseline }, integration: { observed: true, noFastForward: true } },
+      planAuthority: async () => ({ valid: true, errors: [] }),
       reviewAuthority: {
         standardsReview: async () => ({ findings: [{ severity: 'error' as const, message: 'missing validation', path: 'output.txt', applicableActionIds: [] }] }),
         specReview: async () => ({ findings: [] }),
@@ -287,7 +314,7 @@ describe('v2 mandatory gates', () => {
     };
     const initial = (await gitBaseline(project)).head!;
 
-    const result = await runV2Lifecycle({ project, runId, manifest, execute: async () => ({ status: 'done', tests: [{ command: 'pnpm test', status: 'passed' }], changedPaths: [] }), gateEvidence: { planValidation: { valid: true, errors: [] }, standardsReview: { findings: [] }, specReview: { findings: [] }, repairClosure: { closedFindingIds: [], expectedFindingIds: [] }, baseline: { expected: initial, current: initial }, integration: { observed: false, noFastForward: false } }, reviewAuthority: { standardsReview: async () => ({ findings: [] }), specReview: async () => ({ findings: [] }) } });
+    const result = await runV2Lifecycle({ project, runId, manifest, execute: async () => ({ status: 'done', tests: [{ command: 'pnpm test', status: 'passed' }], changedPaths: [] }), gateEvidence: { planValidation: { valid: true, errors: [] }, standardsReview: { findings: [] }, specReview: { findings: [] }, repairClosure: { closedFindingIds: [], expectedFindingIds: [] }, baseline: { expected: initial, current: initial }, integration: { observed: false, noFastForward: false } }, planAuthority: async () => ({ valid: true, errors: [] }), reviewAuthority: { standardsReview: async () => ({ findings: [] }), specReview: async () => ({ findings: [] }) } });
 
     expect(result.run_state).toBe('paused');
     expect(result.integration).toBeUndefined();
@@ -409,6 +436,7 @@ describe('v2 mandatory gates', () => {
       script: 'await agent("test", { actionId: "task-001-test", callId: "script/test" });',
       execute: async ({ cwd }) => { await writeFile(join(cwd, 'output.txt'), 'script action\n'); return { status: 'done', tests: [{ command: 'pnpm test', status: 'passed' }], changedPaths: ['output.txt'] }; },
       gateEvidence: { planValidation: { valid: true, errors: [] }, standardsReview: { findings: [] }, specReview: { findings: [] }, repairClosure: { closedFindingIds: [], expectedFindingIds: [] }, baseline: { expected: baseline, current: baseline }, integration: { observed: true, noFastForward: true } },
+      planAuthority: async () => ({ valid: true, errors: [] }),
       reviewAuthority: { standardsReview: async () => ({ findings: [] }), specReview: async () => ({ findings: [] }) },
     });
 
@@ -468,7 +496,7 @@ describe('v2 mandatory gates', () => {
       actions: [{ action_id: 'task-001-test', task_id: 'task-001', operation: 'test', write_scope: ['output.txt'] }],
     };
     const baseline = (await gitBaseline(project)).head!;
-    const result = await runV2Lifecycle({ project, runId, manifest, execute: async ({ cwd }) => { await writeFile(join(cwd, 'output.txt'), 'cleanup\n'); return { status: 'done', tests: [{ command: 'pnpm test', status: 'passed' }], changedPaths: ['output.txt'] }; }, gateEvidence: { planValidation: { valid: true, errors: [] }, standardsReview: { findings: [] }, specReview: { findings: [] }, repairClosure: { closedFindingIds: [], expectedFindingIds: [] }, baseline: { expected: baseline, current: baseline }, integration: { observed: true, noFastForward: true } }, reviewAuthority: { standardsReview: async () => ({ findings: [] }), specReview: async () => ({ findings: [] }) } });
+    const result = await runV2Lifecycle({ project, runId, manifest, execute: async ({ cwd }) => { await writeFile(join(cwd, 'output.txt'), 'cleanup\n'); return { status: 'done', tests: [{ command: 'pnpm test', status: 'passed' }], changedPaths: ['output.txt'] }; }, gateEvidence: { planValidation: { valid: true, errors: [] }, standardsReview: { findings: [] }, specReview: { findings: [] }, repairClosure: { closedFindingIds: [], expectedFindingIds: [] }, baseline: { expected: baseline, current: baseline }, integration: { observed: true, noFastForward: true } }, planAuthority: async () => ({ valid: true, errors: [] }), reviewAuthority: { standardsReview: async () => ({ findings: [] }), specReview: async () => ({ findings: [] }) } });
     expect(result.run_state).toBe('complete');
     const cleaned = await cleanupV2Run(project, runId);
     expect(cleaned.run_state).toBe('complete');

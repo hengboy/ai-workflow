@@ -125,6 +125,7 @@ export interface V2LifecycleOptions {
     baseline: { expected: string; current: string };
     integration: { observed: boolean; noFastForward: boolean; mergeCommit?: string };
   };
+  planAuthority?: () => Promise<{ valid: boolean; errors: string[] }>;
   reviewAuthority?: {
     standardsReview: () => Promise<{ findings: Array<{ severity: 'error' | 'warning' | 'info'; finding_id?: string; message?: string; path?: string; applicableActionIds?: string[] }> }>;
     specReview: () => Promise<{ findings: Array<{ severity: 'error' | 'warning' | 'info'; finding_id?: string; message?: string; path?: string; applicableActionIds?: string[] }> }>;
@@ -530,7 +531,9 @@ async function runScriptLifecycle(options: V2LifecycleOptions, record: RunRecord
   const taskClosure = await gates.runGate('task-closure', { taskClosure: Object.fromEntries([...tasks].map(([taskId, task]) => [taskId, { state: task.state }])) });
   if (taskClosure.state !== 'passed') return lifecyclePaused(options.project, record, gates, trace, 'task-closure gate failed', operator);
   trace.push('gate:task-closure:passed');
-  const validation = await gates.runGate('plan-validation', { planValidation: options.gateEvidence.planValidation });
+  if (!options.planAuthority) return lifecyclePaused(options.project, record, gates, trace, 'host-owned plan validation authority is required', operator);
+  const planEvidence = await options.planAuthority();
+  const validation = await gates.runGate('plan-validation', { planValidation: planEvidence });
   if (validation.state !== 'passed') return lifecyclePaused(options.project, record, gates, trace, 'plan-validation gate failed', operator);
   trace.push('gate:plan-validation:passed');
   if (!options.reviewAuthority) return lifecyclePaused(options.project, record, gates, trace, 'host-owned review authority is required', operator);
