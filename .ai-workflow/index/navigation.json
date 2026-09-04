@@ -1789,6 +1789,11 @@
         },
         {
           "kind": "imports",
+          "from": "src/runtime/engine.ts#CodingWorkflowStartOptions",
+          "to": "src/runtime/protocol.ts#TaskControlDescriptor"
+        },
+        {
+          "kind": "imports",
           "from": "src/runtime/engine.ts#CodingWorkflowEngine",
           "to": "src/runtime/worker-host.ts#WorkerRun"
         },
@@ -1915,6 +1920,11 @@
         {
           "kind": "imports",
           "from": "src/runtime/runner.ts#runV2Script",
+          "to": "src/runtime/store.ts#saveV2Run"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/runner.ts#runV2Script",
           "to": "src/runtime/protocol.ts#CallDescriptor"
         },
         {
@@ -1935,7 +1945,12 @@
         {
           "kind": "imports",
           "from": "src/runtime/runner.ts#runV2Script",
-          "to": "src/runtime/store.ts#saveV2Run"
+          "to": "src/runtime/protocol.ts#TaskControlDescriptor"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/runner.ts#runV2Script",
+          "to": "src/runtime/gates.ts#GateCoordinator"
         },
         {
           "kind": "imports",
@@ -1970,17 +1985,32 @@
         {
           "kind": "imports",
           "from": "src/runtime/runner.ts#resumeV2Run",
-          "to": "src/runtime/store.ts#assertResumeFingerprint"
+          "to": "src/runtime/store.ts#saveV2Run"
         },
         {
           "kind": "imports",
           "from": "src/runtime/runner.ts#resumeV2Run",
-          "to": "src/runtime/store.ts#saveV2Run"
+          "to": "src/runtime/store.ts#assertResumeFingerprint"
         },
         {
           "kind": "imports",
           "from": "src/runtime/runner.ts#cancelV2Run",
           "to": "src/runtime/store.ts#RunRecordV2"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/runner.ts#cancelV2Run",
+          "to": "src/runtime/control.ts#CancelControl"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/runner.ts#cancelV2Run",
+          "to": "src/runtime/control.ts#cancelReasonDigest"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/runner.ts#cancelV2Run",
+          "to": "src/runtime/control.ts#cancelProof"
         },
         {
           "kind": "imports",
