@@ -29,7 +29,7 @@ import type { CodingCapabilityManifest } from '../generated/coding-manifest.sche
 import type { ActionCapability, ActionCapabilityManifest } from '../security/capability.js';
 import type { CallDescriptor, CodingAgentResult, TaskControlDescriptor } from './protocol.js';
 import { BrokeredSandboxProvider } from '../security/sandbox.js';
-import { CancelControl, OwnerLease, cancelProof, cancelReasonDigest } from './control.js';
+import { CancelControl, ControlError, OwnerLease, cancelProof, cancelReasonDigest } from './control.js';
 import { captureWorktreeAudit, compareWorktreeAudits } from '../security/audit.js';
 import { RepairCoordinator, type ReviewFindingInput } from './repair.js';
 
@@ -162,10 +162,13 @@ export async function startV2Run(options: StartV2RunOptions): Promise<RunRecordV
   const directory = join(options.project, '.ai-workflow/runs', options.runId);
   if (await exists(join(directory, 'state.json')) || await exists(join(directory, 'events.jsonl'))) throw new Error(`Run already exists: ${options.runId}`);
   const now = new Date().toISOString();
+  const cancelControl = new CancelControl({ root: options.project, runId: options.runId, owner: { osUid: -1, identityDigest: 'unbound' }, fencingEpoch: options.fencingEpoch });
   const record: RunRecordV2 = { record_version: '2.0.0', engine: 'worker-thread-trusted', run_id: options.runId, manifest_digest: options.manifestDigest, fencing_epoch: options.fencingEpoch, run_state: 'preflight', parent_run: options.parentRun ?? 'root', started_at: now, updated_at: now, call_ledger: [], control_ledger: [], resources: [], completed_tasks: [], blocked_tasks: [] };
   const log = v2EventLog(options.project, options.runId, options.fencingEpoch);
   await log.append({ type: 'run/start', payload: { engine: 'worker-thread-trusted', manifest_digest: options.manifestDigest, state: 'preflight' } });
   await saveV2Run(options.project, record);
+  const { writeJson } = await import('../utils/fs.js');
+  await writeJson(join(directory, 'control', 'cancel-authority.json'), cancelControl.authority);
   return record;
 }
 
@@ -330,21 +333,7 @@ export async function cancelV2Run(project: string, runId: string): Promise<RunRe
   const record = await projectV2Run(project, runId);
   if (['complete', 'cancelled', 'cancelled-with-retained-resources'].includes(record.run_state)) return record;
   const log = v2EventLog(project, runId, record.fencing_epoch);
-  const uid = process.getuid?.();
-  if (uid === undefined) throw new Error('CANCEL_UNAUTHORIZED: local process identity is unavailable');
-  const identityDigest = objectDigest({ runId, manifest: record.manifest_digest });
-  const control = new CancelControl({ root: project, runId, owner: { osUid: uid, identityDigest }, fencingEpoch: record.fencing_epoch, nonce: record.manifest_digest });
-  const reason = 'Cancelled by user';
-  const digest = cancelReasonDigest(reason);
-  const outcome = await control.requestCancel({ peerUid: uid, runId, fencingEpoch: record.fencing_epoch, nonce: record.manifest_digest, reason, identityDigest, proof: cancelProof(record.manifest_digest, runId, record.fencing_epoch, digest) });
-  if (outcome.won) await log.append({ type: 'run/cancel-requested', payload: { state: 'cancelling', reason: outcome.intent.reason } });
-  const retained = record.resources.some((resource) => resource === null || typeof resource !== 'object' || !('resource_version' in resource) || !('resource_id' in resource));
-  const state = retained ? 'cancelled-with-retained-resources' : 'cancelled';
-  if (outcome.won) await log.append({ type: 'run/cancelled', payload: { state, stop_reason: 'cancelled' } });
-  record.run_state = state;
-  record.stop_reason = 'cancelled';
-  await saveV2Run(project, record);
-  return record;
+  throw new ControlError('CANCEL_UNAUTHORIZED', 'cancel requires a verified local Unix socket peer-credential adapter');
 }
 
 export async function runV2Lifecycle(options: V2LifecycleOptions): Promise<V2LifecycleResult> {

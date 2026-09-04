@@ -60,6 +60,14 @@ export interface CancelIntent {
   createdAt: string;
 }
 
+export interface CancelAuthority {
+  authority_version: '1.0.0';
+  run_id: string;
+  fencing_epoch: number;
+  challenge_nonce: string;
+  socket_path: string;
+}
+
 export interface CancelOutcome {
   won: boolean;
   intent: CancelIntent;
@@ -212,6 +220,16 @@ export class CancelControl {
   }
 
   get challengeNonce(): string { return this.nonce; }
+
+  get authority(): CancelAuthority {
+    return {
+      authority_version: '1.0.0',
+      run_id: this.options.runId,
+      fencing_epoch: this.options.fencingEpoch,
+      challenge_nonce: this.nonce,
+      socket_path: join(this.directory, 'cancel.sock'),
+    };
+  }
 
   async requestCancel(request: CancelRequest): Promise<CancelOutcome> {
     this.authorize(request);

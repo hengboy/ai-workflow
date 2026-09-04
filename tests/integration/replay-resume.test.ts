@@ -127,6 +127,20 @@ describe('replay and resume', () => {
     expect(events.events.some((event) => event.type === 'resume/diverged')).toBe(true);
   });
 
+  it('persists reusable cancel authority and fails closed without peer credentials', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'ai-workflow-v2-cancel-authority-'));
+    const started = await startV2Run({ project: directory, runId: 'run-cancel-authority', manifestDigest: 'sha256:' + '1'.repeat(64), fencingEpoch: 3 });
+
+    expect(started).toMatchObject({ run_state: 'preflight', fencing_epoch: 3 });
+    const controlDirectory = join(directory, '.ai-workflow/runs/run-cancel-authority/control');
+    const authority = JSON.parse(await readFile(join(controlDirectory, 'cancel-authority.json'), 'utf8')) as { challenge_nonce?: string; socket_path?: string; fencing_epoch?: number };
+    expect(authority).toMatchObject({ fencing_epoch: 3 });
+    expect(authority.challenge_nonce).toEqual(expect.any(String));
+    expect(authority.socket_path).toEqual(expect.stringContaining('cancel.sock'));
+
+    await expect(cancelV2Run(directory, 'run-cancel-authority')).rejects.toMatchObject({ code: 'CANCEL_UNAUTHORIZED' });
+  });
+
   it('fences a crashed lifecycle owner before a replacement owner resumes', async () => {
     const project = await mkdtemp(join(tmpdir(), 'ai-workflow-v2-owner-takeover-'));
     const manifestDigest = 'sha256:' + 'e'.repeat(64);
