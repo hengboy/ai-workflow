@@ -144,8 +144,9 @@ export class BrokeredSandboxProvider {
     if (!cwd) reject('executor cwd is required');
     const useSeatbelt = this.options.useSeatbelt ?? true;
     if (!useSeatbelt) return { command, args: [...args], env: executorEnvironment(this.options.brokerEnvironment) };
-    if (!this.options.projectRoot) reject('Seatbelt executor requires projectRoot');
-    const profile = seatbeltProfile(this.options.projectRoot, (this.options.writePaths ?? []).map((path) => resolve(this.options.projectRoot!, path)));
+    const projectRoot = this.options.projectRoot;
+    if (!projectRoot) reject('Seatbelt executor requires projectRoot');
+    const profile = seatbeltProfile(projectRoot, (this.options.writePaths ?? []).map((path) => resolve(projectRoot, path)));
     return {
       command: '/usr/bin/sandbox-exec',
       args: ['-p', profile, '--', command, ...args],

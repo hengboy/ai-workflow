@@ -15,7 +15,7 @@ import { createNavigationCandidate, refreshContext, validateContext, verifyNavig
 import { locateContext } from './context/locate.js';
 import { discoverFallback, type FallbackPacket } from './context/fallback.js';
 import { resolveCandidatePath, resolveProjectRoot } from './context/paths.js';
-import { cancelV2Run, cleanupV2Run, projectV2Run, resumeV2Run, runV2Script, startV2Run } from './runtime/runner.js';
+import { cancelV2Run, cleanupV2Run, projectV2Run, resumeV2Run, runV2Script } from './runtime/runner.js';
 import { RunVersionError } from './runtime/store.js';
 import { readPlan } from './workflow/parse.js';
 import { gitBaseline } from './git/operator.js';

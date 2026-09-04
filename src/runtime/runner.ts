@@ -175,8 +175,8 @@ export async function runV2Script(options: V2ScriptRunOptions): Promise<RunRecor
         actionStates[action.action_id] = value.status === 'done' ? 'checkpointed' : 'observed';
         lease.release(value.status === 'done' ? 'completed' : 'blocked');
         return value;
-      }, async (error) => { lease.release('blocked'); throw error; });
-      return { id: descriptor.call_id, result: observed, dispose: async () => controller.abort('disposed') };
+      }, (error: unknown) => { lease.release('blocked'); throw error; });
+      return { id: descriptor.call_id, result: observed, dispose: () => Promise.resolve(controller.abort('disposed')) };
     },
   };
   const trace: string[] = [];
