@@ -317,12 +317,9 @@ export async function runV2Script(options: V2ScriptRunOptions): Promise<RunRecor
     const taskClosure = Object.fromEntries(options.manifest.tasks.map((task) => [task.task_id, { state: taskStates[task.task_id] === 'done' ? 'skipped' as const : 'finalized' as const }]));
     const closure = await gates.runGate('task-closure', { taskClosure });
     if (closure.state === 'passed') {
-      const validation = await gates.runGate('plan-validation', { planValidation: { valid: true, errors: [] } });
-      if (validation.state === 'passed') {
-        record.run_state = 'paused';
-        record.stop_reason = 'blocked';
-        await events.append({ type: 'run/error', payload: { state: 'paused', stop_reason: 'blocked', reason: 'host-owned review and repair evidence is required before integration' } });
-      }
+      record.run_state = 'paused';
+      record.stop_reason = 'blocked';
+      await events.append({ type: 'run/error', payload: { state: 'paused', stop_reason: 'blocked', reason: 'host-owned plan validation, review and repair evidence is required before integration' } });
     }
   }
   await saveV2Run(options.project, record);

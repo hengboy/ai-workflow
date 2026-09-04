@@ -286,7 +286,7 @@ describe('replay and resume', () => {
       expect(control?.state).toBe('observed');
       expect(record.completed_tasks).toContain('task-001-example');
       await expect(readFile(join(project, '.ai-workflow/runs/run-finalize-control/receipts/gate/task-closure.json'), 'utf8')).resolves.toMatch(/"state": "passed"/);
-      await expect(readFile(join(project, '.ai-workflow/runs/run-finalize-control/receipts/gate/plan-validation.json'), 'utf8')).resolves.toMatch(/"state": "passed"/);
+      await expect(readFile(join(project, '.ai-workflow/runs/run-finalize-control/receipts/gate/plan-validation.json'), 'utf8')).rejects.toThrow();
       await expect(readFile(join(project, '.ai-workflow/runs/run-finalize-control/receipts/gate/standards-review.json'), 'utf8')).rejects.toThrow();
     } finally {
       process.env.PATH = previousPath;
