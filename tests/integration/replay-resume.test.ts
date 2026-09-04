@@ -6,6 +6,10 @@ import { RunLedger, type CallDescriptor, type RecordedAgentResult } from '../../
 import { assertResumeFingerprint, loadRun, loadV2Run, saveRun, saveV2Run, type ResumeFingerprint, type RunRecord } from '../../src/runtime/store.js';
 import { EventLog } from '../../src/runtime/events.js';
 import { cancelV2Run, projectV2Run, resumeV2Run, startV2Run } from '../../src/runtime/runner.js';
+import { generateManifest } from '../../src/workflow/generate.js';
+import { frozenPlan } from '../helpers.js';
+import { writeFile } from 'node:fs/promises';
+import { runV2Script } from '../../src/runtime/runner.js';
 
 const descriptor: CallDescriptor = { action_id: 'action-one', task_id: 'task-one', input: { value: 1 } };
 const result: RecordedAgentResult = { result_version: '2.0.0', status: 'done', summary: 'ok', changed_paths: [], evidence: [], tests: [], findings: [], git_refs: [], support_requests: [] };
@@ -136,5 +140,18 @@ describe('replay and resume', () => {
     await expect(readFile(join(directory, '.ai-workflow/runs/run-cancel-intent/control/cancel.json'), 'utf8')).resolves.toMatch(/run-cancel-intent/);
     await expect(readFile(join(directory, '.ai-workflow/runs/run-cancel-intent/events.jsonl'), 'utf8')).resolves.toMatch(/run\/cancel-requested/);
     expect(second.resources).toEqual([{ resource_id: 'unknown-resource' }]);
+  });
+
+  it('records a durable skip control for a conditional task in the approved script', async () => {
+    const project = await mkdtemp(join(tmpdir(), 'ai-workflow-v2-skip-control-'));
+    const plan = await frozenPlan(project);
+    await writeFile(join(plan, 'workflow.js'), 'await skipTask("task-001-example", "not activated", "control/skip-task");\n');
+    const manifest = await generateManifest(plan, 'codex');
+    manifest.tasks[0]!.activation = 'conditional';
+
+    const record = await runV2Script({ project, runId: 'run-skip-control', manifest, script: await readFile(join(plan, 'workflow.js'), 'utf8'), args: {}, scriptDigest: manifest.script.bytes_digest, argsDigest: manifest.args.bytes_digest });
+
+    expect(record.run_state).toBe('paused');
+    expect(record.control_ledger).toEqual(expect.arrayContaining([expect.objectContaining({ control_id: 'control/skip-task', state: 'observed', result: expect.objectContaining({ state: 'skipped' }) })]));
   });
 });

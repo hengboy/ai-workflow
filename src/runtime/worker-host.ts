@@ -152,12 +152,13 @@ export class WorkerRun {
   }
 
   private async handleTaskControl(requestId: string, descriptor: import('./protocol.js').TaskControlDescriptor): Promise<void> {
-    if (!this.options.taskControl) {
+    const taskControl = this.options.taskControl;
+    if (!taskControl) {
       this.send({ type: 'task-control-error', request_id: requestId, control_id: descriptor.control_id, error: { code: 'ACTION_NOT_READY', message: 'task-control host adapter is not installed', fatal: true } });
       return;
     }
     try {
-      const result = await this.options.taskControl(descriptor);
+      const result = await taskControl(descriptor);
       this.send({ type: 'task-control-settled', request_id: requestId, control_id: descriptor.control_id, state: result.state, receipt_digest: result.receipt_digest });
     } catch (error) {
       this.send({ type: 'task-control-error', request_id: requestId, control_id: descriptor.control_id, error: { code: 'ACTION_NOT_READY', message: error instanceof Error ? error.message : String(error), fatal: true } });

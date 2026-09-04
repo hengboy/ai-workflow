@@ -26,7 +26,7 @@ import { CodingWorkflowEngine, type ChildRun } from './engine.js';
 import { ScopeScheduler } from './scheduler.js';
 import { admitAction } from '../security/capability.js';
 import type { CodingCapabilityManifest } from '../generated/coding-manifest.schema.js';
-import type { CallDescriptor, CodingAgentResult } from './protocol.js';
+import type { CallDescriptor, CodingAgentResult, TaskControlDescriptor } from './protocol.js';
 import { BrokeredSandboxProvider } from '../security/sandbox.js';
 import { CancelControl, cancelProof, cancelReasonDigest } from './control.js';
 
@@ -181,7 +181,13 @@ export async function runV2Script(options: V2ScriptRunOptions): Promise<RunRecor
     },
   };
   const trace: string[] = [];
-  const worker = new CodingWorkflowEngine().start({ runId: options.runId, script: options.script, args: options.args, manifestDigest, scriptDigest: options.scriptDigest, argsDigest: options.argsDigest, actions: options.manifest.actions.map((action) => ({ action_id: action.action_id, task_id: action.task_id, action_digest: objectDigest(action) })), maxConcurrentAgents: options.manifest.limits.max_concurrent_agents, maxTotalAgents: options.manifest.limits.max_total_agents, maxItemsPerCall: options.manifest.limits.max_items_per_call, maxScriptBytes: options.manifest.limits.max_script_bytes, maxResultBytes: options.manifest.limits.max_result_bytes, syncTimeoutMs: options.manifest.limits.sync_timeout_ms, disposeGraceMs: options.manifest.limits.dispose_grace_ms, childExecutor, observer: { phase: (title) => trace.push(`phase:${title}`), log: (message) => trace.push(`log:${message}`) }, sandboxPreflight: () => { new BrokeredSandboxProvider().preflight(); } });
+  const worker = new CodingWorkflowEngine().start({ runId: options.runId, script: options.script, args: options.args, manifestDigest, scriptDigest: options.scriptDigest, argsDigest: options.argsDigest, actions: options.manifest.actions.map((action) => ({ action_id: action.action_id, task_id: action.task_id, action_digest: objectDigest(action) })), maxConcurrentAgents: options.manifest.limits.max_concurrent_agents, maxTotalAgents: options.manifest.limits.max_total_agents, maxItemsPerCall: options.manifest.limits.max_items_per_call, maxScriptBytes: options.manifest.limits.max_script_bytes, maxResultBytes: options.manifest.limits.max_result_bytes, syncTimeoutMs: options.manifest.limits.sync_timeout_ms, disposeGraceMs: options.manifest.limits.dispose_grace_ms, childExecutor, taskControl: async (descriptor: TaskControlDescriptor) => {
+    if (descriptor.operation !== 'skip-task') throw new Error('task finalization requires host-owned action closure evidence');
+    const task = options.manifest.tasks.find((candidate) => candidate.task_id === descriptor.task_id);
+    if (!task || task.activation !== 'conditional' || !descriptor.task_id || !descriptor.reason) throw new Error('conditional task skip requires a task, conditional activation and reason');
+    const receipt = await new TaskClosureCoordinator({ ledger }).skipTask({ taskId: task.task_id, controlId: descriptor.control_id, controlOrdinal: descriptor.control_ordinal, activation: task.activation, requiredActionIds: [], actions: [], predecessorStates: Object.fromEntries(task.depends_on.map((dependency) => [dependency, 'skipped' as const])), reason: descriptor.reason });
+    return { state: receipt.state, receipt_digest: objectDigest(receipt) };
+  }, observer: { phase: (title) => trace.push(`phase:${title}`), log: (message) => trace.push(`log:${message}`) }, sandboxPreflight: () => { new BrokeredSandboxProvider().preflight(); } });
   await events.append({ type: 'run/lease-acquired', payload: { state: 'executing', manifest_digest: record.manifest_digest } });
   record.run_state = 'executing';
   const result = await worker.result;
