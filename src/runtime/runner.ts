@@ -29,7 +29,7 @@ import type { CodingCapabilityManifest } from '../generated/coding-manifest.sche
 import type { ActionCapability, ActionCapabilityManifest } from '../security/capability.js';
 import type { CallDescriptor, CodingAgentResult, TaskControlDescriptor } from './protocol.js';
 import { BrokeredSandboxProvider } from '../security/sandbox.js';
-import { CancelControl, ControlError, OwnerLease } from './control.js';
+import { CancelControl, CancelSocket, ControlError, OwnerLease, RunControl, requestCancelSocket, cancelProof, cancelReasonDigest } from './control.js';
 import { captureWorktreeAudit, compareWorktreeAudits } from '../security/audit.js';
 import { RepairCoordinator, type ReviewFindingInput } from './repair.js';
 
@@ -146,6 +146,7 @@ export interface V2ScriptRunOptions {
   args: unknown;
   scriptDigest: string;
   argsDigest: string;
+  cancelPeerUid?: (socket: import('node:net').Socket) => number | Promise<number>;
 }
 
 export interface V2LifecycleResult {
@@ -163,7 +164,8 @@ export async function startV2Run(options: StartV2RunOptions): Promise<RunRecordV
   const directory = join(options.project, '.ai-workflow/runs', options.runId);
   if (await exists(join(directory, 'state.json')) || await exists(join(directory, 'events.jsonl'))) throw new Error(`Run already exists: ${options.runId}`);
   const now = new Date().toISOString();
-  const cancelControl = new CancelControl({ root: options.project, runId: options.runId, owner: { osUid: -1, identityDigest: 'unbound' }, fencingEpoch: options.fencingEpoch });
+  const socketPath = `/tmp/aiw-${objectDigest({ project: resolve(options.project), runId: options.runId }).slice(-16)}.sock`;
+  const cancelControl = new CancelControl({ root: options.project, runId: options.runId, owner: { osUid: -1, identityDigest: 'unbound' }, fencingEpoch: options.fencingEpoch, socketPath });
   const record: RunRecordV2 = { record_version: '2.0.0', engine: 'worker-thread-trusted', run_id: options.runId, manifest_digest: options.manifestDigest, fencing_epoch: options.fencingEpoch, run_state: 'preflight', parent_run: options.parentRun ?? 'root', started_at: now, updated_at: now, call_ledger: [], control_ledger: [], resources: [], completed_tasks: [], blocked_tasks: [], ...(options.authority === undefined ? {} : { authority: options.authority }) };
   const log = v2EventLog(options.project, options.runId, options.fencingEpoch);
   await log.append({ type: 'run/start', payload: { engine: 'worker-thread-trusted', manifest_digest: options.manifestDigest, state: 'preflight' } });
@@ -182,7 +184,7 @@ export async function runV2Script(options: V2ScriptRunOptions): Promise<RunRecor
   const approvalPath = join(planDirectory, 'approval.receipt.json');
   const baseline = await gitBaseline(options.project);
   const approvalDigest = await exists(approvalPath) ? objectDigest(JSON.parse(await readFile(approvalPath, 'utf8')) as unknown) : 'missing';
-  const authority: V2AuthorityDescriptor = {
+  const runAuthority: V2AuthorityDescriptor = {
     authority_version: '1.0.0', manifest_path: manifestPath, manifest_digest: manifestDigest,
     script_path: scriptPath, script_digest: options.scriptDigest, args_path: argsPath, args_digest: options.argsDigest,
     approval_path: approvalPath, approval_digest: approvalDigest,
@@ -191,7 +193,7 @@ export async function runV2Script(options: V2ScriptRunOptions): Promise<RunRecor
     baseline_digest: objectDigest({ branch: baseline.branch, head: baseline.head }), fencing_epoch: 1,
     restart_capability: 'worker-thread-trusted-v2',
   };
-  const record = await startV2Run({ project: options.project, runId: options.runId, manifestDigest, fencingEpoch: 1, authority });
+  const record = await startV2Run({ project: options.project, runId: options.runId, manifestDigest, fencingEpoch: 1, authority: runAuthority });
   const directory = join(options.project, '.ai-workflow/runs', options.runId);
   const events = v2EventLog(options.project, options.runId, record.fencing_epoch);
   const ledger = new RunLedger({ directory, runId: options.runId, fencingEpoch: record.fencing_epoch, eventLog: events });
@@ -199,8 +201,31 @@ export async function runV2Script(options: V2ScriptRunOptions): Promise<RunRecor
   if (uid === undefined) throw new Error('CANCEL_UNAUTHORIZED: local process identity is unavailable');
   const ownerLease = new OwnerLease({ root: options.project, runId: options.runId, owner: { osUid: uid, identityDigest: objectDigest({ runId: options.runId, manifest: manifestDigest }) }, process: { pid: process.pid, pgid: process.pid, startIdentity: `${process.pid}:${record.started_at}`, spawnNonce: record.run_id }, leaseMs: 30_000 });
   const owner = await ownerLease.acquire({ wait: false });
-  await events.append({ type: 'run/lease-acquired', payload: { state: 'executing', manifest_digest: manifestDigest } });
+  const authorityPath = join(directory, 'control', 'cancel-authority.json');
+  const cancelAuthority = JSON.parse(await readFile(authorityPath, 'utf8')) as import('./control.js').CancelAuthority;
+  const { writeJson } = await import('../utils/fs.js');
+  const identityDigest = owner.owner.identityDigest;
+  await writeJson(authorityPath, { ...cancelAuthority, owner_uid: owner.owner.osUid, owner_identity_digest: identityDigest });
+  const cancelControl = new CancelControl({ root: options.project, runId: options.runId, owner: { osUid: owner.owner.osUid, identityDigest }, fencingEpoch: record.fencing_epoch, nonce: cancelAuthority.challenge_nonce });
   const scheduler = new ScopeScheduler({ maxConcurrent: options.manifest.limits.max_concurrent_agents });
+  let liveWorker: ReturnType<CodingWorkflowEngine['start']> | undefined;
+  let cancelRequested = false;
+  const runControl = new RunControl({ ownerLease, owner, cancelControl, scheduler, abortChild: (_lease, reason) => liveWorker?.cancel(reason) });
+  const cancelSocket = options.cancelPeerUid ? new CancelSocket(cancelControl, {
+    socketPath: cancelAuthority.socket_path,
+    peerUid: options.cancelPeerUid,
+    requestCancel: async (request) => {
+      const outcome = await runControl.requestCancel(request);
+      if (outcome.won) {
+        cancelRequested = true;
+        liveWorker?.cancel(outcome.intent.reason);
+        await liveWorker?.result;
+      }
+      return outcome;
+    },
+  }) : undefined;
+  await cancelSocket?.start();
+  await events.append({ type: 'run/lease-acquired', payload: { state: 'executing', manifest_digest: manifestDigest } });
   const actionStates: Record<string, 'prepared' | 'dispatch_intent' | 'running' | 'observed' | 'checkpointed' | 'done'> = {};
   const taskStates: Record<string, 'pending' | 'ready' | 'running' | 'done' | 'blocked' | 'failed' | 'cancelled' | 'finalized'> = Object.fromEntries(options.manifest.tasks.map((task) => [task.task_id, 'ready']));
   const actionMap = new Map(options.manifest.actions.map((action) => [action.action_id, action]));
@@ -257,7 +282,7 @@ export async function runV2Script(options: V2ScriptRunOptions): Promise<RunRecor
     },
   };
   const trace: string[] = [];
-  const worker = new CodingWorkflowEngine().start({ runId: options.runId, script: options.script, args: options.args, manifestDigest, scriptDigest: options.scriptDigest, argsDigest: options.argsDigest, actions: options.manifest.actions.map((action) => ({ action_id: action.action_id, task_id: action.task_id, action_digest: objectDigest(action) })), maxConcurrentAgents: options.manifest.limits.max_concurrent_agents, maxTotalAgents: options.manifest.limits.max_total_agents, maxItemsPerCall: options.manifest.limits.max_items_per_call, maxScriptBytes: options.manifest.limits.max_script_bytes, maxResultBytes: options.manifest.limits.max_result_bytes, syncTimeoutMs: options.manifest.limits.sync_timeout_ms, disposeGraceMs: options.manifest.limits.dispose_grace_ms, childExecutor, taskControl: async (descriptor: TaskControlDescriptor) => {
+  liveWorker = new CodingWorkflowEngine().start({ runId: options.runId, script: options.script, args: options.args, manifestDigest, scriptDigest: options.scriptDigest, argsDigest: options.argsDigest, actions: options.manifest.actions.map((action) => ({ action_id: action.action_id, task_id: action.task_id, action_digest: objectDigest(action) })), maxConcurrentAgents: options.manifest.limits.max_concurrent_agents, maxTotalAgents: options.manifest.limits.max_total_agents, maxItemsPerCall: options.manifest.limits.max_items_per_call, syncTimeoutMs: options.manifest.limits.sync_timeout_ms, disposeGraceMs: options.manifest.limits.dispose_grace_ms, childExecutor, taskControl: async (descriptor: TaskControlDescriptor) => {
     if (descriptor.operation !== 'skip-task' && descriptor.operation !== 'finalize-task') throw new Error('unsupported task control operation');
     const task = options.manifest.tasks.find((candidate) => candidate.task_id === descriptor.task_id);
     if (!task || !descriptor.task_id) throw new Error('task control requires an authorized task');
@@ -277,9 +302,10 @@ export async function runV2Script(options: V2ScriptRunOptions): Promise<RunRecor
     else if (receipt.state !== 'skipped' && !record.completed_tasks?.includes(task.task_id)) record.completed_tasks = [...(record.completed_tasks ?? []), task.task_id];
     return { state: receipt.state, receipt_digest: objectDigest(receipt) };
   }, observer: { phase: (title) => trace.push(`phase:${title}`), log: (message) => trace.push(`log:${message}`) }, sandboxPreflight: () => { new BrokeredSandboxProvider().preflight(); } });
+  if (cancelRequested) liveWorker.cancel((await cancelControl.readIntent())?.reason ?? 'workflow cancelled');
   await events.append({ type: 'run/lease-acquired', payload: { state: 'executing', manifest_digest: record.manifest_digest } });
   record.run_state = 'executing';
-  const result = await worker.result;
+  const result = await liveWorker.result;
   for (const entry of trace) await events.append({ type: entry.startsWith('phase:') ? 'workflow/phase' : 'workflow/log', payload: entry.startsWith('phase:') ? { title: entry.slice('phase:'.length) } : { message: entry.slice('log:'.length) } });
   if (result.stop_reason === 'cancelled') { record.run_state = 'cancelled'; record.stop_reason = 'cancelled'; await events.append({ type: 'run/cancelled', payload: { state: 'cancelled', stop_reason: 'cancelled' } }); }
   else { record.run_state = 'paused'; record.stop_reason = result.stop_reason === 'completed' ? 'blocked' : 'error'; await events.append({ type: 'run/error', payload: { state: 'paused', stop_reason: record.stop_reason, error: result.error ?? 'host-owned plan, review and repair authority is required before integration' } }); }
@@ -301,7 +327,8 @@ export async function runV2Script(options: V2ScriptRunOptions): Promise<RunRecor
   }
   await saveV2Run(options.project, record);
   if (record.run_state !== 'paused') await ownerLease.release(owner);
-  await worker.dispose();
+  await liveWorker.dispose();
+  await cancelSocket?.close();
   return record;
 }
 
@@ -382,7 +409,26 @@ export async function resumeV2Run(project: string, runId: string, options?: Resu
 export async function cancelV2Run(project: string, runId: string): Promise<RunRecordV2> {
   const record = await projectV2Run(project, runId);
   if (['complete', 'cancelled', 'cancelled-with-retained-resources'].includes(record.run_state)) return record;
-  throw new ControlError('CANCEL_UNAUTHORIZED', 'cancel requires a verified local Unix socket peer-credential adapter');
+  const authorityPath = join(project, '.ai-workflow', 'runs', runId, 'control', 'cancel-authority.json');
+  if (!await exists(authorityPath)) throw new ControlError('CANCEL_UNAUTHORIZED', 'cancel authority is unavailable');
+  const authority = JSON.parse(await readFile(authorityPath, 'utf8')) as import('./control.js').CancelAuthority;
+  if (authority.run_id !== runId || authority.fencing_epoch !== record.fencing_epoch || authority.owner_uid === undefined || !authority.owner_identity_digest) throw new ControlError('CANCEL_UNAUTHORIZED', 'cancel authority is incomplete');
+  const reason = 'Cancelled by user';
+  let outcome;
+  try {
+    outcome = await requestCancelSocket(authority.socket_path, { runId, fencingEpoch: record.fencing_epoch, nonce: authority.challenge_nonce, reason, identityDigest: authority.owner_identity_digest, proof: cancelProof(authority.challenge_nonce, runId, record.fencing_epoch, cancelReasonDigest(reason)) });
+  } catch (error) {
+    if (error instanceof ControlError) throw error;
+    throw new ControlError('CANCEL_UNAUTHORIZED', `cancel socket is unavailable: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  if (!outcome.won) return projectV2Run(project, runId);
+  const deadline = Date.now() + 10_000;
+  while (Date.now() < deadline) {
+    const current = await projectV2Run(project, runId);
+    if (['cancelled', 'cancelled-with-retained-resources'].includes(current.run_state)) return current;
+    await new Promise((resolvePromise) => setTimeout(resolvePromise, 25));
+  }
+  throw new ControlError('CANCEL_CONTROL_STALE', 'owner accepted cancellation but did not publish a terminal state');
 }
 
 export async function runV2Lifecycle(options: V2LifecycleOptions): Promise<V2LifecycleResult> {

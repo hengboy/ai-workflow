@@ -1,6 +1,6 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { chmod, mkdir, open, readFile, rename, unlink } from 'node:fs/promises';
-import { createServer, type Server, type Socket } from 'node:net';
+import { connect, createServer, type Server, type Socket } from 'node:net';
 import { dirname, join, resolve } from 'node:path';
 import { admitAction, type ActionAdmission, type ActionAdmissionRequest } from '../security/capability.js';
 import { ScopeScheduler, type LeaseTerminalState, type ScopeLease } from './scheduler.js';
@@ -66,6 +66,8 @@ export interface CancelAuthority {
   fencing_epoch: number;
   challenge_nonce: string;
   socket_path: string;
+  owner_uid?: number;
+  owner_identity_digest?: string;
 }
 
 export interface CancelOutcome {
@@ -96,7 +98,9 @@ function controlDirectory(root: string, runId: string): string {
 
 async function prepareDirectory(path: string): Promise<void> {
   await mkdir(path, { recursive: true, mode: 0o700 });
-  await chmod(path, 0o700);
+  await chmod(path, 0o700).catch((error: unknown) => {
+    if ((error as NodeJS.ErrnoException).code !== 'EPERM' || path !== '/tmp') throw error;
+  });
 }
 
 async function writeExclusive(path: string, value: unknown): Promise<boolean> {
@@ -213,7 +217,7 @@ export class CancelControl {
   private readonly cancelPath: string;
   private readonly nonce: string;
 
-  constructor(private readonly options: { root: string; runId: string; owner: ReceiptApprovalIdentity; fencingEpoch: number; nonce?: string }) {
+  constructor(private readonly options: { root: string; runId: string; owner: ReceiptApprovalIdentity; fencingEpoch: number; nonce?: string; socketPath?: string }) {
     this.directory = controlDirectory(options.root, options.runId);
     this.cancelPath = join(this.directory, 'cancel.json');
     this.nonce = options.nonce ?? randomBytes(32).toString('hex');
@@ -227,7 +231,7 @@ export class CancelControl {
       run_id: this.options.runId,
       fencing_epoch: this.options.fencingEpoch,
       challenge_nonce: this.nonce,
-      socket_path: join(this.directory, 'cancel.sock'),
+      socket_path: this.options.socketPath ?? join(this.directory, 'cancel.sock'),
     };
   }
 
@@ -260,6 +264,7 @@ export class CancelControl {
 export interface CancelSocketOptions {
   socketPath: string;
   peerUid: (socket: Socket) => number | Promise<number>;
+  requestCancel?: (request: CancelRequest) => Promise<CancelOutcome>;
 }
 
 export class CancelSocket {
@@ -299,13 +304,31 @@ export class CancelSocket {
     try {
       const peerUid = await this.options.peerUid(socket);
       const request = JSON.parse(line) as Omit<CancelRequest, 'peerUid'>;
-      const result = await this.control.requestCancel({ ...request, peerUid });
+      const result = await (this.options.requestCancel ?? ((value: CancelRequest) => this.control.requestCancel(value)))({ ...request, peerUid });
       socket.write(`${JSON.stringify(result)}\n`);
     } catch (error) {
       const value = error instanceof ControlError ? { code: error.code, message: error.message } : { code: 'CANCEL_UNAUTHORIZED', message: String(error) };
       socket.write(`${JSON.stringify({ error: value })}\n`);
     }
   }
+}
+
+export async function requestCancelSocket(socketPath: string, request: Omit<CancelRequest, 'peerUid'>): Promise<CancelOutcome> {
+  return new Promise((resolvePromise, reject) => {
+    const socket = connect(socketPath);
+    let response = '';
+    socket.setEncoding('utf8');
+    socket.on('data', (chunk: string) => { response += chunk; });
+    socket.on('error', reject);
+    socket.on('end', () => {
+      try {
+        const value = JSON.parse(response) as { error?: { code?: string; message?: string } } | CancelOutcome;
+        if ('error' in value && value.error) throw new ControlError('CANCEL_UNAUTHORIZED', value.error.message ?? 'cancel request rejected');
+        resolvePromise(value as CancelOutcome);
+      } catch (error) { reject(error); }
+    });
+    socket.on('connect', () => socket.write(`${JSON.stringify(request)}\n`));
+  });
 }
 
 export interface ReapOptions {

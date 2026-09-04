@@ -108,7 +108,6 @@ export class WorkerRun {
       this.settle({ value: null, stop_reason: 'cancelled', error: `workflow run cancelled: ${reason}`, agents_started: this.liveAgents.size, completed_tasks: [], blocked_tasks: [] });
       void this.worker.terminate();
     }, this.options.disposeGraceMs);
-    this.graceTimer.unref();
   }
 
   dispose(): Promise<void> {

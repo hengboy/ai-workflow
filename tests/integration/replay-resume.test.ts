@@ -110,8 +110,8 @@ describe('replay and resume', () => {
 
     const fingerprint: ResumeFingerprint = { workflow: 'workflow', script: 'script', args: 'args', manifest: manifestDigest, profile: 'profile', baseline: 'baseline' };
     await expect(resumeV2Run(directory, 'run-lifecycle', { expected: fingerprint, current: fingerprint })).resolves.toMatchObject({ run_state: 'paused' });
-    await expect(cancelV2Run(directory, 'run-lifecycle')).resolves.toMatchObject({ run_state: 'cancelled', stop_reason: 'cancelled' });
-    await expect(resumeV2Run(directory, 'run-lifecycle')).rejects.toThrow(/paused v2/i);
+    await expect(cancelV2Run(directory, 'run-lifecycle')).rejects.toMatchObject({ code: 'CANCEL_UNAUTHORIZED' });
+    await expect(projectV2Run(directory, 'run-lifecycle')).resolves.toMatchObject({ run_state: 'paused' });
   });
 
   it('keeps a paused v2 run paused when resume authority is incomplete', async () => {
@@ -136,7 +136,7 @@ describe('replay and resume', () => {
     const authority = JSON.parse(await readFile(join(controlDirectory, 'cancel-authority.json'), 'utf8')) as { challenge_nonce?: string; socket_path?: string; fencing_epoch?: number };
     expect(authority).toMatchObject({ fencing_epoch: 3 });
     expect(authority.challenge_nonce).toEqual(expect.any(String));
-    expect(authority.socket_path).toEqual(expect.stringContaining('cancel.sock'));
+    expect(authority.socket_path).toEqual(expect.stringMatching(/^\/tmp\/aiw-[a-f0-9]+\.sock$/));
 
     await expect(cancelV2Run(directory, 'run-cancel-authority')).rejects.toMatchObject({ code: 'CANCEL_UNAUTHORIZED' });
   });
@@ -190,16 +190,8 @@ describe('replay and resume', () => {
     started.resources = [{ resource_id: 'unknown-resource' }];
     await saveV2Run(directory, started);
 
-    const first = await cancelV2Run(directory, 'run-cancel-intent');
-    const second = await cancelV2Run(directory, 'run-cancel-intent');
-
-    expect(first).toMatchObject({ run_state: 'cancelled-with-retained-resources', stop_reason: 'cancelled' });
-    expect(second).toMatchObject({ run_state: 'cancelled-with-retained-resources', stop_reason: 'cancelled' });
-    await expect(readFile(join(directory, '.ai-workflow/runs/run-cancel-intent/control/cancel.json'), 'utf8')).resolves.toMatch(/run-cancel-intent/);
-    await expect(readFile(join(directory, '.ai-workflow/runs/run-cancel-intent/events.jsonl'), 'utf8')).resolves.toMatch(/run\/cancel-requested/);
-    expect(second.resources).toEqual([{ resource_id: 'unknown-resource' }]);
-    const events = (await new EventLog({ path: join(directory, '.ai-workflow/runs/run-cancel-intent/events.jsonl'), runId: 'run-cancel-intent', fencingEpoch: 1 }).read()).events;
-    expect(events.filter((event) => event.type === 'run/cancel-requested')).toHaveLength(1);
+    await expect(cancelV2Run(directory, 'run-cancel-intent')).rejects.toMatchObject({ code: 'CANCEL_UNAUTHORIZED' });
+    await expect(projectV2Run(directory, 'run-cancel-intent')).resolves.toMatchObject({ run_state: 'preflight' });
   });
 
   it('marks a cancelled run as retaining resources it cannot reconcile', async () => {
@@ -209,10 +201,8 @@ describe('replay and resume', () => {
     started.resources = [{ resource_id: 'unknown-resource' }];
     await saveV2Run(directory, started);
 
-    const cancelled = await cancelV2Run(directory, 'run-retained');
-
-    expect(cancelled).toMatchObject({ run_state: 'cancelled-with-retained-resources', stop_reason: 'cancelled' });
-    expect(cancelled.resources).toEqual([{ resource_id: 'unknown-resource' }]);
+    await expect(cancelV2Run(directory, 'run-retained')).rejects.toMatchObject({ code: 'CANCEL_UNAUTHORIZED' });
+    await expect(projectV2Run(directory, 'run-retained')).resolves.toMatchObject({ run_state: 'preflight', resources: [{ resource_id: 'unknown-resource' }] });
   });
 
   it('accepts one authorized cross-process socket cancel and rejects a forged peer', async () => {
@@ -238,6 +228,23 @@ describe('replay and resume', () => {
     await forged.start();
     await expect(socketRequest(socketPath, request)).resolves.toMatchObject({ error: { code: 'CANCEL_UNAUTHORIZED' } });
     await forged.close();
+  });
+
+  it('routes an authorized live cancel through the owner socket to stop the Worker', async () => {
+    const project = await mkdtemp(join(tmpdir(), 'ai-workflow-v2-live-cancel-'));
+    await gitInit(project);
+    const plan = await frozenPlan(project);
+    await writeFile(join(plan, 'workflow.js'), 'await new Promise(() => {});\n');
+    const manifest = await generateManifest(plan, 'codex');
+    const uid = process.getuid?.();
+    if (uid === undefined) throw new Error('local uid is unavailable');
+    const run = runV2Script({ project, runId: 'run-live-cancel', manifest, script: await readFile(join(plan, 'workflow.js'), 'utf8'), args: {}, scriptDigest: manifest.script.bytes_digest, argsDigest: manifest.args.bytes_digest, cancelPeerUid: () => uid });
+    await new Promise((resolvePromise) => setTimeout(resolvePromise, 250));
+
+    const authority = JSON.parse(await readFile(join(project, '.ai-workflow/runs/run-live-cancel/control/cancel-authority.json'), 'utf8')) as { socket_path?: string };
+    expect(authority.socket_path).toEqual(expect.any(String));
+    await expect(cancelV2Run(project, 'run-live-cancel')).resolves.toMatchObject({ run_state: 'cancelled' });
+    await expect(run).resolves.toMatchObject({ run_state: 'cancelled' });
   });
 
   it('records a durable skip control for a conditional task in the approved script', async () => {
