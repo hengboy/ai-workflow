@@ -85,6 +85,21 @@ describe('v2 CLI artifacts', () => {
     await expect(readFile(join(project, '.ai-workflow/runs', record.run_id, 'events.jsonl'), 'utf8')).resolves.toMatch(/cli-started|script-ran/);
   });
 
+  it('persists a host-authority blocked reason when CLI start cannot complete lifecycle gates', async () => {
+    const project = await temporary('ai-workflow-cli-v2-');
+    await gitInit(project);
+    const plan = await frozenPlan(project);
+    await writeFile(join(plan, 'workflow.js'), "phase('cli-authority'); return { started: true };");
+    const generated = await workflowCli(project, ['workflow', 'generate', '--plan', plan, '--host', 'codex']);
+    const workflow = (JSON.parse(generated.stdout) as { workflow: string }).workflow;
+    await workflowCli(project, ['workflow', 'approve', workflow, '--project', project]);
+
+    const started = await workflowCli(project, ['run', 'start', '--workflow', workflow, '--host', 'codex', '--project', project]);
+    const record = JSON.parse(started.stdout) as { run_id: string; run_state: string; stop_reason?: string };
+    expect(record).toMatchObject({ run_state: 'paused', stop_reason: 'blocked' });
+    await expect(readFile(join(project, '.ai-workflow/runs', record.run_id, 'events.jsonl'), 'utf8')).resolves.toMatch(/host-owned plan, review and repair authority is required/);
+  });
+
   it('records an approved Worker action through the durable call ledger before pausing for lifecycle gates', async () => {
     const project = await temporary('ai-workflow-cli-v2-');
     const bin = await temporary('ai-workflow-host-');

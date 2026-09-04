@@ -262,7 +262,7 @@ export async function runV2Script(options: V2ScriptRunOptions): Promise<RunRecor
   const result = await worker.result;
   for (const entry of trace) await events.append({ type: entry.startsWith('phase:') ? 'workflow/phase' : 'workflow/log', payload: entry.startsWith('phase:') ? { title: entry.slice('phase:'.length) } : { message: entry.slice('log:'.length) } });
   if (result.stop_reason === 'cancelled') { record.run_state = 'cancelled'; record.stop_reason = 'cancelled'; await events.append({ type: 'run/cancelled', payload: { state: 'cancelled', stop_reason: 'cancelled' } }); }
-  else { record.run_state = 'paused'; record.stop_reason = result.stop_reason === 'completed' ? 'blocked' : 'error'; await events.append({ type: 'run/error', payload: { state: 'paused', stop_reason: record.stop_reason, error: result.error ?? 'Lifecycle gates require host closure evidence' } }); }
+  else { record.run_state = 'paused'; record.stop_reason = result.stop_reason === 'completed' ? 'blocked' : 'error'; await events.append({ type: 'run/error', payload: { state: 'paused', stop_reason: record.stop_reason, error: result.error ?? 'host-owned plan, review and repair authority is required before integration' } }); }
   record.call_ledger = await ledger.replaySubmissionOrder();
   record.control_ledger = await ledger.replayControlOrder();
   const allTasksTerminal = options.manifest.tasks.every((task) => taskStates[task.task_id] === 'done' || taskStates[task.task_id] === 'finalized');
