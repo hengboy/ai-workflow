@@ -211,6 +211,7 @@ export async function runV2Script(options: V2ScriptRunOptions): Promise<RunRecor
   // The socket handler is installed before the Worker is created and observes this holder.
   // eslint-disable-next-line prefer-const
   let liveWorker: ReturnType<CodingWorkflowEngine['start']> | undefined;
+  let cancelRequested = false;
   const runControl = new RunControl({ ownerLease, owner, cancelControl, scheduler, abortChild: (_lease, reason) => liveWorker?.cancel(reason) });
   const cancelSocket = options.cancelPeerUid ? new CancelSocket(cancelControl, {
     socketPath: cancelAuthority.socket_path,
@@ -218,12 +219,14 @@ export async function runV2Script(options: V2ScriptRunOptions): Promise<RunRecor
     requestCancel: async (request) => {
       const outcome = await runControl.requestCancel(request);
       if (outcome.won) {
+        cancelRequested = true;
         liveWorker?.cancel(outcome.intent.reason);
         await liveWorker?.result;
       }
       return outcome;
     },
   }) : undefined;
+  await cancelSocket?.start();
   await events.append({ type: 'run/lease-acquired', payload: { state: 'executing', manifest_digest: manifestDigest } });
   const actionStates: Record<string, 'prepared' | 'dispatch_intent' | 'running' | 'observed' | 'checkpointed' | 'done'> = {};
   const taskStates: Record<string, 'pending' | 'ready' | 'running' | 'done' | 'blocked' | 'failed' | 'cancelled' | 'finalized'> = Object.fromEntries(options.manifest.tasks.map((task) => [task.task_id, 'ready']));
@@ -301,6 +304,7 @@ export async function runV2Script(options: V2ScriptRunOptions): Promise<RunRecor
     else if (receipt.state !== 'skipped' && !record.completed_tasks?.includes(task.task_id)) record.completed_tasks = [...(record.completed_tasks ?? []), task.task_id];
     return { state: receipt.state, receipt_digest: objectDigest(receipt) };
   }, observer: { phase: (title) => trace.push(`phase:${title}`), log: (message) => trace.push(`log:${message}`) }, sandboxPreflight: () => { new BrokeredSandboxProvider().preflight(); } });
+  if (cancelRequested) liveWorker.cancel((await cancelControl.readIntent())?.reason ?? 'workflow cancelled');
   await events.append({ type: 'run/lease-acquired', payload: { state: 'executing', manifest_digest: record.manifest_digest } });
   record.run_state = 'executing';
   const result = await liveWorker.result;
