@@ -111,6 +111,12 @@ export interface V2LifecycleOptions {
   manifest: { manifest_digest: string; target_branch?: string; tasks: Array<{ task_id: string; activation: 'required' | 'conditional'; finalization_mode: 'read-only-finalize' | 'commit-and-merge'; required_actions: string[]; depends_on: string[] }>; actions: Array<{ action_id: string; task_id: string; operation: string; write_scope: string[] }> };
   fencingEpoch?: number;
   execute: (context: V2LifecycleActionContext) => Promise<V2LifecycleActionResult>;
+  gateEvidence: {
+    planValidation: { valid: boolean; errors: string[] };
+    standardsReview: { findings: Array<{ severity: 'error' | 'warning' | 'info'; finding_id?: string }> };
+    specReview: { findings: Array<{ severity: 'error' | 'warning' | 'info'; finding_id?: string }> };
+    repairClosure: { closedFindingIds: string[]; expectedFindingIds: string[] };
+  };
 }
 
 export interface V2ScriptRunOptions {
@@ -342,11 +348,16 @@ export async function runV2Lifecycle(options: V2LifecycleOptions): Promise<V2Lif
     trace.push(`task-${task.task_id}:${finalized.state}`);
   }
   const gates = new GateCoordinator({ directory, runId: options.runId, fencingEpoch, manifestDigest: options.manifest.manifest_digest });
-  await gates.runGate('task-closure', { taskClosure: Object.fromEntries([...tasks].map(([taskId, task]) => [taskId, { state: task.state }])) }); trace.push('gate:task-closure:passed');
-  await gates.runGate('plan-validation', { planValidation: { valid: true, errors: [] } }); trace.push('gate:plan-validation:passed');
-  await gates.runGate('standards-review', { review: { findings: [] } });
-  await gates.runGate('spec-review', { review: { findings: [] } });
-  await gates.runGate('repair-closure', { repairClosure: { closedFindingIds: [] } });
+  const taskClosure = await gates.runGate('task-closure', { taskClosure: Object.fromEntries([...tasks].map(([taskId, task]) => [taskId, { state: task.state }])) });
+  if (taskClosure.state !== 'passed') return lifecyclePaused(options.project, record, gates, trace, 'task-closure gate failed');
+  trace.push('gate:task-closure:passed');
+  const planValidation = await gates.runGate('plan-validation', { planValidation: options.gateEvidence.planValidation });
+  if (planValidation.state !== 'passed') return lifecyclePaused(options.project, record, gates, trace, 'plan-validation gate failed');
+  trace.push('gate:plan-validation:passed');
+  const standardsReview = await gates.runGate('standards-review', { review: options.gateEvidence.standardsReview });
+  const specReview = await gates.runGate('spec-review', { review: options.gateEvidence.specReview });
+  const repairClosure = await gates.runGate('repair-closure', { repairClosure: options.gateEvidence.repairClosure });
+  if (standardsReview.state !== 'passed' || specReview.state !== 'passed' || repairClosure.state !== 'passed') return lifecyclePaused(options.project, record, gates, trace, 'review or repair gate failed');
   const baseline = await gitBaseline(options.project);
   await gates.runGate('baseline-stable', { baseline: { expected: baseline.head ?? '', current: baseline.head ?? '' } }); trace.push('gate:baseline-stable:passed');
   const mergeCommit = await operator.integratePlan(plan, { targetBranch: options.manifest.target_branch ?? 'main', expectedHead: baseline.head });
@@ -365,6 +376,15 @@ export async function runV2Lifecycle(options: V2LifecycleOptions): Promise<V2Lif
     return [gateId, receipt] as const;
   }));
   return { run_state: record.run_state, gates: Object.fromEntries(gateEntries), integration, trace };
+}
+
+async function lifecyclePaused(project: string, record: RunRecordV2, gates: GateCoordinator, trace: string[], reason: string): Promise<V2LifecycleResult> {
+  record.run_state = 'paused';
+  record.stop_reason = 'blocked';
+  await v2EventLog(project, record.run_id, record.fencing_epoch).append({ type: 'run/error', payload: { state: 'paused', stop_reason: 'blocked', reason } });
+  const gateIds = ['task-closure', 'plan-validation', 'standards-review', 'spec-review', 'repair-closure', 'baseline-stable', 'integration'] as const;
+  const entries = await Promise.all(gateIds.map(async (gateId) => [gateId, await gates.readGate(gateId)] as const));
+  return { run_state: record.run_state, gates: Object.fromEntries(entries.filter((entry): entry is [typeof entry[0], GateReceipt] => entry[1] !== undefined).map(([gateId, receipt]) => [gateId, receipt])), trace };
 }
 
 export async function cleanupV2Run(project: string, runId: string): Promise<RunRecordV2> {

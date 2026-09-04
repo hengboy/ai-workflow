@@ -155,12 +155,30 @@ describe('v2 mandatory gates', () => {
       actions: [{ action_id: 'task-001-test', task_id: 'task-001', operation: 'test', write_scope: ['output.txt'] }],
     };
 
-    const result = await runV2Lifecycle({ project, runId, manifest, execute: async ({ cwd }) => { await writeFile(join(cwd, 'output.txt'), 'runner lifecycle\n'); return { status: 'done', tests: [{ command: 'pnpm test', status: 'passed' }], changedPaths: ['output.txt'] }; } });
+    const result = await runV2Lifecycle({ project, runId, manifest, execute: async ({ cwd }) => { await writeFile(join(cwd, 'output.txt'), 'runner lifecycle\n'); return { status: 'done', tests: [{ command: 'pnpm test', status: 'passed' }], changedPaths: ['output.txt'] }; }, gateEvidence: { planValidation: { valid: true, errors: [] }, standardsReview: { findings: [] }, specReview: { findings: [] }, repairClosure: { closedFindingIds: [], expectedFindingIds: [] } } });
     expect(result.run_state).toBe('complete');
     expect(result.integration?.observed).toBe(true);
     expect(result.gates.integration?.state).toBe('passed');
     expect(result.trace).toEqual(expect.arrayContaining(['task-task-001:committed', 'gate:integration:passed', 'run:complete']));
     expect(await readFile(join(project, 'output.txt'), 'utf8')).toContain('runner lifecycle');
+  });
+
+  it('keeps the lifecycle paused when host-owned gate evidence is missing', async () => {
+    const project = await temporary();
+    await gitInit(project);
+    const runId = 'runner-v2-missing-evidence';
+    const manifest = {
+      manifest_digest: digest,
+      target_branch: 'main',
+      tasks: [{ task_id: 'task-001', activation: 'required' as const, finalization_mode: 'read-only-finalize' as const, required_actions: ['task-001-test'], depends_on: [] }],
+      actions: [{ action_id: 'task-001-test', task_id: 'task-001', operation: 'test', write_scope: [] }],
+    };
+
+    const result = await runV2Lifecycle({ project, runId, manifest, execute: async () => ({ status: 'done', tests: [{ command: 'pnpm test', status: 'passed' }], changedPaths: [] }), gateEvidence: { planValidation: { valid: false, errors: ['host validation evidence missing'] }, standardsReview: { findings: [] }, specReview: { findings: [] }, repairClosure: { closedFindingIds: [], expectedFindingIds: [] } } });
+
+    expect(result.run_state).toBe('paused');
+    expect(result.integration).toBeUndefined();
+    expect(result.gates['standards-review']).toBeUndefined();
   });
 
   it('cancels a deferred v2 run and reconciles its durable projection without deleting resources', async () => {
@@ -185,7 +203,7 @@ describe('v2 mandatory gates', () => {
       tasks: [{ task_id: 'task-001', activation: 'required' as const, finalization_mode: 'commit-and-merge' as const, required_actions: ['task-001-test'], depends_on: [] }],
       actions: [{ action_id: 'task-001-test', task_id: 'task-001', operation: 'test', write_scope: ['output.txt'] }],
     };
-    const result = await runV2Lifecycle({ project, runId, manifest, execute: async ({ cwd }) => { await writeFile(join(cwd, 'output.txt'), 'cleanup\n'); return { status: 'done', tests: [{ command: 'pnpm test', status: 'passed' }], changedPaths: ['output.txt'] }; } });
+    const result = await runV2Lifecycle({ project, runId, manifest, execute: async ({ cwd }) => { await writeFile(join(cwd, 'output.txt'), 'cleanup\n'); return { status: 'done', tests: [{ command: 'pnpm test', status: 'passed' }], changedPaths: ['output.txt'] }; }, gateEvidence: { planValidation: { valid: true, errors: [] }, standardsReview: { findings: [] }, specReview: { findings: [] }, repairClosure: { closedFindingIds: [], expectedFindingIds: [] } } });
     expect(result.run_state).toBe('complete');
     const cleaned = await cleanupV2Run(project, runId);
     expect(cleaned.run_state).toBe('complete');
