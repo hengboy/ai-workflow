@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { connect } from 'node:net';
 import { RunLedger, type CallDescriptor, type RecordedAgentResult } from '../../src/runtime/ledger.js';
 import { assertResumeFingerprint, loadRun, loadV2Run, saveRun, saveV2Run, type ResumeFingerprint, type RunRecord } from '../../src/runtime/store.js';
 import { EventLog } from '../../src/runtime/events.js';
@@ -9,6 +10,7 @@ import { cancelV2Run, projectV2Run, resumeV2Run, startV2Run } from '../../src/ru
 import { generateManifest } from '../../src/workflow/generate.js';
 import { frozenPlan, gitInit } from '../helpers.js';
 import { runV2Script } from '../../src/runtime/runner.js';
+import { CancelControl, CancelSocket, cancelProof, cancelReasonDigest } from '../../src/runtime/control.js';
 
 const descriptor: CallDescriptor = { action_id: 'action-one', task_id: 'task-one', input: { value: 1 } };
 const result: RecordedAgentResult = { result_version: '2.0.0', status: 'done', summary: 'ok', changed_paths: [], evidence: [], tests: [], findings: [], git_refs: [], support_requests: [] };
@@ -172,6 +174,31 @@ describe('replay and resume', () => {
     expect(cancelled.resources).toEqual([{ resource_id: 'unknown-resource' }]);
   });
 
+  it('accepts one authorized cross-process socket cancel and rejects a forged peer', async () => {
+    const project = await mkdtemp(join(tmpdir(), 'ai-workflow-v2-cancel-socket-'));
+    const uid = process.getuid?.();
+    if (uid === undefined) throw new Error('local uid is unavailable');
+    const runId = 'run-socket';
+    const control = new CancelControl({ root: project, runId, owner: { osUid: uid, identityDigest: 'owner' }, fencingEpoch: 1, nonce: 'challenge' });
+    const socketPath = join(project, 'cancel.sock');
+    const socket = new CancelSocket(control, { socketPath, peerUid: () => uid });
+    await socket.start();
+    const reason = 'cancel via socket';
+    const request = { runId, fencingEpoch: 1, nonce: 'challenge', reason, identityDigest: 'owner', proof: cancelProof('challenge', runId, 1, cancelReasonDigest(reason)) };
+
+    const first = await socketRequest(socketPath, request);
+    const second = await socketRequest(socketPath, { ...request, reason: 'later', proof: cancelProof('challenge', runId, 1, cancelReasonDigest('later')) });
+
+    expect(first).toMatchObject({ won: true });
+    expect(second).toMatchObject({ won: false, intent: { reason } });
+    await socket.close();
+
+    const forged = new CancelSocket(control, { socketPath, peerUid: () => uid + 1 });
+    await forged.start();
+    await expect(socketRequest(socketPath, request)).resolves.toMatchObject({ error: { code: 'CANCEL_UNAUTHORIZED' } });
+    await forged.close();
+  });
+
   it('records a durable skip control for a conditional task in the approved script', async () => {
     const project = await mkdtemp(join(tmpdir(), 'ai-workflow-v2-skip-control-'));
     await gitInit(project);
@@ -218,3 +245,15 @@ describe('replay and resume', () => {
     }
   });
 });
+
+async function socketRequest(socketPath: string, request: object): Promise<unknown> {
+  return new Promise((resolvePromise, reject) => {
+    const client = connect(socketPath);
+    let response = '';
+    client.setEncoding('utf8');
+    client.on('data', (chunk: string) => { response += chunk; });
+    client.on('end', () => resolvePromise(JSON.parse(response)));
+    client.on('error', reject);
+    client.on('connect', () => client.write(`${JSON.stringify(request)}\n`));
+  });
+}
