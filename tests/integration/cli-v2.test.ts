@@ -1,15 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { execFile } from 'node:child_process';
-import { readFile, writeFile } from 'node:fs/promises';
+import { chmod, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { frozenPlan, gitInit, temporary } from '../helpers.js';
 
 const exec = promisify(execFile);
 
-async function workflowCli(project: string, arguments_: string[]): Promise<{ stdout: string; stderr: string }> {
+async function workflowCli(project: string, arguments_: string[], env?: NodeJS.ProcessEnv): Promise<{ stdout: string; stderr: string }> {
   const root = process.cwd();
-  return exec(process.execPath, [join(root, 'node_modules/tsx/dist/cli.mjs'), join(root, 'src/cli.ts'), ...arguments_], { cwd: project });
+  return exec(process.execPath, [join(root, 'node_modules/tsx/dist/cli.mjs'), join(root, 'src/cli.ts'), ...arguments_], { cwd: project, ...(env === undefined ? {} : { env: { ...process.env, ...env } }) });
 }
 
 describe('v2 CLI artifacts', () => {
@@ -83,6 +83,25 @@ describe('v2 CLI artifacts', () => {
     const record = JSON.parse(started.stdout) as { run_id: string; run_state: string };
     expect(record.run_state).toBe('paused');
     await expect(readFile(join(project, '.ai-workflow/runs', record.run_id, 'events.jsonl'), 'utf8')).resolves.toMatch(/cli-started|script-ran/);
+  });
+
+  it('records an approved Worker action through the durable call ledger before pausing for lifecycle gates', async () => {
+    const project = await temporary('ai-workflow-cli-v2-');
+    const bin = await temporary('ai-workflow-host-');
+    await gitInit(project);
+    const plan = await frozenPlan(project);
+    await writeFile(join(plan, 'workflow.js'), 'await agent("explore", { actionId: "task-001-example-explore", callId: "call/explore" });\n');
+    const host = join(bin, 'codex');
+    await writeFile(host, '#!/bin/sh\nprintf \'%s\\n\' \'{"status":"done","summary":"explored","changed_paths":[],"evidence":[],"tests":[],"findings":[],"git_refs":[],"support_requests":[]}\'\n');
+    await chmod(host, 0o755);
+    const generated = await workflowCli(project, ['workflow', 'generate', '--plan', plan, '--host', 'codex']);
+    const workflow = (JSON.parse(generated.stdout) as { workflow: string }).workflow;
+    await workflowCli(project, ['workflow', 'approve', workflow, '--project', project]);
+
+    const started = await workflowCli(project, ['run', 'start', '--workflow', workflow, '--host', 'codex', '--project', project], { PATH: `${bin}:${process.env.PATH ?? ''}` });
+    const record = JSON.parse(started.stdout) as { run_id: string; run_state: string; call_ledger: Array<{ call_id: string; state: string }> };
+    expect(record.run_state).toBe('paused');
+    expect(record.call_ledger).toEqual(expect.arrayContaining([expect.objectContaining({ call_id: 'call/explore', state: 'checkpointed' })]));
   });
 
   it('fails closed when an approved v2 artifact changes before start', async () => {

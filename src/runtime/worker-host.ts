@@ -132,7 +132,7 @@ export class WorkerRun {
     if (this.workerGone || this.deathObserved) return;
     this.outboundMessageId += 1;
     const full = { ...message, protocol_version: '2.0.0' as const, run_id: this.options.runId, message_id: this.outboundMessageId } as HostToWorkerMessage;
-    try { this.worker.postMessage(JSON.parse(encodeMessage(full))); } catch { this.onDeath('failed to post worker message', false); }
+    try { this.worker.postMessage(JSON.parse(encodeMessage(full))); } catch (error) { if (!this.terminalClaimed) this.onDeath(`failed to post worker message (${message.type}): ${error instanceof Error ? error.message : String(error)}`, false); }
   }
 
   private onMessage(raw: unknown): void {
@@ -204,7 +204,7 @@ export class WorkerRun {
        await this.options.processRegistry?.({ type: 'released', runId: this.options.runId, callId, childId: record.run.id, ...(record.run.identity === undefined ? {} : { identity: record.run.identity }) });
        this.children.delete(callId);
      })();
-    return record.disposal.then(() => { this.send({ type: 'agent-disposed', request_id: requestId, call_id: callId }); });
+     return record.disposal.then(() => { if (!this.terminalClaimed) this.send({ type: 'agent-disposed', request_id: requestId, call_id: callId }); });
   }
 
   private reapChildren(): void { for (const [callId, record] of this.children) void this.disposeChild(callId, callId === record.descriptor.call_id ? callId : callId); }
