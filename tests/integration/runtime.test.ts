@@ -12,7 +12,7 @@ import { renderNavigation, type NavigationIndex } from '../../src/context/naviga
 const done = { status: 'done' as const, summary: 'ok', changed_paths: [] as string[], evidence: [] as string[], tests: [], findings: [], git_refs: [], support_requests: [] as string[] };
 
 describe('runtime lifecycle', () => {
-  it('injects the verified more-tools locator and its exact read order into File Explorer', async () => {
+  it('injects the verified more-tools locator and fails closed before lifecycle completion', async () => {
     const root = await temporary();
     const capture = join(root, 'file-explorer-packet.json');
     const bin = await temporary('ai-workflow-host-');
@@ -45,7 +45,7 @@ describe('runtime lifecycle', () => {
       const path = join(plan, 'workflow.json');
       await writeJson(path, workflow);
       await approveWorkflow(path, root);
-      await expect(startRun({ workflowPath: path, host: 'opencode', project: root })).resolves.toMatchObject({ state: 'complete' });
+      await expect(startRun({ workflowPath: path, host: 'opencode', project: root })).resolves.toMatchObject({ state: 'paused' });
     } finally {
       process.env.PATH = previousPath;
       if (previousCapture === undefined) delete process.env.AI_WORKFLOW_CAPTURE;
