@@ -9,11 +9,24 @@ import { canonicalPath } from '../utils/paths.js';
 import { writeJson, exists } from '../utils/fs.js';
 
 const exec = promisify(execFile);
-const forbidden = new Set(['push', 'pull', 'fetch', 'rebase', 'reset', 'clean', 'stash', 'tag']);
+const allowedReadOnly = new Set(['branch', 'rev-parse', 'status', 'worktree', 'merge-tree', 'show']);
+const forbidden = new Set(['push', 'pull', 'fetch', 'rebase', 'reset', 'clean', 'stash', 'tag', 'remote', 'config', 'submodule']);
 const digestPattern = /^sha256:[a-f0-9]{64}$/;
 
+function assertLocalGitCommand(args: string[]): void {
+  const command = args[0];
+  if (!command || forbidden.has(command)) throw new Error(`Git operation is forbidden: ${command ?? '<missing command>'}`);
+  if (args.some((arg) => /^(?:origin|upstream|https?:|ssh:|git@)/i.test(arg)) || args.includes('--set-upstream-to') || args.includes('--track') || args.includes('--remote')) throw new Error('Git operation is forbidden: remote or upstream mutation');
+  if (allowedReadOnly.has(command)) return;
+  if (command === 'add' && args[1] === '--') return;
+  if (command === 'commit' && args.includes('-m')) return;
+  if (command === 'merge' && args.includes('--no-ff') && args.includes('--no-edit')) return;
+  if (command === 'branch' && (args[1] === '-D' || args[1] === '--delete')) return;
+  throw new Error(`Git operation is not in the local allowlist: ${command}`);
+}
+
 export async function git(project: string, args: string[]): Promise<string> {
-  if (args[0] && forbidden.has(args[0])) throw new Error(`Git operation is forbidden: ${args[0]}`);
+  assertLocalGitCommand(args);
   const { stdout } = await exec('git', args, { cwd: project, maxBuffer: 1_000_000 });
   return stdout.trim();
 }

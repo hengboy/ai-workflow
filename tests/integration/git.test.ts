@@ -7,4 +7,13 @@ const exec = promisify(execFile);
 describe('Git Operator helpers', () => {
   it('recognizes an unborn HEAD baseline', async () => { const root = await temporary(); await exec('git', ['init', '-b', 'main'], { cwd: root }); const baseline = await gitBaseline(root); expect(baseline.head).toBeNull(); expect(baseline.branch).toBe('main'); });
   it('denies remote and destructive operations', async () => { const root = await temporary(); await expect(git(root, ['push'])).rejects.toThrow(/forbidden/); await expect(git(root, ['reset', '--hard'])).rejects.toThrow(/forbidden/); });
+  it.each([
+    ['remote', ['remote', 'add', 'origin', 'https://example.test/repo.git']],
+    ['config', ['config', 'remote.origin.url', 'https://example.test/repo.git']],
+    ['upstream', ['branch', '--set-upstream-to', 'origin/main']],
+    ['subcommand option', ['fetch', '--all']],
+  ])('rejects %s Git mutation before spawning Git', async (_label, args) => {
+    const root = await temporary();
+    await expect(git(root, args)).rejects.toThrow(/forbidden|local allowlist/i);
+  });
 });
