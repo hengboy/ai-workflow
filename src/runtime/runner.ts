@@ -116,6 +116,8 @@ export interface V2LifecycleOptions {
     standardsReview: { findings: Array<{ severity: 'error' | 'warning' | 'info'; finding_id?: string }> };
     specReview: { findings: Array<{ severity: 'error' | 'warning' | 'info'; finding_id?: string }> };
     repairClosure: { closedFindingIds: string[]; expectedFindingIds: string[] };
+    baseline: { expected: string; current: string };
+    integration: { observed: boolean; noFastForward: boolean; mergeCommit?: string };
   };
 }
 
@@ -349,18 +351,23 @@ export async function runV2Lifecycle(options: V2LifecycleOptions): Promise<V2Lif
   }
   const gates = new GateCoordinator({ directory, runId: options.runId, fencingEpoch, manifestDigest: options.manifest.manifest_digest });
   const taskClosure = await gates.runGate('task-closure', { taskClosure: Object.fromEntries([...tasks].map(([taskId, task]) => [taskId, { state: task.state }])) });
-  if (taskClosure.state !== 'passed') return lifecyclePaused(options.project, record, gates, trace, 'task-closure gate failed');
+  if (taskClosure.state !== 'passed') return lifecyclePaused(options.project, record, gates, trace, 'task-closure gate failed', operator);
   trace.push('gate:task-closure:passed');
   const planValidation = await gates.runGate('plan-validation', { planValidation: options.gateEvidence.planValidation });
-  if (planValidation.state !== 'passed') return lifecyclePaused(options.project, record, gates, trace, 'plan-validation gate failed');
+  if (planValidation.state !== 'passed') return lifecyclePaused(options.project, record, gates, trace, 'plan-validation gate failed', operator);
   trace.push('gate:plan-validation:passed');
   const standardsReview = await gates.runGate('standards-review', { review: options.gateEvidence.standardsReview });
   const specReview = await gates.runGate('spec-review', { review: options.gateEvidence.specReview });
   const repairClosure = await gates.runGate('repair-closure', { repairClosure: options.gateEvidence.repairClosure });
-  if (standardsReview.state !== 'passed' || specReview.state !== 'passed' || repairClosure.state !== 'passed') return lifecyclePaused(options.project, record, gates, trace, 'review or repair gate failed');
+  if (standardsReview.state !== 'passed' || specReview.state !== 'passed' || repairClosure.state !== 'passed') return lifecyclePaused(options.project, record, gates, trace, 'review or repair gate failed', operator);
   const baseline = await gitBaseline(options.project);
-  await gates.runGate('baseline-stable', { baseline: { expected: baseline.head ?? '', current: baseline.head ?? '' } }); trace.push('gate:baseline-stable:passed');
+  const baselineEvidence = options.gateEvidence.baseline;
+  if (baselineEvidence.current !== baseline.head || baselineEvidence.expected !== baselineEvidence.current) return lifecyclePaused(options.project, record, gates, trace, 'baseline evidence is missing or drifted', operator);
+  await gates.runGate('baseline-stable', { baseline: baselineEvidence }); trace.push('gate:baseline-stable:passed');
+  const integrationEvidence = options.gateEvidence.integration;
+  if (!integrationEvidence.observed || !integrationEvidence.noFastForward) return lifecyclePaused(options.project, record, gates, trace, 'observed integration evidence is required', operator);
   const mergeCommit = await operator.integratePlan(plan, { targetBranch: options.manifest.target_branch ?? 'main', expectedHead: baseline.head });
+  if (integrationEvidence.mergeCommit !== undefined && integrationEvidence.mergeCommit !== mergeCommit) return lifecyclePaused(options.project, record, gates, trace, 'integration evidence does not match observed merge', operator);
   const integration = { observed: true, noFastForward: true, mergeCommit };
   await gates.runGate('integration', { integration }); trace.push('gate:integration:passed');
   record.run_state = 'complete'; record.stop_reason = 'completed';
@@ -378,10 +385,12 @@ export async function runV2Lifecycle(options: V2LifecycleOptions): Promise<V2Lif
   return { run_state: record.run_state, gates: Object.fromEntries(gateEntries), integration, trace };
 }
 
-async function lifecyclePaused(project: string, record: RunRecordV2, gates: GateCoordinator, trace: string[], reason: string): Promise<V2LifecycleResult> {
+async function lifecyclePaused(project: string, record: RunRecordV2, gates: GateCoordinator, trace: string[], reason: string, operator: V2GitOperator): Promise<V2LifecycleResult> {
   record.run_state = 'paused';
   record.stop_reason = 'blocked';
+  record.resources = operator.resources as unknown[];
   await v2EventLog(project, record.run_id, record.fencing_epoch).append({ type: 'run/error', payload: { state: 'paused', stop_reason: 'blocked', reason } });
+  await saveV2Run(project, record);
   const gateIds = ['task-closure', 'plan-validation', 'standards-review', 'spec-review', 'repair-closure', 'baseline-stable', 'integration'] as const;
   const entries = await Promise.all(gateIds.map(async (gateId) => [gateId, await gates.readGate(gateId)] as const));
   return { run_state: record.run_state, gates: Object.fromEntries(entries.filter((entry): entry is [typeof entry[0], GateReceipt] => entry[1] !== undefined).map(([gateId, receipt]) => [gateId, receipt])), trace };

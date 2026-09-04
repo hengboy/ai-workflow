@@ -7,6 +7,7 @@ import { V2GitOperator } from '../../src/git/operator.js';
 import { gitBaseline } from '../../src/git/operator.js';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { startV2Run, runV2Lifecycle, cancelV2Run, projectV2Run, cleanupV2Run } from '../../src/runtime/runner.js';
+import { loadV2Run } from '../../src/runtime/store.js';
 import { gitInit, temporary } from '../helpers.js';
 
 const digest = `sha256:${'b'.repeat(64)}`;
@@ -155,7 +156,8 @@ describe('v2 mandatory gates', () => {
       actions: [{ action_id: 'task-001-test', task_id: 'task-001', operation: 'test', write_scope: ['output.txt'] }],
     };
 
-    const result = await runV2Lifecycle({ project, runId, manifest, execute: async ({ cwd }) => { await writeFile(join(cwd, 'output.txt'), 'runner lifecycle\n'); return { status: 'done', tests: [{ command: 'pnpm test', status: 'passed' }], changedPaths: ['output.txt'] }; }, gateEvidence: { planValidation: { valid: true, errors: [] }, standardsReview: { findings: [] }, specReview: { findings: [] }, repairClosure: { closedFindingIds: [], expectedFindingIds: [] } } });
+    const baseline = (await gitBaseline(project)).head!;
+    const result = await runV2Lifecycle({ project, runId, manifest, execute: async ({ cwd }) => { await writeFile(join(cwd, 'output.txt'), 'runner lifecycle\n'); return { status: 'done', tests: [{ command: 'pnpm test', status: 'passed' }], changedPaths: ['output.txt'] }; }, gateEvidence: { planValidation: { valid: true, errors: [] }, standardsReview: { findings: [] }, specReview: { findings: [] }, repairClosure: { closedFindingIds: [], expectedFindingIds: [] }, baseline: { expected: baseline, current: baseline }, integration: { observed: true, noFastForward: true } } });
     expect(result.run_state).toBe('complete');
     expect(result.integration?.observed).toBe(true);
     expect(result.gates.integration?.state).toBe('passed');
@@ -174,11 +176,34 @@ describe('v2 mandatory gates', () => {
       actions: [{ action_id: 'task-001-test', task_id: 'task-001', operation: 'test', write_scope: [] }],
     };
 
-    const result = await runV2Lifecycle({ project, runId, manifest, execute: async () => ({ status: 'done', tests: [{ command: 'pnpm test', status: 'passed' }], changedPaths: [] }), gateEvidence: { planValidation: { valid: false, errors: ['host validation evidence missing'] }, standardsReview: { findings: [] }, specReview: { findings: [] }, repairClosure: { closedFindingIds: [], expectedFindingIds: [] } } });
+    const baseline = (await gitBaseline(project)).head!;
+    const result = await runV2Lifecycle({ project, runId, manifest, execute: async () => ({ status: 'done', tests: [{ command: 'pnpm test', status: 'passed' }], changedPaths: [] }), gateEvidence: { planValidation: { valid: false, errors: ['host validation evidence missing'] }, standardsReview: { findings: [] }, specReview: { findings: [] }, repairClosure: { closedFindingIds: [], expectedFindingIds: [] }, baseline: { expected: baseline, current: baseline }, integration: { observed: false, noFastForward: false } } });
 
     expect(result.run_state).toBe('paused');
     expect(result.integration).toBeUndefined();
     expect(result.gates['standards-review']).toBeUndefined();
+    await expect(loadV2Run(project, runId)).resolves.toMatchObject({ run_state: 'paused', stop_reason: 'blocked' });
+  });
+
+  it('does not invent baseline or integration evidence when lifecycle authority is incomplete', async () => {
+    const project = await temporary();
+    await gitInit(project);
+    const runId = 'runner-v2-missing-integration-evidence';
+    const manifest = {
+      manifest_digest: digest,
+      target_branch: 'main',
+      tasks: [{ task_id: 'task-001', activation: 'required' as const, finalization_mode: 'read-only-finalize' as const, required_actions: ['task-001-test'], depends_on: [] }],
+      actions: [{ action_id: 'task-001-test', task_id: 'task-001', operation: 'test', write_scope: [] }],
+    };
+    const initial = (await gitBaseline(project)).head!;
+
+    const result = await runV2Lifecycle({ project, runId, manifest, execute: async () => ({ status: 'done', tests: [{ command: 'pnpm test', status: 'passed' }], changedPaths: [] }), gateEvidence: { planValidation: { valid: true, errors: [] }, standardsReview: { findings: [] }, specReview: { findings: [] }, repairClosure: { closedFindingIds: [], expectedFindingIds: [] }, baseline: { expected: initial, current: initial }, integration: { observed: false, noFastForward: false } } });
+
+    expect(result.run_state).toBe('paused');
+    expect(result.integration).toBeUndefined();
+    expect(result.gates['baseline-stable']?.state).toBe('passed');
+    expect((await gitBaseline(project)).head).toBe(initial);
+    await expect(loadV2Run(project, runId)).resolves.toMatchObject({ run_state: 'paused', stop_reason: 'blocked' });
   });
 
   it('cancels a deferred v2 run and reconciles its durable projection without deleting resources', async () => {
@@ -203,7 +228,8 @@ describe('v2 mandatory gates', () => {
       tasks: [{ task_id: 'task-001', activation: 'required' as const, finalization_mode: 'commit-and-merge' as const, required_actions: ['task-001-test'], depends_on: [] }],
       actions: [{ action_id: 'task-001-test', task_id: 'task-001', operation: 'test', write_scope: ['output.txt'] }],
     };
-    const result = await runV2Lifecycle({ project, runId, manifest, execute: async ({ cwd }) => { await writeFile(join(cwd, 'output.txt'), 'cleanup\n'); return { status: 'done', tests: [{ command: 'pnpm test', status: 'passed' }], changedPaths: ['output.txt'] }; }, gateEvidence: { planValidation: { valid: true, errors: [] }, standardsReview: { findings: [] }, specReview: { findings: [] }, repairClosure: { closedFindingIds: [], expectedFindingIds: [] } } });
+    const baseline = (await gitBaseline(project)).head!;
+    const result = await runV2Lifecycle({ project, runId, manifest, execute: async ({ cwd }) => { await writeFile(join(cwd, 'output.txt'), 'cleanup\n'); return { status: 'done', tests: [{ command: 'pnpm test', status: 'passed' }], changedPaths: ['output.txt'] }; }, gateEvidence: { planValidation: { valid: true, errors: [] }, standardsReview: { findings: [] }, specReview: { findings: [] }, repairClosure: { closedFindingIds: [], expectedFindingIds: [] }, baseline: { expected: baseline, current: baseline }, integration: { observed: true, noFastForward: true } } });
     expect(result.run_state).toBe('complete');
     const cleaned = await cleanupV2Run(project, runId);
     expect(cleaned.run_state).toBe('complete');
