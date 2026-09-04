@@ -342,9 +342,12 @@ export async function runV2Lifecycle(options: V2LifecycleOptions): Promise<V2Lif
   await v2EventLog(options.project, options.runId, record.fencing_epoch).append({ type: 'run/lease-acquired', payload: { state: 'executing', manifest_digest: options.manifest.manifest_digest } });
   const plan = await operator.createPlanWorktree({ baseBranch: options.manifest.target_branch ?? 'main' });
   trace.push('resource:plan-created');
-  if (options.script !== undefined) {
-    return runScriptLifecycle(options, record, directory, trace, operator, plan, ownerLease, owner);
-  }
+  const lifecycleScript = options.script ?? [
+    "phase('generated-lifecycle');",
+    ...options.manifest.actions.map((action, index) => `await agent(${JSON.stringify(`Execute ${action.action_id}`)}, { actionId: ${JSON.stringify(action.action_id)}, callId: ${JSON.stringify(`lifecycle/${index + 1}/${action.action_id}`)} });`),
+  ].join('\n');
+  return runScriptLifecycle({ ...options, script: lifecycleScript }, record, directory, trace, operator, plan, ownerLease, owner);
+  /*
   const tasks = new Map<string, { worktree: V2Worktree; state: 'finalized' | 'committed' | 'skipped' }>();
   const actionObservations = new Map<string, TaskActionObservation[]>();
   const lifecycleActions = options.manifest.actions;
@@ -412,6 +415,7 @@ export async function runV2Lifecycle(options: V2LifecycleOptions): Promise<V2Lif
     return [gateId, receipt] as const;
   }));
   return { run_state: record.run_state, gates: Object.fromEntries(gateEntries), integration, trace };
+  */
 }
 
 async function runScriptLifecycle(options: V2LifecycleOptions, record: RunRecordV2, directory: string, trace: string[], operator: V2GitOperator, plan: V2Worktree, ownerLease: OwnerLease, owner: import('./control.js').OwnerLeaseRecord): Promise<V2LifecycleResult> {

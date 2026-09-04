@@ -256,6 +256,25 @@ describe('v2 mandatory gates', () => {
     expect(result.trace).toEqual(expect.arrayContaining(['phase:worker-only']));
   });
 
+  it('runs the generated lifecycle script when no custom script is supplied', async () => {
+    const project = await temporary();
+    await gitInit(project);
+    const runId = 'runner-v2-generated-script';
+    const manifest = { manifest_digest: digest, target_branch: 'main', tasks: [], actions: [] };
+    const baseline = (await gitBaseline(project)).head!;
+
+    const result = await runV2Lifecycle({
+      project,
+      runId,
+      manifest,
+      execute: async () => { throw new Error('generated script has no action'); },
+      gateEvidence: { planValidation: { valid: false, errors: ['no task closure'] }, standardsReview: { findings: [] }, specReview: { findings: [] }, repairClosure: { closedFindingIds: [], expectedFindingIds: [] }, baseline: { expected: baseline, current: baseline }, integration: { observed: false, noFastForward: false } },
+    });
+
+    expect(result.run_state).toBe('paused');
+    expect(result.trace).toEqual(expect.arrayContaining(['phase:generated-lifecycle']));
+  });
+
   it('routes approved lifecycle script actions through host execution and task closure', async () => {
     const project = await temporary();
     await gitInit(project);

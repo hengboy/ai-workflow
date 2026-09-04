@@ -2029,26 +2029,6 @@
         },
         {
           "kind": "imports",
-          "from": "src/runtime/runner.ts#runV2Lifecycle",
-          "to": "src/runtime/engine.ts#CodingWorkflowEngine"
-        },
-        {
-          "kind": "imports",
-          "from": "src/runtime/runner.ts#runV2Lifecycle",
-          "to": "src/runtime/gates.ts#GateCoordinator"
-        },
-        {
-          "kind": "imports",
-          "from": "src/runtime/runner.ts#runV2Lifecycle",
-          "to": "src/runtime/ledger.ts#RunLedger"
-        },
-        {
-          "kind": "imports",
-          "from": "src/runtime/runner.ts#runV2Lifecycle",
-          "to": "src/runtime/store.ts#saveV2Run"
-        },
-        {
-          "kind": "imports",
           "from": "src/runtime/runner.ts#cleanupV2Run",
           "to": "src/runtime/store.ts#RunRecordV2"
         },
