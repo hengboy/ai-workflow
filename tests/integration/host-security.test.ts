@@ -163,6 +163,26 @@ try {
     expect(done.status).toBe('done');
   });
 
+  it('retains a cancelled child when its native process-group identity is unavailable', async () => {
+    const events: string[] = [];
+    let resolveResult!: (result: CodingAgentResult) => void;
+    const result = new Promise<CodingAgentResult>((resolve) => { resolveResult = resolve; });
+    const run = new CodingWorkflowEngine().start({
+      script: `await agent('live', { actionId: 'build', callId: 'cancel-no-identity' });`,
+      manifestDigest: digest, scriptDigest: digest, argsDigest: digest,
+      actions: [{ action_id: 'build', task_id: 'task-001-host' }], disposeGraceMs: 25,
+      childExecutor: { async start(): Promise<ChildRun> { return { id: 'child-no-identity', result, dispose: async () => undefined }; } },
+      processRegistry: (event) => { events.push(event.type); },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    run.cancel('retain without identity');
+    await expect(run.result).resolves.toMatchObject({ stop_reason: 'cancelled' });
+    resolveResult({ ...({ result_version: '2.0.0', status: 'done', summary: 'late', changed_paths: [], evidence: [], tests: [], findings: [], git_refs: [], support_requests: [] } as CodingAgentResult) });
+    await run.dispose();
+    expect(events).toContain('registered');
+    expect(events).not.toContain('released');
+  });
+
   it('returns a host fatal result when sandbox preflight rejects an action', async () => {
     const run = new CodingWorkflowEngine().start({
       script: `await agent('blocked', { actionId: 'build', callId: 'call-fatal' });`,

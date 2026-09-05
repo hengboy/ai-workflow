@@ -10,6 +10,7 @@ export interface ChildRun {
   readonly result: Promise<CodingAgentResult>;
   readonly identity?: ProcessGroupIdentity;
   readonly reaped?: Promise<void>;
+  readonly reap?: () => Promise<'reaped' | 'already-exited'>;
   dispose(): Promise<void>;
 }
 
@@ -101,7 +102,7 @@ export class WorkerRun {
     this.cancelReason = reason;
     this.controller.abort(reason);
     this.send({ type: 'cancel', reason });
-    this.reapChildren();
+    this.reapChildren(true);
     this.graceTimer = setTimeout(() => {
       this.terminalClaimed = true;
       this.endStrandedAgents();
@@ -194,12 +195,15 @@ export class WorkerRun {
      }
   }
 
-  private disposeChild(requestId: string, callId: string): Promise<void> {
+  private disposeChild(requestId: string, callId: string, cancellation = false): Promise<void> {
     const record = this.children.get(callId);
     if (!record) { this.send({ type: 'agent-disposed', request_id: requestId, call_id: callId }); return Promise.resolve(); }
      if (!record.disposal) record.disposal = (async () => {
-       await record.run.dispose().catch(() => undefined);
-       await record.run.reaped?.catch(() => undefined);
+        await record.run.dispose().catch(() => undefined);
+        if (cancellation) {
+          if (!record.run.identity || !record.run.reap) return;
+          await record.run.reap();
+        } else await record.run.reaped?.catch(() => undefined);
        await this.options.audit?.(record.descriptor, 'after-dispose');
        await this.options.processRegistry?.({ type: 'released', runId: this.options.runId, callId, childId: record.run.id, ...(record.run.identity === undefined ? {} : { identity: record.run.identity }) });
        this.children.delete(callId);
@@ -207,7 +211,7 @@ export class WorkerRun {
      return record.disposal.then(() => { if (!this.terminalClaimed) this.send({ type: 'agent-disposed', request_id: requestId, call_id: callId }); });
   }
 
-  private reapChildren(): void { for (const [callId, record] of this.children) void this.disposeChild(callId, callId === record.descriptor.call_id ? callId : callId); }
+  private reapChildren(cancellation = false): void { for (const [callId, record] of this.children) void this.disposeChild(callId, callId === record.descriptor.call_id ? callId : callId, cancellation); }
 
   private endStrandedAgents(): void { for (const [callId, descriptor] of this.liveAgents) { this.options.observer?.agentEnd?.(descriptor, 'cancelled'); this.liveAgents.delete(callId); } }
 
@@ -215,7 +219,7 @@ export class WorkerRun {
     if (this.terminalClaimed) return;
     this.terminalClaimed = true;
     if (this.cancelReason && result.stop_reason !== 'cancelled') result = { ...result, value: null, stop_reason: 'cancelled', error: `workflow run cancelled: ${this.cancelReason}` };
-    this.reapChildren();
+    this.reapChildren(true);
     this.settle(result);
   }
 
