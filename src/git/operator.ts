@@ -18,7 +18,7 @@ function assertLocalGitCommand(args: string[]): void {
   if (!command || forbidden.has(command)) throw new Error(`Git operation is forbidden: ${command ?? '<missing command>'}`);
   if (args.some((arg) => /^(?:origin|upstream|https?:|ssh:|git@)/i.test(arg)) || args.includes('--set-upstream-to') || args.includes('--track') || args.includes('--remote')) throw new Error('Git operation is forbidden: remote or upstream mutation');
   if (command === 'branch' && args.some((arg) => ['-f', '-M', '-m', '--force', '--move', '--set-upstream-to', '--track'].includes(arg))) throw new Error('Git operation is forbidden: local branch mutation');
-  if (command === 'worktree' && args[1] === 'remove') throw new Error('Git operation is forbidden: worktree removal');
+  if (command === 'worktree' && args[1] === 'remove' && args.includes('--force')) throw new Error('Git operation is forbidden: force worktree removal');
   if (command === 'branch' && args.includes('-vv')) throw new Error('Git operation is forbidden: upstream inspection');
   if (allowedReadOnly.has(command)) return;
   if (command === 'add' && args[1] === '--') return;
@@ -85,8 +85,17 @@ export async function integratePlan(project: string, planBranch: string, targetB
 }
 
 export async function removeOwnedWorktrees(project: string, paths: string[]): Promise<void> {
+  const projectRoot = canonicalPath(await realpath(project).catch(() => project));
+  const entries = worktreeEntries(await git(project, ['worktree', 'list', '--porcelain']));
   for (const path of paths) {
-    try { await git(project, ['worktree', 'remove', '--force', path]); }
+    const resolvedPath = canonicalPath(await realpath(resolve(projectRoot, path)).catch(() => resolve(projectRoot, path)));
+    const relativePath = relative(projectRoot, resolvedPath).replaceAll('\\', '/');
+    if (!relativePath.startsWith('.ai-workflow/runs/') || relativePath.split('/').includes('..')) throw new Error(`Git resource is not owned: ${path}`);
+    const entry = entries.find((candidate) => candidate.path === resolvedPath);
+    if (!entry || !entry.branch?.startsWith('ai-workflow/')) throw new Error(`Git resource is unknown or tampered: ${path}`);
+    const status = await git(resolvedPath, ['status', '--porcelain=v1', '--untracked-files=all']);
+    if (status) throw new Error(`Git resource is dirty: ${path}`);
+    try { await git(project, ['worktree', 'remove', resolvedPath]); }
     catch (error) { if (!String(error).includes('not a working tree')) throw error; }
   }
 }
