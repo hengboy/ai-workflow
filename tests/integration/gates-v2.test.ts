@@ -223,13 +223,6 @@ describe('v2 mandatory gates', () => {
     const project = await temporary();
     await gitInit(project);
     const runId = 'runner-v2-missing-evidence';
-    const manifest = {
-      manifest_digest: digest,
-      target_branch: 'main',
-      tasks: [{ task_id: 'task-001', activation: 'required' as const, finalization_mode: 'read-only-finalize' as const, required_actions: ['task-001-test'], depends_on: [] }],
-      actions: [{ action_id: 'task-001-test', task_id: 'task-001', operation: 'test', write_scope: [] }],
-    };
-
     const result = await runWithHost(project, runId, 'return true;', 'authority-invalid', false);
 
     expect(result.run_state).toBe('paused');
@@ -296,12 +289,6 @@ describe('v2 mandatory gates', () => {
     const project = await temporary();
     await gitInit(project);
     const runId = 'runner-v2-missing-integration-evidence';
-    const manifest = {
-      manifest_digest: digest,
-      target_branch: 'main',
-      tasks: [{ task_id: 'task-001', activation: 'required' as const, finalization_mode: 'read-only-finalize' as const, required_actions: ['task-001-test'], depends_on: [] }],
-      actions: [{ action_id: 'task-001-test', task_id: 'task-001', operation: 'test', write_scope: [] }],
-    };
     const result = await runWithHost(project, runId, `${completeTaskScript}\n`, 'authority-invalid');
 
     expect(result.run_state).toBe('paused');
