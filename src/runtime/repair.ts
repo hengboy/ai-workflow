@@ -2,7 +2,7 @@ import { join } from 'node:path';
 import { EventLog } from './events.js';
 import { objectDigest } from '../utils/hash.js';
 import { readJson, writeJson, exists } from '../utils/fs.js';
-import { V2GitOperator, type V2Worktree } from '../git/operator.js';
+import { git, V2GitOperator, type V2Worktree } from '../git/operator.js';
 
 export interface ReviewFindingInput {
   sourceGate: 'standards-review' | 'spec-review';
@@ -157,7 +157,10 @@ export class RepairCoordinator {
 
   private directory(): string { return this.options.directory ?? join(this.options.project, '.ai-workflow/runs', this.options.runId); }
 
-  private async planHead(): Promise<string> { return this.options.operator.resources.find((resource) => resource.kind === 'plan-worktree')?.created_head ?? await this.options.operator.reconcile().then(() => this.options.operator.resources.find((resource) => resource.kind === 'plan-worktree')?.created_head ?? (() => { throw new RepairError('REPAIR_STATE_INVALID', 'plan worktree receipt is missing'); })()); }
+  private async planHead(): Promise<string> {
+    const plan = this.planWorktree();
+    return git(plan.path, ['rev-parse', 'HEAD']);
+  }
 
   private planWorktree(): V2Worktree {
     const resource = this.options.operator.resources.find((candidate) => candidate.kind === 'plan-worktree');

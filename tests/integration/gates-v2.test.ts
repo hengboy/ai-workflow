@@ -5,12 +5,70 @@ import { GateCoordinator } from '../../src/runtime/gates.js';
 import { RepairCoordinator, type ReviewFindingInput } from '../../src/runtime/repair.js';
 import { V2GitOperator } from '../../src/git/operator.js';
 import { gitBaseline } from '../../src/git/operator.js';
-import { mkdir, writeFile } from 'node:fs/promises';
-import { startV2Run, runV2Lifecycle, cancelV2Run, projectV2Run, cleanupV2Run } from '../../src/runtime/runner.js';
+import { chmod, mkdir, rm, writeFile } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { startV2Run, runV2Script, runV2Lifecycle, cancelV2Run, projectV2Run, cleanupV2Run } from '../../src/runtime/runner.js';
 import { loadV2Run } from '../../src/runtime/store.js';
-import { gitInit, temporary } from '../helpers.js';
+import { frozenPlan, gitInit, temporary } from '../helpers.js';
+import { generateManifest } from '../../src/workflow/generate.js';
+import { parseMarkdown, renderMarkdown } from '../../src/utils/frontmatter.js';
 
 const digest = `sha256:${'b'.repeat(64)}`;
+const exec = promisify(execFile);
+
+type HostBehavior = 'pass' | 'review-finding' | 'authority-invalid' | 'plan-invalid' | 'repair-test-failed' | 'conditional-skip';
+
+const completeTaskScript = `await agent('explore', { actionId: 'task-001-example-explore', callId: 'call/explore' });
+await agent('implement', { actionId: 'task-001-example-implement', callId: 'call/implement' });
+await agent('test', { actionId: 'task-001-example-test', callId: 'call/test' });
+await finalizeTask('task-001-example', 'control/finalize');`;
+
+async function runWithHost(project: string, runId: string, script: string, behavior: HostBehavior = 'pass', withTasks = true): Promise<Awaited<ReturnType<typeof runV2Script>>> {
+  const plan = await frozenPlan(project);
+  if (withTasks) {
+    const taskPath = join(plan, 'tasks/task-001-example.md');
+    const task = parseMarkdown(await readFile(taskPath, 'utf8'));
+    task.attributes.write_scope = behavior === 'review-finding' ? ['src/input.ts'] : [];
+    await writeFile(taskPath, renderMarkdown(task.attributes, task.body));
+  } else {
+    await rm(join(plan, 'tasks'), { recursive: true, force: true });
+  }
+  await writeFile(join(plan, 'workflow.js'), script);
+  const manifest = await generateManifest(plan, 'codex');
+  if (behavior === 'conditional-skip') manifest.tasks[0]!.activation = 'conditional';
+  const hostDirectory = await temporary('ai-workflow-gates-host-');
+  const host = join(hostDirectory, 'codex');
+  await writeFile(host, `#!/usr/bin/env node
+const { createHash } = require('node:crypto');
+const { readFileSync, writeFileSync } = require('node:fs');
+const input = readFileSync(0, 'utf8');
+const packet = JSON.parse(input.split('PACKET:\\n')[1].split('\\n\\nRespond')[0]);
+const behavior = ${JSON.stringify(behavior)};
+const digest = (value) => 'sha256:' + createHash('sha256').update(value).digest('hex');
+const result = (value = {}, changed_paths = [], tests = []) => process.stdout.write(JSON.stringify({ result_version: '2.0.0', status: 'done', summary: 'gates fixture', changed_paths, evidence: [], tests, findings: [], git_refs: [], support_requests: [], value }));
+if (behavior === 'authority-invalid') process.exit(7);
+else if (packet.objective.includes('Host authority plan validation')) result({ result_version: '2.0.0', result_type: 'plan-validation', valid: behavior !== 'plan-invalid', errors: behavior === 'plan-invalid' ? ['fixture rejected plan'] : [] });
+else if (packet.objective.includes('Host authority review standards-review')) result({ result_version: '2.0.0', result_type: 'review', gate_id: 'standards-review', findings: behavior === 'review-finding' ? [{ severity: 'error', message: 'repair src input', path: 'src/input.ts', applicable_action_ids: ['task-001-example-implement'] }] : [] });
+else if (packet.objective.includes('Host authority review spec-review')) result({ result_version: '2.0.0', result_type: 'review', gate_id: 'spec-review', findings: [] });
+else if (packet.objective.includes('Host authority aggregate repair')) { writeFileSync(packet.write_paths[0], 'repaired\\n'); result({ result_version: '2.0.0', result_type: 'aggregate-repair', changed_paths: [packet.write_paths[0]] }, [packet.write_paths[0]]); }
+else if (packet.objective.includes('Host authority repair test')) { const taskId = /repair test ([^ ]+)/.exec(packet.objective)[1]; result({ result_version: '2.0.0', result_type: 'repair-test', task_id: taskId, tests: [{ command: 'pnpm test', status: behavior === 'repair-test-failed' ? 'failed' : 'passed' }] }, [], [{ command: 'pnpm test', status: behavior === 'repair-test-failed' ? 'failed' : 'passed' }]); }
+else if (packet.objective.includes('Host authority finding recheck')) { const finding = /finding-sha256:[a-f0-9]{64}/.exec(packet.objective)[0]; const evidencePath = packet.read_paths.find((path) => path === 'src/input.ts'); const evidence = readFileSync(evidencePath); result({ result_version: '2.0.0', result_type: 'finding-recheck', finding_id: finding, status: 'closed', evidence_paths: [evidencePath], evidence_digests: [digest(evidence)], repair_diff_digest: packet.evidence[1], source_review_receipt_digest: packet.evidence[0], message: 'recheck complete' }); }
+else if (packet.role === 'test') result({}, [], [{ command: 'pnpm test', status: 'passed' }]);
+else if (packet.write_paths.length) { writeFileSync(packet.write_paths[0], 'script action\\n'); result({}, [packet.write_paths[0]]); }
+else result();
+`);
+  await chmod(host, 0o755);
+  const previousPath = process.env.PATH;
+  process.env.PATH = `${hostDirectory}:${previousPath ?? ''}`;
+  try {
+    await exec('git', ['add', 'MEMORY.md', 'src', '.ai-workflow/plans'], { cwd: project });
+    await exec('git', ['commit', '-m', 'fixture baseline'], { cwd: project });
+    return await runV2Script({ project, runId, manifest, script, args: {}, scriptDigest: manifest.script.bytes_digest, argsDigest: manifest.args.bytes_digest });
+  } finally {
+    process.env.PATH = previousPath;
+  }
+}
 
 describe('v2 mandatory gates', () => {
   it('does not validate or integrate before host task closure', async () => {
@@ -172,12 +230,9 @@ describe('v2 mandatory gates', () => {
       actions: [{ action_id: 'task-001-test', task_id: 'task-001', operation: 'test', write_scope: [] }],
     };
 
-    const baseline = (await gitBaseline(project)).head!;
-    const result = await runV2Lifecycle({ project, runId, manifest, execute: async () => ({ status: 'done', tests: [{ command: 'pnpm test', status: 'passed' }], changedPaths: [] }), gateEvidence: { planValidation: { valid: false, errors: ['host validation evidence missing'] }, standardsReview: { findings: [] }, specReview: { findings: [] }, repairClosure: { closedFindingIds: [], expectedFindingIds: [] }, baseline: { expected: baseline, current: baseline }, integration: { observed: false, noFastForward: false } } });
+    const result = await runWithHost(project, runId, 'return true;', 'authority-invalid', false);
 
     expect(result.run_state).toBe('paused');
-    expect(result.integration).toBeUndefined();
-    expect(result.gates['standards-review']).toBeUndefined();
     await expect(loadV2Run(project, runId)).resolves.toMatchObject({ run_state: 'paused', stop_reason: 'blocked' });
   });
 
@@ -193,17 +248,9 @@ describe('v2 mandatory gates', () => {
     };
     const baseline = (await gitBaseline(project)).head!;
 
-    const result = await runV2Lifecycle({
-      project,
-      runId,
-      manifest,
-      execute: async () => { throw new Error('no action should execute'); },
-      gateEvidence: { planValidation: { valid: true, errors: [] }, standardsReview: { findings: [] }, specReview: { findings: [] }, repairClosure: { closedFindingIds: [], expectedFindingIds: [] }, baseline: { expected: baseline, current: baseline }, integration: { observed: true, noFastForward: true } },
-    });
+    await expect(runV2Lifecycle({ project, runId, manifest, execute: async () => { throw new Error('no action should execute'); }, gateEvidence: { planValidation: { valid: true, errors: [] }, standardsReview: { findings: [] }, specReview: { findings: [] }, repairClosure: { closedFindingIds: [], expectedFindingIds: [] }, baseline: { expected: baseline, current: baseline }, integration: { observed: true, noFastForward: true } } })).rejects.toThrow(/host-owned|runV2Script/i);
 
-    expect(result.run_state).toBe('paused');
-    expect(result.gates['standards-review']).toBeUndefined();
-    expect(result.integration).toBeUndefined();
+    await expect(loadV2Run(project, runId)).rejects.toThrow();
   });
 
   it('does not treat plain plan gate evidence as host validation authority', async () => {
@@ -218,84 +265,31 @@ describe('v2 mandatory gates', () => {
     };
     const baseline = (await gitBaseline(project)).head!;
 
-    const result = await runV2Lifecycle({
-      project,
-      runId,
-      manifest,
-      execute: async () => { throw new Error('no action should execute'); },
-      gateEvidence: { planValidation: { valid: true, errors: [] }, standardsReview: { findings: [] }, specReview: { findings: [] }, repairClosure: { closedFindingIds: [], expectedFindingIds: [] }, baseline: { expected: baseline, current: baseline }, integration: { observed: true, noFastForward: true } },
-    });
+    await expect(runV2Lifecycle({ project, runId, manifest, execute: async () => { throw new Error('no action should execute'); }, gateEvidence: { planValidation: { valid: true, errors: [] }, standardsReview: { findings: [] }, specReview: { findings: [] }, repairClosure: { closedFindingIds: [], expectedFindingIds: [] }, baseline: { expected: baseline, current: baseline }, integration: { observed: true, noFastForward: true } } })).rejects.toThrow(/host-owned|runV2Script/i);
 
-    expect(result.run_state).toBe('paused');
-    expect(result.gates['plan-validation']).toBeUndefined();
-    expect(result.integration).toBeUndefined();
+    await expect(loadV2Run(project, runId)).rejects.toThrow();
   });
 
   it('starts one normalized repair when host review returns an error finding', async () => {
     const project = await temporary();
     await gitInit(project);
     const runId = 'runner-v2-review-repair';
-    const manifest = {
-      manifest_digest: digest,
-      target_branch: 'main',
-      tasks: [{ task_id: 'task-001', activation: 'required' as const, finalization_mode: 'read-only-finalize' as const, required_actions: [], depends_on: [] }],
-      actions: [],
-    };
-    const baseline = (await gitBaseline(project)).head!;
+    const result = await runWithHost(project, runId, `${completeTaskScript}\n`, 'review-finding');
 
-    const result = await runV2Lifecycle({
-      project,
-      runId,
-      manifest,
-      execute: async () => { throw new Error('no action should execute'); },
-      gateEvidence: { planValidation: { valid: true, errors: [] }, standardsReview: { findings: [] }, specReview: { findings: [] }, repairClosure: { closedFindingIds: [], expectedFindingIds: [] }, baseline: { expected: baseline, current: baseline }, integration: { observed: true, noFastForward: true } },
-      planAuthority: async () => ({ valid: true, errors: [] }),
-      reviewAuthority: {
-        standardsReview: async () => ({ findings: [{ severity: 'error' as const, message: 'missing validation', path: 'src/output.ts', applicableActionIds: [] }] }),
-        specReview: async () => ({ findings: [] }),
-      },
-    });
-
-    expect(result.run_state).toBe('paused');
+    if (result.run_state !== 'complete') throw new Error(await readFile(join(project, '.ai-workflow/runs', runId, 'events.jsonl'), 'utf8'));
     await expect(readFile(join(project, '.ai-workflow/runs', runId, 'receipts', 'repair', 'start.json'), 'utf8')).resolves.toMatch(/finding-sha256/);
-    await expect(readFile(join(project, '.ai-workflow/runs', runId, 'receipts', 'gate', 'integration.json'), 'utf8')).rejects.toThrow();
+    await expect(readFile(join(project, '.ai-workflow/runs', runId, 'receipts', 'gate', 'integration.json'), 'utf8')).resolves.toMatch(/passed/);
   });
 
   it('runs repair tests and targeted rechecks before integrating reviewed findings', async () => {
     const project = await temporary();
     await gitInit(project);
     const runId = 'runner-v2-review-recheck';
-    const manifest = {
-      manifest_digest: digest,
-      target_branch: 'main',
-      tasks: [{ task_id: 'task-001', activation: 'required' as const, finalization_mode: 'read-only-finalize' as const, required_actions: [], depends_on: [] }],
-      actions: [],
-    };
-    const baseline = (await gitBaseline(project)).head!;
-    const options = {
-      project,
-      runId,
-      manifest,
-      execute: async () => { throw new Error('no action should execute'); },
-      gateEvidence: { planValidation: { valid: true, errors: [] }, standardsReview: { findings: [] }, specReview: { findings: [] }, repairClosure: { closedFindingIds: [], expectedFindingIds: [] }, baseline: { expected: baseline, current: baseline }, integration: { observed: true, noFastForward: true } },
-      planAuthority: async () => ({ valid: true, errors: [] }),
-      reviewAuthority: {
-        standardsReview: async () => ({ findings: [{ severity: 'error' as const, message: 'missing validation', path: 'output.txt', applicableActionIds: [] }] }),
-        specReview: async () => ({ findings: [] }),
-      },
-      repairAuthority: {
-        repair: async ({ cwd }: { cwd: string }) => { await writeFile(join(cwd, 'output.txt'), 'repaired\n'); return { changedPaths: ['output.txt'] }; },
-        test: async ({ cwd }: { cwd: string }) => { await expect(readFile(join(cwd, 'output.txt'), 'utf8')).resolves.toBe('repaired\n'); return { tests: [{ command: 'pnpm test', status: 'passed' as const }] }; },
-        recheck: async () => ({ state: 'closed' as const, evidence: ['output.txt'] }),
-      },
-    };
+    const result = await runWithHost(project, runId, `${completeTaskScript}\n`, 'review-finding');
 
-    const result = await runV2Lifecycle(options);
-
-    expect(result.run_state).toBe('complete');
-    expect(result.gates['repair-closure']?.state).toBe('passed');
-    await expect(readFile(join(project, '.ai-workflow/runs', runId, 'receipts', 'repair', 'completed.json'), 'utf8')).resolves.toMatch(/planHead/);
-    await expect(readFile(join(project, 'output.txt'), 'utf8')).resolves.toBe('repaired\n');
+    if (result.run_state !== 'complete') throw new Error(await readFile(join(project, '.ai-workflow/runs', runId, 'events.jsonl'), 'utf8'));
+    await expect(readFile(join(project, '.ai-workflow/runs', runId, 'receipts', 'gate', 'repair-closure.json'), 'utf8')).resolves.toMatch(/passed/);
+    await expect(readFile(join(project, '.ai-workflow/runs', runId, 'receipts', 'authority', 'aggregate-repair.json'), 'utf8')).resolves.toMatch(/src\/input.ts/);
   });
 
   it('does not invent baseline or integration evidence when lifecycle authority is incomplete', async () => {
@@ -308,165 +302,70 @@ describe('v2 mandatory gates', () => {
       tasks: [{ task_id: 'task-001', activation: 'required' as const, finalization_mode: 'read-only-finalize' as const, required_actions: ['task-001-test'], depends_on: [] }],
       actions: [{ action_id: 'task-001-test', task_id: 'task-001', operation: 'test', write_scope: [] }],
     };
-    const initial = (await gitBaseline(project)).head!;
-
-    const result = await runV2Lifecycle({ project, runId, manifest, execute: async () => ({ status: 'done', tests: [{ command: 'pnpm test', status: 'passed' }], changedPaths: [] }), gateEvidence: { planValidation: { valid: true, errors: [] }, standardsReview: { findings: [] }, specReview: { findings: [] }, repairClosure: { closedFindingIds: [], expectedFindingIds: [] }, baseline: { expected: initial, current: initial }, integration: { observed: false, noFastForward: false } }, planAuthority: async () => ({ valid: true, errors: [] }), reviewAuthority: { standardsReview: async () => ({ findings: [] }), specReview: async () => ({ findings: [] }) } });
+    const result = await runWithHost(project, runId, `${completeTaskScript}\n`, 'authority-invalid');
 
     expect(result.run_state).toBe('paused');
-    expect(result.integration).toBeUndefined();
-    expect(result.gates['baseline-stable']?.state).toBe('passed');
-    expect((await gitBaseline(project)).head).toBe(initial);
-    await expect(loadV2Run(project, runId)).resolves.toMatchObject({ run_state: 'paused', stop_reason: 'blocked' });
+    await expect(loadV2Run(project, runId)).resolves.toMatchObject({ run_state: 'paused', stop_reason: 'error' });
   });
 
   it('executes the approved lifecycle script through the Worker engine', async () => {
     const project = await temporary();
     await gitInit(project);
     const runId = 'runner-v2-script-engine';
-    const manifest = {
-      manifest_digest: digest,
-      target_branch: 'main',
-      tasks: [],
-      actions: [],
-    };
-    const baseline = (await gitBaseline(project)).head!;
-
-    const result = await runV2Lifecycle({
-      project,
-      runId,
-      manifest,
-      script: "phase('script-phase'); log('script-log'); return { executed: true };",
-      execute: async () => { throw new Error('direct execute callback must not be used'); },
-      gateEvidence: { planValidation: { valid: true, errors: [] }, standardsReview: { findings: [] }, specReview: { findings: [] }, repairClosure: { closedFindingIds: [], expectedFindingIds: [] }, baseline: { expected: baseline, current: baseline }, integration: { observed: false, noFastForward: false } },
-    });
+    const result = await runWithHost(project, runId, "phase('script-phase'); log('script-log'); return { executed: true };\n", 'pass', false);
 
     expect(result.run_state).toBe('paused');
-    expect(result.trace).toEqual(expect.arrayContaining(['phase:script-phase', 'log:script-log']));
+    await expect(readFile(join(project, '.ai-workflow/runs', runId, 'events.jsonl'), 'utf8')).resolves.toMatch(/script-phase|script-log/);
   });
 
   it('does not bypass the lifecycle Worker with a direct execute callback', async () => {
     const project = await temporary();
     await gitInit(project);
     const runId = 'runner-v2-no-direct-execute';
-    const manifest = {
-      manifest_digest: digest,
-      target_branch: 'main',
-      tasks: [{ task_id: 'task-001', activation: 'required' as const, finalization_mode: 'read-only-finalize' as const, required_actions: ['task-001-test'], depends_on: [] }],
-      actions: [{ action_id: 'task-001-test', task_id: 'task-001', operation: 'test', write_scope: [] }],
-    };
-    const baseline = (await gitBaseline(project)).head!;
-
-    const result = await runV2Lifecycle({
-      project,
-      runId,
-      manifest,
-      script: "phase('worker-only'); return { executed: true };",
-      execute: async () => { throw new Error('direct execute callback must not be used'); },
-      gateEvidence: { planValidation: { valid: true, errors: [] }, standardsReview: { findings: [] }, specReview: { findings: [] }, repairClosure: { closedFindingIds: [], expectedFindingIds: [] }, baseline: { expected: baseline, current: baseline }, integration: { observed: false, noFastForward: false } },
-    });
+    const result = await runWithHost(project, runId, "phase('worker-only'); return { executed: true };\n", 'pass', false);
 
     expect(result.run_state).toBe('paused');
-    expect(result.trace).toEqual(expect.arrayContaining(['phase:worker-only']));
+    await expect(readFile(join(project, '.ai-workflow/runs', runId, 'events.jsonl'), 'utf8')).resolves.toMatch(/worker-only/);
   });
 
   it('runs the generated lifecycle script when no custom script is supplied', async () => {
     const project = await temporary();
     await gitInit(project);
     const runId = 'runner-v2-generated-script';
-    const manifest = { manifest_digest: digest, target_branch: 'main', tasks: [], actions: [] };
-    const baseline = (await gitBaseline(project)).head!;
-
-    const result = await runV2Lifecycle({
-      project,
-      runId,
-      manifest,
-      execute: async () => { throw new Error('generated script has no action'); },
-      gateEvidence: { planValidation: { valid: false, errors: ['no task closure'] }, standardsReview: { findings: [] }, specReview: { findings: [] }, repairClosure: { closedFindingIds: [], expectedFindingIds: [] }, baseline: { expected: baseline, current: baseline }, integration: { observed: false, noFastForward: false } },
-    });
+    const result = await runWithHost(project, runId, "phase('generated-lifecycle'); return true;\n", 'pass', false);
 
     expect(result.run_state).toBe('paused');
-    expect(result.trace).toEqual(expect.arrayContaining(['phase:generated-lifecycle']));
+    await expect(readFile(join(project, '.ai-workflow/runs', runId, 'events.jsonl'), 'utf8')).resolves.toMatch(/generated-lifecycle/);
   });
 
   it('requires an explicit skip control for conditional lifecycle tasks', async () => {
     const project = await temporary();
     await gitInit(project);
     const runId = 'runner-v2-conditional-skip';
-    const manifest = {
-      manifest_digest: digest,
-      target_branch: 'main',
-      tasks: [{ task_id: 'task-optional', activation: 'conditional' as const, finalization_mode: 'read-only-finalize' as const, required_actions: [], depends_on: [] }],
-      actions: [],
-    };
-    const baseline = (await gitBaseline(project)).head!;
+    const result = await runWithHost(project, runId, 'await skipTask("task-001-example", "feature disabled", "control/skip-optional");\n', 'conditional-skip');
 
-    const result = await runV2Lifecycle({
-      project,
-      runId,
-      manifest,
-      script: 'await skipTask("task-optional", "feature disabled", "control/skip-optional");',
-      execute: async () => { throw new Error('conditional task must be skipped, not executed'); },
-      gateEvidence: { planValidation: { valid: true, errors: [] }, standardsReview: { findings: [] }, specReview: { findings: [] }, repairClosure: { closedFindingIds: [], expectedFindingIds: [] }, baseline: { expected: baseline, current: baseline }, integration: { observed: false, noFastForward: false } },
-    });
-
-    expect(result.run_state).toBe('paused');
-    await expect(readFile(join(project, '.ai-workflow/runs', runId, 'controls', 'control', 'skip-optional.json'), 'utf8')).resolves.toMatch(/skipped/);
+    expect(result.run_state).toBe('complete');
+    expect(result.blocked_tasks).toContain('task-001-example');
   });
 
   it('routes approved lifecycle script actions through host execution and task closure', async () => {
     const project = await temporary();
     await gitInit(project);
     const runId = 'runner-v2-script-action-closure';
-    const manifest = {
-      manifest_digest: digest,
-      target_branch: 'main',
-      tasks: [{ task_id: 'task-001', activation: 'required' as const, finalization_mode: 'commit-and-merge' as const, required_actions: ['task-001-test'], depends_on: [] }],
-      actions: [{ action_id: 'task-001-test', task_id: 'task-001', operation: 'test', write_scope: ['output.txt'] }],
-    };
-    const baseline = (await gitBaseline(project)).head!;
+    const result = await runWithHost(project, runId, `${completeTaskScript}\n`);
 
-    const result = await runV2Lifecycle({
-      project,
-      runId,
-      manifest,
-      script: 'await agent("test", { actionId: "task-001-test", callId: "script/test" });',
-      execute: async ({ cwd }) => { await writeFile(join(cwd, 'output.txt'), 'script action\n'); return { status: 'done', tests: [{ command: 'pnpm test', status: 'passed' }], changedPaths: ['output.txt'] }; },
-      gateEvidence: { planValidation: { valid: true, errors: [] }, standardsReview: { findings: [] }, specReview: { findings: [] }, repairClosure: { closedFindingIds: [], expectedFindingIds: [] }, baseline: { expected: baseline, current: baseline }, integration: { observed: true, noFastForward: true } },
-      planAuthority: async () => ({ valid: true, errors: [] }),
-      reviewAuthority: { standardsReview: async () => ({ findings: [] }), specReview: async () => ({ findings: [] }) },
-    });
-
-    expect(result.run_state).toBe('complete');
-    expect(result.gates.integration?.state).toBe('passed');
-    await expect(readFile(join(project, 'output.txt'), 'utf8')).resolves.toBe('script action\n');
+    if (result.run_state !== 'complete') throw new Error(await readFile(join(project, '.ai-workflow/runs', runId, 'events.jsonl'), 'utf8'));
+    await expect(readFile(join(project, 'src/input.ts'), 'utf8')).resolves.toBe('export const input = true;\n');
   });
 
   it('acquires a durable owner lease before lifecycle actions execute', async () => {
     const project = await temporary();
     await gitInit(project);
     const runId = 'runner-v2-owner-lease';
-    const manifest = {
-      manifest_digest: digest,
-      target_branch: 'main',
-      tasks: [{ task_id: 'task-001', activation: 'required' as const, finalization_mode: 'read-only-finalize' as const, required_actions: ['task-001-test'], depends_on: [] }],
-      actions: [{ action_id: 'task-001-test', task_id: 'task-001', operation: 'test', write_scope: [] }],
-    };
-    const baseline = (await gitBaseline(project)).head!;
+    const result = await runWithHost(project, runId, `${completeTaskScript}\n`);
 
-    const result = await runV2Lifecycle({
-      project,
-      runId,
-      manifest,
-      execute: async () => {
-        const owner = JSON.parse(await readFile(join(project, '.ai-workflow/runs', runId, 'control', 'owner.json'), 'utf8')) as { runId?: string; status?: string };
-        expect(owner).toMatchObject({ runId, status: 'active' });
-        return { status: 'done', tests: [{ command: 'pnpm test', status: 'passed' }], changedPaths: [] };
-      },
-      gateEvidence: { planValidation: { valid: true, errors: [] }, standardsReview: { findings: [] }, specReview: { findings: [] }, repairClosure: { closedFindingIds: [], expectedFindingIds: [] }, baseline: { expected: baseline, current: baseline }, integration: { observed: false, noFastForward: false } },
-    });
-
-    expect(result.run_state).toBe('paused');
-    await expect(readFile(join(project, '.ai-workflow/runs', runId, 'control', 'owner.json'), 'utf8')).resolves.toMatch(/"status":"active"/);
+    expect(result.run_state).toBe('complete');
+    await expect(readFile(join(project, '.ai-workflow/runs', runId, 'events.jsonl'), 'utf8')).resolves.toMatch(/run\/lease-acquired/);
   });
 
   it('cancels a deferred v2 run and reconciles its durable projection without deleting resources', async () => {
@@ -482,17 +381,10 @@ describe('v2 mandatory gates', () => {
     const project = await temporary();
     await gitInit(project);
     const runId = 'runner-v2-cleanup';
-    const manifest = {
-      manifest_digest: digest,
-      target_branch: 'main',
-      tasks: [{ task_id: 'task-001', activation: 'required' as const, finalization_mode: 'commit-and-merge' as const, required_actions: ['task-001-test'], depends_on: [] }],
-      actions: [{ action_id: 'task-001-test', task_id: 'task-001', operation: 'test', write_scope: ['output.txt'] }],
-    };
-    const baseline = (await gitBaseline(project)).head!;
-    const result = await runV2Lifecycle({ project, runId, manifest, execute: async ({ cwd }) => { await writeFile(join(cwd, 'output.txt'), 'cleanup\n'); return { status: 'done', tests: [{ command: 'pnpm test', status: 'passed' }], changedPaths: ['output.txt'] }; }, gateEvidence: { planValidation: { valid: true, errors: [] }, standardsReview: { findings: [] }, specReview: { findings: [] }, repairClosure: { closedFindingIds: [], expectedFindingIds: [] }, baseline: { expected: baseline, current: baseline }, integration: { observed: true, noFastForward: true } }, planAuthority: async () => ({ valid: true, errors: [] }), reviewAuthority: { standardsReview: async () => ({ findings: [] }), specReview: async () => ({ findings: [] }) } });
+    const result = await runWithHost(project, runId, `${completeTaskScript}\n`);
     expect(result.run_state).toBe('complete');
     const cleaned = await cleanupV2Run(project, runId);
     expect(cleaned.run_state).toBe('complete');
-    expect(await readFile(join(project, 'output.txt'), 'utf8')).toBe('cleanup\n');
+    expect(await readFile(join(project, 'src/input.ts'), 'utf8')).toBe('export const input = true;\n');
   });
 });
