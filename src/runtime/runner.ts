@@ -356,7 +356,7 @@ export async function runV2Script(options: V2ScriptRunOptions): Promise<RunRecor
     const taskClosure = Object.fromEntries(options.manifest.tasks.map((task) => [task.task_id, { state: taskStates[task.task_id] === 'done' ? 'skipped' as const : 'finalized' as const }]));
     const closure = await gates.runGate('task-closure', { taskClosure });
     if (closure.state === 'passed') {
-      await runV2HostAuthorityLifecycle(options, record, gates, operator, planWorktree, events);
+  await runV2HostAuthorityLifecycle(options, record, gates, operator, planWorktree, events, baseline);
     }
   } else if (record.run_state === 'paused' && record.stop_reason === 'blocked') {
     await events.append({ type: 'run/error', payload: { state: 'paused', stop_reason: 'blocked', reason: 'approved script did not close every required task before host authority review' } });
@@ -368,7 +368,7 @@ export async function runV2Script(options: V2ScriptRunOptions): Promise<RunRecor
   return record;
 }
 
-async function runV2HostAuthorityLifecycle(options: V2ScriptRunOptions, record: RunRecordV2, gates: GateCoordinator, operator: V2GitOperator, plan: V2Worktree, events: EventLog): Promise<void> {
+async function runV2HostAuthorityLifecycle(options: V2ScriptRunOptions, record: RunRecordV2, gates: GateCoordinator, operator: V2GitOperator, plan: V2Worktree, events: EventLog, approvedBaseline: { branch: string; head: string | null }): Promise<void> {
   const authority = new ManifestHostAuthority({ project: options.project, runId: options.runId, manifest: options.manifest });
   const pause = async (reason: string): Promise<void> => {
     record.run_state = 'paused';
@@ -414,9 +414,9 @@ async function runV2HostAuthorityLifecycle(options: V2ScriptRunOptions, record: 
     const repairClosure = await gates.runGate('repair-closure', { repairClosure: { closedFindingIds, expectedFindingIds: closedFindingIds } });
     if (standards.state !== 'passed' || spec.state !== 'passed' || repairClosure.state !== 'passed') return await pause('host review or repair authority did not close the gates');
     const baseline = await gitBaseline(options.project);
-    if (!baseline.head) return await pause('host baseline authority is unavailable');
-    if ((await gates.runGate('baseline-stable', { baseline: { expected: baseline.head, current: baseline.head } })).state !== 'passed') return await pause('host baseline authority rejected the run');
-    const mergeCommit = await operator.integratePlan(plan, { targetBranch: options.manifest.project.target_branch, expectedHead: baseline.head });
+    if (!approvedBaseline.head || baseline.branch !== approvedBaseline.branch || baseline.head !== approvedBaseline.head) return await pause('host baseline drifted since approval');
+    if ((await gates.runGate('baseline-stable', { baseline: { expected: approvedBaseline.head, current: baseline.head } })).state !== 'passed') return await pause('host baseline authority rejected the run');
+    const mergeCommit = await operator.integratePlan(plan, { targetBranch: options.manifest.project.target_branch, expectedHead: approvedBaseline.head });
     const integration = await gates.runGate('integration', { integration: { observed: true, noFastForward: true, mergeCommit } });
     if (integration.state !== 'passed') return await pause('host integration authority did not observe a no-ff merge');
     record.run_state = 'complete';
@@ -576,7 +576,7 @@ export async function runV2Lifecycle(options: V2LifecycleOptions): Promise<V2Lif
   const operator = new V2GitOperator({ project: options.project, runId: options.runId, manifestDigest: options.manifest.manifest_digest, fencingEpoch, targetBranch: options.manifest.target_branch ?? 'main' });
   const uid = process.getuid?.();
   if (uid === undefined) throw new Error('CANCEL_UNAUTHORIZED: local process identity is unavailable');
-  const ownerLease = new OwnerLease({ root: options.project, runId: options.runId, owner: { osUid: uid, identityDigest: objectDigest({ runId: options.runId, manifest: options.manifest.manifest_digest }) }, process: { pid: process.pid, pgid: process.pid, startIdentity: `${process.pid}:${record.started_at}`, spawnNonce: record.run_id }, leaseMs: 30_000 });
+  const ownerLease = new OwnerLease({ root: options.project, runId: options.runId, owner: { osUid: uid!, identityDigest: objectDigest({ runId: options.runId, manifest: options.manifest.manifest_digest }) }, process: { pid: process.pid, pgid: process.pid, startIdentity: `${process.pid}:${record.started_at}`, spawnNonce: record.run_id }, leaseMs: 30_000 });
   const owner = await ownerLease.acquire({ wait: false });
   await v2EventLog(options.project, options.runId, record.fencing_epoch).append({ type: 'run/lease-acquired', payload: { state: 'executing', manifest_digest: options.manifest.manifest_digest } });
   const plan = await operator.createPlanWorktree({ baseBranch: options.manifest.target_branch ?? 'main' });
