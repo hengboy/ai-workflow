@@ -4,6 +4,7 @@ import { chmod, readFile, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { frozenPlan, gitInit, temporary } from '../helpers.js';
+import { parseMarkdown, renderMarkdown } from '../../src/utils/frontmatter.js';
 
 const exec = promisify(execFile);
 
@@ -110,8 +111,12 @@ describe('v2 CLI artifacts', () => {
     const bin = await temporary('ai-workflow-authority-host-');
     await gitInit(project);
     const plan = await frozenPlan(project);
-    await writeFile(join(project, 'src/output.ts'), 'baseline\n');
-    await exec('git', ['add', 'MEMORY.md', 'src/input.ts', 'src/output.ts'], { cwd: project });
+    const taskPath = join(plan, 'tasks/task-001-example.md');
+    const taskDocument = parseMarkdown(await readFile(taskPath, 'utf8'));
+    taskDocument.attributes.write_scope = ['src/input.ts'];
+    await writeFile(taskPath, renderMarkdown(taskDocument.attributes, taskDocument.body));
+    await writeFile(join(project, 'src/input.ts'), 'baseline\n');
+    await exec('git', ['add', 'MEMORY.md', 'src/input.ts'], { cwd: project });
     await exec('git', ['commit', '-m', 'fixture source'], { cwd: project });
     await writeFile(join(plan, 'workflow.js'), 'await skipTask("task-001-example", "authority fixture", "control/skip");\n');
     const host = join(bin, 'codex');
@@ -123,11 +128,11 @@ const packet = JSON.parse(input.split('PACKET:\\n')[1].split('\\n\\nRespond')[0]
 const result = (value = {}, changed_paths = [], tests = []) => process.stdout.write(JSON.stringify({ result_version: '2.0.0', status: 'done', summary: 'fake authority', changed_paths, evidence: [], tests, findings: [], git_refs: [], support_requests: [], value }));
 const digest = (value) => 'sha256:' + createHash('sha256').update(value).digest('hex');
 if (packet.objective.includes('Host authority plan validation')) result({ result_version: '2.0.0', result_type: 'plan-validation', valid: true, errors: [] });
-else if (packet.objective.includes('Host authority review standards-review')) result({ result_version: '2.0.0', result_type: 'review', gate_id: 'standards-review', findings: [{ severity: 'error', message: 'repair src output', path: 'src/output.ts', applicable_action_ids: ['task-001-example-implement'] }] });
+else if (packet.objective.includes('Host authority review standards-review')) result({ result_version: '2.0.0', result_type: 'review', gate_id: 'standards-review', findings: [{ severity: 'error', message: 'repair src input', path: 'src/input.ts', applicable_action_ids: ['task-001-example-implement'] }] });
 else if (packet.objective.includes('Host authority review spec-review')) result({ result_version: '2.0.0', result_type: 'review', gate_id: 'spec-review', findings: [] });
-else if (packet.objective.includes('Host authority aggregate repair')) { writeFileSync('src/output.ts', 'repaired\\n'); result({ result_version: '2.0.0', result_type: 'aggregate-repair', changed_paths: ['src/output.ts'] }, ['src/output.ts']); }
+else if (packet.objective.includes('Host authority aggregate repair')) { writeFileSync('src/input.ts', 'repaired\\n'); result({ result_version: '2.0.0', result_type: 'aggregate-repair', changed_paths: ['src/input.ts'] }, ['src/input.ts']); }
 else if (packet.objective.includes('Host authority repair test')) result({ result_version: '2.0.0', result_type: 'repair-test', task_id: 'task-001-example', tests: [{ command: 'pnpm test', status: 'passed' }] }, [], [{ command: 'pnpm test', status: 'passed' }]);
-else if (packet.objective.includes('Host authority finding recheck')) { const [source, repair] = packet.evidence; const finding = /finding-sha256:[a-f0-9]{64}/.exec(packet.objective)[0]; const evidence = readFileSync('src/output.ts'); result({ result_version: '2.0.0', result_type: 'finding-recheck', finding_id: finding, status: 'closed', evidence_paths: ['src/output.ts'], evidence_digests: [digest(evidence)], repair_diff_digest: repair, source_review_receipt_digest: source, message: 'recheck complete' }); }
+else if (packet.objective.includes('Host authority finding recheck')) { const [source, repair] = packet.evidence; const finding = /finding-sha256:[a-f0-9]{64}/.exec(packet.objective)[0]; const evidence = readFileSync('src/input.ts'); result({ result_version: '2.0.0', result_type: 'finding-recheck', finding_id: finding, status: 'closed', evidence_paths: ['src/input.ts'], evidence_digests: [digest(evidence)], repair_diff_digest: repair, source_review_receipt_digest: source, message: 'recheck complete' }); }
 else if (packet.write_paths.length) { writeFileSync('src/output.ts', 'implemented\\n'); result({}, ['src/output.ts']); }
 else if (packet.role === 'test') result({}, [], [{ command: 'pnpm test', status: 'passed' }]);
 else result();
@@ -157,7 +162,7 @@ else result();
     expect(review.findings).toHaveLength(1);
     expect(review.findings[0]?.finding_id).toBe(receipt.finding_id);
     expect(review.findings[0]?.message_digest).toMatch(/^sha256:/);
-    await expect(readFile(join(project, 'src/output.ts'), 'utf8')).resolves.toBe('repaired\n');
+    await expect(readFile(join(project, 'src/input.ts'), 'utf8')).resolves.toBe('repaired\n');
   });
 
   it('records an approved Worker action through the durable call ledger before pausing for lifecycle gates', async () => {

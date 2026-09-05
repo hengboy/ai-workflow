@@ -108,12 +108,13 @@ export class ManifestHostAuthority {
     const receipt = value as FindingRecheckResult;
     if (receipt.finding_id !== findingId || receipt.source_review_receipt_digest !== sourceReviewReceiptDigest || receipt.repair_diff_digest !== repairDiffDigest) throw new HostAuthorityError('AUTHORITY_INVALID', 'finding recheck receipt is not bound to the source review and repair');
     if (receipt.evidence_paths.length !== receipt.evidence_digests.length) throw new HostAuthorityError('AUTHORITY_INVALID', 'finding recheck evidence paths and digests must have the same length');
+    const canonicalCwd = await realpath(cwd).catch(() => resolve(cwd));
     for (const [index, path] of receipt.evidence_paths.entries()) {
       const digest = receipt.evidence_digests[index];
       const capability = this.options.manifest.review_rechecks.find((entry) => entry.gate_id === gate);
       const candidate = resolve(cwd, path);
       const canonical = await realpath(candidate).catch(() => candidate);
-      const inside = !relative(resolve(cwd), canonical).split('/').includes('..');
+      const inside = !relative(canonicalCwd, canonical).split('/').includes('..');
       const inScope = capability?.read_scope.some((scope) => path === scope || path.startsWith(`${scope}/`));
       if (!inside || !inScope) throw new HostAuthorityError('AUTHORITY_SCOPE_INVALID', `finding recheck evidence is outside review read scope: ${path}`);
       if (!digest || digest !== sha256(await readFile(canonical))) throw new HostAuthorityError('AUTHORITY_INVALID', `finding recheck evidence digest does not match: ${path}`);
