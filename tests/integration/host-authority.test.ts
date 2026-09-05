@@ -62,6 +62,7 @@ process.stdout.write(JSON.stringify({ result_version: '2.0.0', status: 'done', s
     const bin = await temporary('ai-workflow-host-authority-bin-');
     const plan = await frozenPlan(project);
     const manifest = await generateManifest(plan, 'codex');
+    await writeFile(join(project, 'README.md'), 'outside review scope\n');
     const host = join(bin, 'codex');
     await writeFile(host, `#!/usr/bin/env node
 const { readFileSync } = require('node:fs');
@@ -75,6 +76,32 @@ process.stdout.write(JSON.stringify({ result_version: '2.0.0', status: 'done', s
       const authority = new ManifestHostAuthority({ project, runId: 'run-authority', manifest });
 
       await expect(authority.review('standards-review', project)).rejects.toMatchObject({ code: 'AUTHORITY_SCOPE_INVALID' });
+    } finally {
+      process.env.PATH = previousPath;
+    }
+  });
+
+  it('rejects recheck evidence outside the review capability read scope', async () => {
+    const project = await temporary('ai-workflow-host-authority-');
+    const bin = await temporary('ai-workflow-host-authority-bin-');
+    const plan = await frozenPlan(project);
+    const manifest = await generateManifest(plan, 'codex');
+    await writeFile(join(project, 'README.md'), 'outside review scope\n');
+    const findingId = `finding-sha256:${'a'.repeat(64)}`;
+    const source = sha256('source review');
+    const repair = sha256('repair diff');
+    const host = join(bin, 'codex');
+    await writeFile(host, `#!/usr/bin/env node
+const { readFileSync } = require('node:fs');
+readFileSync(0, 'utf8');
+process.stdout.write(JSON.stringify({ result_version: '2.0.0', status: 'done', summary: 'recheck', changed_paths: [], evidence: [], tests: [], findings: [], git_refs: [], support_requests: [], value: { result_version: '2.0.0', result_type: 'finding-recheck', finding_id: ${JSON.stringify(findingId)}, status: 'closed', evidence_paths: ['README.md'], evidence_digests: [${JSON.stringify(sha256(await readFile(join(project, 'README.md'))))}], repair_diff_digest: ${JSON.stringify(repair)}, source_review_receipt_digest: ${JSON.stringify(source)}, message: 'out of scope' } }));
+`);
+    await chmod(host, 0o755);
+    const previousPath = process.env.PATH;
+    process.env.PATH = `${bin}:${previousPath ?? ''}`;
+    try {
+      const authority = new ManifestHostAuthority({ project, runId: 'run-authority', manifest });
+      await expect(authority.recheck('standards-review', findingId, project, source, repair)).rejects.toMatchObject({ code: 'AUTHORITY_SCOPE_INVALID' });
     } finally {
       process.env.PATH = previousPath;
     }

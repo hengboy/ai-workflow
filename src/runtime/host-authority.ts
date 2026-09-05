@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, relative, resolve } from 'node:path';
+import { realpath } from 'node:fs/promises';
 import type { CodingCapabilityManifest } from '../generated/coding-manifest.schema.js';
 import type { FindingRecheckResult } from '../generated/review-repair-resolution.schema.js';
 import type { AgentPacket } from '../generated/packet.schema.js';
@@ -109,7 +110,13 @@ export class ManifestHostAuthority {
     if (receipt.evidence_paths.length !== receipt.evidence_digests.length) throw new HostAuthorityError('AUTHORITY_INVALID', 'finding recheck evidence paths and digests must have the same length');
     for (const [index, path] of receipt.evidence_paths.entries()) {
       const digest = receipt.evidence_digests[index];
-      if (!digest || digest !== sha256(await readFile(join(cwd, path)))) throw new HostAuthorityError('AUTHORITY_INVALID', `finding recheck evidence digest does not match: ${path}`);
+      const capability = this.options.manifest.review_rechecks.find((entry) => entry.gate_id === gate);
+      const candidate = resolve(cwd, path);
+      const canonical = await realpath(candidate).catch(() => candidate);
+      const inside = !relative(resolve(cwd), canonical).split('/').includes('..');
+      const inScope = capability?.read_scope.some((scope) => path === scope || path.startsWith(`${scope}/`));
+      if (!inside || !inScope) throw new HostAuthorityError('AUTHORITY_SCOPE_INVALID', `finding recheck evidence is outside review read scope: ${path}`);
+      if (!digest || digest !== sha256(await readFile(canonical))) throw new HostAuthorityError('AUTHORITY_INVALID', `finding recheck evidence digest does not match: ${path}`);
     }
     await this.save(`finding-recheck-${findingId.slice('finding-sha256:'.length)}.json`, receipt);
     return { state: receipt.status, evidence: receipt.evidence_paths };

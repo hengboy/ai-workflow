@@ -17,6 +17,9 @@ function assertLocalGitCommand(args: string[]): void {
   const command = args[0];
   if (!command || forbidden.has(command)) throw new Error(`Git operation is forbidden: ${command ?? '<missing command>'}`);
   if (args.some((arg) => /^(?:origin|upstream|https?:|ssh:|git@)/i.test(arg)) || args.includes('--set-upstream-to') || args.includes('--track') || args.includes('--remote')) throw new Error('Git operation is forbidden: remote or upstream mutation');
+  if (command === 'branch' && args.some((arg) => ['-f', '-M', '-m', '--force', '--move', '--set-upstream-to', '--track'].includes(arg))) throw new Error('Git operation is forbidden: local branch mutation');
+  if (command === 'worktree' && args[1] === 'remove') throw new Error('Git operation is forbidden: worktree removal');
+  if (command === 'branch' && args.includes('-vv')) throw new Error('Git operation is forbidden: upstream inspection');
   if (allowedReadOnly.has(command)) return;
   if (command === 'add' && args[1] === '--') return;
   if (command === 'commit' && args.includes('-m')) return;

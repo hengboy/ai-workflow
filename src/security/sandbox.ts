@@ -136,6 +136,7 @@ export class BrokeredSandboxProvider {
   private readonly options: SandboxProviderOptions;
 
   constructor(probe: SandboxProbe = defaultProbe(), options: SandboxProviderOptions = {}) {
+    if (options.useSeatbelt === false) reject('Seatbelt isolation is required for brokered action execution');
     this.capability = createActionSandboxCapability(probe, sha256('ai-workflow-action-sandbox-v2'));
     this.options = options;
   }
@@ -159,7 +160,6 @@ export class BrokeredSandboxProvider {
   }
 
   async available(): Promise<boolean> {
-    if (this.options.useSeatbelt === false) return false;
     try { await access('/usr/bin/sandbox-exec', constants.X_OK); return true; } catch { return false; }
   }
 }

@@ -85,6 +85,7 @@ export async function invokeHost(host: Host, prompt: string, packet: AgentPacket
       actionExecutorNetworkDenied: true, modelTransportPartitioned: true, nativeToolBroker: true,
       processGroupControl: true, brokerAvailable: true, executorAvailable: true, credentialsVisibleToExecutor: false,
     });
+    if (!(await options.sandbox.available())) throw new ActionSandboxError('ACTION_SANDBOX_UNAVAILABLE', 'Seatbelt action executor is unavailable');
   }
   const command = options.executable ?? commands[host].command; const defaultArgs = commands[host].args.map((arg) => arg.includes('schemas/result.schema.json') ? packagePath('schemas', 'result.schema.json') : arg); const message = `${prompt}\n\nPACKET:\n${JSON.stringify(packet)}\n\nRespond with exactly one JSON object conforming to schemas/result.schema.json. Do not output Markdown or explanations.`; const args = host === 'opencode' ? ['run', '--agent', packet.role, '--format', 'json', '--', message] : options.args ?? defaultArgs;
   const output = await new Promise<string>((resolve, reject) => {

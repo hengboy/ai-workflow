@@ -12,6 +12,11 @@ describe('Git Operator helpers', () => {
     ['config', ['config', 'remote.origin.url', 'https://example.test/repo.git']],
     ['upstream', ['branch', '--set-upstream-to', 'origin/main']],
     ['subcommand option', ['fetch', '--all']],
+    ['forced branch move', ['branch', '-f', 'main', 'HEAD']],
+    ['branch rename', ['branch', '-M', 'main']],
+    ['forced worktree removal', ['worktree', 'remove', '--force', '/tmp/worktree']],
+    ['remote inspection', ['remote', '-v']],
+    ['upstream inspection', ['branch', '-vv']],
   ])('rejects %s Git mutation before spawning Git', async (_label, args) => {
     const root = await temporary();
     await expect(git(root, args)).rejects.toThrow(/forbidden|local allowlist/i);

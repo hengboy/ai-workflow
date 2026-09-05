@@ -108,6 +108,10 @@ process.stdout.write(JSON.stringify({ status: 'done', summary: process.env.BROKE
     expect(() => new ActionSandboxError('ACTION_SANDBOX_UNAVAILABLE', 'missing')).toBeTruthy();
   });
 
+  it('fails closed when Seatbelt is explicitly disabled', () => {
+    expect(() => new BrokeredSandboxProvider(probe(), { useSeatbelt: false })).toThrowError(ActionSandboxError);
+  });
+
   it('runs a disposable action executor through macOS Seatbelt with network denied', async () => {
     const root = await mkdtemp(join(tmpdir(), 'ai-workflow-seatbelt-'));
     const executable = join(root, 'seatbelt-check');
