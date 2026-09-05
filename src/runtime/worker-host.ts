@@ -53,6 +53,7 @@ interface ChildRecord {
   descriptor: CallDescriptor;
   run: ChildRun;
   disposal?: Promise<void>;
+  settlement?: Promise<void>;
 }
 
 type HostMessageBody = HostToWorkerMessage extends infer Message
@@ -180,7 +181,7 @@ export class WorkerRun {
        await this.options.processRegistry?.({ type: 'registered', runId: this.options.runId, callId: descriptor.call_id, childId: run.id, ...(run.identity === undefined ? {} : { identity: run.identity }) });
       this.options.observer?.agentStart?.(descriptor, run.id);
       this.send({ type: 'agent-started', request_id: requestId, call_id: descriptor.call_id, child_id: run.id });
-      void run.result.then((result) => {
+      const settlement = run.result.then((result) => {
         this.send({ type: 'agent-settled', request_id: requestId, call_id: descriptor.call_id, result });
         this.options.observer?.agentEnd?.(descriptor, result.status === 'done' ? 'completed' : 'failed');
         this.liveAgents.delete(descriptor.call_id);
@@ -189,6 +190,8 @@ export class WorkerRun {
         this.options.observer?.agentEnd?.(descriptor, 'failed');
         this.liveAgents.delete(descriptor.call_id);
       });
+      const record = this.children.get(descriptor.call_id);
+      if (record) record.settlement = settlement.then(() => undefined, () => undefined);
      } catch (error) {
        const code = error && typeof error === 'object' && 'code' in error && typeof error.code === 'string' ? error.code : 'ACTION_NOT_READY';
        this.send({ type: 'agent-start-error', request_id: requestId, call_id: descriptor.call_id, error: { code: code as 'ACTION_NOT_READY', message: error instanceof Error ? error.message : String(error), fatal: true } });
