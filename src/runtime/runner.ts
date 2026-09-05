@@ -256,7 +256,7 @@ export async function runV2Script(options: V2ScriptRunOptions): Promise<RunRecor
   await cancelSocket.start();
   await events.append({ type: 'run/lease-acquired', payload: { state: 'executing', manifest_digest: manifestDigest } });
   const actionStates: Record<string, import('../security/capability.js').ActionState> = {};
-  const taskStates: Record<string, import('../security/capability.js').TaskState> = Object.fromEntries(options.manifest.tasks.map((task) => [task.task_id, 'ready']));
+  const taskStates: Record<string, import('../security/capability.js').TaskState> = Object.fromEntries(options.manifest.tasks.map((task) => [task.task_id, task.depends_on.length ? 'pending' : 'ready']));
   const actionMap = new Map(options.manifest.actions.map((action) => [action.action_id, action]));
   const actionObservations = new Map<string, TaskActionObservation[]>();
   const operator = new V2GitOperator({ project: options.project, runId: options.runId, manifestDigest, fencingEpoch: record.fencing_epoch, targetBranch: options.manifest.project.target_branch });
@@ -328,13 +328,13 @@ export async function runV2Script(options: V2ScriptRunOptions): Promise<RunRecor
     const coordinator = new TaskClosureCoordinator({ ledger });
     let receipt;
     if (descriptor.operation === 'skip-task') {
-      receipt = await coordinator.skipTask({ taskId: task.task_id, controlId: descriptor.control_id, controlOrdinal: descriptor.control_ordinal, activation: task.activation, requiredActionIds: [], actions: [], predecessorStates: Object.fromEntries(task.depends_on.map((dependency) => [dependency, taskStates[dependency] === 'finalized' ? 'finalized' : 'pending'])), reason: descriptor.reason ?? '' });
+       receipt = await coordinator.skipTask({ taskId: task.task_id, controlId: descriptor.control_id, controlOrdinal: descriptor.control_ordinal, activation: task.activation, requiredActionIds: [], actions: [], predecessorStates: Object.fromEntries(task.depends_on.map((dependency) => [dependency, ['done', 'finalized'].includes(taskStates[dependency] ?? '') ? 'finalized' : 'pending'])), reason: descriptor.reason ?? '' });
     } else if (task.finalization_mode === 'commit-and-merge') {
       const taskWorktree = taskWorktrees.get(task.task_id);
       if (!taskWorktree) throw new Error(`TASK_CLOSURE_INCOMPLETE: task worktree is missing: ${task.task_id}`);
-      receipt = await coordinator.finalizeTask({ taskId: task.task_id, controlId: descriptor.control_id, controlOrdinal: descriptor.control_ordinal, activation: task.activation, requiredActionIds: task.required_actions, actions: actionObservations.get(task.task_id) ?? [], predecessorStates: Object.fromEntries(task.depends_on.map((dependency) => [dependency, taskStates[dependency] === 'finalized' ? 'finalized' : 'pending'])), finalizationMode: task.finalization_mode, taskWorktree, planWorktree, writeScope: options.manifest.actions.filter((action) => action.task_id === task.task_id).flatMap((action) => action.write_scope), operator });
+       receipt = await coordinator.finalizeTask({ taskId: task.task_id, controlId: descriptor.control_id, controlOrdinal: descriptor.control_ordinal, activation: task.activation, requiredActionIds: task.required_actions, actions: actionObservations.get(task.task_id) ?? [], predecessorStates: Object.fromEntries(task.depends_on.map((dependency) => [dependency, ['done', 'finalized'].includes(taskStates[dependency] ?? '') ? 'finalized' : 'pending'])), finalizationMode: task.finalization_mode, taskWorktree, planWorktree, writeScope: options.manifest.actions.filter((action) => action.task_id === task.task_id).flatMap((action) => action.write_scope), operator });
     } else {
-      receipt = await coordinator.finalizeTask({ taskId: task.task_id, controlId: descriptor.control_id, controlOrdinal: descriptor.control_ordinal, activation: task.activation, requiredActionIds: task.required_actions, actions: actionObservations.get(task.task_id) ?? [], predecessorStates: Object.fromEntries(task.depends_on.map((dependency) => [dependency, taskStates[dependency] === 'finalized' ? 'finalized' : 'pending'])), finalizationMode: task.finalization_mode });
+       receipt = await coordinator.finalizeTask({ taskId: task.task_id, controlId: descriptor.control_id, controlOrdinal: descriptor.control_ordinal, activation: task.activation, requiredActionIds: task.required_actions, actions: actionObservations.get(task.task_id) ?? [], predecessorStates: Object.fromEntries(task.depends_on.map((dependency) => [dependency, ['done', 'finalized'].includes(taskStates[dependency] ?? '') ? 'finalized' : 'pending'])), finalizationMode: task.finalization_mode });
     }
     taskStates[task.task_id] = receipt.state === 'skipped' ? 'done' : 'finalized';
     if (receipt.state === 'skipped' && !record.blocked_tasks?.includes(task.task_id)) record.blocked_tasks = [...(record.blocked_tasks ?? []), task.task_id];
@@ -664,7 +664,7 @@ async function runScriptLifecycle(options: V2LifecycleOptions, record: RunRecord
   const scheduler = new ScopeScheduler({ maxConcurrent: Math.max(1, options.manifest.actions.length) });
   const taskWorktrees = new Map<string, V2Worktree>();
   for (const task of options.manifest.tasks) taskWorktrees.set(task.task_id, await operator.createTaskWorktree(plan, task.task_id));
-  const taskStates: Record<string, TaskState> = Object.fromEntries(options.manifest.tasks.map((task) => [task.task_id, 'ready' as const]));
+  const taskStates: Record<string, TaskState> = Object.fromEntries(options.manifest.tasks.map((task) => [task.task_id, task.depends_on.length ? 'pending' : 'ready']));
   const actionStates: Record<string, 'prepared' | 'dispatch_intent' | 'running' | 'observed' | 'checkpointed' | 'done'> = {};
   const observations = new Map<string, TaskActionObservation[]>();
   const tasks = new Map<string, { worktree: V2Worktree; state: 'finalized' | 'committed' | 'skipped' }>();
@@ -730,7 +730,7 @@ async function runScriptLifecycle(options: V2LifecycleOptions, record: RunRecord
     if (descriptor.operation !== 'skip-task') throw new Error('task finalization requires host-owned closure evidence');
     const task = options.manifest.tasks.find((candidate) => candidate.task_id === descriptor.task_id);
     if (!task || task.activation !== 'conditional' || !descriptor.task_id) throw new Error('conditional task skip requires an authorized conditional task');
-    const receipt = await new TaskClosureCoordinator({ ledger }).skipTask({ taskId: task.task_id, controlId: descriptor.control_id, controlOrdinal: descriptor.control_ordinal, activation: task.activation, requiredActionIds: [], actions: [], predecessorStates: {}, reason: descriptor.reason ?? '' });
+     const receipt = await new TaskClosureCoordinator({ ledger }).skipTask({ taskId: task.task_id, controlId: descriptor.control_id, controlOrdinal: descriptor.control_ordinal, activation: task.activation, requiredActionIds: [], actions: [], predecessorStates: Object.fromEntries(task.depends_on.map((dependency) => [dependency, taskStates[dependency] === 'finalized' || taskStates[dependency] === 'done' ? 'finalized' : 'pending'])), reason: descriptor.reason ?? '' });
     const worktree = taskWorktrees.get(task.task_id);
     if (worktree) tasks.set(task.task_id, { worktree, state: 'skipped' });
     if (!record.blocked_tasks?.includes(task.task_id)) record.blocked_tasks = [...(record.blocked_tasks ?? []), task.task_id];
@@ -744,7 +744,7 @@ async function runScriptLifecycle(options: V2LifecycleOptions, record: RunRecord
     if (task.activation === 'conditional') continue;
     const worktree = taskWorktrees.get(task.task_id);
     if (!worktree || task.required_actions.some((actionId) => !observations.get(task.task_id)?.some((observation) => observation.action_id === actionId))) return lifecyclePaused(options.project, record, new GateCoordinator({ directory, runId: options.runId, fencingEpoch: record.fencing_epoch, manifestDigest: options.manifest.manifest_digest }), trace, `approved script did not close task actions: ${task.task_id}`, operator);
-    const finalized = await coordinator.finalizeTask({ taskId: task.task_id, controlId: `finalize-${task.task_id}`, controlOrdinal: tasks.size + 1, activation: task.activation, requiredActionIds: task.required_actions, actions: observations.get(task.task_id) ?? [], predecessorStates: {}, finalizationMode: task.finalization_mode, ...(task.finalization_mode === 'commit-and-merge' ? { taskWorktree: worktree, planWorktree: plan, writeScope: actions.filter((action) => action.task_id === task.task_id).flatMap((action) => action.write_scope), operator } : {}) });
+     const finalized = await coordinator.finalizeTask({ taskId: task.task_id, controlId: `finalize-${task.task_id}`, controlOrdinal: tasks.size + 1, activation: task.activation, requiredActionIds: task.required_actions, actions: observations.get(task.task_id) ?? [], predecessorStates: Object.fromEntries(task.depends_on.map((dependency) => [dependency, tasks.get(dependency)?.state === 'finalized' || tasks.get(dependency)?.state === 'committed' || tasks.get(dependency)?.state === 'skipped' ? tasks.get(dependency)!.state : 'pending'])), finalizationMode: task.finalization_mode, ...(task.finalization_mode === 'commit-and-merge' ? { taskWorktree: worktree, planWorktree: plan, writeScope: actions.filter((action) => action.task_id === task.task_id).flatMap((action) => action.write_scope), operator } : {}) });
      tasks.set(task.task_id, { worktree, state: finalized.state });
      taskStates[task.task_id] = finalized.state === 'skipped' ? 'done' : 'finalized';
     trace.push(`task-${task.task_id}:${finalized.state}`);

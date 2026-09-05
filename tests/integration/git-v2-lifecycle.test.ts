@@ -167,6 +167,17 @@ describe('v2 Git lifecycle', () => {
     await expect(coordinator.finalizeTask({ taskId: 'task-002', controlId: 'finalize-predecessor', controlOrdinal: 2, activation: 'required', requiredActionIds: ['task-002-test'], actions: [{ ...failed[0]!, remediated: true, state: 'observed', result: { status: 'done', tests: [{ command: 'pnpm test', status: 'passed' }] } }], predecessorStates: { 'task-001': 'pending' }, finalizationMode: 'read-only-finalize' })).rejects.toMatchObject({ code: 'TASK_PREDECESSOR_INCOMPLETE' });
   });
 
+  it('finalizes a dependent task only after its predecessor closure is terminal', async () => {
+    const project = await temporary();
+    await gitInit(project);
+    const ledger = new RunLedger({ directory: join(project, '.ai-workflow/runs/closure-dependencies'), runId: 'closure-dependencies', fencingEpoch: 1 });
+    const coordinator = new TaskClosureCoordinator({ ledger });
+    const action = { action_id: 'task-002-test', state: 'checkpointed' as const, result: { status: 'done' as const, tests: [] } };
+
+    await expect(coordinator.finalizeTask({ taskId: 'task-002', controlId: 'finalize-dependent-pending', controlOrdinal: 1, activation: 'required', requiredActionIds: [action.action_id], actions: [action], predecessorStates: { 'task-001': 'pending' }, finalizationMode: 'read-only-finalize' })).rejects.toMatchObject({ code: 'TASK_PREDECESSOR_INCOMPLETE' });
+    await expect(coordinator.finalizeTask({ taskId: 'task-002', controlId: 'finalize-dependent-ready', controlOrdinal: 2, activation: 'required', requiredActionIds: [action.action_id], actions: [action], predecessorStates: { 'task-001': 'finalized' }, finalizationMode: 'read-only-finalize' })).resolves.toMatchObject({ state: 'finalized' });
+  });
+
   it('skips a conditional task only with an explicit control reason', async () => {
     const project = await temporary();
     await gitInit(project);
