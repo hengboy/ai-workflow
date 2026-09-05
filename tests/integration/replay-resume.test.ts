@@ -266,8 +266,14 @@ describe('replay and resume', () => {
     const plan = await frozenPlan(project);
     await writeFile(join(plan, 'workflow.js'), 'await new Promise(() => {});\n');
     const manifest = await generateManifest(plan, 'codex');
-    const run = runV2Script({ project, runId: 'run-live-cancel', manifest, script: await readFile(join(plan, 'workflow.js'), 'utf8'), args: {}, scriptDigest: manifest.script.bytes_digest, argsDigest: manifest.args.bytes_digest });
-    await new Promise((resolvePromise) => setTimeout(resolvePromise, 250));
+    let settled = false;
+    const run = runV2Script({ project, runId: 'run-live-cancel', manifest, script: await readFile(join(plan, 'workflow.js'), 'utf8'), args: {}, scriptDigest: manifest.script.bytes_digest, argsDigest: manifest.args.bytes_digest }).finally(() => { settled = true; });
+    await waitFor(async () => {
+      if (settled) return false;
+      const authority = JSON.parse(await readFile(join(project, '.ai-workflow/runs/run-live-cancel/control/cancel-authority.json'), 'utf8')) as { owner_uid?: number; owner_identity_digest?: string; local_control_path?: string };
+      await readFile(join(project, '.ai-workflow/runs/run-live-cancel/control/owner-capability.json'), 'utf8');
+      return authority.owner_uid !== undefined && authority.owner_identity_digest !== undefined && authority.local_control_path !== undefined;
+    }, 5_000);
 
     const authority = JSON.parse(await readFile(join(project, '.ai-workflow/runs/run-live-cancel/control/cancel-authority.json'), 'utf8')) as { socket_path?: string };
     expect(authority.socket_path).toEqual(expect.any(String));

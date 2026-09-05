@@ -168,11 +168,11 @@ export async function startV2Run(options: StartV2RunOptions): Promise<RunRecordV
   const socketPath = `/tmp/aiw-${objectDigest({ project: resolve(options.project), runId: options.runId }).slice(-16)}.sock`;
   const cancelControl = new CancelControl({ root: options.project, runId: options.runId, owner: { osUid: -1, identityDigest: 'unbound' }, fencingEpoch: options.fencingEpoch, socketPath });
   const record: RunRecordV2 = { record_version: '2.0.0', engine: 'worker-thread-trusted', run_id: options.runId, manifest_digest: options.manifestDigest, fencing_epoch: options.fencingEpoch, run_state: 'preflight', parent_run: options.parentRun ?? 'root', started_at: now, updated_at: now, call_ledger: [], control_ledger: [], resources: [], completed_tasks: [], blocked_tasks: [], ...(options.authority === undefined ? {} : { authority: options.authority }) };
+  const { writeJson } = await import('../utils/fs.js');
+  await writeJson(join(directory, 'control', 'cancel-authority.json'), cancelControl.authority);
   const log = v2EventLog(options.project, options.runId, options.fencingEpoch);
   await log.append({ type: 'run/start', payload: { engine: 'worker-thread-trusted', manifest_digest: options.manifestDigest, state: 'preflight' } });
   await saveV2Run(options.project, record);
-  const { writeJson } = await import('../utils/fs.js');
-  await writeJson(join(directory, 'control', 'cancel-authority.json'), cancelControl.authority);
   return record;
 }
 
@@ -209,7 +209,6 @@ export async function runV2Script(options: V2ScriptRunOptions): Promise<RunRecor
   const identityDigest = owner.owner.identityDigest;
   const localCapability = await createLocalCancelCapability(options.project, options.runId, record.fencing_epoch);
   const persistedAuthority = { ...cancelAuthority, owner_uid: owner.owner.osUid, owner_identity_digest: identityDigest, local_control_path: join(directory, 'control', 'owner-capability.json') };
-  await writeJson(authorityPath, persistedAuthority);
   const cancelControl = new CancelControl({ root: options.project, runId: options.runId, owner: { osUid: owner.owner.osUid, identityDigest }, fencingEpoch: record.fencing_epoch, nonce: cancelAuthority.challenge_nonce, socketPath: cancelAuthority.socket_path, localCapability });
   const scheduler = new ScopeScheduler({ maxConcurrent: options.manifest.limits.max_concurrent_agents });
   // The socket handler is installed before the Worker is created and observes this holder.
@@ -255,6 +254,7 @@ export async function runV2Script(options: V2ScriptRunOptions): Promise<RunRecor
     },
   });
   await cancelSocket.start();
+  await writeJson(authorityPath, persistedAuthority);
   await events.append({ type: 'run/lease-acquired', payload: { state: 'executing', manifest_digest: manifestDigest } });
   const actionStates: Record<string, import('../security/capability.js').ActionState> = {};
   const taskStates: Record<string, import('../security/capability.js').TaskState> = Object.fromEntries(options.manifest.tasks.map((task) => [task.task_id, task.depends_on.length ? 'pending' : 'ready']));
