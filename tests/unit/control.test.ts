@@ -98,6 +98,35 @@ describe('run control', () => {
     await admitted.lease.releaseAfterReconcile('cancelled', () => undefined);
   });
 
+  it('rechecks cancellation after admission before allowing action side effects', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ai-workflow-admission-race-'));
+    const lease = new OwnerLease({ root, runId: 'run-race', owner: { osUid: 501, identityDigest: 'identity-501' }, process: { pid: 10, pgid: 10, startIdentity: 'owner', spawnNonce: 'owner' }, leaseMs: 10_000 });
+    const owner = await lease.acquire();
+    const control = new CancelControl({ root, runId: 'run-race', owner: owner.owner, fencingEpoch: owner.fencingEpoch, nonce: 'challenge-race' });
+    const scheduler = new (await import('../../src/runtime/scheduler.js')).ScopeScheduler({ maxConcurrent: 1 });
+    const runControl = new (await import('../../src/runtime/control.js')).RunControl({ ownerLease: lease, owner, cancelControl: control, scheduler });
+    const admission = await runControl.admitAction({ manifest: { plan_id: 'plan', host: 'codex', host_execution: { adapter: 'codex', mode: 'brokered-sandbox', model_transport: { owner: 'host-native-broker', network_allowed: true, project_write_allowed: false, credential_visibility: 'broker-only' }, action_executor: { process_group: true, network_allowed: false, project_write_enforced: true, git_metadata_write_allowed: false }, native_tool_authorization: 'unavailable', capability_digest: 'sha256:' + 'a'.repeat(64) }, tasks: [{ task_id: 'task', depends_on: [], required_actions: ['action'] }], actions: [{ action_id: 'action', task_id: 'task', operation: 'test', role: 'test', locator_read_order: [], read_scope: [], write_scope: [], new_module_directories: [], allowed_commands: [], test_commands: [], requires_actions: [], max_attempts: 1, optional: false, write_access: false, host_only: false }] }, action_id: 'action', run_id: 'run-race', cwd: root, attempt: 1, task_states: { task: 'ready' }, action_states: {}, active_hosts: [] });
+    const reason = 'cancel after admission';
+    await runControl.requestCancel({ peerUid: 501, runId: 'run-race', fencingEpoch: owner.fencingEpoch, nonce: 'challenge-race', reason, identityDigest: owner.owner.identityDigest, proof: cancelProof('challenge-race', 'run-race', owner.fencingEpoch, cancelReasonDigest(reason)) });
+    await expect(runControl.assertActionActive(admission.lease)).rejects.toMatchObject({ code: 'CANCEL_CONTROL_STALE' });
+    expect(admission.lease.released).toBe(true);
+  });
+
+  it('renews an owner lease throughout a long-running action and reports renewal loss', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ai-workflow-owner-renew-'));
+    const lease = new OwnerLease({ root, runId: 'run-renew', owner: { osUid: 501, identityDigest: 'identity-501' }, process: { pid: 10, pgid: 10, startIdentity: 'owner', spawnNonce: 'owner' }, leaseMs: 40 });
+    const owner = await lease.acquire();
+    const control = new CancelControl({ root, runId: 'run-renew', owner: owner.owner, fencingEpoch: owner.fencingEpoch, nonce: 'challenge-renew' });
+    const scheduler = new (await import('../../src/runtime/scheduler.js')).ScopeScheduler({ maxConcurrent: 1 });
+    const runControl = new (await import('../../src/runtime/control.js')).RunControl({ ownerLease: lease, owner, cancelControl: control, scheduler });
+    const renewal = runControl.startOwnerRenewal({ intervalMs: 10 });
+    const admission = await runControl.admitAction({ manifest: { plan_id: 'plan', host: 'codex', host_execution: { adapter: 'codex', mode: 'brokered-sandbox', model_transport: { owner: 'host-native-broker', network_allowed: true, project_write_allowed: false, credential_visibility: 'broker-only' }, action_executor: { process_group: true, network_allowed: false, project_write_enforced: true, git_metadata_write_allowed: false }, native_tool_authorization: 'unavailable', capability_digest: 'sha256:' + 'a'.repeat(64) }, tasks: [{ task_id: 'task', depends_on: [], required_actions: ['action'] }], actions: [{ action_id: 'action', task_id: 'task', operation: 'test', role: 'test', locator_read_order: [], read_scope: [], write_scope: [], new_module_directories: [], allowed_commands: [], test_commands: [], requires_actions: [], max_attempts: 1, optional: false, write_access: false, host_only: false }] }, action_id: 'action', run_id: 'run-renew', cwd: root, attempt: 1, task_states: { task: 'ready' }, action_states: {}, active_hosts: [] });
+    await new Promise<void>((resolvePromise) => setTimeout(resolvePromise, 100));
+    await expect(runControl.assertActionActive(admission.lease)).resolves.toBeUndefined();
+    admission.lease.release('completed');
+    await renewal.stop();
+  });
+
   it('authorizes socket cancellation using the peer credential before accepting the intent', async () => {
     const root = await mkdtemp(join(tmpdir(), 'ai-workflow-socket-'));
     const control = new CancelControl({ root, runId: 'run-1', owner: { osUid: 501, identityDigest: 'identity-501' }, fencingEpoch: 1, nonce: 'challenge-1' });

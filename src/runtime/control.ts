@@ -39,6 +39,10 @@ export interface OwnerLeaseOptions {
   isProcessAlive?: (identity: ProcessIdentity) => boolean | Promise<boolean>;
 }
 
+export interface OwnerLeaseRenewal {
+  stop(): Promise<void>;
+}
+
 export interface CancelRequest {
   peerUid: number;
   runId: string;
@@ -455,7 +459,35 @@ export class RunControl {
     return this.owner;
   }
 
-  async admitAction(request: ActionAdmissionRequest): Promise<ControlledActionAdmission> {
+  startOwnerRenewal(options: { intervalMs?: number; onFailure?: (error: unknown) => Promise<void> | void } = {}): OwnerLeaseRenewal {
+    const intervalMs = options.intervalMs ?? 10_000;
+    if (!Number.isSafeInteger(intervalMs) || intervalMs < 1) throw new ControlError('LEASE_LOST', 'owner renewal interval must be positive');
+    let stopped = false;
+    let renewing: Promise<void> = Promise.resolve();
+    let failed = false;
+    const timer = setInterval(() => {
+      renewing = renewing.then(async () => {
+        if (stopped || failed) return;
+        try { await this.renewOwner(); }
+        catch (error) {
+          failed = true;
+          this.admissionStopped = true;
+          await options.onFailure?.(error);
+        }
+      });
+      renewing.catch(() => undefined);
+    }, intervalMs);
+    timer.unref?.();
+    return {
+      stop: async () => {
+        stopped = true;
+        clearInterval(timer);
+        await renewing;
+      },
+    };
+  }
+
+  async admitAction(request: ActionAdmissionRequest, onAdmitted?: (lease: ScopeLease) => Promise<void> | void): Promise<ControlledActionAdmission> {
     if (this.admissionStopped || await this.options.cancelControl.readIntent()) throw new ControlError('CANCEL_CONTROL_STALE', 'run cancellation has stopped action admission');
     await this.options.ownerLease.assertCurrent(this.owner);
     const admission = admitAction(request);
@@ -476,10 +508,18 @@ export class RunControl {
       }
       await this.options.ownerLease.assertCurrent(this.owner);
       this.admitted.set(lease.admission_id, lease);
+      await onAdmitted?.(lease);
       return { admission, lease };
     } finally {
       this.pending.delete(admission.attempt_id);
     }
+  }
+
+  async assertActionActive(lease: ScopeLease): Promise<void> {
+    if (this.admissionStopped || await this.options.cancelControl.readIntent() || lease.released) {
+      throw new ControlError('CANCEL_CONTROL_STALE', 'action admission is no longer active');
+    }
+    await this.options.ownerLease.assertCurrent(this.owner);
   }
 
   async settleAction(lease: ScopeLease, state: LeaseTerminalState, reconcile: () => Promise<void> | void = () => undefined): Promise<void> {
