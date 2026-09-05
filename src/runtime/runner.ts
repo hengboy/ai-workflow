@@ -200,7 +200,8 @@ export async function runV2Script(options: V2ScriptRunOptions): Promise<RunRecor
   const ledger = new RunLedger({ directory, runId: options.runId, fencingEpoch: record.fencing_epoch, eventLog: events });
   const uid = process.getuid?.();
   if (uid === undefined) throw new Error('CANCEL_UNAUTHORIZED: local process identity is unavailable');
-  const ownerLease = new OwnerLease({ root: options.project, runId: options.runId, owner: { osUid: uid, identityDigest: objectDigest({ runId: options.runId, manifest: manifestDigest }) }, process: { pid: process.pid, pgid: process.pid, startIdentity: `${process.pid}:${record.started_at}`, spawnNonce: record.run_id }, leaseMs: 30_000 });
+  const ownerUid = uid ?? 0;
+  const ownerLease = new OwnerLease({ root: options.project, runId: options.runId, owner: { osUid: ownerUid, identityDigest: objectDigest({ runId: options.runId, manifest: manifestDigest }) }, process: { pid: process.pid, pgid: process.pid, startIdentity: `${process.pid}:${record.started_at}`, spawnNonce: record.run_id }, leaseMs: 30_000 });
   const owner = await ownerLease.acquire({ wait: false });
   const authorityPath = join(directory, 'control', 'cancel-authority.json');
   const cancelAuthority = JSON.parse(await readFile(authorityPath, 'utf8')) as import('./control.js').CancelAuthority;
@@ -515,7 +516,8 @@ export async function resumeV2Run(project: string, runId: string, options?: Resu
   }
   const uid = process.getuid?.();
   if (uid === undefined) throw new Error('CANCEL_UNAUTHORIZED: local process identity is unavailable');
-  const ownerLease = new OwnerLease({ root: project, runId, owner: { osUid: uid, identityDigest: objectDigest({ runId, manifest: record.manifest_digest }) }, process: { pid: process.pid, pgid: process.pid, startIdentity: `${process.pid}:${record.updated_at}`, spawnNonce: `${runId}-resume` }, leaseMs: 30_000, isProcessAlive: () => false });
+  const ownerUid = uid ?? 0;
+  const ownerLease = new OwnerLease({ root: project, runId, owner: { osUid: ownerUid, identityDigest: objectDigest({ runId, manifest: record.manifest_digest }) }, process: { pid: process.pid, pgid: process.pid, startIdentity: `${process.pid}:${record.updated_at}`, spawnNonce: `${runId}-resume` }, leaseMs: 30_000, isProcessAlive: () => false });
   await ownerLease.acquire({ wait: false });
   await log.append({ type: 'run/lease-acquired', payload: { state: 'paused', manifest_digest: record.manifest_digest } });
   await log.append({ type: 'resume/replayed', payload: { state: 'paused', manifest_digest: record.manifest_digest } });
@@ -576,7 +578,7 @@ export async function runV2Lifecycle(options: V2LifecycleOptions): Promise<V2Lif
   const operator = new V2GitOperator({ project: options.project, runId: options.runId, manifestDigest: options.manifest.manifest_digest, fencingEpoch, targetBranch: options.manifest.target_branch ?? 'main' });
   const uid = process.getuid?.();
   if (uid === undefined) throw new Error('CANCEL_UNAUTHORIZED: local process identity is unavailable');
-  const ownerLease = new OwnerLease({ root: options.project, runId: options.runId, owner: { osUid: uid!, identityDigest: objectDigest({ runId: options.runId, manifest: options.manifest.manifest_digest }) }, process: { pid: process.pid, pgid: process.pid, startIdentity: `${process.pid}:${record.started_at}`, spawnNonce: record.run_id }, leaseMs: 30_000 });
+  const ownerLease = new OwnerLease({ root: options.project, runId: options.runId, owner: { osUid: uid ?? 0, identityDigest: objectDigest({ runId: options.runId, manifest: options.manifest.manifest_digest }) }, process: { pid: process.pid, pgid: process.pid, startIdentity: `${process.pid}:${record.started_at}`, spawnNonce: record.run_id }, leaseMs: 30_000 });
   const owner = await ownerLease.acquire({ wait: false });
   await v2EventLog(options.project, options.runId, record.fencing_epoch).append({ type: 'run/lease-acquired', payload: { state: 'executing', manifest_digest: options.manifest.manifest_digest } });
   const plan = await operator.createPlanWorktree({ baseBranch: options.manifest.target_branch ?? 'main' });
@@ -744,7 +746,11 @@ async function runScriptLifecycle(options: V2LifecycleOptions, record: RunRecord
     if (task.activation === 'conditional') continue;
     const worktree = taskWorktrees.get(task.task_id);
     if (!worktree || task.required_actions.some((actionId) => !observations.get(task.task_id)?.some((observation) => observation.action_id === actionId))) return lifecyclePaused(options.project, record, new GateCoordinator({ directory, runId: options.runId, fencingEpoch: record.fencing_epoch, manifestDigest: options.manifest.manifest_digest }), trace, `approved script did not close task actions: ${task.task_id}`, operator);
-     const finalized = await coordinator.finalizeTask({ taskId: task.task_id, controlId: `finalize-${task.task_id}`, controlOrdinal: tasks.size + 1, activation: task.activation, requiredActionIds: task.required_actions, actions: observations.get(task.task_id) ?? [], predecessorStates: Object.fromEntries(task.depends_on.map((dependency) => [dependency, tasks.get(dependency)?.state === 'finalized' || tasks.get(dependency)?.state === 'committed' || tasks.get(dependency)?.state === 'skipped' ? tasks.get(dependency)!.state : 'pending'])), finalizationMode: task.finalization_mode, ...(task.finalization_mode === 'commit-and-merge' ? { taskWorktree: worktree, planWorktree: plan, writeScope: actions.filter((action) => action.task_id === task.task_id).flatMap((action) => action.write_scope), operator } : {}) });
+     const predecessorStates = Object.fromEntries(task.depends_on.map((dependency) => {
+       const predecessor = tasks.get(dependency);
+       return [dependency, predecessor?.state === 'finalized' || predecessor?.state === 'committed' || predecessor?.state === 'skipped' ? predecessor.state : 'pending'];
+     })) as Record<string, 'pending' | 'running' | 'finalized' | 'committed' | 'skipped'>;
+     const finalized = await coordinator.finalizeTask({ taskId: task.task_id, controlId: `finalize-${task.task_id}`, controlOrdinal: tasks.size + 1, activation: task.activation, requiredActionIds: task.required_actions, actions: observations.get(task.task_id) ?? [], predecessorStates, finalizationMode: task.finalization_mode, ...(task.finalization_mode === 'commit-and-merge' ? { taskWorktree: worktree, planWorktree: plan, writeScope: actions.filter((action) => action.task_id === task.task_id).flatMap((action) => action.write_scope), operator } : {}) });
      tasks.set(task.task_id, { worktree, state: finalized.state });
      taskStates[task.task_id] = finalized.state === 'skipped' ? 'done' : 'finalized';
     trace.push(`task-${task.task_id}:${finalized.state}`);
