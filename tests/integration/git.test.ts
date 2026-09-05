@@ -17,6 +17,12 @@ describe('Git Operator helpers', () => {
     ['forced worktree removal', ['worktree', 'remove', '--force', '/tmp/worktree']],
     ['remote inspection', ['remote', '-v']],
     ['upstream inspection', ['branch', '-vv']],
+    ['amended commit', ['commit', '--amend', '-m', 'changed']],
+    ['forced merge', ['merge', '--no-ff', '--no-edit', '--strategy', 'ours', 'topic']],
+    ['merge strategy option', ['merge', '--no-ff', '--no-edit', '--strategy-option', ' theirs', 'topic']],
+    ['merge multiple targets', ['merge', '--no-ff', '--no-edit', 'one', 'two']],
+    ['branch multiple targets', ['branch', '-D', 'one', 'two']],
+    ['forced commit option', ['commit', '--allow-empty', '-m', 'message', '--no-verify']],
   ])('rejects %s Git mutation before spawning Git', async (_label, args) => {
     const root = await temporary();
     await expect(git(root, args)).rejects.toThrow(/forbidden|local allowlist/i);

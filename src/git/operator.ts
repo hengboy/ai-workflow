@@ -9,22 +9,30 @@ import { canonicalPath } from '../utils/paths.js';
 import { writeJson, exists } from '../utils/fs.js';
 
 const exec = promisify(execFile);
-const allowedReadOnly = new Set(['branch', 'rev-parse', 'status', 'worktree', 'merge-tree', 'show']);
 const forbidden = new Set(['push', 'pull', 'fetch', 'rebase', 'reset', 'clean', 'stash', 'tag', 'remote', 'config', 'submodule']);
 const digestPattern = /^sha256:[a-f0-9]{64}$/;
 
 function assertLocalGitCommand(args: string[]): void {
   const command = args[0];
   if (!command || forbidden.has(command)) throw new Error(`Git operation is forbidden: ${command ?? '<missing command>'}`);
-  if (args.some((arg) => /^(?:origin|upstream|https?:|ssh:|git@)/i.test(arg)) || args.includes('--set-upstream-to') || args.includes('--track') || args.includes('--remote')) throw new Error('Git operation is forbidden: remote or upstream mutation');
-  if (command === 'branch' && args.some((arg) => ['-f', '-M', '-m', '--force', '--move', '--set-upstream-to', '--track'].includes(arg))) throw new Error('Git operation is forbidden: local branch mutation');
-  if (command === 'worktree' && args[1] === 'remove' && args.includes('--force')) throw new Error('Git operation is forbidden: force worktree removal');
-  if (command === 'branch' && args.includes('-vv')) throw new Error('Git operation is forbidden: upstream inspection');
-  if (allowedReadOnly.has(command)) return;
-  if (command === 'add' && args[1] === '--') return;
-  if (command === 'commit' && args.includes('-m')) return;
-  if (command === 'merge' && args.includes('--no-ff') && args.includes('--no-edit')) return;
-  if (command === 'branch' && (args[1] === '-D' || args[1] === '--delete')) return;
+  if (args.some((arg) => /^(?:origin|upstream|https?:|ssh:|git@)/i.test(arg))) throw new Error('Git operation is forbidden: remote or upstream target');
+  if (args.some((arg) => ['--amend', '-f', '-M', '--force', '--strategy', '--strategy-option', '--set-upstream-to', '--track', '--remote', '--no-verify'].includes(arg))) throw new Error('Git operation is forbidden: unsafe option');
+  const value = (arg: string | undefined): boolean => arg !== undefined && arg !== '' && !arg.startsWith('-');
+  const exact = (...expected: string[]): boolean => args.length === expected.length && expected.every((item, index) => item === args[index]);
+  if (command === 'branch' && exact('branch', '--show-current')) return;
+  if (command === 'branch' && args[1] === '-vv') throw new Error('Git operation is forbidden: upstream inspection');
+  if (command === 'branch' && args[1] === '-D' && args.length === 3 && value(args[2])) return;
+  if (command === 'rev-parse' && (exact('rev-parse', '--git-common-dir') || (args.length === 2 && value(args[1])))) return;
+  if (command === 'status' && (exact('status', '--porcelain=v1') || exact('status', '--porcelain=v1', '--untracked-files=all'))) return;
+  if (command === 'worktree' && exact('worktree', 'list', '--porcelain')) return;
+  if (command === 'worktree' && args[1] === 'add' && args[2] === '-b' && args.length === 6 && value(args[3]) && value(args[4]) && value(args[5])) return;
+  if (command === 'worktree' && args[1] === 'remove' && args.length === 3 && value(args[2])) return;
+  if (command === 'merge-tree' && args.length === 4 && args[1] === '--write-tree' && args[2] === 'HEAD' && value(args[3])) return;
+  if (command === 'show' && args.length === 4 && args[1] === '--format=' && args[2] === '--binary' && value(args[3])) return;
+  if (command === 'show' && args.length === 4 && args[1] === '-s' && args[2] === '--format=%B' && value(args[3])) return;
+  if (command === 'add' && args[1] === '--' && args.length > 2 && args.slice(2).every(value)) return;
+  if (command === 'commit' && args.length >= 4 && args[1] === '--allow-empty' && args[2] === '-m' && value(args[3]) && (args.length === 4 || (args.length === 6 && args[4] === '-m' && value(args[5])))) return;
+  if (command === 'merge' && args.length === 4 && args[1] === '--no-ff' && args[2] === '--no-edit' && value(args[3])) return;
   throw new Error(`Git operation is not in the local allowlist: ${command}`);
 }
 
