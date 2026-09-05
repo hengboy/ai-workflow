@@ -91,7 +91,8 @@ export async function removeOwnedWorktrees(project: string, paths: string[]): Pr
     const resolvedPath = canonicalPath(await realpath(resolve(projectRoot, path)).catch(() => resolve(projectRoot, path)));
     const relativePath = relative(projectRoot, resolvedPath).replaceAll('\\', '/');
     if (!relativePath.startsWith('.ai-workflow/runs/') || relativePath.split('/').includes('..')) throw new Error(`Git resource is not owned: ${path}`);
-    const entry = entries.find((candidate) => candidate.path === resolvedPath);
+    try { await lstat(resolvedPath); } catch { continue; }
+    const entry = entries.find((candidate) => canonicalPath(candidate.path) === resolvedPath);
     if (!entry || !entry.branch?.startsWith('ai-workflow/')) throw new Error(`Git resource is unknown or tampered: ${path}`);
     const status = await git(resolvedPath, ['status', '--porcelain=v1', '--untracked-files=all']);
     if (status) throw new Error(`Git resource is dirty: ${path}`);
