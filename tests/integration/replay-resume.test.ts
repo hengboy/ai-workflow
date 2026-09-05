@@ -11,9 +11,18 @@ import { generateManifest } from '../../src/workflow/generate.js';
 import { frozenPlan, gitInit } from '../helpers.js';
 import { runV2Script } from '../../src/runtime/runner.js';
 import { CancelControl, CancelSocket, cancelProof, cancelReasonDigest } from '../../src/runtime/control.js';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { stableJson } from '../../src/utils/hash.js';
 
 const descriptor: CallDescriptor = { action_id: 'action-one', task_id: 'task-one', input: { value: 1 } };
 const result: RecordedAgentResult = { result_version: '2.0.0', status: 'done', summary: 'ok', changed_paths: [], evidence: [], tests: [], findings: [], git_refs: [], support_requests: [] };
+const exec = promisify(execFile);
+
+async function approveV2(project: string, plan: string): Promise<void> {
+  const root = process.cwd();
+  await exec(process.execPath, [join(root, 'node_modules/tsx/dist/cli.mjs'), join(root, 'src/cli.ts'), 'workflow', 'approve', join(plan, 'workflow.json'), '--project', project], { cwd: project });
+}
 
 async function createLedger() {
   const directory = await mkdtemp(join(tmpdir(), 'ai-workflow-replay-'));
@@ -147,6 +156,7 @@ describe('replay and resume', () => {
     const plan = await frozenPlan(project);
     await writeFile(join(plan, 'workflow.js'), 'return true;\n');
     const manifest = await generateManifest(plan, 'codex');
+    await approveV2(project, plan);
     const record = await runV2Script({ project, runId: 'run-resume-authority', manifest, script: await readFile(join(plan, 'workflow.js'), 'utf8'), args: {}, scriptDigest: manifest.script.bytes_digest, argsDigest: manifest.args.bytes_digest });
     expect(record.run_state).toBe('paused');
     await writeFile(join(plan, 'workflow.js'), 'return false;\n');
@@ -161,6 +171,7 @@ describe('replay and resume', () => {
     const plan = await frozenPlan(project);
     await writeFile(join(plan, 'workflow.js'), 'return true;\n');
     const manifest = await generateManifest(plan, 'codex');
+    await approveV2(project, plan);
     const record = await runV2Script({ project, runId: 'run-resume-paused', manifest, script: await readFile(join(plan, 'workflow.js'), 'utf8'), args: {}, scriptDigest: manifest.script.bytes_digest, argsDigest: manifest.args.bytes_digest });
 
     await expect(resumeV2Run(project, record.run_id)).resolves.toMatchObject({ run_state: 'paused' });
@@ -177,6 +188,7 @@ describe('replay and resume', () => {
     const plan = await frozenPlan(project);
     await writeFile(join(plan, 'workflow.js'), 'return true;\n');
     const manifest = await generateManifest(plan, 'codex');
+    await approveV2(project, plan);
     const record = await runV2Script({ project, runId: `run-resume-${field}-drift`, manifest, script: await readFile(join(plan, 'workflow.js'), 'utf8'), args: {}, scriptDigest: manifest.script.bytes_digest, argsDigest: manifest.args.bytes_digest });
     const manifestPath = join(plan, 'workflow.json');
     const persisted = JSON.parse(await readFile(manifestPath, 'utf8')) as typeof manifest;
@@ -192,6 +204,7 @@ describe('replay and resume', () => {
     await gitInit(project);
     const plan = await frozenPlan(project);
     const manifest = await generateManifest(plan, 'codex');
+    await approveV2(project, plan);
     const record = await runV2Script({ project, runId: 'run-resume-restart', manifest, script: await readFile(join(plan, 'workflow.js'), 'utf8'), args: {}, scriptDigest: manifest.script.bytes_digest, argsDigest: manifest.args.bytes_digest });
 
     await expect(resumeV2Run(project, record.run_id, { restart: async () => 'paused' as never })).rejects.toThrow(/restart.*executing/i);
@@ -266,6 +279,7 @@ describe('replay and resume', () => {
     const plan = await frozenPlan(project);
     await writeFile(join(plan, 'workflow.js'), 'await new Promise(() => {});\n');
     const manifest = await generateManifest(plan, 'codex');
+    await approveV2(project, plan);
     let settled = false;
     const run = runV2Script({ project, runId: 'run-live-cancel', manifest, script: await readFile(join(plan, 'workflow.js'), 'utf8'), args: {}, scriptDigest: manifest.script.bytes_digest, argsDigest: manifest.args.bytes_digest }).finally(() => { settled = true; });
     await waitFor(async () => {
@@ -290,6 +304,7 @@ describe('replay and resume', () => {
     await writeFile(join(bin, 'codex'), '#!/bin/sh\ntrap "exit 0" TERM INT\nwhile :; do sleep 1; done\n');
     await chmod(join(bin, 'codex'), 0o755);
     const manifest = await generateManifest(plan, 'codex');
+    await approveV2(project, plan);
     const originalPath = process.env.PATH;
     process.env.PATH = `${bin}:${originalPath ?? ''}`;
     try {
@@ -311,6 +326,7 @@ describe('replay and resume', () => {
     await gitInit(project);
     const plan = await frozenPlan(project);
     const manifest = await generateManifest(plan, 'codex');
+    await approveV2(project, plan);
     const record = await runV2Script({ project, runId: 'run-local-capability', manifest, script: await readFile(join(plan, 'workflow.js'), 'utf8'), args: {}, scriptDigest: manifest.script.bytes_digest, argsDigest: manifest.args.bytes_digest });
     const capabilityPath = join(project, '.ai-workflow/runs', record.run_id, 'control', 'owner-capability.json');
     await chmod(capabilityPath, 0o644);
@@ -324,6 +340,7 @@ describe('replay and resume', () => {
     await gitInit(project);
     const plan = await frozenPlan(project);
     const manifest = await generateManifest(plan, 'codex');
+    await approveV2(project, plan);
     const record = await runV2Script({ project, runId: 'run-retained-capability', manifest, script: await readFile(join(plan, 'workflow.js'), 'utf8'), args: {}, scriptDigest: manifest.script.bytes_digest, argsDigest: manifest.args.bytes_digest });
     record.resources = [{ resource_id: 'unknown-resource' }];
     await saveV2Run(project, record);
@@ -339,6 +356,8 @@ describe('replay and resume', () => {
     await writeFile(join(plan, 'workflow.js'), 'await skipTask("task-001-example", "not activated", "control/skip-task");\n');
     const manifest = await generateManifest(plan, 'codex');
     manifest.tasks[0]!.activation = 'conditional';
+    await writeFile(join(plan, 'workflow.json'), `${stableJson(manifest)}\n`);
+    await approveV2(project, plan);
 
     const record = await runV2Script({ project, runId: 'run-skip-control', manifest, script: await readFile(join(plan, 'workflow.js'), 'utf8'), args: {}, scriptDigest: manifest.script.bytes_digest, argsDigest: manifest.args.bytes_digest });
 
@@ -357,6 +376,8 @@ describe('replay and resume', () => {
     const manifest = await generateManifest(plan, 'codex');
     manifest.tasks[0]!.required_actions = ['task-001-example-explore'];
     manifest.tasks[0]!.finalization_mode = 'read-only-finalize';
+    await writeFile(join(plan, 'workflow.json'), `${stableJson(manifest)}\n`);
+    await approveV2(project, plan);
 
     const hostDir = await mkdtemp(join(tmpdir(), 'ai-workflow-v2-finalize-host-'));
     const host = join(hostDir, 'codex');

@@ -12,6 +12,7 @@ import { startV2Run, runV2Script, runV2Lifecycle, cancelV2Run, projectV2Run, cle
 import { loadV2Run } from '../../src/runtime/store.js';
 import { frozenPlan, gitInit, temporary } from '../helpers.js';
 import { generateManifest } from '../../src/workflow/generate.js';
+import { stableJson } from '../../src/utils/hash.js';
 import { parseMarkdown, renderMarkdown } from '../../src/utils/frontmatter.js';
 
 const digest = `sha256:${'b'.repeat(64)}`;
@@ -37,6 +38,7 @@ async function runWithHost(project: string, runId: string, script: string, behav
   await writeFile(join(plan, 'workflow.js'), script);
   const manifest = await generateManifest(plan, 'codex');
   if (behavior === 'conditional-skip') manifest.tasks[0]!.activation = 'conditional';
+  if (behavior === 'conditional-skip') await writeFile(join(plan, 'workflow.json'), `${stableJson(manifest)}\n`);
   const hostDirectory = await temporary('ai-workflow-gates-host-');
   const host = join(hostDirectory, 'codex');
   await writeFile(host, `#!/usr/bin/env node
@@ -64,6 +66,8 @@ else result();
   try {
     await exec('git', ['add', 'MEMORY.md', 'src', '.ai-workflow/plans'], { cwd: project });
     await exec('git', ['commit', '-m', 'fixture baseline'], { cwd: project });
+    const root = process.cwd();
+    await exec(process.execPath, [join(root, 'node_modules/tsx/dist/cli.mjs'), join(root, 'src/cli.ts'), 'workflow', 'approve', join(plan, 'workflow.json'), '--project', project], { cwd: project });
     return await runV2Script({ project, runId, manifest, script, args: {}, scriptDigest: manifest.script.bytes_digest, argsDigest: manifest.args.bytes_digest });
   } finally {
     process.env.PATH = previousPath;

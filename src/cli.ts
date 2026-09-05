@@ -10,7 +10,7 @@ import { validateWorkflow } from './workflow/validate.js';
 import { activateProfile, install, uninstall, initializeProject, updateProject } from './install/index.js';
 import { exists, readJson, writeJson } from './utils/fs.js';
 import { formatSchemaErrors, schemaValidator } from './utils/schema.js';
-import { objectDigest, sha256 } from './utils/hash.js';
+import { objectDigest, sha256, stableJson } from './utils/hash.js';
 import { createNavigationCandidate, refreshContext, validateContext, verifyNavigation } from './context/validate.js';
 import { locateContext } from './context/locate.js';
 import { discoverFallback, type FallbackPacket } from './context/fallback.js';
@@ -152,7 +152,7 @@ workflow.command('generate').description('Generate canonical .ai-workflow/plans/
   const directory = resolve(plan); const project = resolveProjectRoot(resolve(directory, '../../..')); const document = await readPlan(directory); const canonicalDirectory = join(project, '.ai-workflow', 'plans', document.planId); if (directory !== canonicalDirectory) throw new Error(`Workflow plan directory must be canonical: ${canonicalDirectory}`);
   if (script) await copyPlanLocalFile(directory, script, 'workflow.js', '--script');
   if (args) await copyPlanLocalFile(directory, args, 'workflow.args.json', '--args');
-  const manifest = await generateManifest(directory, host); const target = join(directory, 'workflow.json'); await writeFile(target, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8'); print({ workflow: target, manifest: { schema_version: manifest.schema_version, engine: manifest.engine } });
+  const manifest = await generateManifest(directory, host); const target = join(directory, 'workflow.json'); await writeFile(target, `${stableJson(manifest)}\n`, 'utf8'); print({ workflow: target, manifest: { schema_version: manifest.schema_version, engine: manifest.engine } });
 });
 workflow.command('validate').argument('<workflow>').option('--project <project>', '.').action(async (path: string, { project }: { project: string }) => { const result = await validateWorkflow(requireV2Manifest(await jsonFile<unknown>(path)), resolveProjectRoot(project)); print(result); if (!result.valid) process.exitCode = 1; });
 workflow.command('explain').argument('<workflow>').action(async (path: string) => {

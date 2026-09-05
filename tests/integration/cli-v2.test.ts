@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { frozenPlan, gitInit, temporary } from '../helpers.js';
 import { parseMarkdown, renderMarkdown } from '../../src/utils/frontmatter.js';
+import { stableJson } from '../../src/utils/hash.js';
 import { runV2Script } from '../../src/runtime/runner.js';
 
 const exec = promisify(execFile);
@@ -142,7 +143,7 @@ else result();
     const workflow = (JSON.parse((await workflowCli(project, ['workflow', 'generate', '--plan', plan, '--host', 'codex'])).stdout) as { workflow: string }).workflow;
     const manifest = JSON.parse(await readFile(workflow, 'utf8')) as { tasks: Array<{ activation: string }> };
     manifest.tasks[0]!.activation = 'conditional';
-    await writeFile(workflow, `${JSON.stringify(manifest, null, 2)}\n`);
+    await writeFile(workflow, `${stableJson(manifest)}\n`);
     await workflowCli(project, ['workflow', 'approve', workflow, '--project', project]);
 
     const started = await workflowCli(project, ['run', 'start', '--workflow', workflow, '--host', 'codex', '--project', project], { PATH: `${bin}:${process.env.PATH ?? ''}` });
@@ -258,7 +259,7 @@ else result();
     await expect(workflowCli(project, ['run', 'start', '--workflow', workflow, '--host', 'codex', '--project', project])).rejects.toThrow(/digest drift|approval/i);
   });
 
-  it('runs only manifest artifacts when the direct runner caller supplies replacements', async () => {
+  it('rejects caller script and args replacements before creating a run', async () => {
     const project = await temporary('ai-workflow-direct-v2-');
     await gitInit(project);
     const plan = await frozenPlan(project);
@@ -267,9 +268,51 @@ else result();
     const workflow = (JSON.parse(generated.stdout) as { workflow: string });
     const manifest = JSON.parse(await readFile(workflow.workflow, 'utf8')) as import('../../src/generated/coding-manifest.schema.js').CodingCapabilityManifest;
     await workflowCli(project, ['workflow', 'approve', workflow.workflow, '--project', project]);
-    const record = await runV2Script({ project, runId: 'direct-runner-replacement', manifest, script: "throw new Error('caller script must not run');", args: { caller: true }, scriptDigest: 'sha256:' + 'f'.repeat(64), argsDigest: 'sha256:' + 'f'.repeat(64) });
-    expect(record.run_state).toBe('paused');
-    await expect(readFile(join(project, '.ai-workflow/runs/direct-runner-replacement/events.jsonl'), 'utf8')).resolves.toContain('manifest-script');
+    await expect(runV2Script({ project, runId: 'direct-runner-replacement', manifest, script: "throw new Error('caller script must not run');", args: { caller: true }, scriptDigest: 'sha256:' + 'f'.repeat(64), argsDigest: 'sha256:' + 'f'.repeat(64) })).rejects.toThrow(/Caller (script|args)/i);
+    await expect(readFile(join(project, '.ai-workflow/runs/direct-runner-replacement/state.json'), 'utf8')).rejects.toThrow();
+  });
+
+  it.each([
+    ['script', () => ({ script: 'caller script\n' }), /Caller script/i],
+    ['args', () => ({ args: { caller: true } }), /Caller args/i],
+    ['script digest', () => ({ scriptDigest: 'sha256:' + 'f'.repeat(64) }), /Caller script/i],
+    ['args digest', () => ({ argsDigest: 'sha256:' + 'f'.repeat(64) }), /Caller args/i],
+  ] as const)('rejects a forged caller %s before Worker, host, worktree or intent creation', async (_label, mutate, error) => {
+    const project = await temporary('ai-workflow-direct-v2-');
+    await gitInit(project);
+    const plan = await frozenPlan(project);
+    const workflowPath = (JSON.parse((await workflowCli(project, ['workflow', 'generate', '--plan', plan, '--host', 'codex'])).stdout) as { workflow: string }).workflow;
+    await workflowCli(project, ['workflow', 'approve', workflowPath, '--project', project]);
+    const manifest = JSON.parse(await readFile(workflowPath, 'utf8')) as import('../../src/generated/coding-manifest.schema.js').CodingCapabilityManifest;
+    const base = { project, runId: `forged-${_label.replaceAll(' ', '-')}`, manifest, script: await readFile(join(plan, 'workflow.js'), 'utf8'), args: {}, scriptDigest: manifest.script.bytes_digest, argsDigest: manifest.args.bytes_digest };
+    await expect(runV2Script({ ...base, ...mutate() })).rejects.toThrow(error);
+    await expect(readFile(join(project, '.ai-workflow/runs', base.runId, 'state.json'), 'utf8')).rejects.toThrow();
+    await expect(exec('git', ['worktree', 'list', '--porcelain'], { cwd: project })).resolves.not.toHaveProperty('stdout', expect.stringContaining(base.runId));
+  });
+
+  it('rejects a forged caller manifest before creating a run or Git resource', async () => {
+    const project = await temporary('ai-workflow-direct-v2-');
+    await gitInit(project);
+    const plan = await frozenPlan(project);
+    const generated = await workflowCli(project, ['workflow', 'generate', '--plan', plan, '--host', 'codex']);
+    const workflowPath = (JSON.parse(generated.stdout) as { workflow: string }).workflow;
+    await workflowCli(project, ['workflow', 'approve', workflowPath, '--project', project]);
+    const manifest = JSON.parse(await readFile(workflowPath, 'utf8')) as import('../../src/generated/coding-manifest.schema.js').CodingCapabilityManifest;
+    const forged = structuredClone(manifest);
+    forged.actions = [];
+
+    await expect(runV2Script({
+      project,
+      runId: 'forged-manifest',
+      manifest: forged,
+      script: await readFile(join(plan, 'workflow.js'), 'utf8'),
+      args: {},
+      scriptDigest: manifest.script.bytes_digest,
+      argsDigest: manifest.args.bytes_digest,
+    })).rejects.toThrow(/manifest.*drift|manifest.*mismatch|canonical/i);
+    await expect(readFile(join(project, '.ai-workflow/runs/forged-manifest/state.json'), 'utf8')).rejects.toThrow();
+    await expect(readFile(join(project, '.ai-workflow/runs/forged-manifest/events.jsonl'), 'utf8')).rejects.toThrow();
+    await expect(exec('git', ['worktree', 'list', '--porcelain'], { cwd: project })).resolves.not.toHaveProperty('stdout', expect.stringContaining('forged-manifest'));
   });
 
   it('initializes the v2 run path and installs all host coding guidance in an isolated home', async () => {

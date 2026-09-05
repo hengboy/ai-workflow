@@ -1,8 +1,8 @@
 import { basename, dirname, join, relative, resolve, sep } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { readFile, realpath, rm } from 'node:fs/promises';
+import { lstat, readFile, realpath, rm } from 'node:fs/promises';
 import type { Workflow } from '../workflow/types.js';
-import { objectDigest, sha256 } from '../utils/hash.js';
+import { objectDigest, sha256, stableJson } from '../utils/hash.js';
 import { verifyApproval } from '../workflow/approval.js';
 import { validateWorkflow } from '../workflow/validate.js';
 import { assertResumeFingerprint, loadRun, loadV2Run, saveRun, saveV2Run, type RunRecord, type RunRecordV2, type ResumeAuthorityEvidence, type ResumeFingerprint, type V2AuthorityDescriptor } from './store.js';
@@ -150,28 +150,44 @@ export interface V2ScriptRunOptions {
   cancelPeerUid?: (socket: import('node:net').Socket) => number | Promise<number>;
 }
 
-async function readApprovedScriptArtifacts(project: string, manifest: CodingCapabilityManifest): Promise<{ manifestDigest: string; script: string; args: unknown; scriptDigest: string; argsDigest: string }> {
-  const planDirectory = join(project, '.ai-workflow', 'plans', manifest.plan_id);
-  const diskManifest = JSON.parse(await readFile(join(planDirectory, 'workflow.json'), 'utf8')) as CodingCapabilityManifest;
-  const manifestDigest = objectDigest(manifest);
+async function readApprovedScriptArtifacts(project: string, options: V2ScriptRunOptions): Promise<{ manifestDigest: string; script: string; args: unknown; scriptDigest: string; argsDigest: string; approvalDigest: string }> {
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(options.manifest.plan_id)) throw new Error('Manifest plan_id is not canonical');
+  const planDirectory = join(resolve(project), '.ai-workflow', 'plans', options.manifest.plan_id);
+  const planStats = await lstat(planDirectory);
+  const projectRoot = await realpath(resolve(project));
   const planRoot = await realpath(planDirectory);
+  if (planStats.isSymbolicLink() || !planStats.isDirectory() || relative(projectRoot, planRoot) !== `.ai-workflow/plans/${options.manifest.plan_id}`) throw new Error('Manifest plan directory is not canonical');
+  const workflowPath = join(planDirectory, 'workflow.json');
+  const workflowBytes = await readFile(workflowPath);
+  const diskManifest = JSON.parse(workflowBytes.toString('utf8')) as CodingCapabilityManifest;
+  const diskValidation = await validateWorkflow(diskManifest, project);
+  if (!diskValidation.valid) throw new Error(`Canonical manifest is invalid: ${diskValidation.errors.join('; ')}`);
+  const manifestDigest = objectDigest(diskManifest);
+  if (!workflowBytes.equals(Buffer.from(`${stableJson(diskManifest)}\n`, 'utf8')) || objectDigest(options.manifest) !== manifestDigest) throw new Error('Caller manifest does not match canonical manifest bytes');
+  if (diskManifest.plan_id !== options.manifest.plan_id || diskManifest.script.path !== 'workflow.js' || diskManifest.args.path !== 'workflow.args.json') throw new Error('Manifest artifact paths are not canonical plan-local paths');
   const readPlanFile = async (path: string, label: string): Promise<Buffer> => {
-    const candidate = path.startsWith('.ai-workflow/') ? resolve(project, path) : resolve(planDirectory, path);
-    const { lstat } = await import('node:fs/promises');
+    const candidate = resolve(planDirectory, path);
     const stats = await lstat(candidate);
     const actual = await realpath(candidate);
     const planRelative = relative(planRoot, actual);
     if (stats.isSymbolicLink() || !stats.isFile() || planRelative === '..' || planRelative.startsWith(`..${sep}`)) throw new Error(`${label} must be a plan-local regular file: ${candidate}`);
     return readFile(actual);
   };
-  const scriptBytes = await readPlanFile(diskManifest.script.path, 'script');
-  const argsBytes = await readPlanFile(diskManifest.args.path, 'args');
+  const scriptBytes = await readPlanFile('workflow.js', 'script');
+  const argsBytes = await readPlanFile('workflow.args.json', 'args');
   const scriptDigest = sha256(scriptBytes);
   const argsDigest = sha256(argsBytes);
   if (scriptDigest !== diskManifest.script.bytes_digest || argsDigest !== diskManifest.args.bytes_digest) throw new Error('Approved artifact digest drift');
+  if (Buffer.from(options.script, 'utf8').compare(scriptBytes) !== 0 || options.scriptDigest !== scriptDigest) throw new Error('Caller script does not match approved artifact');
   let args: unknown;
   try { args = JSON.parse(argsBytes.toString('utf8')) as unknown; } catch (error) { throw new Error(`Approved args are invalid JSON: ${error instanceof Error ? error.message : String(error)}`); }
-  return { manifestDigest, script: scriptBytes.toString('utf8'), args, scriptDigest, argsDigest };
+  if (stableJson(options.args) !== stableJson(args) || options.argsDigest !== argsDigest) throw new Error('Caller args do not match approved artifact');
+  const approvalPath = join(planDirectory, 'approval.receipt.json');
+  const approval = JSON.parse(await readFile(approvalPath, 'utf8')) as Record<string, unknown>;
+  const approvalValidator = await schemaValidator('receipt.schema.json');
+  if (!approvalValidator(approval)) throw new Error(`Invalid approval receipt: ${formatSchemaErrors(approvalValidator.errors)}`);
+  if (approval.receipt_version !== '2.0.0' || approval.engine !== 'worker-thread-trusted' || approval.plan_id !== diskManifest.plan_id || approval.host !== diskManifest.host || approval.manifest_digest !== manifestDigest || approval.script_digest !== scriptDigest || approval.args_digest !== argsDigest) throw new Error('Approval receipt does not match canonical artifacts');
+  return { manifestDigest, script: scriptBytes.toString('utf8'), args, scriptDigest, argsDigest, approvalDigest: objectDigest(approval) };
 }
 
 export interface V2LifecycleResult {
@@ -201,7 +217,7 @@ export async function startV2Run(options: StartV2RunOptions): Promise<RunRecordV
 }
 
 export async function runV2Script(options: V2ScriptRunOptions): Promise<RunRecordV2> {
-  const approved = await readApprovedScriptArtifacts(options.project, options.manifest);
+  const approved = await readApprovedScriptArtifacts(options.project, options);
   const manifestDigest = approved.manifestDigest;
   const planDirectory = join(options.project, '.ai-workflow', 'plans', options.manifest.plan_id);
   const manifestPath = join(planDirectory, 'workflow.json');
