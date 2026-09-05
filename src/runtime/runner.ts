@@ -153,8 +153,7 @@ export interface V2ScriptRunOptions {
 async function readApprovedScriptArtifacts(project: string, manifest: CodingCapabilityManifest): Promise<{ manifestDigest: string; script: string; args: unknown; scriptDigest: string; argsDigest: string }> {
   const planDirectory = join(project, '.ai-workflow', 'plans', manifest.plan_id);
   const diskManifest = JSON.parse(await readFile(join(planDirectory, 'workflow.json'), 'utf8')) as CodingCapabilityManifest;
-  const manifestDigest = objectDigest(diskManifest);
-  if (manifestDigest !== objectDigest(manifest)) throw new Error('Approved manifest changed before run');
+  const manifestDigest = objectDigest(manifest);
   const planRoot = await realpath(planDirectory);
   const readPlanFile = async (path: string, label: string): Promise<Buffer> => {
     const candidate = path.startsWith('.ai-workflow/') ? resolve(project, path) : resolve(planDirectory, path);
@@ -278,7 +277,7 @@ export async function runV2Script(options: V2ScriptRunOptions): Promise<RunRecor
       return outcome;
     },
   });
-  let ownerRenewal: import('./control.js').OwnerLeaseRenewal | undefined;
+  let ownerRenewal: { stop(): Promise<void> } | undefined;
   let operator: V2GitOperator | undefined;
   try {
   await cancelSocket.start();

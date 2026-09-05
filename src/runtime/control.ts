@@ -39,7 +39,7 @@ export interface OwnerLeaseOptions {
   isProcessAlive?: (identity: ProcessIdentity) => boolean | Promise<boolean>;
 }
 
-export interface OwnerLeaseRenewal {
+interface OwnerLeaseRenewal {
   stop(): Promise<void>;
 }
 
