@@ -30,7 +30,7 @@ describe('workflow generate CLI', () => {
     const generated = await workflowCli(project, ['workflow', 'generate', '--plan', plan, '--host', 'codex']);
 
     expect(JSON.parse(generated.stdout)).toMatchObject({ workflow: canonical });
-    await expect(readFile(canonical, 'utf8')).resolves.toContain('"plan_id": "20260831-example"');
+    expect(JSON.parse(await readFile(canonical, 'utf8'))).toMatchObject({ plan_id: '20260831-example' });
     const validation = await workflowCli(project, ['workflow', 'validate', canonical, '--project', '.']);
     expect(validation.stdout).toContain('"valid": true');
   });

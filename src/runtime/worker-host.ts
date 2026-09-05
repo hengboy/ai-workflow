@@ -10,6 +10,7 @@ export interface ChildRun {
   readonly result: Promise<CodingAgentResult>;
   readonly identity?: ProcessGroupIdentity;
   readonly reaped?: Promise<void>;
+  readonly reap?: () => Promise<'reaped' | 'already-exited'>;
   dispose(): Promise<void>;
 }
 
@@ -44,6 +45,7 @@ export interface WorkerRunOptions {
   audit?: HostAuditCallback | undefined;
   sandboxPreflight?: SandboxPreflightCallback | undefined;
   processRegistry?: ProcessRegistryCallback | undefined;
+  taskControl?: (descriptor: import('./protocol.js').TaskControlDescriptor) => Promise<{ state: 'finalized' | 'committed' | 'skipped'; receipt_digest: string }>;
   disposeGraceMs: number;
 }
 
@@ -51,6 +53,7 @@ interface ChildRecord {
   descriptor: CallDescriptor;
   run: ChildRun;
   disposal?: Promise<void>;
+  settlement?: Promise<void>;
 }
 
 type HostMessageBody = HostToWorkerMessage extends infer Message
@@ -100,14 +103,13 @@ export class WorkerRun {
     this.cancelReason = reason;
     this.controller.abort(reason);
     this.send({ type: 'cancel', reason });
-    this.reapChildren();
+    this.reapChildren(true);
     this.graceTimer = setTimeout(() => {
       this.terminalClaimed = true;
       this.endStrandedAgents();
       this.settle({ value: null, stop_reason: 'cancelled', error: `workflow run cancelled: ${reason}`, agents_started: this.liveAgents.size, completed_tasks: [], blocked_tasks: [] });
       void this.worker.terminate();
     }, this.options.disposeGraceMs);
-    this.graceTimer.unref();
   }
 
   dispose(): Promise<void> {
@@ -131,7 +133,7 @@ export class WorkerRun {
     if (this.workerGone || this.deathObserved) return;
     this.outboundMessageId += 1;
     const full = { ...message, protocol_version: '2.0.0' as const, run_id: this.options.runId, message_id: this.outboundMessageId } as HostToWorkerMessage;
-    try { this.worker.postMessage(JSON.parse(encodeMessage(full))); } catch { this.onDeath('failed to post worker message', false); }
+    try { this.worker.postMessage(JSON.parse(encodeMessage(full))); } catch (error) { if (!this.terminalClaimed) this.onDeath(`failed to post worker message (${message.type}): ${error instanceof Error ? error.message : String(error)}`, false); }
   }
 
   private onMessage(raw: unknown): void {
@@ -145,8 +147,22 @@ export class WorkerRun {
       case 'log': if (!this.cancelReason) this.options.observer?.log?.(message.message); break;
       case 'agent-start': void this.startChild(message.request_id, message.descriptor); break;
       case 'agent-dispose': void this.disposeChild(message.request_id, message.call_id); break;
-      case 'task-control': this.send({ type: 'task-control-error', request_id: message.request_id, control_id: message.control_descriptor.control_id, error: { code: 'ACTION_NOT_READY', message: 'task-control host adapter is not installed', fatal: true } }); break;
+      case 'task-control': void this.handleTaskControl(message.request_id, message.control_descriptor); break;
       case 'result': this.onResult(message.result); break;
+    }
+  }
+
+  private async handleTaskControl(requestId: string, descriptor: import('./protocol.js').TaskControlDescriptor): Promise<void> {
+    const taskControl = this.options.taskControl;
+    if (!taskControl) {
+      this.send({ type: 'task-control-error', request_id: requestId, control_id: descriptor.control_id, error: { code: 'ACTION_NOT_READY', message: 'task-control host adapter is not installed', fatal: true } });
+      return;
+    }
+    try {
+      const result = await taskControl(descriptor);
+      this.send({ type: 'task-control-settled', request_id: requestId, control_id: descriptor.control_id, state: result.state, receipt_digest: result.receipt_digest });
+    } catch (error) {
+      this.send({ type: 'task-control-error', request_id: requestId, control_id: descriptor.control_id, error: { code: 'ACTION_NOT_READY', message: error instanceof Error ? error.message : String(error), fatal: true } });
     }
   }
 
@@ -165,7 +181,7 @@ export class WorkerRun {
        await this.options.processRegistry?.({ type: 'registered', runId: this.options.runId, callId: descriptor.call_id, childId: run.id, ...(run.identity === undefined ? {} : { identity: run.identity }) });
       this.options.observer?.agentStart?.(descriptor, run.id);
       this.send({ type: 'agent-started', request_id: requestId, call_id: descriptor.call_id, child_id: run.id });
-      void run.result.then((result) => {
+      const settlement = run.result.then((result) => {
         this.send({ type: 'agent-settled', request_id: requestId, call_id: descriptor.call_id, result });
         this.options.observer?.agentEnd?.(descriptor, result.status === 'done' ? 'completed' : 'failed');
         this.liveAgents.delete(descriptor.call_id);
@@ -174,26 +190,31 @@ export class WorkerRun {
         this.options.observer?.agentEnd?.(descriptor, 'failed');
         this.liveAgents.delete(descriptor.call_id);
       });
+      const record = this.children.get(descriptor.call_id);
+      if (record) record.settlement = settlement.then(() => undefined, () => undefined);
      } catch (error) {
        const code = error && typeof error === 'object' && 'code' in error && typeof error.code === 'string' ? error.code : 'ACTION_NOT_READY';
        this.send({ type: 'agent-start-error', request_id: requestId, call_id: descriptor.call_id, error: { code: code as 'ACTION_NOT_READY', message: error instanceof Error ? error.message : String(error), fatal: true } });
      }
   }
 
-  private disposeChild(requestId: string, callId: string): Promise<void> {
+  private disposeChild(requestId: string, callId: string, cancellation = false): Promise<void> {
     const record = this.children.get(callId);
     if (!record) { this.send({ type: 'agent-disposed', request_id: requestId, call_id: callId }); return Promise.resolve(); }
      if (!record.disposal) record.disposal = (async () => {
-       await record.run.dispose().catch(() => undefined);
-       await record.run.reaped?.catch(() => undefined);
+        await record.run.dispose().catch(() => undefined);
+        if (cancellation) {
+          if (!record.run.identity || !record.run.reap) return;
+          await record.run.reap();
+        } else await record.run.reaped?.catch(() => undefined);
        await this.options.audit?.(record.descriptor, 'after-dispose');
        await this.options.processRegistry?.({ type: 'released', runId: this.options.runId, callId, childId: record.run.id, ...(record.run.identity === undefined ? {} : { identity: record.run.identity }) });
        this.children.delete(callId);
      })();
-    return record.disposal.then(() => { this.send({ type: 'agent-disposed', request_id: requestId, call_id: callId }); });
+     return record.disposal.then(() => { if (!this.terminalClaimed) this.send({ type: 'agent-disposed', request_id: requestId, call_id: callId }); });
   }
 
-  private reapChildren(): void { for (const [callId, record] of this.children) void this.disposeChild(callId, callId === record.descriptor.call_id ? callId : callId); }
+  private reapChildren(cancellation = false): void { for (const [callId, record] of this.children) void this.disposeChild(callId, callId === record.descriptor.call_id ? callId : callId, cancellation); }
 
   private endStrandedAgents(): void { for (const [callId, descriptor] of this.liveAgents) { this.options.observer?.agentEnd?.(descriptor, 'cancelled'); this.liveAgents.delete(callId); } }
 
@@ -201,7 +222,7 @@ export class WorkerRun {
     if (this.terminalClaimed) return;
     this.terminalClaimed = true;
     if (this.cancelReason && result.stop_reason !== 'cancelled') result = { ...result, value: null, stop_reason: 'cancelled', error: `workflow run cancelled: ${this.cancelReason}` };
-    this.reapChildren();
+    this.reapChildren(true);
     this.settle(result);
   }
 

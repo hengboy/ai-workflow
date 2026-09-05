@@ -7,4 +7,24 @@ const exec = promisify(execFile);
 describe('Git Operator helpers', () => {
   it('recognizes an unborn HEAD baseline', async () => { const root = await temporary(); await exec('git', ['init', '-b', 'main'], { cwd: root }); const baseline = await gitBaseline(root); expect(baseline.head).toBeNull(); expect(baseline.branch).toBe('main'); });
   it('denies remote and destructive operations', async () => { const root = await temporary(); await expect(git(root, ['push'])).rejects.toThrow(/forbidden/); await expect(git(root, ['reset', '--hard'])).rejects.toThrow(/forbidden/); });
+  it.each([
+    ['remote', ['remote', 'add', 'origin', 'https://example.test/repo.git']],
+    ['config', ['config', 'remote.origin.url', 'https://example.test/repo.git']],
+    ['upstream', ['branch', '--set-upstream-to', 'origin/main']],
+    ['subcommand option', ['fetch', '--all']],
+    ['forced branch move', ['branch', '-f', 'main', 'HEAD']],
+    ['branch rename', ['branch', '-M', 'main']],
+    ['forced worktree removal', ['worktree', 'remove', '--force', '/tmp/worktree']],
+    ['remote inspection', ['remote', '-v']],
+    ['upstream inspection', ['branch', '-vv']],
+    ['amended commit', ['commit', '--amend', '-m', 'changed']],
+    ['forced merge', ['merge', '--no-ff', '--no-edit', '--strategy', 'ours', 'topic']],
+    ['merge strategy option', ['merge', '--no-ff', '--no-edit', '--strategy-option', ' theirs', 'topic']],
+    ['merge multiple targets', ['merge', '--no-ff', '--no-edit', 'one', 'two']],
+    ['branch multiple targets', ['branch', '-D', 'one', 'two']],
+    ['forced commit option', ['commit', '--allow-empty', '-m', 'message', '--no-verify']],
+  ])('rejects %s Git mutation before spawning Git', async (_label, args) => {
+    const root = await temporary();
+    await expect(git(root, args)).rejects.toThrow(/forbidden|local allowlist/i);
+  });
 });

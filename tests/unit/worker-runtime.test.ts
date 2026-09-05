@@ -75,7 +75,7 @@ describe('worker runtime protocol and realm boundary', () => {
   });
 
   it('materializes cross-realm JSON values and rejects values JSON cannot preserve', () => {
-    const value = vm.runInNewContext('({ answer: 42, nested: [true, "ok"] })');
+    const value: unknown = vm.runInNewContext('({ answer: 42, nested: [true, "ok"] })');
     expect(materializeFromRealm(value)).toEqual({ answer: 42, nested: [true, 'ok'] });
 
     expect(() => materializeFromRealm(() => 1)).toThrow(MaterializeError);
@@ -147,6 +147,6 @@ describe('worker runtime protocol and realm boundary', () => {
       runId: 'run-2', script: `return pipeline([1, 2], { itemKeys: ['same', 'same'] }, (value) => value);`, args: {}, manifestDigest: digest, scriptDigest: digest, argsDigest: digest,
       actions: [], maxConcurrentAgents: 1, maxTotalAgents: 1, maxItemsPerCall: 4, maxScriptBytes: 1000, maxResultBytes: 1000, syncTimeoutMs: 1000, send: () => undefined,
     });
-    await expect(invalid.run()).resolves.toMatchObject({ stop_reason: 'error', error: expect.stringMatching(/itemKeys/) });
+    await expect(invalid.run()).resolves.toMatchObject({ stop_reason: 'error', error: expect.stringMatching(/itemKeys/) as unknown });
   });
 });

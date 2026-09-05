@@ -1,8 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import type { ActionProjection } from './worker-runtime.js';
+import type { TaskControlDescriptor } from './protocol.js';
 import { WorkerRun, type HostAuditCallback, type HostChildExecutor, type ProcessRegistryCallback, type SandboxPreflightCallback, type WorkflowObserver } from './worker-host.js';
 
 export interface CodingWorkflowStartOptions {
+  runId?: string;
   script: string;
   args?: unknown;
   manifestDigest: string;
@@ -21,11 +23,12 @@ export interface CodingWorkflowStartOptions {
   audit?: HostAuditCallback;
   sandboxPreflight?: SandboxPreflightCallback;
   processRegistry?: ProcessRegistryCallback;
+  taskControl?: (descriptor: TaskControlDescriptor) => Promise<{ state: 'finalized' | 'committed' | 'skipped'; receipt_digest: string }>;
 }
 
 export class CodingWorkflowEngine {
   start(options: CodingWorkflowStartOptions): WorkerRun {
-    const runId = `run-${randomUUID()}`;
+    const runId = options.runId ?? `run-${randomUUID()}`;
     return new WorkerRun({
       runId,
       worker: {
@@ -48,6 +51,7 @@ export class CodingWorkflowEngine {
       audit: options.audit,
       sandboxPreflight: options.sandboxPreflight,
       processRegistry: options.processRegistry,
+      ...(options.taskControl === undefined ? {} : { taskControl: options.taskControl }),
       disposeGraceMs: options.disposeGraceMs ?? 5_000,
     });
   }

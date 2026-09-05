@@ -113,11 +113,6 @@ function plainClone(value: unknown, label: string): unknown {
   return materialized === undefined ? undefined : structuredClone(materialized);
 }
 
-function defaultLabel(prompt: string): string {
-  const line = prompt.split('\n', 1)[0] ?? prompt;
-  return line.length <= 48 ? line : `${line.slice(0, 47)}...`;
-}
-
 function asWorkflowError(error: unknown): WorkflowError {
   return isFatal(error) ? error : new WorkflowError('SCRIPT_API_FORBIDDEN', renderThrown(error));
 }
@@ -186,7 +181,8 @@ export class WorkerRuntime {
 
   async run(): Promise<import('./protocol.js').WorkflowResult> {
     try {
-      if (this.cancelled) throw this.cancelled;
+      const cancelled = this.cancelled;
+      if (cancelled) throw new WorkflowError(cancelled.code, cancelled.message);
       const context = Object.create(null) as Record<string, unknown>;
       const args = plainClone(this.options.args ?? {}, 'args');
       context.args = deepFreeze(args);

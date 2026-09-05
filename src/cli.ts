@@ -10,12 +10,12 @@ import { validateWorkflow } from './workflow/validate.js';
 import { activateProfile, install, uninstall, initializeProject, updateProject } from './install/index.js';
 import { exists, readJson, writeJson } from './utils/fs.js';
 import { formatSchemaErrors, schemaValidator } from './utils/schema.js';
-import { objectDigest, sha256 } from './utils/hash.js';
+import { objectDigest, sha256, stableJson } from './utils/hash.js';
 import { createNavigationCandidate, refreshContext, validateContext, verifyNavigation } from './context/validate.js';
 import { locateContext } from './context/locate.js';
 import { discoverFallback, type FallbackPacket } from './context/fallback.js';
 import { resolveCandidatePath, resolveProjectRoot } from './context/paths.js';
-import { cancelV2Run, cleanupV2Run, projectV2Run, resumeV2Run, startV2Run } from './runtime/runner.js';
+import { cancelV2Run, cleanupV2Run, projectV2Run, resumeV2Run, runV2Script } from './runtime/runner.js';
 import { RunVersionError } from './runtime/store.js';
 import { readPlan } from './workflow/parse.js';
 import { gitBaseline } from './git/operator.js';
@@ -152,7 +152,7 @@ workflow.command('generate').description('Generate canonical .ai-workflow/plans/
   const directory = resolve(plan); const project = resolveProjectRoot(resolve(directory, '../../..')); const document = await readPlan(directory); const canonicalDirectory = join(project, '.ai-workflow', 'plans', document.planId); if (directory !== canonicalDirectory) throw new Error(`Workflow plan directory must be canonical: ${canonicalDirectory}`);
   if (script) await copyPlanLocalFile(directory, script, 'workflow.js', '--script');
   if (args) await copyPlanLocalFile(directory, args, 'workflow.args.json', '--args');
-  const manifest = await generateManifest(directory, host); const target = join(directory, 'workflow.json'); await writeFile(target, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8'); print({ workflow: target, manifest: { schema_version: manifest.schema_version, engine: manifest.engine } });
+  const manifest = await generateManifest(directory, host); const target = join(directory, 'workflow.json'); await writeFile(target, `${stableJson(manifest)}\n`, 'utf8'); print({ workflow: target, manifest: { schema_version: manifest.schema_version, engine: manifest.engine } });
 });
 workflow.command('validate').argument('<workflow>').option('--project <project>', '.').action(async (path: string, { project }: { project: string }) => { const result = await validateWorkflow(requireV2Manifest(await jsonFile<unknown>(path)), resolveProjectRoot(project)); print(result); if (!result.valid) process.exitCode = 1; });
 workflow.command('explain').argument('<workflow>').action(async (path: string) => {
@@ -180,8 +180,11 @@ run.command('start').requiredOption('--workflow <path>').requiredOption('--host 
   if (manifest.host !== options.host) throw new Error(`Host mismatch: manifest=${manifest.host}, requested=${options.host}`);
   const project = resolveProjectRoot(options.project); const validation = await validateWorkflow(manifest, project); if (!validation.valid) throw new Error(validation.errors.join('; '));
   await verifyV2Approval(resolve(options.workflow), manifest, project);
-  const runId = `run-${manifest.plan_id}-${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
-  print(await startV2Run({ project, runId, manifestDigest: objectDigest(manifest), fencingEpoch: 1 }));
+   const planDirectory = resolve(options.workflow, '..');
+   const script = await readFile(join(planDirectory, manifest.script.path), 'utf8');
+   const args = JSON.parse(await readFile(join(planDirectory, manifest.args.path), 'utf8')) as unknown;
+   const runId = `run-${manifest.plan_id}-${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
+   print(await runV2Script({ project, runId, manifest, script, args, scriptDigest: manifest.script.bytes_digest, argsDigest: manifest.args.bytes_digest }));
 });
 run.command('status').argument('<runId>').requiredOption('--project <project>').action(async (runId: string, { project }: { project: string }) => print(await v2RunCommand(() => projectV2Run(resolveProjectRoot(project), runId))));
 run.command('resume').argument('<runId>').requiredOption('--project <project>').action(async (runId: string, { project }: { project: string }) => print(await v2RunCommand(() => resumeV2Run(resolveProjectRoot(project), runId))));

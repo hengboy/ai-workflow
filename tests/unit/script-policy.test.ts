@@ -19,6 +19,8 @@ describe('workflow script policy', () => {
     expect(first.args.bytes.toString('utf8')).toBe('{}\n');
     expect(await readFile(join(plan, 'workflow.args.json'), 'utf8')).toBe('{}\n');
     expect(first.script.path).toBe('workflow.js');
+    expect(first.script.bytes.toString('utf8')).toContain('agent(');
+    expect(first.script.bytes.toString('utf8')).not.toContain('workflow.');
     expect(first.args.path).toBe('workflow.args.json');
   });
 
@@ -57,15 +59,15 @@ describe('workflow script policy', () => {
     const project = await temporary('ai-workflow-script-');
     const plan = join(project, '.ai-workflow/plans/20260831-example');
     await mkdir(plan, { recursive: true });
-    await writeFile(join(plan, 'workflow.js'), `workflow.action("unknown-action", "call-1");\nworkflow.pipeline("task-001-example-test", "call-2", ["same", "same"]);\n`);
+    await writeFile(join(plan, 'workflow.js'), `agent("unknown", { actionId: "unknown-action", callId: "call-1" });\npipeline(["a", "b"], { itemKeys: ["same", "same"] }, (value) => value);\n`);
 
     await expect(snapshotWorkflowScript({ projectDirectory: project, planDirectory: plan, planId: '20260831-example', actionIds: actions })).rejects.toThrow(/action|item key/i);
   });
 
   it.each([
-    ['missing call ID', 'workflow.action("task-001-example-test");'],
-    ['dynamic action ID', 'const id = "task-001-example-test"; workflow.action(id, "call-1");'],
-    ['dynamic pipeline items', 'workflow.pipeline("task-001-example-test", "call-1", items);'],
+    ['missing call ID', 'agent("prompt", { actionId: "task-001-example-test" });'],
+    ['dynamic action ID', 'const id = "task-001-example-test"; agent("prompt", { actionId: id, callId: "call-1" });'],
+    ['dynamic pipeline items', 'pipeline("items", { itemKeys: items }, (value) => value);'],
   ])('rejects %s', async (_name, source) => {
     const project = await temporary('ai-workflow-script-');
     const plan = join(project, '.ai-workflow/plans/20260831-example');

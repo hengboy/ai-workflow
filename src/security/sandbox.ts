@@ -1,5 +1,6 @@
 import { access } from 'node:fs/promises';
-import { constants } from 'node:fs';
+import { constants, realpathSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { sha256 } from '../utils/hash.js';
 
 export interface SandboxProbe {
@@ -94,11 +95,15 @@ function quoteProfilePath(value: string): string {
   return JSON.stringify(value).replaceAll('\\', '\\\\');
 }
 
+function physicalPath(path: string): string {
+  try { return realpathSync.native(path); } catch { return path; }
+}
+
 function seatbeltProfile(projectRoot: string, writePaths: readonly string[]): string {
   const writes = writePaths.length
-    ? writePaths.map((path) => `  (allow file-write* (subpath ${quoteProfilePath(path)}))`).join('\n')
+    ? writePaths.map((path) => `  (allow file-write* (literal ${quoteProfilePath(physicalPath(path))}))\n  (allow file-write* (subpath ${quoteProfilePath(physicalPath(path))}))`).join('\n')
     : '';
-  const git = `${projectRoot}/.git`;
+  const git = physicalPath(`${projectRoot}/.git`);
   return [
     '(version 1)',
     '(deny default)',
@@ -131,6 +136,7 @@ export class BrokeredSandboxProvider {
   private readonly options: SandboxProviderOptions;
 
   constructor(probe: SandboxProbe = defaultProbe(), options: SandboxProviderOptions = {}) {
+    if (options.useSeatbelt === false) reject('Seatbelt isolation is required for brokered action execution');
     this.capability = createActionSandboxCapability(probe, sha256('ai-workflow-action-sandbox-v2'));
     this.options = options;
   }
@@ -141,10 +147,11 @@ export class BrokeredSandboxProvider {
 
   spawnSpec(command: string, args: readonly string[], cwd: string): SandboxSpawnSpec {
     if (!cwd) reject('executor cwd is required');
-    const useSeatbelt = this.options.useSeatbelt ?? false;
+    const useSeatbelt = this.options.useSeatbelt ?? true;
     if (!useSeatbelt) return { command, args: [...args], env: executorEnvironment(this.options.brokerEnvironment) };
-    if (!this.options.projectRoot) reject('Seatbelt executor requires projectRoot');
-    const profile = seatbeltProfile(this.options.projectRoot, this.options.writePaths ?? []);
+    const projectRoot = this.options.projectRoot;
+    if (!projectRoot) reject('Seatbelt executor requires projectRoot');
+    const profile = seatbeltProfile(projectRoot, (this.options.writePaths ?? []).map((path) => resolve(projectRoot, path)));
     return {
       command: '/usr/bin/sandbox-exec',
       args: ['-p', profile, '--', command, ...args],
@@ -153,7 +160,6 @@ export class BrokeredSandboxProvider {
   }
 
   async available(): Promise<boolean> {
-    if (this.options.useSeatbelt !== true) return true;
     try { await access('/usr/bin/sandbox-exec', constants.X_OK); return true; } catch { return false; }
   }
 }

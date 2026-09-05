@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { join } from 'node:path';
 import { readFile, writeFile } from 'node:fs/promises';
+import { execFile as execFileCallback } from 'node:child_process';
+import { promisify } from 'node:util';
 import { V2GitOperator, type GitResourceReceipt } from '../../src/git/operator.js';
 import { git, gitBaseline } from '../../src/git/operator.js';
 import { gitInit, temporary } from '../helpers.js';
@@ -8,6 +10,7 @@ import { RunLedger } from '../../src/runtime/ledger.js';
 import { TaskClosureCoordinator, type TaskActionObservation } from '../../src/workflow/approval.js';
 
 const manifestDigest = `sha256:${'a'.repeat(64)}`;
+const execFile = promisify(execFileCallback);
 
 describe('v2 Git lifecycle', () => {
   it('creates fixed owned resources and commits with an ownership trailer', async () => {
@@ -69,6 +72,17 @@ describe('v2 Git lifecycle', () => {
     const operator = new V2GitOperator({ project, runId: 'run-stale', manifestDigest, fencingEpoch: 1 });
 
     await expect(operator.createPlanWorktree({ baseBranch: 'main', expectedHead: '0'.repeat(40) })).rejects.toMatchObject({ code: 'BASELINE_DRIFT' });
+  });
+
+  it('refuses integration when the target branch drifts after approval', async () => {
+    const project = await temporary();
+    await gitInit(project);
+    const initial = (await gitBaseline(project)).head!;
+    const operator = new V2GitOperator({ project, runId: 'run-integration-drift', manifestDigest, fencingEpoch: 1 });
+    const plan = await operator.createPlanWorktree({ baseBranch: 'main', expectedHead: initial });
+
+    await execFile('git', ['commit', '--allow-empty', '-m', 'external change'], { cwd: project, env: { ...process.env, GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: 'commit.gpgsign', GIT_CONFIG_VALUE_0: 'false' } });
+    await expect(operator.integratePlan(plan, { targetBranch: 'main', expectedHead: initial })).rejects.toMatchObject({ code: 'BASELINE_DRIFT' });
   });
 
   it('dry-runs and rejects a conflicting task merge', async () => {
@@ -151,6 +165,17 @@ describe('v2 Git lifecycle', () => {
 
     await expect(coordinator.finalizeTask({ taskId: 'task-002', controlId: 'finalize-failed', controlOrdinal: 1, activation: 'required', requiredActionIds: ['task-002-test'], actions: failed, predecessorStates: { 'task-001': 'finalized' }, finalizationMode: 'read-only-finalize' })).rejects.toMatchObject({ code: 'TASK_CLOSURE_INCOMPLETE' });
     await expect(coordinator.finalizeTask({ taskId: 'task-002', controlId: 'finalize-predecessor', controlOrdinal: 2, activation: 'required', requiredActionIds: ['task-002-test'], actions: [{ ...failed[0]!, remediated: true, state: 'observed', result: { status: 'done', tests: [{ command: 'pnpm test', status: 'passed' }] } }], predecessorStates: { 'task-001': 'pending' }, finalizationMode: 'read-only-finalize' })).rejects.toMatchObject({ code: 'TASK_PREDECESSOR_INCOMPLETE' });
+  });
+
+  it('finalizes a dependent task only after its predecessor closure is terminal', async () => {
+    const project = await temporary();
+    await gitInit(project);
+    const ledger = new RunLedger({ directory: join(project, '.ai-workflow/runs/closure-dependencies'), runId: 'closure-dependencies', fencingEpoch: 1 });
+    const coordinator = new TaskClosureCoordinator({ ledger });
+    const action = { action_id: 'task-002-test', state: 'checkpointed' as const, result: { status: 'done' as const, tests: [] } };
+
+    await expect(coordinator.finalizeTask({ taskId: 'task-002', controlId: 'finalize-dependent-pending', controlOrdinal: 1, activation: 'required', requiredActionIds: [action.action_id], actions: [action], predecessorStates: { 'task-001': 'pending' }, finalizationMode: 'read-only-finalize' })).rejects.toMatchObject({ code: 'TASK_PREDECESSOR_INCOMPLETE' });
+    await expect(coordinator.finalizeTask({ taskId: 'task-002', controlId: 'finalize-dependent-ready', controlOrdinal: 2, activation: 'required', requiredActionIds: [action.action_id], actions: [action], predecessorStates: { 'task-001': 'finalized' }, finalizationMode: 'read-only-finalize' })).resolves.toMatchObject({ state: 'finalized' });
   });
 
   it('skips a conditional task only with an explicit control reason', async () => {

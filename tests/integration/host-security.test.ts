@@ -70,6 +70,11 @@ describe('host security', () => {
     expect(new BrokeredSandboxProvider(probe()).mode).toBe('brokered-sandbox');
   });
 
+  it('requires the default provider path to use OS-level isolation', () => {
+    const provider = new BrokeredSandboxProvider(probe(), { projectRoot: '/tmp/project', writePaths: ['src/output.ts'] });
+    expect(provider.spawnSpec('codex', [], '/tmp/project').command).toBe('/usr/bin/sandbox-exec');
+  });
+
   it.each([
     ['broker', { brokerAvailable: false }],
     ['executor', { executorAvailable: false }],
@@ -85,16 +90,13 @@ describe('host security', () => {
     const root = await mkdtemp(join(tmpdir(), 'ai-workflow-sandbox-'));
     const executable = join(root, 'credential-check.mjs');
     await writeFile(executable, `#!/usr/bin/env node
-import { writeFile } from 'node:fs/promises';
-await writeFile('executor-env.json', JSON.stringify({ token: process.env.BROKER_TOKEN ?? null }));
-process.stdout.write(JSON.stringify({ status: 'done', summary: 'ok', changed_paths: [], evidence: [], tests: [], findings: [], git_refs: [], support_requests: [] }));
+process.stdout.write(JSON.stringify({ status: 'done', summary: process.env.BROKER_TOKEN ?? 'null', changed_paths: [], evidence: [], tests: [], findings: [], git_refs: [], support_requests: [] }));
 `);
     await chmod(executable, 0o755);
-    const provider = new BrokeredSandboxProvider(probe(), { brokerEnvironment: { BROKER_TOKEN: 'secret' } });
+    const provider = new BrokeredSandboxProvider(probe(), { projectRoot: root, brokerEnvironment: { BROKER_TOKEN: 'secret' } });
 
     const result = await invokeHost('codex', 'run', packet(root), { executable, args: [], sandbox: provider });
-    expect(result.status).toBe('done');
-    await expect(import('node:fs/promises').then(({ readFile }) => readFile(join(root, 'executor-env.json'), 'utf8'))).resolves.toBe('{"token":null}');
+    expect(result).toMatchObject({ status: 'done', summary: 'null' });
   });
 
   it('rejects a write/test adapter invocation without a brokered sandbox', async () => {
@@ -104,6 +106,10 @@ process.stdout.write(JSON.stringify({ status: 'done', summary: 'ok', changed_pat
 
     await expect(invokeHost('codex', 'run', packet(root, ['src/output.ts']), { executable, args: [] })).rejects.toThrowError(ActionSandboxError);
     expect(() => new ActionSandboxError('ACTION_SANDBOX_UNAVAILABLE', 'missing')).toBeTruthy();
+  });
+
+  it('fails closed when Seatbelt is explicitly disabled', () => {
+    expect(() => new BrokeredSandboxProvider(probe(), { useSeatbelt: false })).toThrowError(ActionSandboxError);
   });
 
   it('runs a disposable action executor through macOS Seatbelt with network denied', async () => {
@@ -157,6 +163,26 @@ try {
     expect(done.status).toBe('done');
   });
 
+  it('retains a cancelled child when its native process-group identity is unavailable', async () => {
+    const events: string[] = [];
+    let resolveResult!: (result: CodingAgentResult) => void;
+    const result = new Promise<CodingAgentResult>((resolve) => { resolveResult = resolve; });
+    const run = new CodingWorkflowEngine().start({
+      script: `await agent('live', { actionId: 'build', callId: 'cancel-no-identity' });`,
+      manifestDigest: digest, scriptDigest: digest, argsDigest: digest,
+      actions: [{ action_id: 'build', task_id: 'task-001-host' }], disposeGraceMs: 25,
+      childExecutor: { async start(): Promise<ChildRun> { return { id: 'child-no-identity', result, dispose: async () => undefined }; } },
+      processRegistry: (event) => { events.push(event.type); },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    run.cancel('retain without identity');
+    await expect(run.result).resolves.toMatchObject({ stop_reason: 'cancelled' });
+    resolveResult({ ...({ result_version: '2.0.0', status: 'done', summary: 'late', changed_paths: [], evidence: [], tests: [], findings: [], git_refs: [], support_requests: [] } as CodingAgentResult) });
+    await run.dispose();
+    expect(events).toContain('registered');
+    expect(events).not.toContain('released');
+  });
+
   it('returns a host fatal result when sandbox preflight rejects an action', async () => {
     const run = new CodingWorkflowEngine().start({
       script: `await agent('blocked', { actionId: 'build', callId: 'call-fatal' });`,
@@ -166,7 +192,7 @@ try {
       sandboxPreflight: () => { throw new ActionSandboxError('ACTION_SANDBOX_UNAVAILABLE', 'fixture sandbox unavailable'); },
     });
 
-    await expect(run.result).resolves.toMatchObject({ stop_reason: 'error', error: 'fixture sandbox unavailable' });
+    await expect(run.result).resolves.toMatchObject({ stop_reason: 'error', error: /fixture sandbox unavailable/ });
     await run.dispose();
   });
 });

@@ -42,7 +42,10 @@ const forbiddenIdentifiers = new Set([
   'setTimeout', 'setInterval', 'setImmediate', 'clearTimeout', 'clearInterval', 'clearImmediate',
   'XMLHttpRequest', 'WebSocket', 'net', 'http', 'https', 'fs', 'child_process', 'worker_threads',
 ]);
-const allowedFreeIdentifiers = new Set(['workflow', 'undefined']);
+const allowedFreeIdentifiers = new Set([
+  'agent', 'parallel', 'pipeline', 'phase', 'log', 'finalizeTask', 'skipAction', 'skipTask', 'args', 'undefined',
+  'Promise', 'Array', 'Object', 'String', 'Number', 'Boolean', 'JSON', 'Math',
+]);
 
 function pathInsideProject(projectDirectory: string, planDirectory: string): string {
   const relativePath = relative(resolve(projectDirectory), resolve(planDirectory)).split(sep).join('/');
@@ -88,11 +91,6 @@ function parseArray(node: ts.Node | undefined): string[] {
   return itemKeys;
 }
 
-function memberCall(node: ts.CallExpression): { method: string; args: ts.NodeArray<ts.Expression> } | undefined {
-  if (!ts.isPropertyAccessExpression(node.expression) || !ts.isIdentifier(node.expression.expression) || node.expression.expression.text !== 'workflow') return undefined;
-  return { method: node.expression.name.text, args: node.arguments };
-}
-
 function parseScript(source: string, actionIds: string[]): ScriptCall[] {
   const file = ts.createSourceFile('workflow.js', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
   const diagnostics = (file as ts.SourceFile & { parseDiagnostics?: readonly ts.Diagnostic[] }).parseDiagnostics ?? [];
@@ -100,7 +98,7 @@ function parseScript(source: string, actionIds: string[]): ScriptCall[] {
   const allowedActions = new Set(actionIds);
   if (allowedActions.size !== actionIds.length) throw new Error('Manifest action IDs must be unique');
   for (const statement of file.statements) {
-    if (!ts.isExpressionStatement(statement) || !ts.isCallExpression(statement.expression)) throw new Error('Script policy permits only workflow action statements');
+    if (ts.isImportDeclaration(statement) || ts.isExportDeclaration(statement) || ts.isExportAssignment(statement)) throw new Error('Script policy forbids import/export');
   }
   const calls: ScriptCall[] = [];
   const callIds = new Set<string>();
@@ -108,30 +106,39 @@ function parseScript(source: string, actionIds: string[]): ScriptCall[] {
     if (ts.isImportDeclaration(node) || ts.isImportEqualsDeclaration(node) || ts.isExportDeclaration(node) || ts.isExportAssignment(node) || ts.isNamespaceExport(node)) throw new Error('Script policy forbids import/export');
     if (ts.isIdentifier(node) && !allowedFreeIdentifiers.has(node.text)) {
       const parent = node.parent;
-      const propertyName = (ts.isPropertyAccessExpression(parent) && parent.name === node) || (ts.isPropertyAccessExpression(parent) && parent.expression === node && node.text === 'workflow');
+      const propertyName = (ts.isPropertyAccessExpression(parent) && parent.name === node)
+        || (ts.isPropertyAccessExpression(parent) && parent.expression === node && node.text === 'workflow')
+        || (ts.isPropertyAssignment(parent) && parent.name === node);
       const declarationName = ts.isVariableDeclaration(parent) || ts.isParameter(parent) || ts.isFunctionDeclaration(parent);
-      if (!propertyName && !declarationName) {
+      if (!propertyName && !declarationName && !allowedFreeIdentifiers.has(node.text)) {
         if (forbiddenIdentifiers.has(node.text)) throw new Error(`Script policy forbids ${node.text}`);
         throw new Error(`Script policy forbids free identifier ${node.text}`);
       }
     }
     if (ts.isCallExpression(node)) {
-      const call = memberCall(node);
-      if (!call) throw new Error('Script policy permits only workflow action calls');
-      const actionId = stringLiteral(call.args[0], 'action ID');
-      if (!allowedActions.has(actionId)) throw new Error(`Script references unknown action ${actionId}`);
-      const callId = stringLiteral(call.args[1], 'call ID');
-      if (callIds.has(callId)) throw new Error(`Script call ID is duplicated: ${callId}`);
-      callIds.add(callId);
-      if (call.method === 'action') {
-        if (call.args.length !== 2) throw new Error('Script action requires action ID and call ID');
-        calls.push({ kind: 'action', actionId, callId });
-      } else if (call.method === 'pipeline') {
-        if (call.args.length !== 3) throw new Error('Script pipeline requires action ID, call ID and itemKeys');
-        const itemKeys = parseArray(call.args[2]);
-        if (itemKeys.length === 0) throw new Error('Script pipeline itemKeys must not be empty');
-        calls.push({ kind: 'pipeline', actionId, callId, itemKeys });
-      } else throw new Error(`Script policy forbids workflow.${call.method}`);
+      if (ts.isPropertyAccessExpression(node.expression)) throw new Error('Script policy forbids namespace calls');
+      if (!ts.isIdentifier(node.expression)) throw new Error('Script policy permits only plain JavaScript hooks');
+      const method = node.expression.text;
+      if (['agent', 'parallel', 'pipeline', 'phase', 'log', 'finalizeTask', 'skipAction', 'skipTask'].includes(method)) {
+        if (method === 'agent') {
+          if (node.arguments.length !== 2) throw new Error('Script agent requires prompt and options');
+          const options = node.arguments[1];
+          if (!options || !ts.isObjectLiteralExpression(options)) throw new Error('Script agent options must be an object literal');
+          const actionId = stringLiteral(options.properties.find((property) => ts.isPropertyAssignment(property) && ts.isIdentifier(property.name) && property.name.text === 'actionId') && (options.properties.find((property) => ts.isPropertyAssignment(property) && ts.isIdentifier(property.name) && property.name.text === 'actionId') as ts.PropertyAssignment).initializer, 'action ID');
+          const callId = stringLiteral(options.properties.find((property) => ts.isPropertyAssignment(property) && ts.isIdentifier(property.name) && property.name.text === 'callId') && (options.properties.find((property) => ts.isPropertyAssignment(property) && ts.isIdentifier(property.name) && property.name.text === 'callId') as ts.PropertyAssignment).initializer, 'call ID');
+          if (!allowedActions.has(actionId)) throw new Error(`Script references unknown action ${actionId}`);
+          if (callIds.has(callId)) throw new Error(`Script call ID is duplicated: ${callId}`);
+          callIds.add(callId);
+          calls.push({ kind: 'action', actionId, callId });
+        } else if (method === 'pipeline') {
+          const config = node.arguments[1];
+          if (!config || !ts.isObjectLiteralExpression(config)) throw new Error('Script pipeline requires an itemKeys object');
+          const itemKeysProperty = config.properties.find((property) => ts.isPropertyAssignment(property) && ts.isIdentifier(property.name) && property.name.text === 'itemKeys');
+          const itemKeys = parseArray(itemKeysProperty && ts.isPropertyAssignment(itemKeysProperty) ? itemKeysProperty.initializer : undefined);
+          if (itemKeys.length === 0) throw new Error('Script pipeline itemKeys must not be empty');
+          calls.push({ kind: 'pipeline', actionId: 'pipeline', callId: `pipeline/${calls.length + 1}`, itemKeys });
+        }
+      }
     }
     ts.forEachChild(node, visit);
   };
@@ -140,7 +147,7 @@ function parseScript(source: string, actionIds: string[]): ScriptCall[] {
 }
 
 function defaultScript(actionIds: string[]): Buffer {
-  return Buffer.from(`${actionIds.map((actionId, index) => `workflow.action(${JSON.stringify(actionId)}, ${JSON.stringify(`action/${String(index + 1).padStart(4, '0')}/${actionId}`)});`).join('\n')}\n`, 'utf8');
+  return Buffer.from(`${actionIds.map((actionId, index) => `await agent(${JSON.stringify(`Execute ${actionId}`)}, { actionId: ${JSON.stringify(actionId)}, callId: ${JSON.stringify(`action/${String(index + 1).padStart(4, '0')}/${actionId}`)} });`).join('\n')}\n`, 'utf8');
 }
 
 function defaultMeta(planId: string): CodingWorkflowMeta {

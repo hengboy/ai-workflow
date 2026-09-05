@@ -1,14 +1,14 @@
 import { readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import AjvModule, { type ValidateFunction } from 'ajv';
+import AjvModule, { type AnySchema, type ValidateFunction } from 'ajv';
 import addFormatsModule from 'ajv-formats';
 
 const root = join(import.meta.dirname, '..', '..');
 const schemaDir = join(root, 'schemas');
 const generatedDir = join(root, 'src', 'generated');
 const digest = 'sha256:' + 'a'.repeat(64);
-const head = 'a'.repeat(40);
+type JsonSchema = Record<string, unknown>;
 
 async function validators(): Promise<Map<string, ValidateFunction>> {
   const Ajv = AjvModule as unknown as new (options: object) => import('ajv').default;
@@ -30,12 +30,12 @@ async function validators(): Promise<Map<string, ValidateFunction>> {
     'workflow-script-meta.schema.json',
     'workflow-v2.schema.json',
   ];
-  const schemas = await Promise.all(names.map(async (name) => [name, JSON.parse(await readFile(join(schemaDir, name), 'utf8'))] as const));
+  const schemas = await Promise.all(names.map(async (name) => [name, JSON.parse(await readFile(join(schemaDir, name), 'utf8')) as JsonSchema] as const));
   for (const [name, schema] of schemas) {
-    const alias = { ...schema };
+    const alias: JsonSchema = { ...schema };
     delete alias.$id;
-    ajv.addSchema(alias, `schemas/${name}`);
-    ajv.addSchema({ ...alias }, `schemas/schemas/${name}`);
+    ajv.addSchema(alias as AnySchema, `schemas/${name}`);
+    ajv.addSchema({ ...alias } as AnySchema, `schemas/schemas/${name}`);
   }
   return new Map(names.map((name) => {
     return [name, ajv.getSchema(`schemas/${name}`)!] as const;
@@ -102,10 +102,10 @@ describe('v2 machine contracts', () => {
   it('rejects illegal run states and v2 adjustments', async () => {
     const runValidate = (await validators()).get('coding-run.schema.json')!;
     expect(runValidate({ record_version: '2.0.0', engine: 'worker-thread-trusted', run_id: 'run-1', manifest_digest: digest, fencing_epoch: 1, run_state: 'failed', parent_run: 'root', started_at: '2026-09-03T00:00:00.000Z', updated_at: '2026-09-03T00:00:00.000Z', call_ledger: [], control_ledger: [], resources: [] })).toBe(false);
-    const adjustment = JSON.parse(await readFile(join(schemaDir, 'adjustment.schema.json'), 'utf8'));
+    const adjustment = JSON.parse(await readFile(join(schemaDir, 'adjustment.schema.json'), 'utf8')) as JsonSchema;
     const Ajv = AjvModule as unknown as new (options: object) => import('ajv').default;
     const ajv = new Ajv({ strict: true });
-    const validateAdjustment = ajv.compile(adjustment);
+    const validateAdjustment = ajv.compile(adjustment as AnySchema);
     expect(validateAdjustment({ version: '2.0.0', operations: [] })).toBe(false);
   });
 

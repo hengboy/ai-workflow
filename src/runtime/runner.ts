@@ -1,15 +1,15 @@
-import { basename, dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, relative, resolve, sep } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { readFile, rm } from 'node:fs/promises';
+import { lstat, readFile, realpath, rm } from 'node:fs/promises';
 import type { Workflow } from '../workflow/types.js';
-import { objectDigest } from '../utils/hash.js';
+import { objectDigest, sha256, stableJson } from '../utils/hash.js';
 import { verifyApproval } from '../workflow/approval.js';
 import { validateWorkflow } from '../workflow/validate.js';
-import { assertResumeFingerprint, loadRun, loadV2Run, saveRun, saveV2Run, type RunRecord, type RunRecordV2, type ResumeFingerprint } from './store.js';
+import { assertResumeFingerprint, loadRun, loadV2Run, saveRun, saveV2Run, type RunRecord, type RunRecordV2, type ResumeAuthorityEvidence, type ResumeFingerprint, type V2AuthorityDescriptor } from './store.js';
 import { EventLog } from './events.js';
 import { RunLedger } from './ledger.js';
 import { assertTransition, type RunState } from './state.js';
-import { commitTask, createPlanWorktree, createTaskWorktree, deleteOwnedBranches, gitBaseline, integratePlan, mergeTask, removeOwnedWorktrees, type Worktree } from '../git/operator.js';
+import { commitTask, createPlanWorktree, createTaskWorktree, deleteOwnedBranches, git, gitBaseline, integratePlan, mergeTask, removeOwnedWorktrees, type Worktree } from '../git/operator.js';
 import { readPlan, readTasks } from '../workflow/parse.js';
 import { invokeHost } from '../adapters/process.js';
 import { formatSchemaErrors, packagePath, schemaValidator } from '../utils/schema.js';
@@ -22,6 +22,17 @@ import { exists } from '../utils/fs.js';
 import { TaskClosureCoordinator, type TaskActionObservation } from '../workflow/approval.js';
 import { GateCoordinator, type GateReceipt } from './gates.js';
 import { V2GitOperator, type V2Worktree } from '../git/operator.js';
+import { CodingWorkflowEngine, type ChildRun } from './engine.js';
+import { ScopeScheduler } from './scheduler.js';
+import { admitAction } from '../security/capability.js';
+import type { CodingCapabilityManifest } from '../generated/coding-manifest.schema.js';
+import type { ActionCapability, ActionCapabilityManifest, TaskState } from '../security/capability.js';
+import type { CallDescriptor, CodingAgentResult, TaskControlDescriptor } from './protocol.js';
+import { BrokeredSandboxProvider } from '../security/sandbox.js';
+import { CancelControl, CancelSocket, ControlError, OwnerLease, RunControl, createLocalCancelCapability, readLocalCancelCapability, requestCancelSocket, cancelProof, cancelReasonDigest } from './control.js';
+import { captureWorktreeAudit, compareWorktreeAudits } from '../security/audit.js';
+import { RepairCoordinator, type ReviewFindingInput } from './repair.js';
+import { ManifestHostAuthority } from './host-authority.js';
 
 const activeControllers = new Map<string, AbortController>();
 class ReviewFindingsError extends Error {}
@@ -67,7 +78,7 @@ async function blockedFileExplorerResult(locator: LocateResult): Promise<AgentRe
 
 function assertAgentResult(node: Workflow['nodes'][number], value: unknown): asserts value is AgentResult { if (value === null || typeof value !== 'object' || !('status' in value) || ((value as { status?: unknown }).status !== 'done' && !(node.role === 'file-explorer' && (value as { status?: unknown }).status === 'blocked'))) throw new Error('Agent result did not report done'); const result = value as AgentResult; if (node.role === 'test' && result.tests.some((test) => test.status === 'failed')) throw new Error(`Required test failed: ${result.summary}`); if ((node.role === 'standards-review' || node.role === 'spec-review') && result.findings.some((finding) => finding.severity === 'error')) throw new ReviewFindingsError(`Review finding blocks integration: ${result.summary}`); }
 function hasReviewFindings(state: RunRecord['nodes'][string]): boolean { return (state.result as { reason?: unknown } | undefined)?.reason === 'review_findings'; }
-async function executeGitNode(record: RunRecord, workflow: Workflow, node: Workflow['nodes'][number]): Promise<unknown> { const { plan_worktree: planPath, plan_branch: planBranch, start_head: startHead } = record.resources; if (!planPath || !planBranch || !startHead) throw new Error('Incomplete plan worktree resources'); const plan: Worktree = { path: planPath, branch: planBranch, base: startHead }; const taskId = node.task_id; if (node.id.endsWith('-setup') && taskId) { const task = await createTaskWorktree(record.project, plan, record.run_id, taskId); record.resources.task_worktrees[taskId] = task.path; record.resources.task_branches[taskId] = task.branch; return task; } if (node.id.endsWith('-commit') && taskId) { const path = record.resources.task_worktrees[taskId]; if (!path) throw new Error(`Missing task worktree: ${taskId}`); const implementation = workflow.nodes.find((item) => item.task_id === taskId && item.id.endsWith('-implement')); const commit = await commitTask(path, taskId, implementation?.write_scope ?? []); record.resources.commits[taskId] = commit; await mergeTask(plan.path, commit); await removeOwnedWorktrees(record.project, [path]); return { commit }; } if (node.id === 'plan-integrate') { const commit = await integratePlan(record.project, plan.branch, record.resources.start_branch, record.resources.start_head); record.resources.merge_commit = commit; await removeOwnedWorktrees(record.project, [plan.path]); await deleteOwnedBranches(record.project, [...Object.values(record.resources.task_branches), plan.branch]); return { commit }; } throw new Error(`Unknown Git lifecycle node: ${node.id}`); }
+async function executeGitNode(record: RunRecord, workflow: Workflow, node: Workflow['nodes'][number]): Promise<unknown> { const { plan_worktree: planPath, plan_branch: planBranch, start_head: startHead } = record.resources; if (!planPath || !planBranch || !startHead) throw new Error('Incomplete plan worktree resources'); const plan: Worktree = { path: planPath, branch: planBranch, base: startHead }; const taskId = node.task_id; if (node.id.endsWith('-setup') && taskId) { const task = await createTaskWorktree(record.project, plan, record.run_id, taskId); record.resources.task_worktrees[taskId] = task.path; record.resources.task_branches[taskId] = task.branch; return task; } if (node.id.endsWith('-commit') && taskId) { const path = record.resources.task_worktrees[taskId]; if (!path) throw new Error(`Missing task worktree: ${taskId}`); const implementation = workflow.nodes.find((item) => item.task_id === taskId && item.id.endsWith('-implement')); const commit = await commitTask(path, taskId, implementation?.write_scope ?? []); record.resources.commits[taskId] = commit; await mergeTask(plan.path, commit); await removeOwnedWorktrees(record.project, [path]); record.resources.task_worktrees = Object.fromEntries(Object.entries(record.resources.task_worktrees).filter(([id]) => id !== taskId)); return { commit }; } if (node.id === 'plan-integrate') { const commit = await integratePlan(record.project, plan.branch, record.resources.start_branch, record.resources.start_head); record.resources.merge_commit = commit; await removeOwnedWorktrees(record.project, [plan.path]); delete record.resources.plan_worktree; await deleteOwnedBranches(record.project, [...Object.values(record.resources.task_branches), plan.branch]); return { commit }; } throw new Error(`Unknown Git lifecycle node: ${node.id}`); }
 
 async function executeNodes(record: RunRecord, workflow: Workflow, executor: (nodeId: string, context: ExecutionContext) => Promise<unknown>): Promise<void> { const pending = new Set(workflow.nodes.filter((node) => record.nodes[node.id]?.status !== 'done').map((node) => node.id)); while (pending.size && !record.cancelled) { const ready = workflow.nodes.filter((node) => pending.has(node.id) && node.depends_on.every((dep) => record.nodes[dep]?.status === 'done')).slice(0, workflow.concurrency); if (!ready.length) { record.resume_state = record.state; await advance(record, 'paused', 'No schedulable nodes'); return; } await Promise.all(ready.map(async (node) => { const state = record.nodes[node.id]; if (!state || state.status === 'done') return; state.status = 'running'; state.attempts += 1; await saveRun(record); try { const cwd = node.task_id ? record.resources.task_worktrees[node.task_id] ?? record.resources.plan_worktree ?? record.project : record.resources.plan_worktree ?? record.project; const result = node.kind === 'git' ? await executeGitNode(record, workflow, node) : await executor(node.id, { cwd, node }); if (node.kind !== 'git') assertAgentResult(node, result); state.result = result; if (node.role === 'file-explorer' && (result as AgentResult).status === 'blocked') state.status = 'blocked'; else { state.status = 'done'; pending.delete(node.id); await checkpoint(record, node.id); } } catch (error) { state.result = { error: error instanceof Error ? error.message : String(error), reason: error instanceof ReviewFindingsError ? 'review_findings' : 'execution_failure' }; if (node.on_failure === 'repair_once' && state.attempts === 1) { record.resume_state = 'repairing'; state.status = 'blocked'; } else if (state.attempts <= node.retry) state.status = 'pending'; else { state.status = 'failed'; pending.delete(node.id); } } await saveRun(record); })); if (Object.values(record.nodes).some((node) => node.status === 'failed' || node.status === 'blocked')) { if (Object.values(record.nodes).some((node) => node.status === 'blocked')) record.resume_state = 'repairing'; else record.resume_state = 'executing'; await advance(record, 'paused', 'Node failed or requires repair'); return; } }
   if (record.cancelled) return; await advance(record, 'validating', 'Task nodes complete'); await advance(record, 'reviewing', 'Validation gates complete'); await advance(record, 'integrating', 'Review gates complete'); await advance(record, 'complete', 'Integration complete'); await writeSummary(record);
@@ -93,6 +104,7 @@ export interface StartV2RunOptions {
   manifestDigest: string;
   fencingEpoch: number;
   parentRun?: string;
+  authority?: V2AuthorityDescriptor;
 }
 
 export interface V2LifecycleActionContext { cwd: string; taskId: string; actionId: string }
@@ -103,6 +115,79 @@ export interface V2LifecycleOptions {
   manifest: { manifest_digest: string; target_branch?: string; tasks: Array<{ task_id: string; activation: 'required' | 'conditional'; finalization_mode: 'read-only-finalize' | 'commit-and-merge'; required_actions: string[]; depends_on: string[] }>; actions: Array<{ action_id: string; task_id: string; operation: string; write_scope: string[] }> };
   fencingEpoch?: number;
   execute: (context: V2LifecycleActionContext) => Promise<V2LifecycleActionResult>;
+  script?: string;
+  args?: unknown;
+  scriptDigest?: string;
+  argsDigest?: string;
+  gateEvidence: {
+    planValidation: { valid: boolean; errors: string[] };
+    standardsReview: { findings: Array<{ severity: 'error' | 'warning' | 'info'; finding_id?: string }> };
+    specReview: { findings: Array<{ severity: 'error' | 'warning' | 'info'; finding_id?: string }> };
+    repairClosure: { closedFindingIds: string[]; expectedFindingIds: string[] };
+    baseline: { expected: string; current: string };
+    integration: { observed: boolean; noFastForward: boolean; mergeCommit?: string };
+  };
+  planAuthority?: () => Promise<{ valid: boolean; errors: string[] }>;
+  reviewAuthority?: {
+    standardsReview: () => Promise<{ findings: Array<{ severity: 'error' | 'warning' | 'info'; finding_id?: string; message?: string; path?: string; applicableActionIds?: string[] }> }>;
+    specReview: () => Promise<{ findings: Array<{ severity: 'error' | 'warning' | 'info'; finding_id?: string; message?: string; path?: string; applicableActionIds?: string[] }> }>;
+  };
+  repairAuthority?: {
+    repair: (context: { cwd: string }) => Promise<{ changedPaths: string[] }>;
+    test: (context: { cwd: string; taskId: string }) => Promise<{ tests: Array<{ command: string; status: 'passed' | 'failed' | 'skipped' }> }>;
+    recheck: (finding: { findingId: string; taskId: string }) => Promise<{ state: 'open' | 'closed'; evidence: string[] }>;
+  };
+}
+
+export interface V2ScriptRunOptions {
+  project: string;
+  runId: string;
+  manifest: CodingCapabilityManifest;
+  script: string;
+  args: unknown;
+  scriptDigest: string;
+  argsDigest: string;
+  cancelPeerUid?: (socket: import('node:net').Socket) => number | Promise<number>;
+}
+
+async function readApprovedScriptArtifacts(project: string, options: V2ScriptRunOptions): Promise<{ manifestDigest: string; script: string; args: unknown; scriptDigest: string; argsDigest: string; approvalDigest: string }> {
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(options.manifest.plan_id)) throw new Error('Manifest plan_id is not canonical');
+  const planDirectory = join(resolve(project), '.ai-workflow', 'plans', options.manifest.plan_id);
+  const planStats = await lstat(planDirectory);
+  const projectRoot = await realpath(resolve(project));
+  const planRoot = await realpath(planDirectory);
+  if (planStats.isSymbolicLink() || !planStats.isDirectory() || relative(projectRoot, planRoot) !== `.ai-workflow/plans/${options.manifest.plan_id}`) throw new Error('Manifest plan directory is not canonical');
+  const workflowPath = join(planDirectory, 'workflow.json');
+  const workflowBytes = await readFile(workflowPath);
+  const diskManifest = JSON.parse(workflowBytes.toString('utf8')) as CodingCapabilityManifest;
+  const diskValidation = await validateWorkflow(diskManifest, project);
+  if (!diskValidation.valid) throw new Error(`Canonical manifest is invalid: ${diskValidation.errors.join('; ')}`);
+  const manifestDigest = objectDigest(diskManifest);
+  if (!workflowBytes.equals(Buffer.from(`${stableJson(diskManifest)}\n`, 'utf8')) || objectDigest(options.manifest) !== manifestDigest) throw new Error('Caller manifest does not match canonical manifest bytes');
+  if (diskManifest.plan_id !== options.manifest.plan_id || diskManifest.script.path !== 'workflow.js' || diskManifest.args.path !== 'workflow.args.json') throw new Error('Manifest artifact paths are not canonical plan-local paths');
+  const readPlanFile = async (path: string, label: string): Promise<Buffer> => {
+    const candidate = resolve(planDirectory, path);
+    const stats = await lstat(candidate);
+    const actual = await realpath(candidate);
+    const planRelative = relative(planRoot, actual);
+    if (stats.isSymbolicLink() || !stats.isFile() || planRelative === '..' || planRelative.startsWith(`..${sep}`)) throw new Error(`${label} must be a plan-local regular file: ${candidate}`);
+    return readFile(actual);
+  };
+  const scriptBytes = await readPlanFile('workflow.js', 'script');
+  const argsBytes = await readPlanFile('workflow.args.json', 'args');
+  const scriptDigest = sha256(scriptBytes);
+  const argsDigest = sha256(argsBytes);
+  if (scriptDigest !== diskManifest.script.bytes_digest || argsDigest !== diskManifest.args.bytes_digest) throw new Error('Approved artifact digest drift');
+  if (Buffer.from(options.script, 'utf8').compare(scriptBytes) !== 0 || options.scriptDigest !== scriptDigest) throw new Error('Caller script does not match approved artifact');
+  let args: unknown;
+  try { args = JSON.parse(argsBytes.toString('utf8')) as unknown; } catch (error) { throw new Error(`Approved args are invalid JSON: ${error instanceof Error ? error.message : String(error)}`); }
+  if (stableJson(options.args) !== stableJson(args) || options.argsDigest !== argsDigest) throw new Error('Caller args do not match approved artifact');
+  const approvalPath = join(planDirectory, 'approval.receipt.json');
+  const approval = JSON.parse(await readFile(approvalPath, 'utf8')) as Record<string, unknown>;
+  const approvalValidator = await schemaValidator('receipt.schema.json');
+  if (!approvalValidator(approval)) throw new Error(`Invalid approval receipt: ${formatSchemaErrors(approvalValidator.errors)}`);
+  if (approval.receipt_version !== '2.0.0' || approval.engine !== 'worker-thread-trusted' || approval.plan_id !== diskManifest.plan_id || approval.host !== diskManifest.host || approval.manifest_digest !== manifestDigest || approval.script_digest !== scriptDigest || approval.args_digest !== argsDigest) throw new Error('Approval receipt does not match canonical artifacts');
+  return { manifestDigest, script: scriptBytes.toString('utf8'), args, scriptDigest, argsDigest, approvalDigest: objectDigest(approval) };
 }
 
 export interface V2LifecycleResult {
@@ -120,11 +205,337 @@ export async function startV2Run(options: StartV2RunOptions): Promise<RunRecordV
   const directory = join(options.project, '.ai-workflow/runs', options.runId);
   if (await exists(join(directory, 'state.json')) || await exists(join(directory, 'events.jsonl'))) throw new Error(`Run already exists: ${options.runId}`);
   const now = new Date().toISOString();
-  const record: RunRecordV2 = { record_version: '2.0.0', engine: 'worker-thread-trusted', run_id: options.runId, manifest_digest: options.manifestDigest, fencing_epoch: options.fencingEpoch, run_state: 'preflight', parent_run: options.parentRun ?? 'root', started_at: now, updated_at: now, call_ledger: [], control_ledger: [], resources: [], completed_tasks: [], blocked_tasks: [] };
+  const socketPath = `/tmp/aiw-${objectDigest({ project: resolve(options.project), runId: options.runId }).slice(-16)}.sock`;
+  const cancelControl = new CancelControl({ root: options.project, runId: options.runId, owner: { osUid: -1, identityDigest: 'unbound' }, fencingEpoch: options.fencingEpoch, socketPath });
+  const record: RunRecordV2 = { record_version: '2.0.0', engine: 'worker-thread-trusted', run_id: options.runId, manifest_digest: options.manifestDigest, fencing_epoch: options.fencingEpoch, run_state: 'preflight', parent_run: options.parentRun ?? 'root', started_at: now, updated_at: now, call_ledger: [], control_ledger: [], resources: [], completed_tasks: [], blocked_tasks: [], ...(options.authority === undefined ? {} : { authority: options.authority }) };
+  const { writeJson } = await import('../utils/fs.js');
+  await writeJson(join(directory, 'control', 'cancel-authority.json'), cancelControl.authority);
   const log = v2EventLog(options.project, options.runId, options.fencingEpoch);
   await log.append({ type: 'run/start', payload: { engine: 'worker-thread-trusted', manifest_digest: options.manifestDigest, state: 'preflight' } });
   await saveV2Run(options.project, record);
   return record;
+}
+
+export async function runV2Script(options: V2ScriptRunOptions): Promise<RunRecordV2> {
+  const approved = await readApprovedScriptArtifacts(options.project, options);
+  const manifestDigest = approved.manifestDigest;
+  const planDirectory = join(options.project, '.ai-workflow', 'plans', options.manifest.plan_id);
+  const manifestPath = join(planDirectory, 'workflow.json');
+  const scriptPath = join(planDirectory, options.manifest.script.path);
+  const argsPath = join(planDirectory, options.manifest.args.path);
+  const approvalPath = join(planDirectory, 'approval.receipt.json');
+  const baseline = await gitBaseline(options.project);
+  const approvalDigest = approved.approvalDigest;
+  const runAuthority: V2AuthorityDescriptor = {
+    authority_version: '1.0.0', manifest_path: manifestPath, manifest_digest: manifestDigest,
+    script_path: scriptPath, script_digest: approved.scriptDigest, args_path: argsPath, args_digest: approved.argsDigest,
+    approval_path: approvalPath, approval_digest: approvalDigest,
+    profile_digest: objectDigest({ host: options.manifest.host, adapter: options.manifest.host_execution.adapter, engine: options.manifest.engine }),
+    sandbox_digest: objectDigest(options.manifest.host_execution),
+    baseline_digest: objectDigest({ branch: baseline.branch, head: baseline.head }), fencing_epoch: 1,
+    restart_capability: 'worker-thread-trusted-v2',
+  };
+  const record = await startV2Run({ project: options.project, runId: options.runId, manifestDigest, fencingEpoch: 1, authority: runAuthority });
+  const directory = join(options.project, '.ai-workflow/runs', options.runId);
+  const events = v2EventLog(options.project, options.runId, record.fencing_epoch);
+  const ledger = new RunLedger({ directory, runId: options.runId, fencingEpoch: record.fencing_epoch, eventLog: events });
+  const uid = process.getuid?.();
+  if (uid === undefined) throw new Error('CANCEL_UNAUTHORIZED: local process identity is unavailable');
+  const authorityPath = join(directory, 'control', 'cancel-authority.json');
+  const cancelAuthority = JSON.parse(await readFile(authorityPath, 'utf8')) as import('./control.js').CancelAuthority;
+  const { writeJson } = await import('../utils/fs.js');
+  const identityDigest = objectDigest({ runId: options.runId, manifest: manifestDigest });
+  const localCapability = await createLocalCancelCapability(options.project, options.runId, record.fencing_epoch);
+  const cancelControl = new CancelControl({ root: options.project, runId: options.runId, owner: { osUid: uid, identityDigest }, fencingEpoch: record.fencing_epoch, nonce: cancelAuthority.challenge_nonce, socketPath: cancelAuthority.socket_path, localCapability });
+  let runControl: RunControl | undefined;
+  let liveWorker: ReturnType<CodingWorkflowEngine['start']> | undefined;
+  const liveActions = new Map<string, { callId: string; controller: AbortController; completion?: Promise<void> }>();
+  let cancelRequested = false;
+  const cancelSocket = new CancelSocket(cancelControl, {
+    socketPath: cancelAuthority.socket_path,
+    ...(options.cancelPeerUid === undefined ? {} : { peerUid: options.cancelPeerUid }),
+    requestCancel: async (request) => {
+      const outcome = runControl ? await runControl.requestCancel(request) : await cancelControl.requestCancel(request);
+      if (outcome.won) {
+        cancelRequested = true;
+        liveWorker?.cancel(outcome.intent.reason);
+      }
+      return outcome;
+    },
+    requestLocalCancel: async (request) => {
+      const outcome = runControl ? await runControl.requestLocalCancel(request) : await cancelControl.requestLocalCancel(request);
+      if (outcome.won) {
+        cancelRequested = true;
+        liveWorker?.cancel(outcome.intent.reason);
+      }
+      return outcome;
+    },
+  });
+  let ownerLease: OwnerLease | undefined;
+  let owner: import('./control.js').OwnerLeaseRecord | undefined;
+  let ownerRenewal: { stop(): Promise<void> } | undefined;
+  let operator: V2GitOperator | undefined;
+  let socketStarted = false;
+  let setupFailed = false;
+  let ownerRenewalFailure: Error | undefined;
+  try {
+  socketStarted = true;
+  await cancelSocket.start();
+  const ownerUid = uid;
+  ownerLease = new OwnerLease({ root: options.project, runId: options.runId, owner: { osUid: ownerUid, identityDigest }, process: { pid: process.pid, pgid: process.pid, startIdentity: `${process.pid}:${record.started_at}`, spawnNonce: record.run_id }, leaseMs: 30_000 });
+  owner = await ownerLease.acquire({ wait: false });
+  const persistedAuthority = { ...cancelAuthority, owner_uid: owner.owner.osUid, owner_identity_digest: identityDigest, local_control_path: join(directory, 'control', 'owner-capability.json') };
+  const scheduler = new ScopeScheduler({ maxConcurrent: options.manifest.limits.max_concurrent_agents });
+  const activeRunControl = new RunControl({
+    ownerLease,
+    owner,
+    cancelControl,
+    scheduler,
+    abortChild: (lease, reason) => {
+      liveActions.get(lease.admission_id)?.controller.abort(reason);
+      liveWorker?.cancel(reason);
+    },
+    reapChild: async (lease) => { await liveActions.get(lease.admission_id)?.completion; },
+    reconcileChild: async (lease) => {
+      const action = liveActions.get(lease.admission_id);
+      if (action) await ledger.reconcileCall(action.callId);
+    },
+  });
+  runControl = activeRunControl;
+  const control = activeRunControl;
+  await writeJson(authorityPath, persistedAuthority);
+  await events.append({ type: 'run/lease-acquired', payload: { state: 'executing', manifest_digest: manifestDigest } });
+  const actionStates: Record<string, import('../security/capability.js').ActionState> = {};
+  const taskStates: Record<string, import('../security/capability.js').TaskState> = Object.fromEntries(options.manifest.tasks.map((task) => [task.task_id, task.depends_on.length ? 'pending' : 'ready']));
+  const actionMap = new Map(options.manifest.actions.map((action) => [action.action_id, action]));
+  const actionObservations = new Map<string, TaskActionObservation[]>();
+   operator = new V2GitOperator({ project: options.project, runId: options.runId, manifestDigest, fencingEpoch: record.fencing_epoch, targetBranch: options.manifest.project.target_branch });
+  const planWorktree = await operator.createPlanWorktree({ baseBranch: options.manifest.project.target_branch });
+  const taskWorktrees = new Map<string, V2Worktree>();
+  for (const task of options.manifest.tasks) taskWorktrees.set(task.task_id, await operator.createTaskWorktree(planWorktree, task.task_id));
+  record.resources = operator.resources as unknown[];
+  await saveV2Run(options.project, record);
+  const childExecutor = {
+    start: async (descriptor: CallDescriptor, signal: AbortSignal): Promise<ChildRun> => {
+      const action = actionMap.get(descriptor.action_id);
+      if (!action) throw new Error(`ACTION_NOT_AUTHORIZED: ${descriptor.action_id}`);
+      const worktree = taskWorktrees.get(action.task_id);
+      if (!worktree) throw new Error(`TASK_NOT_AUTHORIZED: ${action.task_id}`);
+        const controlled = await control.admitAction({ manifest: options.manifest, action_id: action.action_id, run_id: options.runId, cwd: worktree.path, attempt: 1, task_states: taskStates, action_states: actionStates, active_hosts: [options.manifest.host] });
+       const { lease } = controlled;
+       const controller = new AbortController();
+       liveActions.set(lease.admission_id, { callId: descriptor.call_id, controller });
+       try {
+          await control.assertActionActive(lease);
+         await ledger.prepareCall({ callId: descriptor.call_id, callOrdinal: descriptor.call_ordinal, descriptor: descriptor as unknown as import('./ledger.js').CallDescriptor });
+          await control.assertActionActive(lease);
+         await ledger.dispatchIntent(descriptor.call_id);
+         actionStates[action.action_id] = 'dispatch_intent';
+         if (signal.aborted) controller.abort(signal.reason);
+         signal.addEventListener('abort', () => controller.abort(signal.reason), { once: true });
+          await control.assertActionActive(lease);
+         await ledger.markRunning(descriptor.call_id);
+         actionStates[action.action_id] = 'running';
+         const packet: AgentPacket = { packet_version: '1.0.0', run_id: options.runId, plan_id: options.manifest.plan_id, task_id: action.task_id, role: action.role, objective: `Execute approved action ${action.action_id}`, cwd: worktree.path, read_paths: action.read_scope, write_paths: action.write_scope, evidence: action.requires_actions, screenshot_dir: `.ai-workflow/plans/${options.manifest.plan_id}/screenshot/`, allowed_commands: action.allowed_commands, timeout_ms: options.manifest.limits.sync_timeout_ms, result_schema: 'schemas/result.schema.json' };
+          await control.assertActionActive(lease);
+         const beforeAudit = await captureWorktreeAudit(worktree.path);
+         const result = invokeHost(options.manifest.host, 'Execute approved action', packet, { signal: controller.signal, sandbox: new BrokeredSandboxProvider(undefined, { projectRoot: options.project, writePaths: action.write_scope.map((path) => join(worktree.path, path)) }) }) as unknown as Promise<CodingAgentResult>;
+      const observed = result.then(async (value) => {
+        if (lease.released) throw new ControlError('CANCEL_CONTROL_STALE', 'action was cancelled before the host result was observed');
+        const typed = value as unknown as import('../generated/coding-agent-result.schema.js').CodingAgentResult;
+        await ledger.observeCall(descriptor.call_id, typed);
+        const changedPaths = value.changed_paths.filter((path): path is string => typeof path === 'string');
+        const afterAudit = await captureWorktreeAudit(worktree.path);
+        const audit = compareWorktreeAudits(beforeAudit, afterAudit, action.write_scope, [` .ai-workflow/plans/${options.manifest.plan_id}/screenshot/`.trim()]);
+        const violations = [...changedPaths.filter((path) => !action.write_scope.some((scope) => path === scope || path.startsWith(`${scope}/`))), ...audit.out_of_scope_paths];
+        if (violations.length) {
+          await events.append({ type: 'call/audit-failed', call_id: descriptor.call_id, task_id: action.task_id, payload: { action_id: action.action_id, state: 'blocked', reason: `changed paths outside scope: ${violations.join(', ')}` } });
+          await events.append({ type: 'call/reconcile-required', call_id: descriptor.call_id, task_id: action.task_id, payload: { action_id: action.action_id, state: 'reconcile_required', reason: 'action result failed scope audit' } });
+          await control.settleAction(lease, 'blocked');
+          liveActions.delete(lease.admission_id);
+          throw new Error(`ACTION_SCOPE_VIOLATION: ${violations.join(', ')}`);
+        }
+        await ledger.checkpointCall(descriptor.call_id, changedPaths);
+        actionStates[action.action_id] = value.status === 'done' ? 'checkpointed' : 'observed';
+        actionObservations.set(action.task_id, [...(actionObservations.get(action.task_id) ?? []), {
+          action_id: action.action_id,
+          state: value.status === 'done' ? 'checkpointed' : 'failed',
+          result: { status: value.status, tests: value.tests.filter((test): test is { command: string; status: 'passed' | 'failed' | 'skipped' } => typeof test === 'object' && test !== null && typeof (test as { command?: unknown }).command === 'string' && ['passed', 'failed', 'skipped'].includes((test as { status?: unknown }).status as string)) },
+        }]);
+        await control.settleAction(lease, value.status === 'done' ? 'completed' : 'blocked', value.status === 'done' ? () => undefined : async () => { await ledger.reconcileCall(descriptor.call_id); });
+        liveActions.delete(lease.admission_id);
+        return value;
+      }, async (error: unknown) => {
+        if (!lease.released) {
+          await control.settleAction(lease, 'blocked', async () => { await ledger.reconcileCall(descriptor.call_id); });
+          liveActions.delete(lease.admission_id);
+        }
+        throw error;
+      });
+         const completion = observed.then(() => undefined, () => undefined);
+         liveActions.set(lease.admission_id, { callId: descriptor.call_id, controller, completion });
+         return { id: descriptor.call_id, result: observed, dispose: () => Promise.resolve(controller.abort('disposed')) };
+       } catch (error) {
+          await control.releaseAction(lease, 'cancelled', async () => { if (await ledger.replaySubmissionOrder().then((entries) => entries.some((entry) => entry.call_id === descriptor.call_id))) await ledger.reconcileCall(descriptor.call_id).catch(() => undefined); }).catch(() => undefined);
+         liveActions.delete(lease.admission_id);
+         throw error;
+       }
+    },
+  };
+  const trace: string[] = [];
+  ownerRenewal = runControl.startOwnerRenewal({ intervalMs: 10_000, onFailure: async (error) => {
+    ownerRenewalFailure = error instanceof Error ? error : new Error(String(error));
+    await events.append({ type: 'run/error', payload: { state: 'paused', stop_reason: 'error', reason: `owner lease renewal failed: ${error instanceof Error ? error.message : String(error)}` } });
+    liveWorker?.cancel('owner lease renewal failed');
+  } });
+  liveWorker = new CodingWorkflowEngine().start({ runId: options.runId, script: approved.script, args: approved.args, manifestDigest, scriptDigest: approved.scriptDigest, argsDigest: approved.argsDigest, actions: options.manifest.actions.map((action) => ({ action_id: action.action_id, task_id: action.task_id, action_digest: objectDigest(action) })), maxConcurrentAgents: options.manifest.limits.max_concurrent_agents, maxTotalAgents: options.manifest.limits.max_total_agents, maxItemsPerCall: options.manifest.limits.max_items_per_call, syncTimeoutMs: options.manifest.limits.sync_timeout_ms, disposeGraceMs: options.manifest.limits.dispose_grace_ms, childExecutor, taskControl: async (descriptor: TaskControlDescriptor) => {
+    if (descriptor.operation !== 'skip-task' && descriptor.operation !== 'finalize-task') throw new Error('unsupported task control operation');
+    const task = options.manifest.tasks.find((candidate) => candidate.task_id === descriptor.task_id);
+    if (!task || !descriptor.task_id) throw new Error('task control requires an authorized task');
+    const coordinator = new TaskClosureCoordinator({ ledger });
+    let receipt;
+    if (descriptor.operation === 'skip-task') {
+       receipt = await coordinator.skipTask({ taskId: task.task_id, controlId: descriptor.control_id, controlOrdinal: descriptor.control_ordinal, activation: task.activation, requiredActionIds: [], actions: [], predecessorStates: Object.fromEntries(task.depends_on.map((dependency) => [dependency, ['done', 'finalized'].includes(taskStates[dependency] ?? '') ? 'finalized' : 'pending'])), reason: descriptor.reason ?? '' });
+     } else if (task.finalization_mode === 'commit-and-merge') {
+       const taskWorktree = taskWorktrees.get(task.task_id);
+       if (!taskWorktree) throw new Error(`TASK_CLOSURE_INCOMPLETE: task worktree is missing: ${task.task_id}`);
+       if (!operator) throw new Error('Git operator is unavailable');
+        receipt = await coordinator.finalizeTask({ taskId: task.task_id, controlId: descriptor.control_id, controlOrdinal: descriptor.control_ordinal, activation: task.activation, requiredActionIds: task.required_actions, actions: actionObservations.get(task.task_id) ?? [], predecessorStates: Object.fromEntries(task.depends_on.map((dependency) => [dependency, ['done', 'finalized'].includes(taskStates[dependency] ?? '') ? 'finalized' : 'pending'])), finalizationMode: task.finalization_mode, taskWorktree, planWorktree, writeScope: options.manifest.actions.filter((action) => action.task_id === task.task_id).flatMap((action) => action.write_scope), operator });
+    } else {
+       receipt = await coordinator.finalizeTask({ taskId: task.task_id, controlId: descriptor.control_id, controlOrdinal: descriptor.control_ordinal, activation: task.activation, requiredActionIds: task.required_actions, actions: actionObservations.get(task.task_id) ?? [], predecessorStates: Object.fromEntries(task.depends_on.map((dependency) => [dependency, ['done', 'finalized'].includes(taskStates[dependency] ?? '') ? 'finalized' : 'pending'])), finalizationMode: task.finalization_mode });
+    }
+    taskStates[task.task_id] = receipt.state === 'skipped' ? 'done' : 'finalized';
+    if (receipt.state === 'skipped' && !record.blocked_tasks?.includes(task.task_id)) record.blocked_tasks = [...(record.blocked_tasks ?? []), task.task_id];
+    else if (receipt.state !== 'skipped' && !record.completed_tasks?.includes(task.task_id)) record.completed_tasks = [...(record.completed_tasks ?? []), task.task_id];
+    return { state: receipt.state, receipt_digest: objectDigest(receipt) };
+  }, observer: { phase: (title) => trace.push(`phase:${title}`), log: (message) => trace.push(`log:${message}`) }, sandboxPreflight: () => { new BrokeredSandboxProvider().preflight(); } });
+  if (cancelRequested) liveWorker.cancel((await cancelControl.readIntent())?.reason ?? 'workflow cancelled');
+  await events.append({ type: 'run/lease-acquired', payload: { state: 'executing', manifest_digest: record.manifest_digest } });
+  record.run_state = 'executing';
+  const result = await liveWorker.result;
+  for (const entry of trace) await events.append({ type: entry.startsWith('phase:') ? 'workflow/phase' : 'workflow/log', payload: entry.startsWith('phase:') ? { title: entry.slice('phase:'.length) } : { message: entry.slice('log:'.length) } });
+  if (ownerRenewalFailure || result.stop_reason === 'error') {
+    record.run_state = 'paused';
+    record.stop_reason = 'error';
+    setupFailed = true;
+    await events.append({ type: 'run/error', payload: { state: 'paused', stop_reason: 'error', reason: ownerRenewalFailure?.message ?? result.error ?? 'Worker execution failed' } });
+  }
+  else if (result.stop_reason === 'cancelled') { record.run_state = 'cancelled'; record.stop_reason = 'cancelled'; await events.append({ type: 'run/cancelled', payload: { state: 'cancelled', stop_reason: 'cancelled' } }); }
+  else { record.run_state = 'paused'; record.stop_reason = result.stop_reason === 'completed' ? 'blocked' : 'error'; }
+  record.call_ledger = await ledger.replaySubmissionOrder();
+  record.control_ledger = await ledger.replayControlOrder();
+  const allTasksTerminal = options.manifest.tasks.every((task) => taskStates[task.task_id] === 'done' || taskStates[task.task_id] === 'finalized');
+  if (allTasksTerminal) {
+    const gates = new GateCoordinator({ directory, runId: options.runId, fencingEpoch: record.fencing_epoch, manifestDigest });
+    const taskClosure = Object.fromEntries(options.manifest.tasks.map((task) => [task.task_id, { state: taskStates[task.task_id] === 'done' ? 'skipped' as const : 'finalized' as const }]));
+    const closure = await gates.runGate('task-closure', { taskClosure });
+    if (closure.state === 'passed') {
+      await runV2HostAuthorityLifecycle(options, record, gates, operator, planWorktree, events, baseline);
+      if (record.stop_reason === 'error') setupFailed = true;
+    }
+  } else if (record.run_state === 'paused' && record.stop_reason === 'blocked') {
+    await events.append({ type: 'run/error', payload: { state: 'paused', stop_reason: 'blocked', reason: 'approved script did not close every required task before host authority review' } });
+  }
+  await saveV2Run(options.project, record);
+  return record;
+  } catch (error) {
+    setupFailed = true;
+    record.run_state = 'paused';
+    record.stop_reason = 'error';
+    await events.append({ type: 'run/error', payload: { state: 'paused', stop_reason: 'error', reason: `setup failure: ${error instanceof Error ? error.message : String(error)}` } }).catch(() => undefined);
+    throw error;
+  } finally {
+    const teardownErrors: string[] = [];
+    await ownerRenewal?.stop().catch((error: unknown) => teardownErrors.push(`owner renewal: ${error instanceof Error ? error.message : String(error)}`));
+    await liveWorker?.dispose().catch((error: unknown) => teardownErrors.push(`Worker: ${error instanceof Error ? error.message : String(error)}`));
+    if (socketStarted) await cancelSocket.close().catch((error: unknown) => teardownErrors.push(`cancel socket: ${error instanceof Error ? error.message : String(error)}`));
+    if (setupFailed && operator) {
+      try { await operator.cleanup(); }
+      catch (error) { teardownErrors.push(`resource cleanup retained: ${error instanceof Error ? error.message : String(error)}`); }
+    }
+    const retainedPaths: string[] = [];
+    if (setupFailed) {
+      const receiptIds = new Set(operator?.resources.map((resource) => resource.resource_id) ?? []);
+      for (const event of (await events.read()).events) {
+        if (event.type !== 'resource/create-intent' || !event.payload.resource_id || receiptIds.has(event.payload.resource_id) || !event.payload.path) continue;
+        const path = resolve(options.project, event.payload.path);
+        if (await exists(path)) retainedPaths.push(event.payload.path);
+      }
+      for (const task of options.manifest.tasks) {
+        const path = join(directory, 'worktrees', 'tasks', task.task_id);
+        if (await exists(path)) retainedPaths.push(relative(options.project, path).replaceAll('\\', '/'));
+      }
+    }
+    if (retainedPaths.length) teardownErrors.push(`unowned setup paths retained: ${retainedPaths.join(', ')}`);
+    if (operator) record.resources = operator.resources as unknown[];
+    if (ownerLease && owner) await ownerLease.release(owner).catch((error: unknown) => {
+      if (!(error instanceof ControlError) || error.code !== 'LEASE_LOST') teardownErrors.push(`owner lease release: ${error instanceof Error ? error.message : String(error)}`);
+    });
+    if (teardownErrors.length) await events.append({ type: 'resource/retained', payload: { state: 'paused', reason: teardownErrors.join('; '), resource_kinds: operator?.resources.map((resource) => resource.kind) ?? [] } }).catch(() => undefined);
+    await saveV2Run(options.project, record).catch(() => undefined);
+  }
+}
+
+async function runV2HostAuthorityLifecycle(options: V2ScriptRunOptions, record: RunRecordV2, gates: GateCoordinator, operator: V2GitOperator, plan: V2Worktree, events: EventLog, approvedBaseline: { branch: string; head: string | null }): Promise<void> {
+  const authority = new ManifestHostAuthority({ project: options.project, runId: options.runId, manifest: options.manifest });
+  const pause = async (reason: string): Promise<void> => {
+    record.run_state = 'paused';
+    record.stop_reason = 'blocked';
+    await events.append({ type: 'run/error', payload: { state: 'paused', stop_reason: 'blocked', reason } });
+  };
+  try {
+    const planValidation = await authority.planValidation(plan.path);
+    if ((await gates.runGate('plan-validation', { planValidation })).state !== 'passed') return await pause('host plan validation authority rejected the run');
+    const standardsReview = await authority.review('standards-review', plan.path);
+    const specReview = await authority.review('spec-review', plan.path);
+    let standards = await gates.runGate('standards-review', { review: { findings: standardsReview.findings.map((finding) => ({ severity: finding.severity })) } });
+    let spec = await gates.runGate('spec-review', { review: { findings: specReview.findings.map((finding) => ({ severity: finding.severity })) } });
+    const findings = [
+      ...standardsReview.findings.filter((finding) => finding.severity === 'error').map((finding) => ({ sourceGate: 'standards-review' as const, ...finding })),
+      ...specReview.findings.filter((finding) => finding.severity === 'error').map((finding) => ({ sourceGate: 'spec-review' as const, ...finding })),
+    ] satisfies ReviewFindingInput[];
+    let closedFindingIds: string[] = [];
+    if (findings.length) {
+      const repair = new RepairCoordinator({ project: options.project, runId: options.runId, manifestDigest: record.manifest_digest, fencingEpoch: record.fencing_epoch, operator });
+      const started = await repair.startRepair(findings);
+      const sourceReceipts = new Map<string, string>();
+      for (const gate of ['standards-review', 'spec-review'] as const) sourceReceipts.set(gate, await authority.bindReviewFindings(gate, started.findings.filter((finding) => finding.sourceGate === gate)));
+      const repaired = await authority.repair(started.worktree.path);
+      const completion = await repair.completeRepair(started, repaired.changedPaths);
+      const repairDiffDigest = sha256(await git(started.worktree.path, ['show', '--format=', '--binary', completion.repairCommit]));
+      for (const task of options.manifest.tasks) {
+        const repairTest = await repair.createRepairTest(task.task_id, completion.planHead);
+        const test = await authority.repairTest(repairTest.worktree.path, task.task_id);
+        if (test.tests.some((entry) => entry.status === 'failed')) return await pause(`host repair test failed: ${task.task_id}`);
+      }
+      for (const finding of started.findings) {
+        const source = sourceReceipts.get(finding.sourceGate);
+        if (!source) return await pause(`host review receipt is unavailable: ${finding.sourceGate}`);
+        const recheck = await authority.recheck(finding.sourceGate, finding.finding_id, plan.path, source, repairDiffDigest);
+        await repair.recheckFinding(finding.finding_id, recheck);
+      }
+      if ((await repair.status()).state !== 'closed') return await pause('host targeted rechecks did not close every finding');
+      closedFindingIds = started.findings.map((finding) => finding.finding_id);
+      standards = await gates.runGate('standards-review', { review: { findings: [] } });
+      spec = await gates.runGate('spec-review', { review: { findings: [] } });
+    }
+    const repairClosure = await gates.runGate('repair-closure', { repairClosure: { closedFindingIds, expectedFindingIds: closedFindingIds } });
+    if (standards.state !== 'passed' || spec.state !== 'passed' || repairClosure.state !== 'passed') return await pause('host review or repair authority did not close the gates');
+    const baseline = await gitBaseline(options.project);
+    if (!approvedBaseline.head || baseline.branch !== approvedBaseline.branch || baseline.head !== approvedBaseline.head) return await pause('host baseline drifted since approval');
+    if ((await gates.runGate('baseline-stable', { baseline: { expected: approvedBaseline.head, current: baseline.head } })).state !== 'passed') return await pause('host baseline authority rejected the run');
+    const mergeCommit = await operator.integratePlan(plan, { targetBranch: options.manifest.project.target_branch, expectedHead: approvedBaseline.head });
+    const integration = await gates.runGate('integration', { integration: { observed: true, noFastForward: true, mergeCommit } });
+    if (integration.state !== 'passed') return await pause('host integration authority did not observe a no-ff merge');
+    record.run_state = 'complete';
+    record.stop_reason = 'completed';
+    record.resources = operator.resources as unknown[];
+    await events.append({ type: 'run/end', payload: { state: 'complete', stop_reason: 'completed' } });
+  } catch (error) {
+    record.run_state = 'paused';
+    record.stop_reason = 'error';
+    await events.append({ type: 'run/error', payload: { state: 'paused', stop_reason: 'error', reason: `host authority setup failure: ${error instanceof Error ? error.message : String(error)}` } });
+  }
 }
 
 export async function projectV2Run(project: string, runId: string): Promise<RunRecordV2> {
@@ -132,17 +543,78 @@ export async function projectV2Run(project: string, runId: string): Promise<RunR
   const ledger = new RunLedger({ directory: join(project, '.ai-workflow/runs', runId), runId, fencingEpoch: record.fencing_epoch });
   const projection = await v2EventLog(project, runId, record.fencing_epoch).rebuildState();
   if (projection.tail_interrupted) { record.run_state = 'paused'; }
-  else if (projection.run_state && ['preflight', 'executing', 'reconciling', 'validating', 'reviewing', 'repairing', 'integrating', 'complete', 'paused', 'cancelling', 'cancelled', 'cancelled-with-retained-resources'].includes(projection.run_state)) record.run_state = projection.run_state as RunRecordV2['run_state'];
+  else if (projection.run_state && ['preflight', 'executing', 'reconciling', 'validating', 'reviewing', 'repairing', 'integrating', 'complete', 'paused', 'cancelling', 'cancelled', 'cancelled-with-retained-resources'].includes(projection.run_state)) {
+    const projected = projection.run_state as RunRecordV2['run_state'];
+    const projectedActive = ['preflight', 'executing', 'reconciling', 'validating', 'reviewing', 'repairing', 'integrating', 'cancelling'].includes(projected);
+    const persistedTerminal = ['paused', 'complete', 'cancelled', 'cancelled-with-retained-resources'].includes(record.run_state);
+    if (!projectedActive || !persistedTerminal) record.run_state = projected;
+  }
   record.call_ledger = await ledger.replaySubmissionOrder();
   record.control_ledger = await ledger.replayControlOrder();
   await saveV2Run(project, record);
   return record;
 }
 
-export async function resumeV2Run(project: string, runId: string, fingerprints?: { expected: ResumeFingerprint; current: ResumeFingerprint }): Promise<RunRecordV2> {
+export interface ResumeV2RunOptions {
+  fingerprints?: { expected: ResumeFingerprint; current: ResumeFingerprint };
+  restart?: (input: { project: string; runId: string; authority: V2AuthorityDescriptor }) => Promise<'executing'>;
+}
+
+export async function resumeV2Run(project: string, runId: string, options?: ResumeV2RunOptions | { expected: ResumeFingerprint; current: ResumeFingerprint }): Promise<RunRecordV2> {
   const record = await projectV2Run(project, runId);
   if (record.run_state !== 'paused') throw new Error('Only paused v2 runs may resume');
   const log = v2EventLog(project, runId, record.fencing_epoch);
+  const fingerprints = options && 'expected' in options ? options : options?.fingerprints;
+  if (record.authority) {
+    const authority = record.authority;
+    const digest = async (path: string): Promise<string> => objectDigest(JSON.parse(await readFile(path, 'utf8')) as unknown);
+    const manifest = JSON.parse(await readFile(authority.manifest_path, 'utf8')) as CodingCapabilityManifest;
+    const baseline = await gitBaseline(project);
+    const actual: ResumeAuthorityEvidence = {
+      manifest_digest: objectDigest(manifest),
+      script_digest: sha256(await readFile(authority.script_path)),
+      args_digest: sha256(await readFile(authority.args_path)),
+      approval_digest: await exists(authority.approval_path) ? await digest(authority.approval_path) : 'missing',
+      profile_digest: objectDigest({ host: manifest.host, adapter: manifest.host_execution.adapter, engine: manifest.engine }),
+      sandbox_digest: objectDigest(manifest.host_execution),
+      baseline_digest: objectDigest({ branch: baseline.branch, head: baseline.head }),
+    };
+    const drift = actual.profile_digest !== authority.profile_digest ? 'profile' : actual.sandbox_digest !== authority.sandbox_digest ? 'sandbox' : actual.manifest_digest !== authority.manifest_digest ? 'manifest' : actual.script_digest !== authority.script_digest ? 'script' : actual.args_digest !== authority.args_digest ? 'args' : actual.approval_digest !== authority.approval_digest ? 'approval' : actual.baseline_digest !== authority.baseline_digest ? 'baseline' : undefined;
+    if (drift) {
+      record.pause_reason = `${drift} drift prevents resume`;
+      record.resume_evidence = actual;
+      await log.append({ type: 'resume/diverged', payload: { state: 'paused', reason: record.pause_reason } });
+      await saveV2Run(project, record);
+      throw new Error(record.pause_reason);
+    }
+    if (!options || 'expected' in options || !options.restart) {
+      record.pause_reason = 'approved Worker restart authority is unavailable';
+      record.resume_evidence = actual;
+      await log.append({ type: 'resume/diverged', payload: { state: 'paused', reason: record.pause_reason } });
+      await saveV2Run(project, record);
+      return record;
+    }
+    const restarted = await options.restart({ project, runId, authority });
+    if (restarted !== 'executing') {
+      record.pause_reason = 'approved Worker restart adapter did not confirm executing';
+      record.resume_evidence = actual;
+      await log.append({ type: 'resume/diverged', payload: { state: 'paused', reason: record.pause_reason } });
+      await saveV2Run(project, record);
+      throw new Error(record.pause_reason);
+    }
+    record.run_state = 'executing';
+    delete record.pause_reason;
+    delete record.resume_evidence;
+    await log.append({ type: 'resume/replayed', payload: { state: 'executing', manifest_digest: record.manifest_digest } });
+    await saveV2Run(project, record);
+    return record;
+  }
+  if (!fingerprints) {
+    await log.append({ type: 'resume/diverged', payload: { state: 'paused', reason: 'complete resume fingerprint and authority are required' } });
+    record.run_state = 'paused';
+    await saveV2Run(project, record);
+    throw new Error('Complete resume fingerprint and authority are required');
+  }
   if (fingerprints) {
     try { assertResumeFingerprint(fingerprints.expected, fingerprints.current); }
     catch (error) {
@@ -151,8 +623,14 @@ export async function resumeV2Run(project: string, runId: string, fingerprints?:
       throw error;
     }
   }
-  await log.append({ type: 'resume/replayed', payload: { state: 'executing', manifest_digest: record.manifest_digest } });
-  record.run_state = 'executing';
+  const uid = process.getuid?.();
+  if (uid === undefined) throw new Error('CANCEL_UNAUTHORIZED: local process identity is unavailable');
+  const ownerUid = uid ?? 0;
+  const ownerLease = new OwnerLease({ root: project, runId, owner: { osUid: ownerUid, identityDigest: objectDigest({ runId, manifest: record.manifest_digest }) }, process: { pid: process.pid, pgid: process.pid, startIdentity: `${process.pid}:${record.updated_at}`, spawnNonce: `${runId}-resume` }, leaseMs: 30_000, isProcessAlive: () => false });
+  await ownerLease.acquire({ wait: false });
+  await log.append({ type: 'run/lease-acquired', payload: { state: 'paused', manifest_digest: record.manifest_digest } });
+  await log.append({ type: 'resume/replayed', payload: { state: 'paused', manifest_digest: record.manifest_digest } });
+  record.run_state = 'paused';
   await saveV2Run(project, record);
   return record;
 }
@@ -160,25 +638,77 @@ export async function resumeV2Run(project: string, runId: string, fingerprints?:
 export async function cancelV2Run(project: string, runId: string): Promise<RunRecordV2> {
   const record = await projectV2Run(project, runId);
   if (['complete', 'cancelled', 'cancelled-with-retained-resources'].includes(record.run_state)) return record;
-  const log = v2EventLog(project, runId, record.fencing_epoch);
-  await log.append({ type: 'run/cancel-requested', payload: { state: 'cancelling', reason: 'Cancelled by user' } });
-  await log.append({ type: 'run/cancelled', payload: { state: 'cancelled', stop_reason: 'cancelled' } });
-  record.run_state = 'cancelled';
+  const authorityPath = join(project, '.ai-workflow', 'runs', runId, 'control', 'cancel-authority.json');
+  if (!await exists(authorityPath)) throw new ControlError('CANCEL_UNAUTHORIZED', 'cancel authority is unavailable');
+  const authority = JSON.parse(await readFile(authorityPath, 'utf8')) as import('./control.js').CancelAuthority;
+  if (authority.run_id !== runId || authority.fencing_epoch !== record.fencing_epoch || authority.owner_uid === undefined || !authority.owner_identity_digest) throw new ControlError('CANCEL_UNAUTHORIZED', 'cancel authority is incomplete');
+  const reason = 'Cancelled by user';
+  const localCapability = await readLocalCancelCapability(project, runId, record.fencing_epoch);
+  const request = { runId, fencingEpoch: record.fencing_epoch, nonce: authority.challenge_nonce, reason, identityDigest: authority.owner_identity_digest, localCapability, proof: cancelProof(authority.challenge_nonce, runId, record.fencing_epoch, cancelReasonDigest(reason)) };
+  let outcome;
+  try {
+    outcome = await requestCancelSocket(authority.socket_path, request);
+  } catch (error) {
+    if (error instanceof ControlError && error.code !== 'CANCEL_UNAUTHORIZED') throw error;
+    const control = new CancelControl({ root: project, runId, owner: { osUid: authority.owner_uid, identityDigest: authority.owner_identity_digest }, fencingEpoch: record.fencing_epoch, nonce: authority.challenge_nonce, socketPath: authority.socket_path, localCapability });
+    outcome = await control.requestLocalCancel(request);
+    if (outcome.won) return publishDirectCancellation(project, record, outcome.intent.reason);
+  }
+  if (!outcome.won) return projectV2Run(project, runId);
+  const deadline = Date.now() + 10_000;
+  while (Date.now() < deadline) {
+    const current = await projectV2Run(project, runId);
+    if (['cancelled', 'cancelled-with-retained-resources'].includes(current.run_state)) return current;
+    await new Promise((resolvePromise) => setTimeout(resolvePromise, 25));
+  }
+  throw new ControlError('CANCEL_CONTROL_STALE', 'owner accepted cancellation but did not publish a terminal state');
+}
+
+async function publishDirectCancellation(project: string, record: RunRecordV2, reason: string): Promise<RunRecordV2> {
+  const events = v2EventLog(project, record.run_id, record.fencing_epoch);
+  await events.append({ type: 'run/cancel-requested', payload: { state: 'cancelling', reason } });
+  await events.append({ type: 'run/cancelling', payload: { state: 'cancelling', reason } });
+  const knownResources = record.resources.every((resource) => resource !== null && typeof resource === 'object' && (resource as { resource_type?: unknown }).resource_type === 'owned-git-resource');
+  record.run_state = knownResources ? 'cancelled' : 'cancelled-with-retained-resources';
   record.stop_reason = 'cancelled';
+  if (!knownResources) await events.append({ type: 'resource/retained', payload: { state: record.run_state, reason: 'unknown resources retained during cancellation' } });
+  await events.append({ type: 'run/cancelled', payload: { state: record.run_state, stop_reason: 'cancelled', reason } });
   await saveV2Run(project, record);
   return record;
 }
 
 export async function runV2Lifecycle(options: V2LifecycleOptions): Promise<V2LifecycleResult> {
+  throw new Error('host-owned v2 lifecycle entry is unavailable: use the approved plan-local script through runV2Script');
+  /* istanbul ignore next: retained below only as an unreachable compatibility implementation. */
   const fencingEpoch = options.fencingEpoch ?? 1;
   const record = await startV2Run({ project: options.project, runId: options.runId, manifestDigest: options.manifest.manifest_digest, fencingEpoch });
   const directory = join(options.project, '.ai-workflow/runs', options.runId);
   const trace = ['run:start'];
   const operator = new V2GitOperator({ project: options.project, runId: options.runId, manifestDigest: options.manifest.manifest_digest, fencingEpoch, targetBranch: options.manifest.target_branch ?? 'main' });
+  const uid = process.getuid?.();
+  if (uid === undefined) throw new Error('CANCEL_UNAUTHORIZED: local process identity is unavailable');
+  const ownerLease = new OwnerLease({ root: options.project, runId: options.runId, owner: { osUid: uid ?? 0, identityDigest: objectDigest({ runId: options.runId, manifest: options.manifest.manifest_digest }) }, process: { pid: process.pid, pgid: process.pid, startIdentity: `${process.pid}:${record.started_at}`, spawnNonce: record.run_id }, leaseMs: 30_000 });
+  const owner = await ownerLease.acquire({ wait: false });
+  await v2EventLog(options.project, options.runId, record.fencing_epoch).append({ type: 'run/lease-acquired', payload: { state: 'executing', manifest_digest: options.manifest.manifest_digest } });
   const plan = await operator.createPlanWorktree({ baseBranch: options.manifest.target_branch ?? 'main' });
   trace.push('resource:plan-created');
+  const lifecycleScript = options.script ?? [
+    "phase('generated-lifecycle');",
+    ...options.manifest.actions.map((action, index) => `await agent(${JSON.stringify(`Execute ${action.action_id}`)}, { actionId: ${JSON.stringify(action.action_id)}, callId: ${JSON.stringify(`lifecycle/${index + 1}/${action.action_id}`)} });`),
+  ].join('\n');
+  return runScriptLifecycle({ ...options, script: lifecycleScript }, record, directory, trace, operator, plan, ownerLease, owner);
+  /*
   const tasks = new Map<string, { worktree: V2Worktree; state: 'finalized' | 'committed' | 'skipped' }>();
   const actionObservations = new Map<string, TaskActionObservation[]>();
+  const lifecycleActions = options.manifest.actions;
+  const actionResults = new Map<string, V2LifecycleActionResult>();
+  if (options.script === undefined) {
+    const script = lifecycleActions.map((action, index) => `await agent(${JSON.stringify(`Execute ${action.action_id}`)}, { actionId: ${JSON.stringify(action.action_id)}, callId: ${JSON.stringify(`lifecycle/${index + 1}/${action.action_id}`)} });`).join('\n');
+    const worker = new CodingWorkflowEngine().start({ runId: options.runId, script, args: options.args ?? {}, manifestDigest: options.manifest.manifest_digest, scriptDigest: options.scriptDigest ?? options.manifest.manifest_digest, argsDigest: options.argsDigest ?? options.manifest.manifest_digest, actions: lifecycleActions.map((action) => ({ action_id: action.action_id, task_id: action.task_id })), childExecutor: { start: (descriptor) => Promise.resolve({ id: descriptor.call_id, result: (async () => { const action = lifecycleActions.find((candidate) => candidate.action_id === descriptor.action_id); if (!action) throw new Error(`ACTION_NOT_AUTHORIZED: ${descriptor.action_id}`); const task = options.manifest.tasks.find((candidate) => candidate.task_id === action.task_id); if (!task) throw new Error(`TASK_NOT_AUTHORIZED: ${action.task_id}`); const worktree = tasks.get(task.task_id)?.worktree ?? await operator.createTaskWorktree(plan, task.task_id); tasks.set(task.task_id, { worktree, state: task.finalization_mode === 'read-only-finalize' ? 'finalized' : 'committed' }); const result = await options.execute({ cwd: worktree.path, taskId: action.task_id, actionId: action.action_id }); actionResults.set(action.action_id, result); return { result_version: '2.0.0' as const, status: result.status, summary: result.status, changed_paths: result.changedPaths, evidence: [], tests: result.tests, findings: [], git_refs: [], support_requests: [] }; })(), dispose: () => Promise.resolve() }) }, observer: { phase: (title) => trace.push(`phase:${title}`), log: (message) => trace.push(`log:${message}`) }, disposeGraceMs: 5_000 });
+    const result = await worker.result;
+    await worker.dispose();
+    if (result.stop_reason !== 'completed') return lifecyclePaused(options.project, record, new GateCoordinator({ directory, runId: options.runId, fencingEpoch, manifestDigest: options.manifest.manifest_digest }), trace, result.error ?? 'lifecycle Worker failed', operator);
+  }
   for (const task of options.manifest.tasks) {
     if (task.activation === 'conditional') continue;
     for (const actionId of task.required_actions) {
@@ -186,7 +716,7 @@ export async function runV2Lifecycle(options: V2LifecycleOptions): Promise<V2Lif
       if (!action) throw new Error(`Missing action capability: ${actionId}`);
       const worktree = tasks.get(task.task_id)?.worktree ?? await operator.createTaskWorktree(plan, task.task_id);
       tasks.set(task.task_id, { worktree, state: task.finalization_mode === 'read-only-finalize' ? 'finalized' : 'committed' });
-      const result = await options.execute({ cwd: worktree.path, taskId: task.task_id, actionId });
+      const result = actionResults.get(actionId) ?? await options.execute({ cwd: worktree.path, taskId: task.task_id, actionId });
       actionObservations.set(task.task_id, [...(actionObservations.get(task.task_id) ?? []), { action_id: actionId, state: result.status === 'done' ? 'checkpointed' : 'failed', result: { status: result.status, tests: result.tests } }]);
     }
     const ledger = new RunLedger({ directory, runId: options.runId, fencingEpoch });
@@ -195,18 +725,30 @@ export async function runV2Lifecycle(options: V2LifecycleOptions): Promise<V2Lif
     const worktree = tasks.get(task.task_id)?.worktree;
     if (!worktree) throw new Error(`Missing task worktree: ${task.task_id}`);
     const finalized = await coordinator.finalizeTask({ taskId: task.task_id, controlId: `finalize-${task.task_id}`, controlOrdinal: tasks.size, activation: task.activation, requiredActionIds: task.required_actions, actions: actionObservations.get(task.task_id) ?? [], predecessorStates, finalizationMode: task.finalization_mode, taskWorktree: worktree, planWorktree: plan, writeScope: options.manifest.actions.filter((action) => action.task_id === task.task_id).flatMap((action) => action.write_scope), operator });
-    tasks.set(task.task_id, { worktree: tasks.get(task.task_id)!.worktree, state: finalized.state });
+    const currentTask = tasks.get(task.task_id);
+    if (!currentTask) throw new Error(`Missing task worktree: ${task.task_id}`);
+    tasks.set(task.task_id, { worktree: currentTask.worktree, state: finalized.state });
     trace.push(`task-${task.task_id}:${finalized.state}`);
   }
   const gates = new GateCoordinator({ directory, runId: options.runId, fencingEpoch, manifestDigest: options.manifest.manifest_digest });
-  await gates.runGate('task-closure', { taskClosure: Object.fromEntries([...tasks].map(([taskId, task]) => [taskId, { state: task.state }])) }); trace.push('gate:task-closure:passed');
-  await gates.runGate('plan-validation', { planValidation: { valid: true, errors: [] } }); trace.push('gate:plan-validation:passed');
-  await gates.runGate('standards-review', { review: { findings: [] } });
-  await gates.runGate('spec-review', { review: { findings: [] } });
-  await gates.runGate('repair-closure', { repairClosure: { closedFindingIds: [] } });
+  const taskClosure = await gates.runGate('task-closure', { taskClosure: Object.fromEntries([...tasks].map(([taskId, task]) => [taskId, { state: task.state }])) });
+  if (taskClosure.state !== 'passed') return lifecyclePaused(options.project, record, gates, trace, 'task-closure gate failed', operator);
+  trace.push('gate:task-closure:passed');
+  const planValidation = await gates.runGate('plan-validation', { planValidation: options.gateEvidence.planValidation });
+  if (planValidation.state !== 'passed') return lifecyclePaused(options.project, record, gates, trace, 'plan-validation gate failed', operator);
+  trace.push('gate:plan-validation:passed');
+  const standardsReview = await gates.runGate('standards-review', { review: options.gateEvidence.standardsReview });
+  const specReview = await gates.runGate('spec-review', { review: options.gateEvidence.specReview });
+  const repairClosure = await gates.runGate('repair-closure', { repairClosure: options.gateEvidence.repairClosure });
+  if (standardsReview.state !== 'passed' || specReview.state !== 'passed' || repairClosure.state !== 'passed') return lifecyclePaused(options.project, record, gates, trace, 'review or repair gate failed', operator);
   const baseline = await gitBaseline(options.project);
-  await gates.runGate('baseline-stable', { baseline: { expected: baseline.head ?? '', current: baseline.head ?? '' } }); trace.push('gate:baseline-stable:passed');
+  const baselineEvidence = options.gateEvidence.baseline;
+  if (baselineEvidence.current !== baseline.head || baselineEvidence.expected !== baselineEvidence.current) return lifecyclePaused(options.project, record, gates, trace, 'baseline evidence is missing or drifted', operator);
+  await gates.runGate('baseline-stable', { baseline: baselineEvidence }); trace.push('gate:baseline-stable:passed');
+  const integrationEvidence = options.gateEvidence.integration;
+  if (!integrationEvidence.observed || !integrationEvidence.noFastForward) return lifecyclePaused(options.project, record, gates, trace, 'observed integration evidence is required', operator);
   const mergeCommit = await operator.integratePlan(plan, { targetBranch: options.manifest.target_branch ?? 'main', expectedHead: baseline.head });
+  if (integrationEvidence.mergeCommit !== undefined && integrationEvidence.mergeCommit !== mergeCommit) return lifecyclePaused(options.project, record, gates, trace, 'integration evidence does not match observed merge', operator);
   const integration = { observed: true, noFastForward: true, mergeCommit };
   await gates.runGate('integration', { integration }); trace.push('gate:integration:passed');
   record.run_state = 'complete'; record.stop_reason = 'completed';
@@ -214,10 +756,191 @@ export async function runV2Lifecycle(options: V2LifecycleOptions): Promise<V2Lif
   record.completed_tasks = [...tasks.keys()];
   await v2EventLog(options.project, options.runId, fencingEpoch).append({ type: 'run/end', payload: { state: 'complete', stop_reason: 'completed' } });
   await saveV2Run(options.project, record);
+  await ownerLease.release(owner);
   trace.push('run:complete');
   const gateIds = ['task-closure', 'plan-validation', 'standards-review', 'spec-review', 'repair-closure', 'baseline-stable', 'integration'] as const;
-  const gateEntries = await Promise.all(gateIds.map(async (gateId) => [gateId, (await gates.readGate(gateId))!] as const));
+  const gateEntries = await Promise.all(gateIds.map(async (gateId) => {
+    const receipt = await gates.readGate(gateId);
+    if (!receipt) throw new Error(`Missing gate receipt: ${gateId}`);
+    return [gateId, receipt] as const;
+  }));
   return { run_state: record.run_state, gates: Object.fromEntries(gateEntries), integration, trace };
+  */
+}
+
+async function runScriptLifecycle(options: V2LifecycleOptions, record: RunRecordV2, directory: string, trace: string[], operator: V2GitOperator, plan: V2Worktree, ownerLease: OwnerLease, owner: import('./control.js').OwnerLeaseRecord): Promise<V2LifecycleResult> {
+  const script = options.script;
+  if (script === undefined) throw new Error('approved lifecycle script is required');
+  const ledger = new RunLedger({ directory, runId: options.runId, fencingEpoch: record.fencing_epoch });
+  const scheduler = new ScopeScheduler({ maxConcurrent: Math.max(1, options.manifest.actions.length) });
+  const taskWorktrees = new Map<string, V2Worktree>();
+  for (const task of options.manifest.tasks) taskWorktrees.set(task.task_id, await operator.createTaskWorktree(plan, task.task_id));
+  const taskStates: Record<string, TaskState> = Object.fromEntries(options.manifest.tasks.map((task) => [task.task_id, task.depends_on.length ? 'pending' : 'ready']));
+  const actionStates: Record<string, 'prepared' | 'dispatch_intent' | 'running' | 'observed' | 'checkpointed' | 'done'> = {};
+  const observations = new Map<string, TaskActionObservation[]>();
+  const tasks = new Map<string, { worktree: V2Worktree; state: 'finalized' | 'committed' | 'skipped' }>();
+  const actions: ActionCapability[] = options.manifest.actions.map((action) => ({
+    action_id: action.action_id,
+    task_id: action.task_id,
+    operation: action.operation as ActionCapability['operation'],
+    role: 'task-worker' as const,
+    locator_read_order: [],
+    read_scope: [],
+    write_scope: [...action.write_scope],
+    new_module_directories: [],
+    allowed_commands: [],
+    test_commands: [],
+    requires_actions: [],
+    max_attempts: 1,
+    optional: false,
+    write_access: action.write_scope.length > 0,
+    host_only: false,
+  } satisfies ActionCapability));
+  const capabilityManifest: ActionCapabilityManifest = {
+    plan_id: options.runId,
+    host: 'codex',
+    host_execution: {
+      adapter: 'codex', mode: 'brokered-sandbox',
+      model_transport: { owner: 'host-native-broker', network_allowed: true, project_write_allowed: false, credential_visibility: 'broker-only' },
+      action_executor: { process_group: true, network_allowed: false, project_write_enforced: true, git_metadata_write_allowed: false },
+      native_tool_authorization: 'unavailable', capability_digest: options.manifest.manifest_digest,
+    },
+    tasks: options.manifest.tasks,
+    actions,
+  };
+  const worker = new CodingWorkflowEngine().start({ runId: options.runId, script, args: options.args ?? {}, manifestDigest: options.manifest.manifest_digest, scriptDigest: options.scriptDigest ?? options.manifest.manifest_digest, argsDigest: options.argsDigest ?? options.manifest.manifest_digest, actions: actions.map((action) => ({ action_id: action.action_id, task_id: action.task_id })), childExecutor: {
+    start: async (descriptor) => {
+      const action = actions.find((candidate) => candidate.action_id === descriptor.action_id);
+      if (!action) throw new Error(`ACTION_NOT_AUTHORIZED: ${descriptor.action_id}`);
+      const worktree = taskWorktrees.get(action.task_id);
+      if (!worktree) throw new Error(`TASK_NOT_AUTHORIZED: ${action.task_id}`);
+      const admission = admitAction({ manifest: capabilityManifest, action_id: action.action_id, run_id: options.runId, cwd: worktree.path, attempt: 1, task_states: taskStates, action_states: actionStates, active_hosts: ['codex'] });
+      const lease = await scheduler.submit({ admission_id: admission.attempt_id, call_ordinal: descriptor.call_ordinal, action_id: action.action_id, task_id: action.task_id, read_scope: action.read_scope, write_scope: action.write_scope });
+      await ledger.prepareCall({ callId: descriptor.call_id, callOrdinal: descriptor.call_ordinal, descriptor: descriptor as unknown as import('./ledger.js').CallDescriptor });
+      await ledger.dispatchIntent(descriptor.call_id);
+      actionStates[action.action_id] = 'dispatch_intent';
+      await ledger.markRunning(descriptor.call_id);
+      actionStates[action.action_id] = 'running';
+      const before = await captureWorktreeAudit(worktree.path);
+      const result = (async () => {
+        const value = await options.execute({ cwd: worktree.path, taskId: action.task_id, actionId: action.action_id });
+        const codingResult: CodingAgentResult = { result_version: '2.0.0', status: value.status, summary: value.status, changed_paths: value.changedPaths, evidence: [], tests: value.tests, findings: [], git_refs: [], support_requests: [] };
+        await ledger.observeCall(descriptor.call_id, codingResult as unknown as import('../generated/coding-agent-result.schema.js').CodingAgentResult);
+        const after = await captureWorktreeAudit(worktree.path);
+        const audit = compareWorktreeAudits(before, after, action.write_scope);
+        if (audit.status !== 'clean') throw new Error(`ACTION_SCOPE_VIOLATION: ${audit.out_of_scope_paths.join(', ') || audit.errors.join(', ')}`);
+        await ledger.checkpointCall(descriptor.call_id, value.changedPaths);
+        actionStates[action.action_id] = value.status === 'done' ? 'checkpointed' : 'observed';
+        observations.set(action.task_id, [...(observations.get(action.task_id) ?? []), { action_id: action.action_id, state: value.status === 'done' ? 'checkpointed' : 'failed', result: { status: value.status, tests: value.tests } }]);
+        lease.release(value.status === 'done' ? 'completed' : 'blocked');
+        return codingResult;
+      })();
+      return { id: descriptor.call_id, result, dispose: () => Promise.resolve() };
+    },
+  }, taskControl: async (descriptor) => {
+    if (descriptor.operation !== 'skip-task') throw new Error('task finalization requires host-owned closure evidence');
+    const task = options.manifest.tasks.find((candidate) => candidate.task_id === descriptor.task_id);
+    if (!task || task.activation !== 'conditional' || !descriptor.task_id) throw new Error('conditional task skip requires an authorized conditional task');
+     const receipt = await new TaskClosureCoordinator({ ledger }).skipTask({ taskId: task.task_id, controlId: descriptor.control_id, controlOrdinal: descriptor.control_ordinal, activation: task.activation, requiredActionIds: [], actions: [], predecessorStates: Object.fromEntries(task.depends_on.map((dependency) => [dependency, taskStates[dependency] === 'finalized' || taskStates[dependency] === 'done' ? 'finalized' : 'pending'])), reason: descriptor.reason ?? '' });
+    const worktree = taskWorktrees.get(task.task_id);
+    if (worktree) tasks.set(task.task_id, { worktree, state: 'skipped' });
+    if (!record.blocked_tasks?.includes(task.task_id)) record.blocked_tasks = [...(record.blocked_tasks ?? []), task.task_id];
+    return { state: receipt.state, receipt_digest: objectDigest(receipt) };
+  }, observer: { phase: (title) => trace.push(`phase:${title}`), log: (message) => trace.push(`log:${message}`) }, sandboxPreflight: () => { new BrokeredSandboxProvider().preflight(); }, disposeGraceMs: 5_000 });
+  const workerResult = await worker.result;
+  await worker.dispose();
+  if (workerResult.stop_reason !== 'completed') return lifecyclePaused(options.project, record, new GateCoordinator({ directory, runId: options.runId, fencingEpoch: record.fencing_epoch, manifestDigest: options.manifest.manifest_digest }), trace, workerResult.error ?? 'lifecycle Worker failed', operator);
+  const coordinator = new TaskClosureCoordinator({ ledger });
+  for (const task of options.manifest.tasks) {
+    if (task.activation === 'conditional') continue;
+    const worktree = taskWorktrees.get(task.task_id);
+    if (!worktree || task.required_actions.some((actionId) => !observations.get(task.task_id)?.some((observation) => observation.action_id === actionId))) return lifecyclePaused(options.project, record, new GateCoordinator({ directory, runId: options.runId, fencingEpoch: record.fencing_epoch, manifestDigest: options.manifest.manifest_digest }), trace, `approved script did not close task actions: ${task.task_id}`, operator);
+     const predecessorStates = Object.fromEntries(task.depends_on.map((dependency) => {
+       const predecessor = tasks.get(dependency);
+       return [dependency, predecessor?.state === 'finalized' || predecessor?.state === 'committed' || predecessor?.state === 'skipped' ? predecessor.state : 'pending'];
+     })) as Record<string, 'pending' | 'running' | 'finalized' | 'committed' | 'skipped'>;
+     const finalized = await coordinator.finalizeTask({ taskId: task.task_id, controlId: `finalize-${task.task_id}`, controlOrdinal: tasks.size + 1, activation: task.activation, requiredActionIds: task.required_actions, actions: observations.get(task.task_id) ?? [], predecessorStates, finalizationMode: task.finalization_mode, ...(task.finalization_mode === 'commit-and-merge' ? { taskWorktree: worktree, planWorktree: plan, writeScope: actions.filter((action) => action.task_id === task.task_id).flatMap((action) => action.write_scope), operator } : {}) });
+     tasks.set(task.task_id, { worktree, state: finalized.state });
+     taskStates[task.task_id] = finalized.state === 'skipped' ? 'done' : 'finalized';
+    trace.push(`task-${task.task_id}:${finalized.state}`);
+  }
+  const gates = new GateCoordinator({ directory, runId: options.runId, fencingEpoch: record.fencing_epoch, manifestDigest: options.manifest.manifest_digest });
+  const taskClosure = await gates.runGate('task-closure', { taskClosure: Object.fromEntries([...tasks].map(([taskId, task]) => [taskId, { state: task.state }])) });
+  if (taskClosure.state !== 'passed') return lifecyclePaused(options.project, record, gates, trace, 'task-closure gate failed', operator);
+  trace.push('gate:task-closure:passed');
+  if (!options.planAuthority) return lifecyclePaused(options.project, record, gates, trace, 'host-owned plan validation authority is required', operator);
+  const planEvidence = await options.planAuthority();
+  const validation = await gates.runGate('plan-validation', { planValidation: planEvidence });
+  if (validation.state !== 'passed') return lifecyclePaused(options.project, record, gates, trace, 'plan-validation gate failed', operator);
+  trace.push('gate:plan-validation:passed');
+  if (!options.reviewAuthority) return lifecyclePaused(options.project, record, gates, trace, 'host-owned review authority is required', operator);
+  const standardsEvidence = await options.reviewAuthority.standardsReview();
+  const specEvidence = await options.reviewAuthority.specReview();
+  let standards = await gates.runGate('standards-review', { review: { findings: standardsEvidence.findings } });
+  let spec = await gates.runGate('spec-review', { review: { findings: specEvidence.findings } });
+  const blockingFindings = [
+    ...standardsEvidence.findings.filter((finding) => finding.severity === 'error').map((finding) => ({ sourceGate: 'standards-review' as const, severity: finding.severity, message: finding.message ?? finding.finding_id ?? 'host review finding', ...(finding.path === undefined ? {} : { path: finding.path }), applicableActionIds: finding.applicableActionIds ?? [] })),
+    ...specEvidence.findings.filter((finding) => finding.severity === 'error').map((finding) => ({ sourceGate: 'spec-review' as const, severity: finding.severity, message: finding.message ?? finding.finding_id ?? 'host review finding', ...(finding.path === undefined ? {} : { path: finding.path }), applicableActionIds: finding.applicableActionIds ?? [] })),
+  ] satisfies ReviewFindingInput[];
+  let repairedPlanHead: string | undefined;
+  if (blockingFindings.length) {
+    const repair = new RepairCoordinator({ project: options.project, runId: options.runId, manifestDigest: options.manifest.manifest_digest, fencingEpoch: record.fencing_epoch, operator });
+    const started = await repair.startRepair(blockingFindings);
+    if (!options.repairAuthority) return lifecyclePaused(options.project, record, gates, trace, 'host-owned repair authority is required', operator);
+    const repaired = await options.repairAuthority.repair({ cwd: started.worktree.path });
+    const completed = await repair.completeRepair(started, repaired.changedPaths);
+    repairedPlanHead = completed.planHead;
+    for (const task of options.manifest.tasks) {
+      const repairTest = await repair.createRepairTest(task.task_id, completed.planHead);
+      const test = await options.repairAuthority.test({ cwd: repairTest.worktree.path, taskId: task.task_id });
+      if (test.tests.some((entry) => entry.status === 'failed')) return lifecyclePaused(options.project, record, gates, trace, `repair test failed: ${task.task_id}`, operator);
+    }
+    for (const finding of started.findings) {
+      const taskId = options.manifest.tasks.find((task) => task.required_actions.some((actionId) => finding.applicableActionIds.includes(actionId)))?.task_id ?? options.manifest.tasks[0]?.task_id;
+      if (!taskId) return lifecyclePaused(options.project, record, gates, trace, 'repair finding has no applicable task', operator);
+      const recheck = await options.repairAuthority.recheck({ findingId: finding.finding_id, taskId });
+      await repair.recheckFinding(finding.finding_id, recheck);
+    }
+    const status = await repair.status();
+    if (status.state !== 'closed') return lifecyclePaused(options.project, record, gates, trace, 'repair findings remain open', operator);
+    const repairedStandards = await gates.runGate('standards-review', { review: { findings: [] } });
+    const repairedSpec = await gates.runGate('spec-review', { review: { findings: [] } });
+    if (repairedStandards.state !== 'passed' || repairedSpec.state !== 'passed') return lifecyclePaused(options.project, record, gates, trace, 'review recheck did not clear findings', operator);
+    standards = repairedStandards;
+    spec = repairedSpec;
+  }
+  const repair = await gates.runGate('repair-closure', {
+    repairClosure: blockingFindings.length
+      ? { closedFindingIds: blockingFindings.map((finding) => `finding-sha256:${objectDigest({ source_gate: finding.sourceGate, severity: finding.severity, message_digest: objectDigest(finding.message), path: finding.path ?? null, applicable_action_ids: [...finding.applicableActionIds].sort() }).slice('sha256:'.length)}`), expectedFindingIds: blockingFindings.map((finding) => `finding-sha256:${objectDigest({ source_gate: finding.sourceGate, severity: finding.severity, message_digest: objectDigest(finding.message), path: finding.path ?? null, applicable_action_ids: [...finding.applicableActionIds].sort() }).slice('sha256:'.length)}`) }
+      : options.gateEvidence.repairClosure,
+  });
+  if (standards.state !== 'passed' || spec.state !== 'passed' || repair.state !== 'passed') return lifecyclePaused(options.project, record, gates, trace, 'review or repair gate failed', operator);
+  const baseline = await gitBaseline(options.project);
+  const baselineEvidence = repairedPlanHead === undefined ? options.gateEvidence.baseline : { expected: repairedPlanHead, current: repairedPlanHead };
+  if (baselineEvidence.expected !== baselineEvidence.current) return lifecyclePaused(options.project, record, gates, trace, 'baseline evidence drifted', operator);
+  await gates.runGate('baseline-stable', { baseline: baselineEvidence });
+  if (!options.gateEvidence.integration.observed || !options.gateEvidence.integration.noFastForward) return lifecyclePaused(options.project, record, gates, trace, 'integration evidence is required', operator);
+  const mergeCommit = await operator.integratePlan(plan, { targetBranch: options.manifest.target_branch ?? 'main', expectedHead: baseline.head });
+  const integration = { observed: true, noFastForward: true, mergeCommit };
+  await gates.runGate('integration', { integration });
+  record.run_state = 'complete'; record.stop_reason = 'completed'; record.resources = operator.resources as unknown[]; record.completed_tasks = [...tasks.keys()];
+  await v2EventLog(options.project, options.runId, record.fencing_epoch).append({ type: 'run/end', payload: { state: 'complete', stop_reason: 'completed' } });
+  await saveV2Run(options.project, record);
+  await ownerLease.release(owner);
+  const gateIds = ['task-closure', 'plan-validation', 'standards-review', 'spec-review', 'repair-closure', 'baseline-stable', 'integration'] as const;
+  const gateEntries = await Promise.all(gateIds.map(async (gateId) => [gateId, await gates.readGate(gateId)] as const));
+  return { run_state: record.run_state, gates: Object.fromEntries(gateEntries.filter((entry): entry is [typeof entry[0], GateReceipt] => entry[1] !== undefined).map(([gateId, receipt]) => [gateId, receipt])), integration, trace: [...trace, 'gate:integration:passed', 'run:complete'] };
+}
+
+async function lifecyclePaused(project: string, record: RunRecordV2, gates: GateCoordinator, trace: string[], reason: string, operator: V2GitOperator): Promise<V2LifecycleResult> {
+  record.run_state = 'paused';
+  record.stop_reason = 'blocked';
+  record.resources = operator.resources as unknown[];
+  await v2EventLog(project, record.run_id, record.fencing_epoch).append({ type: 'run/error', payload: { state: 'paused', stop_reason: 'blocked', reason } });
+  await saveV2Run(project, record);
+  const gateIds = ['task-closure', 'plan-validation', 'standards-review', 'spec-review', 'repair-closure', 'baseline-stable', 'integration'] as const;
+  const entries = await Promise.all(gateIds.map(async (gateId) => [gateId, await gates.readGate(gateId)] as const));
+  return { run_state: record.run_state, gates: Object.fromEntries(entries.filter((entry): entry is [typeof entry[0], GateReceipt] => entry[1] !== undefined).map(([gateId, receipt]) => [gateId, receipt])), trace };
 }
 
 export async function cleanupV2Run(project: string, runId: string): Promise<RunRecordV2> {

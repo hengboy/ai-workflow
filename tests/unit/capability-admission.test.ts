@@ -106,6 +106,21 @@ describe('action capability admission', () => {
     expect(() => admitAction(request({ attempt: 3 }))).toThrowError(/attempt exceeds action budget/);
   });
 
+  it('admits a dependent action only after its predecessor task is finalized', () => {
+    const value = manifest({
+      tasks: [
+        { task_id: 'task-001-host', depends_on: [], required_actions: ['build'], optional_actions: [], finalization_action: 'finalize-1' },
+        { task_id: 'task-002-host', depends_on: ['task-001-host'], required_actions: ['verify'], optional_actions: [], finalization_action: 'finalize-2' },
+      ],
+      actions: [
+        manifest().actions[0]!,
+        { ...manifest().actions[0]!, action_id: 'verify', task_id: 'task-002-host', requires_actions: ['build'] },
+      ],
+    });
+    expect(() => admitAction(request({ manifest: value, action_id: 'verify', task_states: { 'task-001-host': 'ready', 'task-002-host': 'ready' }, action_states: { build: 'checkpointed' } }))).toThrowError(/task is not ready|dependency/);
+    expect(admitAction(request({ manifest: value, action_id: 'verify', task_states: { 'task-001-host': 'finalized', 'task-002-host': 'ready' }, action_states: { build: 'checkpointed' } })).action.action_id).toBe('verify');
+  });
+
   it('fails closed when a write action lacks brokered sandbox capability', () => {
     const unsafe = manifest({ host_execution: { ...manifest().host_execution, mode: 'unsupported' } });
     expect(() => admitAction(request({ manifest: unsafe }))).toThrowError(/lacks brokered sandbox/);

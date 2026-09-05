@@ -9,11 +9,35 @@ import { canonicalPath } from '../utils/paths.js';
 import { writeJson, exists } from '../utils/fs.js';
 
 const exec = promisify(execFile);
-const forbidden = new Set(['push', 'pull', 'fetch', 'rebase', 'reset', 'clean', 'stash', 'tag']);
+const forbidden = new Set(['push', 'pull', 'fetch', 'rebase', 'reset', 'clean', 'stash', 'tag', 'remote', 'config', 'submodule']);
 const digestPattern = /^sha256:[a-f0-9]{64}$/;
 
+function assertLocalGitCommand(args: string[]): void {
+  const command = args[0];
+  if (!command || forbidden.has(command)) throw new Error(`Git operation is forbidden: ${command ?? '<missing command>'}`);
+  if (args.some((arg) => /^(?:origin|upstream|https?:|ssh:|git@)/i.test(arg))) throw new Error('Git operation is forbidden: remote or upstream target');
+  if (args.some((arg) => ['--amend', '-f', '-M', '--force', '--strategy', '--strategy-option', '--set-upstream-to', '--track', '--remote', '--no-verify'].includes(arg))) throw new Error('Git operation is forbidden: unsafe option');
+  const value = (arg: string | undefined): boolean => arg !== undefined && arg !== '' && !arg.startsWith('-');
+  const exact = (...expected: string[]): boolean => args.length === expected.length && expected.every((item, index) => item === args[index]);
+  if (command === 'branch' && exact('branch', '--show-current')) return;
+  if (command === 'branch' && args[1] === '-vv') throw new Error('Git operation is forbidden: upstream inspection');
+  if (command === 'branch' && args[1] === '-D' && args.length === 3 && value(args[2])) return;
+  if (command === 'rev-parse' && (exact('rev-parse', '--git-common-dir') || (args.length === 2 && value(args[1])))) return;
+  if (command === 'status' && (exact('status', '--porcelain=v1') || exact('status', '--porcelain=v1', '--untracked-files=all'))) return;
+  if (command === 'worktree' && exact('worktree', 'list', '--porcelain')) return;
+  if (command === 'worktree' && args[1] === 'add' && args[2] === '-b' && args.length === 6 && value(args[3]) && value(args[4]) && value(args[5])) return;
+  if (command === 'worktree' && args[1] === 'remove' && args.length === 3 && value(args[2])) return;
+  if (command === 'merge-tree' && args.length === 4 && args[1] === '--write-tree' && args[2] === 'HEAD' && value(args[3])) return;
+  if (command === 'show' && args.length === 4 && args[1] === '--format=' && args[2] === '--binary' && value(args[3])) return;
+  if (command === 'show' && args.length === 4 && args[1] === '-s' && args[2] === '--format=%B' && value(args[3])) return;
+  if (command === 'add' && args[1] === '--' && args.length > 2 && args.slice(2).every(value)) return;
+  if (command === 'commit' && args.length >= 4 && args[1] === '--allow-empty' && args[2] === '-m' && value(args[3]) && (args.length === 4 || (args.length === 6 && args[4] === '-m' && value(args[5])))) return;
+  if (command === 'merge' && args.length === 4 && args[1] === '--no-ff' && args[2] === '--no-edit' && value(args[3])) return;
+  throw new Error(`Git operation is not in the local allowlist: ${command}`);
+}
+
 export async function git(project: string, args: string[]): Promise<string> {
-  if (args[0] && forbidden.has(args[0])) throw new Error(`Git operation is forbidden: ${args[0]}`);
+  assertLocalGitCommand(args);
   const { stdout } = await exec('git', args, { cwd: project, maxBuffer: 1_000_000 });
   return stdout.trim();
 }
@@ -69,8 +93,18 @@ export async function integratePlan(project: string, planBranch: string, targetB
 }
 
 export async function removeOwnedWorktrees(project: string, paths: string[]): Promise<void> {
+  const projectRoot = canonicalPath(await realpath(project).catch(() => project));
+  const entries = worktreeEntries(await git(project, ['worktree', 'list', '--porcelain']));
   for (const path of paths) {
-    try { await git(project, ['worktree', 'remove', '--force', path]); }
+    const resolvedPath = canonicalPath(await realpath(resolve(projectRoot, path)).catch(() => resolve(projectRoot, path)));
+    const relativePath = relative(projectRoot, resolvedPath).replaceAll('\\', '/');
+    if (!relativePath.startsWith('.ai-workflow/runs/') || relativePath.split('/').includes('..')) throw new Error(`Git resource is not owned: ${path}`);
+    try { await lstat(resolvedPath); } catch { continue; }
+    const entry = entries.find((candidate) => canonicalPath(candidate.path) === resolvedPath);
+    if (!entry || !entry.branch?.startsWith('ai-workflow/')) throw new Error(`Git resource is unknown or tampered: ${path}`);
+    const status = await git(resolvedPath, ['status', '--porcelain=v1', '--untracked-files=all']);
+    if (status) throw new Error(`Git resource is dirty: ${path}`);
+    try { await git(project, ['worktree', 'remove', resolvedPath]); }
     catch (error) { if (!String(error).includes('not a working tree')) throw error; }
   }
 }
@@ -307,23 +341,29 @@ export class V2GitOperator {
     const toRemove: GitResourceReceipt[] = [];
     for (const resource of resources) {
       this.assertReceipt(resource);
-      const entry = entries.find((candidate) => candidate.path === canonicalPath(resolve(this.options.project, resource.canonical_path!)) || candidate.path === canonicalPath(resolve(projectPath, resource.canonical_path!)));
+      const resourcePath = resource.canonical_path;
+      if (!resourcePath) continue;
+      const entry = entries.find((candidate) => candidate.path === canonicalPath(resolve(this.options.project, resourcePath)) || candidate.path === canonicalPath(resolve(projectPath, resourcePath)));
       if (!entry) continue;
       if (entry.branch !== resource.branch) throw new V2GitOperatorError('RESOURCE_TAMPERED', `worktree branch does not match receipt: ${resource.resource_id}`);
-      const status = await git(resource.canonical_path!.startsWith('.') ? resolve(this.options.project, resource.canonical_path!) : canonicalPath(resource.canonical_path!), ['status', '--porcelain=v1', '--untracked-files=all']);
+      const status = await git(resourcePath.startsWith('.') ? resolve(this.options.project, resourcePath) : canonicalPath(resourcePath), ['status', '--porcelain=v1', '--untracked-files=all']);
       if (status) throw new V2GitOperatorError('RESOURCE_DIRTY', `owned resource is dirty: ${resource.resource_id}`);
       toRemove.push(resource);
     }
     for (const resource of toRemove) {
       const tx = transactionId('cleanup', resource.resource_id);
       await this.emit('git/cleanup-intent', { resource_id: resource.resource_id, path: resource.canonical_path ?? '', branch: resource.branch }, tx);
-      await this.withGitMutation(() => git(this.options.project, ['worktree', 'remove', resource.canonical_path! ]));
+      const resourcePath = resource.canonical_path;
+      if (!resourcePath) continue;
+      await this.withGitMutation(() => git(this.options.project, ['worktree', 'remove', resourcePath]));
       await this.emit('git/cleanup-observed', { resource_id: resource.resource_id, path: resource.canonical_path ?? '', branch: resource.branch }, tx);
     }
     const branches = this.resources.filter((resource) => resource.branch && !resource.canonical_path);
     for (const resource of branches) {
-      if (!resource.branch!.startsWith(`ai-workflow/v2/${safeName(this.options.runId)}/`)) throw new V2GitOperatorError('RESOURCE_TAMPERED', `branch is outside ownership namespace: ${resource.resource_id}`);
-      try { await this.withGitMutation(() => git(this.options.project, ['branch', '-D', resource.branch!])); } catch (error) {
+      const branch = resource.branch;
+      if (!branch) continue;
+      if (!branch.startsWith(`ai-workflow/v2/${safeName(this.options.runId)}/`)) throw new V2GitOperatorError('RESOURCE_TAMPERED', `branch is outside ownership namespace: ${resource.resource_id}`);
+      try { await this.withGitMutation(() => git(this.options.project, ['branch', '-D', branch])); } catch (error) {
         if (!String(error).includes('not found')) throw error;
       }
     }
@@ -340,7 +380,7 @@ export class V2GitOperator {
     if (await exists(path)) throw new V2GitOperatorError('RESOURCE_TAMPERED', `resource path already exists: ${path}`);
     await this.withGitMutation(() => git(this.options.project, ['worktree', 'add', '-b', branch, path, base]));
     const createdHead = await git(path, ['rev-parse', 'HEAD']);
-    const commonDir = await this.gitCommonDir();
+    await this.gitCommonDir();
     const ownerTrailer = `AI-Workflow-Resource: ${worktreeId}`;
     const resource = this.receipt(worktreeId, worktreeKind, path, branch, baseRef, createdHead, ownerTrailer, tx, objectDigest(intent));
     const branchResource = this.receipt(branchResourceId, branchKind, undefined, branch, baseRef, createdHead, ownerTrailer, tx, objectDigest(intent));
@@ -385,7 +425,9 @@ export class V2GitOperator {
 
   private async inspectReceipt(resource: GitResourceReceipt): Promise<ReconcileResult> {
     if (!resource.canonical_path) {
-      try { const head = await git(this.options.project, ['rev-parse', resource.branch!]); if (!head) throw new Error('missing'); return { resource_id: resource.resource_id, state: 'observed', branch: resource.branch }; }
+      const branch = resource.branch;
+      if (!branch) throw new V2GitOperatorError('RESOURCE_TAMPERED', `branch is missing: ${resource.resource_id}`);
+      try { const head = await git(this.options.project, ['rev-parse', branch]); if (!head) throw new Error('missing'); return { resource_id: resource.resource_id, state: 'observed', branch }; }
       catch { return { resource_id: resource.resource_id, state: 'already-cleaned', branch: resource.branch }; }
     }
     const entries = await this.worktrees();

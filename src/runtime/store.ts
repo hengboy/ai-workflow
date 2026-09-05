@@ -33,6 +33,36 @@ export interface RunRecordV2 {
   resources: unknown[];
   completed_tasks?: string[];
   blocked_tasks?: string[];
+  pause_reason?: string;
+  resume_evidence?: ResumeAuthorityEvidence;
+  authority?: V2AuthorityDescriptor;
+}
+
+export interface V2AuthorityDescriptor {
+  authority_version: '1.0.0';
+  manifest_path: string;
+  manifest_digest: string;
+  script_path: string;
+  script_digest: string;
+  args_path: string;
+  args_digest: string;
+  approval_path: string;
+  approval_digest: string;
+  profile_digest: string;
+  sandbox_digest: string;
+  baseline_digest: string;
+  fencing_epoch: number;
+  restart_capability: 'worker-thread-trusted-v2';
+}
+
+export interface ResumeAuthorityEvidence {
+  manifest_digest: string;
+  script_digest: string;
+  args_digest: string;
+  approval_digest: string;
+  profile_digest: string;
+  sandbox_digest: string;
+  baseline_digest: string;
 }
 
 export async function saveV2Run(project: string, record: RunRecordV2): Promise<void> {

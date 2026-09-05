@@ -1,15 +1,20 @@
 import { describe, expect, it } from 'vitest';
 import { execFile } from 'node:child_process';
-import { readFile, writeFile } from 'node:fs/promises';
+import { chmod, readFile, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { frozenPlan, gitInit, temporary } from '../helpers.js';
+import { parseMarkdown, renderMarkdown } from '../../src/utils/frontmatter.js';
+import { stableJson } from '../../src/utils/hash.js';
+import { runV2Script } from '../../src/runtime/runner.js';
 
 const exec = promisify(execFile);
 
-async function workflowCli(project: string, arguments_: string[]): Promise<{ stdout: string; stderr: string }> {
+function parseJson(value: string): unknown { return JSON.parse(value) as unknown; }
+
+async function workflowCli(project: string, arguments_: string[], env?: NodeJS.ProcessEnv): Promise<{ stdout: string; stderr: string }> {
   const root = process.cwd();
-  return exec(process.execPath, [join(root, 'node_modules/tsx/dist/cli.mjs'), join(root, 'src/cli.ts'), ...arguments_], { cwd: project });
+  return exec(process.execPath, [join(root, 'node_modules/tsx/dist/cli.mjs'), join(root, 'src/cli.ts'), ...arguments_], { cwd: project, ...(env === undefined ? {} : { env: { ...process.env, ...env } }) });
 }
 
 describe('v2 CLI artifacts', () => {
@@ -18,7 +23,7 @@ describe('v2 CLI artifacts', () => {
     const plan = await frozenPlan(project);
     const script = join(plan, 'custom-workflow.js');
     const args = join(plan, 'custom-args.json');
-    await writeFile(script, 'workflow.action("task-001-example-explore", "call/explore");\n');
+    await writeFile(script, 'await agent("explore", { actionId: "task-001-example-explore", callId: "call/explore" });\n');
     await writeFile(args, '{"mode":"test"}\n');
 
     const generated = await workflowCli(project, ['workflow', 'generate', '--plan', plan, '--host', 'codex', '--script', script, '--args', args]);
@@ -35,7 +40,8 @@ describe('v2 CLI artifacts', () => {
     await gitInit(project);
     const plan = await frozenPlan(project);
     const generated = await workflowCli(project, ['workflow', 'generate', '--plan', plan, '--host', 'codex']);
-    const workflow = JSON.parse(generated.stdout).workflow as string;
+    const generatedOutput = JSON.parse(generated.stdout) as { workflow: string };
+    const workflow = generatedOutput.workflow;
 
     const validation = await workflowCli(project, ['workflow', 'validate', workflow, '--project', project]);
     expect(JSON.parse(validation.stdout)).toMatchObject({ valid: true });
@@ -53,19 +59,191 @@ describe('v2 CLI artifacts', () => {
     await gitInit(project);
     const plan = await frozenPlan(project);
     const generated = await workflowCli(project, ['workflow', 'generate', '--plan', plan, '--host', 'codex']);
-    const workflow = JSON.parse(generated.stdout).workflow as string;
+    const generatedOutput = JSON.parse(generated.stdout) as { workflow: string };
+    const workflow = generatedOutput.workflow;
     await workflowCli(project, ['workflow', 'approve', workflow, '--project', project]);
 
     const started = await workflowCli(project, ['run', 'start', '--workflow', workflow, '--host', 'codex', '--project', project]);
     const record = JSON.parse(started.stdout) as { record_version: string; run_id: string; engine: string; run_state: string };
-    expect(record).toMatchObject({ record_version: '2.0.0', engine: 'worker-thread-trusted', run_state: 'preflight' });
+    expect(record).toMatchObject({ record_version: '2.0.0', engine: 'worker-thread-trusted', run_state: 'paused' });
 
     const status = await workflowCli(project, ['run', 'status', record.run_id, '--project', project]);
     expect(JSON.parse(status.stdout)).toMatchObject({ record_version: '2.0.0', run_id: record.run_id });
-    const cancelled = await workflowCli(project, ['run', 'cancel', record.run_id, '--project', project]);
-    expect(JSON.parse(cancelled.stdout)).toMatchObject({ run_state: 'cancelled', stop_reason: 'cancelled' });
-    const cleanup = await workflowCli(project, ['run', 'cleanup', record.run_id, '--project', project]);
-    expect(JSON.parse(cleanup.stdout)).toMatchObject({ cleaned: record.run_id });
+    const resumed = await workflowCli(project, ['run', 'resume', record.run_id, '--project', project]);
+    expect(JSON.parse(resumed.stdout)).toMatchObject({ run_state: 'paused', pause_reason: 'approved Worker restart authority is unavailable' });
+    const pausedStatusValue = parseJson((await workflowCli(project, ['run', 'status', record.run_id, '--project', project])).stdout);
+    if (!pausedStatusValue || typeof pausedStatusValue !== 'object' || !('resume_evidence' in pausedStatusValue) || !pausedStatusValue.resume_evidence || typeof pausedStatusValue.resume_evidence !== 'object') throw new Error('paused status is missing resume evidence');
+    const evidence = pausedStatusValue.resume_evidence as Record<string, unknown>;
+    for (const field of ['manifest_digest', 'script_digest', 'args_digest', 'approval_digest', 'profile_digest', 'sandbox_digest', 'baseline_digest']) expect(evidence[field]).toMatch(/^sha256:/);
+    expect((await workflowCli(project, ['run', 'cancel', record.run_id, '--project', project])).stdout).toContain('"run_state": "cancelled"');
+  });
+
+  it('executes the approved plan-local Worker script during run start', async () => {
+    const project = await temporary('ai-workflow-cli-v2-');
+    await gitInit(project);
+    const plan = await frozenPlan(project);
+    await writeFile(join(plan, 'workflow.js'), `phase('cli-started'); log('script-ran'); return { started: true };\n`);
+    const generated = await workflowCli(project, ['workflow', 'generate', '--plan', plan, '--host', 'codex']);
+    const workflow = (JSON.parse(generated.stdout) as { workflow: string }).workflow;
+    await workflowCli(project, ['workflow', 'approve', workflow, '--project', project]);
+
+    const started = await workflowCli(project, ['run', 'start', '--workflow', workflow, '--host', 'codex', '--project', project]);
+    const record = JSON.parse(started.stdout) as { run_id: string; run_state: string };
+    expect(record.run_state).toBe('paused');
+    await expect(readFile(join(project, '.ai-workflow/runs', record.run_id, 'events.jsonl'), 'utf8')).resolves.toMatch(/cli-started|script-ran/);
+  });
+
+  it('persists a host-authority blocked reason when CLI start cannot complete lifecycle gates', async () => {
+    const project = await temporary('ai-workflow-cli-v2-');
+    await gitInit(project);
+    const plan = await frozenPlan(project);
+    await writeFile(join(plan, 'workflow.js'), "phase('cli-authority'); return { started: true };");
+    const generated = await workflowCli(project, ['workflow', 'generate', '--plan', plan, '--host', 'codex']);
+    const workflow = (JSON.parse(generated.stdout) as { workflow: string }).workflow;
+    await workflowCli(project, ['workflow', 'approve', workflow, '--project', project]);
+
+    const started = await workflowCli(project, ['run', 'start', '--workflow', workflow, '--host', 'codex', '--project', project]);
+    const record = JSON.parse(started.stdout) as { run_id: string; run_state: string; stop_reason?: string };
+    expect(record).toMatchObject({ run_state: 'paused', stop_reason: 'blocked' });
+    await expect(readFile(join(project, '.ai-workflow/runs', record.run_id, 'events.jsonl'), 'utf8')).resolves.toMatch(/approved script did not close every required task before host authority review/);
+  });
+
+  it('completes manifest-scoped plan, review, repair, test and targeted recheck authority through a temporary host', async () => {
+    const project = await temporary('ai-workflow-cli-v2-');
+    const bin = await temporary('ai-workflow-authority-host-');
+    await gitInit(project);
+    const plan = await frozenPlan(project);
+    const taskPath = join(plan, 'tasks/task-001-example.md');
+    const taskDocument = parseMarkdown(await readFile(taskPath, 'utf8'));
+    taskDocument.attributes.write_scope = ['src/input.ts'];
+    await writeFile(taskPath, renderMarkdown(taskDocument.attributes, taskDocument.body));
+    await writeFile(join(project, 'src/input.ts'), 'baseline\n');
+    await exec('git', ['add', 'MEMORY.md', 'src/input.ts'], { cwd: project });
+    await exec('git', ['commit', '-m', 'fixture source'], { cwd: project });
+    await writeFile(join(plan, 'workflow.js'), 'await skipTask("task-001-example", "authority fixture", "control/skip");\n');
+    const host = join(bin, 'codex');
+    await writeFile(host, `#!/usr/bin/env node
+const { createHash } = require('node:crypto');
+const { readFileSync, writeFileSync } = require('node:fs');
+const input = readFileSync(0, 'utf8');
+const packet = JSON.parse(input.split('PACKET:\\n')[1].split('\\n\\nRespond')[0]);
+const result = (value = {}, changed_paths = [], tests = []) => process.stdout.write(JSON.stringify({ result_version: '2.0.0', status: 'done', summary: 'fake authority', changed_paths, evidence: [], tests, findings: [], git_refs: [], support_requests: [], value }));
+const digest = (value) => 'sha256:' + createHash('sha256').update(value).digest('hex');
+if (packet.objective.includes('Host authority plan validation')) result({ result_version: '2.0.0', result_type: 'plan-validation', valid: true, errors: [] });
+else if (packet.objective.includes('Host authority review standards-review')) result({ result_version: '2.0.0', result_type: 'review', gate_id: 'standards-review', findings: [{ severity: 'error', message: 'repair src input', path: 'src/input.ts', applicable_action_ids: ['task-001-example-implement'] }] });
+else if (packet.objective.includes('Host authority review spec-review')) result({ result_version: '2.0.0', result_type: 'review', gate_id: 'spec-review', findings: [] });
+else if (packet.objective.includes('Host authority aggregate repair')) { writeFileSync('src/input.ts', 'repaired\\n'); result({ result_version: '2.0.0', result_type: 'aggregate-repair', changed_paths: ['src/input.ts'] }, ['src/input.ts']); }
+else if (packet.objective.includes('Host authority repair test')) result({ result_version: '2.0.0', result_type: 'repair-test', task_id: 'task-001-example', tests: [{ command: 'pnpm test', status: 'passed' }] }, [], [{ command: 'pnpm test', status: 'passed' }]);
+else if (packet.objective.includes('Host authority finding recheck')) { const [source, repair] = packet.evidence; const finding = /finding-sha256:[a-f0-9]{64}/.exec(packet.objective)[0]; const evidence = readFileSync('src/input.ts'); result({ result_version: '2.0.0', result_type: 'finding-recheck', finding_id: finding, status: 'closed', evidence_paths: ['src/input.ts'], evidence_digests: [digest(evidence)], repair_diff_digest: repair, source_review_receipt_digest: source, message: 'recheck complete' }); }
+else if (packet.write_paths.length) { writeFileSync('src/output.ts', 'implemented\\n'); result({}, ['src/output.ts']); }
+else if (packet.role === 'test') result({}, [], [{ command: 'pnpm test', status: 'passed' }]);
+else result();
+`);
+    await chmod(host, 0o755);
+    const workflow = (JSON.parse((await workflowCli(project, ['workflow', 'generate', '--plan', plan, '--host', 'codex'])).stdout) as { workflow: string }).workflow;
+    const manifest = JSON.parse(await readFile(workflow, 'utf8')) as { tasks: Array<{ activation: string }> };
+    manifest.tasks[0]!.activation = 'conditional';
+    await writeFile(workflow, `${stableJson(manifest)}\n`);
+    await workflowCli(project, ['workflow', 'approve', workflow, '--project', project]);
+
+    const started = await workflowCli(project, ['run', 'start', '--workflow', workflow, '--host', 'codex', '--project', project], { PATH: `${bin}:${process.env.PATH ?? ''}` });
+    const record = JSON.parse(started.stdout) as { run_id: string; run_state: string };
+
+    const events = await readFile(join(project, '.ai-workflow/runs', record.run_id, 'events.jsonl'), 'utf8');
+    expect(record.run_state, events).toBe('complete');
+    const authorityDirectory = join(project, '.ai-workflow/runs', record.run_id, 'receipts', 'authority');
+    const recheck = (await readdir(authorityDirectory)).find((entry) => entry.startsWith('finding-recheck-'));
+    if (!recheck) throw new Error('fake host did not produce a targeted recheck receipt');
+    const receipt = parseJson(await readFile(join(authorityDirectory, recheck), 'utf8')) as { finding_id: string; source_review_receipt_digest: string; repair_diff_digest: string; evidence_digests: string[]; message: string };
+    const review = parseJson(await readFile(join(authorityDirectory, 'standards-review.json'), 'utf8')) as { receipt_digest: string; findings: Array<{ finding_id: string; message_digest: string }> };
+    expect(receipt.finding_id).toMatch(/^finding-sha256:/);
+    expect(receipt.source_review_receipt_digest).toBe(review.receipt_digest);
+    expect(receipt.repair_diff_digest).toMatch(/^sha256:/);
+    expect(receipt.evidence_digests).toEqual([expect.stringMatching(/^sha256:/)]);
+    expect(receipt.message).toBe('recheck complete');
+    expect(review.findings).toHaveLength(1);
+    expect(review.findings[0]?.finding_id).toBe(receipt.finding_id);
+    expect(review.findings[0]?.message_digest).toMatch(/^sha256:/);
+    await expect(readFile(join(project, 'src/input.ts'), 'utf8')).resolves.toBe('repaired\n');
+  });
+
+  it('records an approved Worker action through the durable call ledger before pausing for lifecycle gates', async () => {
+    const project = await temporary('ai-workflow-cli-v2-');
+    const bin = await temporary('ai-workflow-host-');
+    await gitInit(project);
+    const plan = await frozenPlan(project);
+    await writeFile(join(plan, 'workflow.js'), 'await agent("explore", { actionId: "task-001-example-explore", callId: "call/explore" });\n');
+    const host = join(bin, 'codex');
+    await writeFile(host, '#!/bin/sh\nprintf \'%s\\n\' \'{"status":"done","summary":"explored","changed_paths":[],"evidence":[],"tests":[],"findings":[],"git_refs":[],"support_requests":[]}\'\n');
+    await chmod(host, 0o755);
+    const generated = await workflowCli(project, ['workflow', 'generate', '--plan', plan, '--host', 'codex']);
+    const workflow = (JSON.parse(generated.stdout) as { workflow: string }).workflow;
+    await workflowCli(project, ['workflow', 'approve', workflow, '--project', project]);
+
+    const started = await workflowCli(project, ['run', 'start', '--workflow', workflow, '--host', 'codex', '--project', project], { PATH: `${bin}:${process.env.PATH ?? ''}` });
+    const record = JSON.parse(started.stdout) as { run_id: string; run_state: string; call_ledger: Array<{ call_id: string; state: string }> };
+    expect(record.run_state).toBe('paused');
+    expect(record.call_ledger).toEqual(expect.arrayContaining([expect.objectContaining({ call_id: 'call/explore', state: 'checkpointed' })]));
+  });
+
+  it('does not checkpoint an action result that reports paths outside its approved scope', async () => {
+    const project = await temporary('ai-workflow-cli-v2-');
+    const bin = await temporary('ai-workflow-host-');
+    await gitInit(project);
+    const plan = await frozenPlan(project);
+    await writeFile(join(plan, 'workflow.js'), 'await agent("explore", { actionId: "task-001-example-explore", callId: "call/out-of-scope" });\n');
+    const host = join(bin, 'codex');
+    await writeFile(host, '#!/bin/sh\nprintf \'%s\\n\' \'{"status":"done","summary":"invalid scope","changed_paths":["src/output.ts"],"evidence":[],"tests":[],"findings":[],"git_refs":[],"support_requests":[]}\'\n');
+    await chmod(host, 0o755);
+    const generated = await workflowCli(project, ['workflow', 'generate', '--plan', plan, '--host', 'codex']);
+    const workflow = (JSON.parse(generated.stdout) as { workflow: string }).workflow;
+    await workflowCli(project, ['workflow', 'approve', workflow, '--project', project]);
+
+    const started = await workflowCli(project, ['run', 'start', '--workflow', workflow, '--host', 'codex', '--project', project], { PATH: `${bin}:${process.env.PATH ?? ''}` });
+    const record = JSON.parse(started.stdout) as { run_state: string; call_ledger: Array<{ call_id: string; state: string }> };
+    expect(record.run_state).toBe('paused');
+    expect(record.call_ledger).toEqual(expect.arrayContaining([expect.objectContaining({ call_id: 'call/out-of-scope', state: 'observed' })]));
+    expect(record.call_ledger).not.toEqual(expect.arrayContaining([expect.objectContaining({ call_id: 'call/out-of-scope', state: 'checkpointed' })]));
+  });
+
+  it('runs an approved dynamic action inside its owned task worktree', async () => {
+    const project = await temporary('ai-workflow-cli-v2-');
+    const bin = await temporary('ai-workflow-host-');
+    await gitInit(project);
+    const plan = await frozenPlan(project);
+    await writeFile(join(plan, 'workflow.js'), 'await agent("explore", { actionId: "task-001-example-explore", callId: "call/explore-worktree" });\n');
+    const host = join(bin, 'codex');
+    await writeFile(host, '#!/bin/sh\nprintf \'%s\\n\' "{\\"status\\":\\"done\\",\\"summary\\":\\"$PWD\\",\\"changed_paths\\":[],\\"evidence\\":[],\\"tests\\":[],\\"findings\\":[],\\"git_refs\\":[],\\"support_requests\\":[]}"\n');
+    await chmod(host, 0o755);
+    const generated = await workflowCli(project, ['workflow', 'generate', '--plan', plan, '--host', 'codex']);
+    const workflow = (JSON.parse(generated.stdout) as { workflow: string }).workflow;
+    await workflowCli(project, ['workflow', 'approve', workflow, '--project', project]);
+
+    const started = await workflowCli(project, ['run', 'start', '--workflow', workflow, '--host', 'codex', '--project', project], { PATH: `${bin}:${process.env.PATH ?? ''}` });
+    const record = JSON.parse(started.stdout) as { run_state: string; call_ledger: Array<{ call_id: string; state: string; result?: { summary?: string } }>; resources: Array<{ kind?: string; canonical_path?: string }> };
+    expect(record.run_state).toBe('paused');
+    expect(record.call_ledger).toEqual(expect.arrayContaining([expect.objectContaining({ call_id: 'call/explore-worktree', state: 'checkpointed' })]));
+    expect(record.resources.some((resource) => resource.kind === 'task-worktree' && resource.canonical_path?.includes('worktrees/tasks/task-001-example'))).toBe(true);
+    expect(record.call_ledger[0]?.result?.summary?.includes('worktrees/tasks/task-001-example')).toBe(true);
+  });
+
+  it('acquires the v2 owner lease before CLI dynamic actions execute', async () => {
+    const project = await temporary('ai-workflow-cli-v2-');
+    const bin = await temporary('ai-workflow-host-');
+    await gitInit(project);
+    const plan = await frozenPlan(project);
+    await writeFile(join(plan, 'workflow.js'), 'await agent("explore", { actionId: "task-001-example-explore", callId: "call/owner-lease" });\n');
+    const host = join(bin, 'codex');
+    await writeFile(host, '#!/bin/sh\nif test -f "$PWD/../../../control/owner.json"; then summary=active; else summary=missing; fi\nprintf \'%s\\n\' "{\\"result_version\\":\\"2.0.0\\",\\"status\\":\\"done\\",\\"summary\\":\\"$summary\\",\\"changed_paths\\":[],\\"evidence\\":[],\\"tests\\":[],\\"findings\\":[],\\"git_refs\\":[],\\"support_requests\\":[]}"\n');
+    await chmod(host, 0o755);
+    const generated = await workflowCli(project, ['workflow', 'generate', '--plan', plan, '--host', 'codex']);
+    const workflow = (JSON.parse(generated.stdout) as { workflow: string }).workflow;
+    await workflowCli(project, ['workflow', 'approve', workflow, '--project', project]);
+
+    const started = await workflowCli(project, ['run', 'start', '--workflow', workflow, '--host', 'codex', '--project', project], { PATH: `${bin}:${process.env.PATH ?? ''}` });
+    const record = JSON.parse(started.stdout) as { run_state: string; call_ledger: Array<{ call_id: string; result?: { summary?: string } }> };
+    expect(record.run_state).toBe('paused');
+    expect(record.call_ledger.find((entry) => entry.call_id === 'call/owner-lease')?.result?.summary).toBe('active');
   });
 
   it('fails closed when an approved v2 artifact changes before start', async () => {
@@ -73,11 +251,68 @@ describe('v2 CLI artifacts', () => {
     await gitInit(project);
     const plan = await frozenPlan(project);
     const generated = await workflowCli(project, ['workflow', 'generate', '--plan', plan, '--host', 'codex']);
-    const workflow = JSON.parse(generated.stdout).workflow as string;
+    const generatedOutput = JSON.parse(generated.stdout) as { workflow: string };
+    const workflow = generatedOutput.workflow;
     await workflowCli(project, ['workflow', 'approve', workflow, '--project', project]);
     await writeFile(join(plan, 'workflow.args.json'), '{"changed":true}\n');
 
     await expect(workflowCli(project, ['run', 'start', '--workflow', workflow, '--host', 'codex', '--project', project])).rejects.toThrow(/digest drift|approval/i);
+  });
+
+  it('rejects caller script and args replacements before creating a run', async () => {
+    const project = await temporary('ai-workflow-direct-v2-');
+    await gitInit(project);
+    const plan = await frozenPlan(project);
+    await writeFile(join(plan, 'workflow.js'), "phase('manifest-script'); return { source: 'manifest' };\n");
+    const generated = await workflowCli(project, ['workflow', 'generate', '--plan', plan, '--host', 'codex']);
+    const workflow = (JSON.parse(generated.stdout) as { workflow: string });
+    const manifest = JSON.parse(await readFile(workflow.workflow, 'utf8')) as import('../../src/generated/coding-manifest.schema.js').CodingCapabilityManifest;
+    await workflowCli(project, ['workflow', 'approve', workflow.workflow, '--project', project]);
+    await expect(runV2Script({ project, runId: 'direct-runner-replacement', manifest, script: "throw new Error('caller script must not run');", args: { caller: true }, scriptDigest: 'sha256:' + 'f'.repeat(64), argsDigest: 'sha256:' + 'f'.repeat(64) })).rejects.toThrow(/Caller (script|args)/i);
+    await expect(readFile(join(project, '.ai-workflow/runs/direct-runner-replacement/state.json'), 'utf8')).rejects.toThrow();
+  });
+
+  it.each([
+    ['script', () => ({ script: 'caller script\n' }), /Caller script/i],
+    ['args', () => ({ args: { caller: true } }), /Caller args/i],
+    ['script digest', () => ({ scriptDigest: 'sha256:' + 'f'.repeat(64) }), /Caller script/i],
+    ['args digest', () => ({ argsDigest: 'sha256:' + 'f'.repeat(64) }), /Caller args/i],
+  ] as const)('rejects a forged caller %s before Worker, host, worktree or intent creation', async (_label, mutate, error) => {
+    const project = await temporary('ai-workflow-direct-v2-');
+    await gitInit(project);
+    const plan = await frozenPlan(project);
+    const workflowPath = (JSON.parse((await workflowCli(project, ['workflow', 'generate', '--plan', plan, '--host', 'codex'])).stdout) as { workflow: string }).workflow;
+    await workflowCli(project, ['workflow', 'approve', workflowPath, '--project', project]);
+    const manifest = JSON.parse(await readFile(workflowPath, 'utf8')) as import('../../src/generated/coding-manifest.schema.js').CodingCapabilityManifest;
+    const base = { project, runId: `forged-${_label.replaceAll(' ', '-')}`, manifest, script: await readFile(join(plan, 'workflow.js'), 'utf8'), args: {}, scriptDigest: manifest.script.bytes_digest, argsDigest: manifest.args.bytes_digest };
+    await expect(runV2Script({ ...base, ...mutate() })).rejects.toThrow(error);
+    await expect(readFile(join(project, '.ai-workflow/runs', base.runId, 'state.json'), 'utf8')).rejects.toThrow();
+    await expect(exec('git', ['worktree', 'list', '--porcelain'], { cwd: project })).resolves.not.toHaveProperty('stdout', expect.stringContaining(base.runId));
+  });
+
+  it('rejects a forged caller manifest before creating a run or Git resource', async () => {
+    const project = await temporary('ai-workflow-direct-v2-');
+    await gitInit(project);
+    const plan = await frozenPlan(project);
+    const generated = await workflowCli(project, ['workflow', 'generate', '--plan', plan, '--host', 'codex']);
+    const workflowPath = (JSON.parse(generated.stdout) as { workflow: string }).workflow;
+    await workflowCli(project, ['workflow', 'approve', workflowPath, '--project', project]);
+    const manifest = JSON.parse(await readFile(workflowPath, 'utf8')) as import('../../src/generated/coding-manifest.schema.js').CodingCapabilityManifest;
+    const forged = structuredClone(manifest);
+    forged.actions = [];
+
+    await expect(runV2Script({
+      project,
+      runId: 'forged-manifest',
+      manifest: forged,
+      script: await readFile(join(plan, 'workflow.js'), 'utf8'),
+      args: {},
+      scriptDigest: manifest.script.bytes_digest,
+      argsDigest: manifest.args.bytes_digest,
+    })).rejects.toThrow(/manifest.*drift|manifest.*mismatch|canonical/i);
+    await expect(readFile(join(project, '.ai-workflow/runs/forged-manifest/state.json'), 'utf8')).rejects.toThrow();
+    await expect(readFile(join(project, '.ai-workflow/runs/forged-manifest/events.jsonl'), 'utf8')).rejects.toThrow();
+    await expect(exec('git', ['worktree', 'list', '--porcelain'], { cwd: project })).resolves.not.toHaveProperty('stdout', expect.stringContaining('forged-manifest'));
   });
 
   it('initializes the v2 run path and installs all host coding guidance in an isolated home', async () => {

@@ -1,14 +1,28 @@
 import { describe, expect, it } from 'vitest';
-import { mkdtemp } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { connect } from 'node:net';
 import { RunLedger, type CallDescriptor, type RecordedAgentResult } from '../../src/runtime/ledger.js';
-import { assertResumeFingerprint, loadRun, loadV2Run, saveRun, type ResumeFingerprint, type RunRecord } from '../../src/runtime/store.js';
+import { assertResumeFingerprint, loadRun, loadV2Run, saveRun, saveV2Run, type ResumeFingerprint, type RunRecord } from '../../src/runtime/store.js';
 import { EventLog } from '../../src/runtime/events.js';
 import { cancelV2Run, projectV2Run, resumeV2Run, startV2Run } from '../../src/runtime/runner.js';
+import { generateManifest } from '../../src/workflow/generate.js';
+import { frozenPlan, gitInit } from '../helpers.js';
+import { runV2Script } from '../../src/runtime/runner.js';
+import { CancelControl, CancelSocket, cancelProof, cancelReasonDigest } from '../../src/runtime/control.js';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { stableJson } from '../../src/utils/hash.js';
 
 const descriptor: CallDescriptor = { action_id: 'action-one', task_id: 'task-one', input: { value: 1 } };
 const result: RecordedAgentResult = { result_version: '2.0.0', status: 'done', summary: 'ok', changed_paths: [], evidence: [], tests: [], findings: [], git_refs: [], support_requests: [] };
+const exec = promisify(execFile);
+
+async function approveV2(project: string, plan: string): Promise<void> {
+  const root = process.cwd();
+  await exec(process.execPath, [join(root, 'node_modules/tsx/dist/cli.mjs'), join(root, 'src/cli.ts'), 'workflow', 'approve', join(plan, 'workflow.json'), '--project', project], { cwd: project });
+}
 
 async function createLedger() {
   const directory = await mkdtemp(join(tmpdir(), 'ai-workflow-replay-'));
@@ -104,8 +118,307 @@ describe('replay and resume', () => {
     await expect(projectV2Run(directory, 'run-lifecycle')).resolves.toMatchObject({ run_state: 'paused' });
 
     const fingerprint: ResumeFingerprint = { workflow: 'workflow', script: 'script', args: 'args', manifest: manifestDigest, profile: 'profile', baseline: 'baseline' };
-    await expect(resumeV2Run(directory, 'run-lifecycle', { expected: fingerprint, current: fingerprint })).resolves.toMatchObject({ run_state: 'executing' });
-    await expect(cancelV2Run(directory, 'run-lifecycle')).resolves.toMatchObject({ run_state: 'cancelled', stop_reason: 'cancelled' });
-    await expect(resumeV2Run(directory, 'run-lifecycle')).rejects.toThrow(/paused v2/i);
+    await expect(resumeV2Run(directory, 'run-lifecycle', { expected: fingerprint, current: fingerprint })).resolves.toMatchObject({ run_state: 'paused' });
+    await expect(cancelV2Run(directory, 'run-lifecycle')).rejects.toMatchObject({ code: 'CANCEL_UNAUTHORIZED' });
+    await expect(projectV2Run(directory, 'run-lifecycle')).resolves.toMatchObject({ run_state: 'paused' });
+  });
+
+  it('keeps a paused v2 run paused when resume authority is incomplete', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'ai-workflow-v2-resume-guard-'));
+    const manifestDigest = 'sha256:' + 'c'.repeat(64);
+    await startV2Run({ project: directory, runId: 'run-guard', manifestDigest, fencingEpoch: 1 });
+    const log = new EventLog({ path: join(directory, '.ai-workflow/runs/run-guard/events.jsonl'), runId: 'run-guard', fencingEpoch: 1 });
+    await log.append({ type: 'run/error', payload: { state: 'paused', reason: 'worker exited' } });
+
+    await expect(resumeV2Run(directory, 'run-guard')).rejects.toThrow(/fingerprint|authority/i);
+    await expect(projectV2Run(directory, 'run-guard')).resolves.toMatchObject({ run_state: 'paused' });
+    const events = await log.read();
+    expect(events.events.some((event) => event.type === 'resume/diverged')).toBe(true);
+  });
+
+  it('persists reusable cancel authority and fails closed without peer credentials', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'ai-workflow-v2-cancel-authority-'));
+    const started = await startV2Run({ project: directory, runId: 'run-cancel-authority', manifestDigest: 'sha256:' + '1'.repeat(64), fencingEpoch: 3 });
+
+    expect(started).toMatchObject({ run_state: 'preflight', fencing_epoch: 3 });
+    const controlDirectory = join(directory, '.ai-workflow/runs/run-cancel-authority/control');
+    const authority = JSON.parse(await readFile(join(controlDirectory, 'cancel-authority.json'), 'utf8')) as { challenge_nonce?: string; socket_path?: string; fencing_epoch?: number };
+    expect(authority).toMatchObject({ fencing_epoch: 3 });
+    expect(authority.challenge_nonce).toEqual(expect.any(String));
+    expect(authority.socket_path).toEqual(expect.stringMatching(/^\/tmp\/aiw-[a-f0-9]+\.sock$/));
+
+    await expect(cancelV2Run(directory, 'run-cancel-authority')).rejects.toMatchObject({ code: 'CANCEL_UNAUTHORIZED' });
+  });
+
+  it('pauses resume when the persisted approved script drifts', async () => {
+    const project = await mkdtemp(join(tmpdir(), 'ai-workflow-v2-resume-authority-'));
+    await gitInit(project);
+    const plan = await frozenPlan(project);
+    await writeFile(join(plan, 'workflow.js'), 'return true;\n');
+    const manifest = await generateManifest(plan, 'codex');
+    await approveV2(project, plan);
+    const record = await runV2Script({ project, runId: 'run-resume-authority', manifest, script: await readFile(join(plan, 'workflow.js'), 'utf8'), args: {}, scriptDigest: manifest.script.bytes_digest, argsDigest: manifest.args.bytes_digest });
+    expect(record.run_state).toBe('paused');
+    await writeFile(join(plan, 'workflow.js'), 'return false;\n');
+
+    await expect(resumeV2Run(project, record.run_id)).rejects.toThrow(/script.*drift/i);
+    await expect(projectV2Run(project, record.run_id)).resolves.toMatchObject({ run_state: 'paused' });
+  });
+
+  it('keeps an authoritative v2 resume paused when no restart adapter is supplied', async () => {
+    const project = await mkdtemp(join(tmpdir(), 'ai-workflow-v2-resume-paused-'));
+    await gitInit(project);
+    const plan = await frozenPlan(project);
+    await writeFile(join(plan, 'workflow.js'), 'return true;\n');
+    const manifest = await generateManifest(plan, 'codex');
+    await approveV2(project, plan);
+    const record = await runV2Script({ project, runId: 'run-resume-paused', manifest, script: await readFile(join(plan, 'workflow.js'), 'utf8'), args: {}, scriptDigest: manifest.script.bytes_digest, argsDigest: manifest.args.bytes_digest });
+
+    await expect(resumeV2Run(project, record.run_id)).resolves.toMatchObject({ run_state: 'paused' });
+    const events = await new EventLog({ path: join(project, '.ai-workflow/runs', record.run_id, 'events.jsonl'), runId: record.run_id, fencingEpoch: 1 }).read();
+    expect(events.events.some((event) => event.type === 'resume/diverged' && event.payload.reason === 'approved Worker restart authority is unavailable')).toBe(true);
+  });
+
+  it.each([
+    ['profile', (manifest: { host_execution: { adapter: string } }) => { manifest.host_execution.adapter = 'claude'; }],
+    ['sandbox', (manifest: { host_execution: { action_executor: { network_allowed: boolean } } }) => { manifest.host_execution.action_executor.network_allowed = true; }],
+  ] as const)('pauses authoritative resume when the persisted %s authority digest drifts', async (field, mutate) => {
+    const project = await mkdtemp(join(tmpdir(), 'ai-workflow-v2-resume-authority-drift-'));
+    await gitInit(project);
+    const plan = await frozenPlan(project);
+    await writeFile(join(plan, 'workflow.js'), 'return true;\n');
+    const manifest = await generateManifest(plan, 'codex');
+    await approveV2(project, plan);
+    const record = await runV2Script({ project, runId: `run-resume-${field}-drift`, manifest, script: await readFile(join(plan, 'workflow.js'), 'utf8'), args: {}, scriptDigest: manifest.script.bytes_digest, argsDigest: manifest.args.bytes_digest });
+    const manifestPath = join(plan, 'workflow.json');
+    const persisted = JSON.parse(await readFile(manifestPath, 'utf8')) as typeof manifest;
+    mutate(persisted as never);
+    await writeFile(manifestPath, `${JSON.stringify(persisted, null, 2)}\n`);
+
+    await expect(resumeV2Run(project, record.run_id)).rejects.toThrow(new RegExp(`${field}.*drift`, 'i'));
+    await expect(projectV2Run(project, record.run_id)).resolves.toMatchObject({ run_state: 'paused' });
+  });
+
+  it('does not mark an authoritative run executing when the restart adapter declines execution', async () => {
+    const project = await mkdtemp(join(tmpdir(), 'ai-workflow-v2-resume-restart-'));
+    await gitInit(project);
+    const plan = await frozenPlan(project);
+    const manifest = await generateManifest(plan, 'codex');
+    await approveV2(project, plan);
+    const record = await runV2Script({ project, runId: 'run-resume-restart', manifest, script: await readFile(join(plan, 'workflow.js'), 'utf8'), args: {}, scriptDigest: manifest.script.bytes_digest, argsDigest: manifest.args.bytes_digest });
+
+    await expect(resumeV2Run(project, record.run_id, { restart: async () => 'paused' as never })).rejects.toThrow(/restart.*executing/i);
+    await expect(projectV2Run(project, record.run_id)).resolves.toMatchObject({ run_state: 'paused' });
+  });
+
+  it('fences a crashed lifecycle owner before a replacement owner resumes', async () => {
+    const project = await mkdtemp(join(tmpdir(), 'ai-workflow-v2-owner-takeover-'));
+    const manifestDigest = 'sha256:' + 'e'.repeat(64);
+    await startV2Run({ project, runId: 'run-owner-takeover', manifestDigest, fencingEpoch: 1 });
+    const ownerPath = join(project, '.ai-workflow/runs/run-owner-takeover/control/owner.json');
+    await mkdir(join(project, '.ai-workflow/runs/run-owner-takeover/control'), { recursive: true });
+    await writeFile(ownerPath, JSON.stringify({ leaseVersion: '1.0.0', runId: 'run-owner-takeover', owner: { osUid: process.getuid?.() ?? 0, identityDigest: 'old-owner' }, process: { pid: 999999, pgid: 999999, startIdentity: 'old', spawnNonce: 'old' }, fencingEpoch: 1, leaseExpiresAt: Date.now() - 1, socketPath: join(project, 'old.sock'), status: 'active' }));
+    await new EventLog({ path: join(project, '.ai-workflow/runs/run-owner-takeover/events.jsonl'), runId: 'run-owner-takeover', fencingEpoch: 1 }).append({ type: 'run/error', payload: { state: 'paused', reason: 'owner crashed' } });
+
+    const resumed = await resumeV2Run(project, 'run-owner-takeover', { expected: { workflow: 'workflow', script: 'script', args: 'args', manifest: manifestDigest, profile: 'profile', baseline: 'baseline' }, current: { workflow: 'workflow', script: 'script', args: 'args', manifest: manifestDigest, profile: 'profile', baseline: 'baseline' } });
+
+    expect(resumed.run_state).toBe('paused');
+    await expect(readFile(ownerPath, 'utf8')).resolves.toMatch(/"fencingEpoch":2/);
+  });
+
+  it('persists the first v2 cancel intent and retains unknown resources', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'ai-workflow-v2-cancel-intent-'));
+    const manifestDigest = 'sha256:' + 'd'.repeat(64);
+    const started = await startV2Run({ project: directory, runId: 'run-cancel-intent', manifestDigest, fencingEpoch: 1 });
+    started.resources = [{ resource_id: 'unknown-resource' }];
+    await saveV2Run(directory, started);
+
+    await expect(cancelV2Run(directory, 'run-cancel-intent')).rejects.toMatchObject({ code: 'CANCEL_UNAUTHORIZED' });
+    await expect(projectV2Run(directory, 'run-cancel-intent')).resolves.toMatchObject({ run_state: 'preflight' });
+  });
+
+  it('marks a cancelled run as retaining resources it cannot reconcile', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'ai-workflow-v2-retained-cancel-'));
+    const manifestDigest = 'sha256:' + 'f'.repeat(64);
+    const started = await startV2Run({ project: directory, runId: 'run-retained', manifestDigest, fencingEpoch: 1 });
+    started.resources = [{ resource_id: 'unknown-resource' }];
+    await saveV2Run(directory, started);
+
+    await expect(cancelV2Run(directory, 'run-retained')).rejects.toMatchObject({ code: 'CANCEL_UNAUTHORIZED' });
+    await expect(projectV2Run(directory, 'run-retained')).resolves.toMatchObject({ run_state: 'preflight', resources: [{ resource_id: 'unknown-resource' }] });
+  });
+
+  it('accepts one authorized cross-process socket cancel and rejects a forged peer', async () => {
+    const project = await mkdtemp(join(tmpdir(), 'ai-workflow-v2-cancel-socket-'));
+    const uid = process.getuid?.();
+    if (uid === undefined) throw new Error('local uid is unavailable');
+    const runId = 'run-socket';
+    const control = new CancelControl({ root: project, runId, owner: { osUid: uid, identityDigest: 'owner' }, fencingEpoch: 1, nonce: 'challenge' });
+    const socketPath = join(project, 'cancel.sock');
+    const socket = new CancelSocket(control, { socketPath, peerUid: () => uid });
+    await socket.start();
+    const reason = 'cancel via socket';
+    const request = { runId, fencingEpoch: 1, nonce: 'challenge', reason, identityDigest: 'owner', proof: cancelProof('challenge', runId, 1, cancelReasonDigest(reason)) };
+
+    const first = await socketRequest(socketPath, request);
+    const second = await socketRequest(socketPath, { ...request, reason: 'later', proof: cancelProof('challenge', runId, 1, cancelReasonDigest('later')) });
+
+    expect(first).toMatchObject({ won: true });
+    expect(second).toMatchObject({ won: false, intent: { reason } });
+    await socket.close();
+
+    const forged = new CancelSocket(control, { socketPath, peerUid: () => uid + 1 });
+    await forged.start();
+    await expect(socketRequest(socketPath, request)).resolves.toMatchObject({ error: { code: 'CANCEL_UNAUTHORIZED' } });
+    await forged.close();
+  });
+
+  it('routes a local owner capability through the live socket to stop the Worker', async () => {
+    const project = await mkdtemp(join(tmpdir(), 'ai-workflow-v2-live-cancel-'));
+    await gitInit(project);
+    const plan = await frozenPlan(project);
+    await writeFile(join(plan, 'workflow.js'), 'await new Promise(() => {});\n');
+    const manifest = await generateManifest(plan, 'codex');
+    await approveV2(project, plan);
+    let settled = false;
+    const run = runV2Script({ project, runId: 'run-live-cancel', manifest, script: await readFile(join(plan, 'workflow.js'), 'utf8'), args: {}, scriptDigest: manifest.script.bytes_digest, argsDigest: manifest.args.bytes_digest }).finally(() => { settled = true; });
+    await waitFor(async () => {
+      if (settled) return false;
+      const authority = JSON.parse(await readFile(join(project, '.ai-workflow/runs/run-live-cancel/control/cancel-authority.json'), 'utf8')) as { owner_uid?: number; owner_identity_digest?: string; local_control_path?: string };
+      await readFile(join(project, '.ai-workflow/runs/run-live-cancel/control/owner-capability.json'), 'utf8');
+      return authority.owner_uid !== undefined && authority.owner_identity_digest !== undefined && authority.local_control_path !== undefined;
+    }, 5_000);
+
+    const authority = JSON.parse(await readFile(join(project, '.ai-workflow/runs/run-live-cancel/control/cancel-authority.json'), 'utf8')) as { socket_path?: string };
+    expect(authority.socket_path).toEqual(expect.any(String));
+    await expect(cancelV2Run(project, 'run-live-cancel')).resolves.toMatchObject({ run_state: 'cancelled' });
+    await expect(run).resolves.toMatchObject({ run_state: 'cancelled' });
+  });
+
+  it('aborts, reaps and reconciles a live fake-host child before publishing cancellation', async () => {
+    const project = await mkdtemp(join(tmpdir(), 'ai-workflow-v2-child-cancel-'));
+    const bin = await mkdtemp(join(tmpdir(), 'ai-workflow-v2-child-host-'));
+    await gitInit(project);
+    const plan = await frozenPlan(project);
+    await writeFile(join(plan, 'workflow.js'), 'await agent("hold", { actionId: "task-001-example-explore", callId: "call/hold" });\n');
+    await writeFile(join(bin, 'codex'), '#!/bin/sh\ntrap "exit 0" TERM INT\nwhile :; do sleep 1; done\n');
+    await chmod(join(bin, 'codex'), 0o755);
+    const manifest = await generateManifest(plan, 'codex');
+    await approveV2(project, plan);
+    const originalPath = process.env.PATH;
+    process.env.PATH = `${bin}:${originalPath ?? ''}`;
+    try {
+      const run = runV2Script({ project, runId: 'run-child-cancel', manifest, script: await readFile(join(plan, 'workflow.js'), 'utf8'), args: {}, scriptDigest: manifest.script.bytes_digest, argsDigest: manifest.args.bytes_digest });
+      await waitFor(async () => (await readFile(join(project, '.ai-workflow/runs/run-child-cancel/events.jsonl'), 'utf8')).includes('"call/running"'));
+
+      await expect(cancelV2Run(project, 'run-child-cancel')).resolves.toMatchObject({ run_state: 'cancelled' });
+      await expect(run).resolves.toMatchObject({ run_state: 'cancelled' });
+      const projected = await projectV2Run(project, 'run-child-cancel');
+      expect(projected.call_ledger).toEqual(expect.arrayContaining([expect.objectContaining({ call_id: 'call/hold', state: 'reconcile_required' })]));
+      await expect(readFile(join(project, '.ai-workflow/runs/run-child-cancel/events.jsonl'), 'utf8')).resolves.toMatch(/call\/reconcile-required/);
+    } finally {
+      process.env.PATH = originalPath;
+    }
+  });
+
+  it('fails closed when the local owner capability is not private to the cancelling user', async () => {
+    const project = await mkdtemp(join(tmpdir(), 'ai-workflow-v2-local-capability-'));
+    await gitInit(project);
+    const plan = await frozenPlan(project);
+    const manifest = await generateManifest(plan, 'codex');
+    await approveV2(project, plan);
+    const record = await runV2Script({ project, runId: 'run-local-capability', manifest, script: await readFile(join(plan, 'workflow.js'), 'utf8'), args: {}, scriptDigest: manifest.script.bytes_digest, argsDigest: manifest.args.bytes_digest });
+    const capabilityPath = join(project, '.ai-workflow/runs', record.run_id, 'control', 'owner-capability.json');
+    await chmod(capabilityPath, 0o644);
+
+    await expect(cancelV2Run(project, record.run_id)).rejects.toMatchObject({ code: 'CANCEL_UNAUTHORIZED' });
+    await expect(projectV2Run(project, record.run_id)).resolves.toMatchObject({ run_state: 'paused' });
+  });
+
+  it('retains unknown resources when a paused run is cancelled through its local owner capability', async () => {
+    const project = await mkdtemp(join(tmpdir(), 'ai-workflow-v2-retained-capability-'));
+    await gitInit(project);
+    const plan = await frozenPlan(project);
+    const manifest = await generateManifest(plan, 'codex');
+    await approveV2(project, plan);
+    const record = await runV2Script({ project, runId: 'run-retained-capability', manifest, script: await readFile(join(plan, 'workflow.js'), 'utf8'), args: {}, scriptDigest: manifest.script.bytes_digest, argsDigest: manifest.args.bytes_digest });
+    record.resources = [{ resource_id: 'unknown-resource' }];
+    await saveV2Run(project, record);
+
+    await expect(cancelV2Run(project, record.run_id)).resolves.toMatchObject({ run_state: 'cancelled-with-retained-resources', resources: [{ resource_id: 'unknown-resource' }] });
+    await expect(readFile(join(project, '.ai-workflow/runs', record.run_id, 'events.jsonl'), 'utf8')).resolves.toMatch(/resource\/retained/);
+  });
+
+  it('records a durable skip control for a conditional task in the approved script', async () => {
+    const project = await mkdtemp(join(tmpdir(), 'ai-workflow-v2-skip-control-'));
+    await gitInit(project);
+    const plan = await frozenPlan(project);
+    await writeFile(join(plan, 'workflow.js'), 'await skipTask("task-001-example", "not activated", "control/skip-task");\n');
+    const manifest = await generateManifest(plan, 'codex');
+    manifest.tasks[0]!.activation = 'conditional';
+    await writeFile(join(plan, 'workflow.json'), `${stableJson(manifest)}\n`);
+    await approveV2(project, plan);
+
+    const record = await runV2Script({ project, runId: 'run-skip-control', manifest, script: await readFile(join(plan, 'workflow.js'), 'utf8'), args: {}, scriptDigest: manifest.script.bytes_digest, argsDigest: manifest.args.bytes_digest });
+
+    expect(record.run_state).toBe('paused');
+    const skipControl = record.control_ledger.find((entry) => entry.control_id === 'control/skip-task');
+    expect(skipControl?.state).toBe('observed');
+    const skipResult = skipControl?.result;
+    expect(skipResult !== null && typeof skipResult === 'object' && !Array.isArray(skipResult) && 'state' in skipResult && skipResult.state === 'skipped').toBe(true);
+  });
+
+  it('records task closure only after the approved action is checkpointed', async () => {
+    const project = await mkdtemp(join(tmpdir(), 'ai-workflow-v2-finalize-control-'));
+    await gitInit(project);
+    const plan = await frozenPlan(project);
+    await writeFile(join(plan, 'workflow.js'), 'await agent("explore", { actionId: "task-001-example-explore", callId: "call/explore-finalize" });\nawait finalizeTask("task-001-example", "control/finalize-task");\n');
+    const manifest = await generateManifest(plan, 'codex');
+    manifest.tasks[0]!.required_actions = ['task-001-example-explore'];
+    manifest.tasks[0]!.finalization_mode = 'read-only-finalize';
+    await writeFile(join(plan, 'workflow.json'), `${stableJson(manifest)}\n`);
+    await approveV2(project, plan);
+
+    const hostDir = await mkdtemp(join(tmpdir(), 'ai-workflow-v2-finalize-host-'));
+    const host = join(hostDir, 'codex');
+    await writeFile(host, '#!/bin/sh\nprintf \'%s\\n\' \'{"result_version":"2.0.0","status":"done","summary":"explored","changed_paths":[],"evidence":[],"tests":[],"findings":[],"git_refs":[],"support_requests":[]}\'\n');
+    await (await import('node:fs/promises')).chmod(host, 0o755);
+    const previousPath = process.env.PATH;
+    process.env.PATH = `${hostDir}:${previousPath ?? ''}`;
+    try {
+      const record = await runV2Script({ project, runId: 'run-finalize-control', manifest, script: await readFile(join(plan, 'workflow.js'), 'utf8'), args: {}, scriptDigest: manifest.script.bytes_digest, argsDigest: manifest.args.bytes_digest });
+      expect(record.run_state).toBe('paused');
+      const control = record.control_ledger.find((entry) => entry.control_id === 'control/finalize-task');
+      expect(control?.state).toBe('observed');
+      expect(record.completed_tasks).toContain('task-001-example');
+      await expect(readFile(join(project, '.ai-workflow/runs/run-finalize-control/receipts/gate/task-closure.json'), 'utf8')).resolves.toMatch(/"state": "passed"/);
+      await expect(readFile(join(project, '.ai-workflow/runs/run-finalize-control/receipts/gate/plan-validation.json'), 'utf8')).rejects.toThrow();
+      await expect(readFile(join(project, '.ai-workflow/runs/run-finalize-control/receipts/gate/standards-review.json'), 'utf8')).rejects.toThrow();
+    } finally {
+      process.env.PATH = previousPath;
+    }
   });
 });
+
+async function socketRequest(socketPath: string, request: object): Promise<unknown> {
+  return new Promise((resolvePromise, reject) => {
+    const client = connect(socketPath);
+    let response = '';
+    client.setEncoding('utf8');
+    client.on('data', (chunk: string) => { response += chunk; });
+    client.on('end', () => resolvePromise(JSON.parse(response)));
+    client.on('error', reject);
+    client.on('connect', () => client.write(`${JSON.stringify(request)}\n`));
+  });
+}
+
+async function waitFor(predicate: () => Promise<boolean>, timeoutMs = 5_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      if (await predicate()) return;
+    } catch { /* state is not written yet */ }
+    await new Promise((resolvePromise) => setTimeout(resolvePromise, 25));
+  }
+  throw new Error('timed out waiting for live child');
+}

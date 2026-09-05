@@ -275,10 +275,13 @@
       "module_root": "workflow",
       "entries": [
         "src/workflow/approval.ts",
+        "src/workflow/artifacts.ts",
         "src/workflow/digest.ts",
         "src/workflow/generate.ts",
+        "src/workflow/manifest.ts",
         "src/workflow/parse.ts",
         "src/workflow/read-scope.ts",
+        "src/workflow/script.ts",
         "src/workflow/types.ts",
         "src/workflow/validate.ts"
       ],
@@ -298,6 +301,60 @@
         {
           "file": "src/workflow/approval.ts",
           "name": "verifyApproval",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workflow/approval.ts",
+          "name": "TaskActionState",
+          "kind": "type",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workflow/approval.ts",
+          "name": "TaskActionObservation",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workflow/approval.ts",
+          "name": "TaskFinalizeInput",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workflow/approval.ts",
+          "name": "TaskClosureReceipt",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workflow/approval.ts",
+          "name": "TaskClosureError",
+          "kind": "class",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workflow/approval.ts",
+          "name": "TaskClosureCoordinator",
+          "kind": "class",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workflow/artifacts.ts",
+          "name": "RawArtifactCollection",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workflow/artifacts.ts",
+          "name": "CollectRawArtifactsOptions",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workflow/artifacts.ts",
+          "name": "collectRawArtifacts",
           "kind": "function",
           "visibility": "public"
         },
@@ -333,6 +390,12 @@
         },
         {
           "file": "src/workflow/generate.ts",
+          "name": "generateManifest",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workflow/generate.ts",
           "name": "applyAdjustments",
           "kind": "function",
           "visibility": "public"
@@ -340,6 +403,36 @@
         {
           "file": "src/workflow/generate.ts",
           "name": "explainWorkflow",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workflow/manifest.ts",
+          "name": "TaskSurface",
+          "kind": "type",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workflow/manifest.ts",
+          "name": "TaskCapabilityInput",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workflow/manifest.ts",
+          "name": "TaskCapabilityCompilation",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workflow/manifest.ts",
+          "name": "manifestDigest",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workflow/manifest.ts",
+          "name": "compileTaskCapabilities",
           "kind": "function",
           "visibility": "public"
         },
@@ -394,6 +487,42 @@
         {
           "file": "src/workflow/read-scope.ts",
           "name": "pathIsWithin",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workflow/script.ts",
+          "name": "ScriptSnapshotOptions",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workflow/script.ts",
+          "name": "ScriptBytesSnapshot",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workflow/script.ts",
+          "name": "ArgsBytesSnapshot",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workflow/script.ts",
+          "name": "WorkflowScriptSnapshot",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workflow/script.ts",
+          "name": "ScriptCall",
+          "kind": "type",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workflow/script.ts",
+          "name": "snapshotWorkflowScript",
           "kind": "function",
           "visibility": "public"
         },
@@ -508,6 +637,56 @@
         },
         {
           "kind": "imports",
+          "from": "src/workflow/generate.ts#generateManifest",
+          "to": "src/workflow/types.ts#Host"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workflow/generate.ts#generateManifest",
+          "to": "src/workflow/parse.ts#readPlan"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workflow/generate.ts#generateManifest",
+          "to": "src/workflow/parse.ts#readTasks"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workflow/generate.ts#generateManifest",
+          "to": "src/workflow/manifest.ts#TaskCapabilityInput"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workflow/generate.ts#generateManifest",
+          "to": "src/workflow/parse.ts#fixedTaskContext"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workflow/generate.ts#generateManifest",
+          "to": "src/workflow/manifest.ts#compileTaskCapabilities"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workflow/generate.ts#generateManifest",
+          "to": "src/workflow/script.ts#snapshotWorkflowScript"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workflow/generate.ts#generateManifest",
+          "to": "src/workflow/artifacts.ts#collectRawArtifacts"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workflow/generate.ts#generateManifest",
+          "to": "src/workflow/manifest.ts#manifestDigest"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workflow/generate.ts#generateManifest",
+          "to": "src/workflow/validate.ts#validateWorkflow"
+        },
+        {
+          "kind": "imports",
           "from": "src/workflow/generate.ts#applyAdjustments",
           "to": "src/workflow/types.ts#Workflow"
         },
@@ -520,6 +699,11 @@
           "kind": "imports",
           "from": "src/workflow/generate.ts#explainWorkflow",
           "to": "src/workflow/types.ts#Workflow"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workflow/manifest.ts#compileTaskCapabilities",
+          "to": "src/workflow/read-scope.ts#fixedTaskContext"
         },
         {
           "kind": "imports",
@@ -576,10 +760,13 @@
       "responsibility": "parse frozen plans and produce validated approved workflows",
       "read_scope": [
         "src/workflow/approval.ts",
+        "src/workflow/artifacts.ts",
         "src/workflow/digest.ts",
         "src/workflow/generate.ts",
+        "src/workflow/manifest.ts",
         "src/workflow/parse.ts",
         "src/workflow/read-scope.ts",
+        "src/workflow/script.ts",
         "src/workflow/types.ts",
         "src/workflow/validate.ts",
         "tests/unit/frozen-protocol.test.ts",
@@ -598,11 +785,558 @@
       ],
       "module_root": "runtime",
       "entries": [
+        "src/runtime/control.ts",
+        "src/runtime/engine.ts",
+        "src/runtime/events.ts",
+        "src/runtime/gates.ts",
+        "src/runtime/host-authority.ts",
+        "src/runtime/ledger.ts",
+        "src/runtime/protocol.ts",
+        "src/runtime/realm.ts",
+        "src/runtime/repair.ts",
         "src/runtime/runner.ts",
+        "src/runtime/scheduler.ts",
+        "src/runtime/session.ts",
         "src/runtime/state.ts",
-        "src/runtime/store.ts"
+        "src/runtime/store.ts",
+        "src/runtime/worker-host.ts",
+        "src/runtime/worker-runtime.ts"
       ],
       "symbols": [
+        {
+          "file": "src/runtime/control.ts",
+          "name": "ReceiptApprovalIdentity",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/control.ts",
+          "name": "ProcessIdentity",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/control.ts",
+          "name": "OwnerLeaseRecord",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/control.ts",
+          "name": "OwnerLeaseOptions",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/control.ts",
+          "name": "CancelRequest",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/control.ts",
+          "name": "CancelIntent",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/control.ts",
+          "name": "CancelAuthority",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/control.ts",
+          "name": "CancelOutcome",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/control.ts",
+          "name": "ControlError",
+          "kind": "class",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/control.ts",
+          "name": "OwnerLease",
+          "kind": "class",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/control.ts",
+          "name": "cancelReasonDigest",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/control.ts",
+          "name": "cancelProof",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/control.ts",
+          "name": "CancelControl",
+          "kind": "class",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/control.ts",
+          "name": "createLocalCancelCapability",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/control.ts",
+          "name": "readLocalCancelCapability",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/control.ts",
+          "name": "CancelSocketOptions",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/control.ts",
+          "name": "CancelSocket",
+          "kind": "class",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/control.ts",
+          "name": "requestCancelSocket",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/control.ts",
+          "name": "ReapOptions",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/control.ts",
+          "name": "safeReapProcessGroup",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/control.ts",
+          "name": "ControlledActionAdmission",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/control.ts",
+          "name": "RunControlOptions",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/control.ts",
+          "name": "RunControl",
+          "kind": "class",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/engine.ts",
+          "name": "CodingWorkflowStartOptions",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/engine.ts",
+          "name": "CodingWorkflowEngine",
+          "kind": "class",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/events.ts",
+          "name": "EventDraft",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/events.ts",
+          "name": "EventLogOptions",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/events.ts",
+          "name": "EventReadResult",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/events.ts",
+          "name": "ProjectedCall",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/events.ts",
+          "name": "ProjectedControl",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/events.ts",
+          "name": "EventProjection",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/events.ts",
+          "name": "EventLogError",
+          "kind": "class",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/events.ts",
+          "name": "validateEvent",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/events.ts",
+          "name": "readEventLog",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/events.ts",
+          "name": "projectEvents",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/events.ts",
+          "name": "EventLog",
+          "kind": "class",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/gates.ts",
+          "name": "GateId",
+          "kind": "type",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/gates.ts",
+          "name": "GateState",
+          "kind": "type",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/gates.ts",
+          "name": "TaskClosureGateInput",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/gates.ts",
+          "name": "GateInput",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/gates.ts",
+          "name": "GateReceipt",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/gates.ts",
+          "name": "GateError",
+          "kind": "class",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/gates.ts",
+          "name": "GateCoordinator",
+          "kind": "class",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/host-authority.ts",
+          "name": "HostAuthorityError",
+          "kind": "class",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/host-authority.ts",
+          "name": "ManifestHostAuthority",
+          "kind": "class",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/ledger.ts",
+          "name": "RecordedAgentResult",
+          "kind": "type",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/ledger.ts",
+          "name": "CallDescriptor",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/ledger.ts",
+          "name": "ControlDescriptor",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/ledger.ts",
+          "name": "CallState",
+          "kind": "type",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/ledger.ts",
+          "name": "ControlState",
+          "kind": "type",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/ledger.ts",
+          "name": "CallLedgerEntry",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/ledger.ts",
+          "name": "ControlLedgerEntry",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/ledger.ts",
+          "name": "LedgerOptions",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/ledger.ts",
+          "name": "PreparedCall",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/ledger.ts",
+          "name": "PreparedControl",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/ledger.ts",
+          "name": "LedgerError",
+          "kind": "class",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/ledger.ts",
+          "name": "descriptorDigest",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/ledger.ts",
+          "name": "ProjectionOptions",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/ledger.ts",
+          "name": "redactAndCap",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/ledger.ts",
+          "name": "RunLedger",
+          "kind": "class",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/protocol.ts",
+          "name": "PROTOCOL_VERSION",
+          "kind": "variable",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/protocol.ts",
+          "name": "ProtocolDirection",
+          "kind": "type",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/protocol.ts",
+          "name": "WorkflowErrorInfo",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/protocol.ts",
+          "name": "CodingAgentResult",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/protocol.ts",
+          "name": "WorkflowResult",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/protocol.ts",
+          "name": "CallDescriptor",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/protocol.ts",
+          "name": "TaskControlDescriptor",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/protocol.ts",
+          "name": "WorkerToHostMessage",
+          "kind": "type",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/protocol.ts",
+          "name": "HostToWorkerMessage",
+          "kind": "type",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/protocol.ts",
+          "name": "ProtocolMessage",
+          "kind": "type",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/protocol.ts",
+          "name": "DecodeOptions",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/protocol.ts",
+          "name": "ProtocolError",
+          "kind": "class",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/protocol.ts",
+          "name": "encodeMessage",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/protocol.ts",
+          "name": "decodeMessage",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/protocol.ts",
+          "name": "MessageLedger",
+          "kind": "class",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/realm.ts",
+          "name": "MaterializeError",
+          "kind": "class",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/realm.ts",
+          "name": "ScriptCompileError",
+          "kind": "class",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/realm.ts",
+          "name": "materializeFromRealm",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/realm.ts",
+          "name": "renderThrown",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/realm.ts",
+          "name": "compileWorkflowScript",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/repair.ts",
+          "name": "ReviewFindingInput",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/repair.ts",
+          "name": "ReviewFindingReceipt",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/repair.ts",
+          "name": "RepairStartReceipt",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/repair.ts",
+          "name": "RepairCompletionReceipt",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/repair.ts",
+          "name": "RepairTestReceipt",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/repair.ts",
+          "name": "FindingRecheckReceipt",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/repair.ts",
+          "name": "RepairStatus",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/repair.ts",
+          "name": "RepairError",
+          "kind": "class",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/repair.ts",
+          "name": "RepairCoordinator",
+          "kind": "class",
+          "visibility": "public"
+        },
         {
           "file": "src/runtime/runner.ts",
           "name": "ExecutionContext",
@@ -636,6 +1370,174 @@
         {
           "file": "src/runtime/runner.ts",
           "name": "cleanupRun",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/runner.ts",
+          "name": "StartV2RunOptions",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/runner.ts",
+          "name": "V2LifecycleActionContext",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/runner.ts",
+          "name": "V2LifecycleActionResult",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/runner.ts",
+          "name": "V2LifecycleOptions",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/runner.ts",
+          "name": "V2ScriptRunOptions",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/runner.ts",
+          "name": "V2LifecycleResult",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/runner.ts",
+          "name": "startV2Run",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/runner.ts",
+          "name": "runV2Script",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/runner.ts",
+          "name": "projectV2Run",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/runner.ts",
+          "name": "ResumeV2RunOptions",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/runner.ts",
+          "name": "resumeV2Run",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/runner.ts",
+          "name": "cancelV2Run",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/runner.ts",
+          "name": "runV2Lifecycle",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/runner.ts",
+          "name": "cleanupV2Run",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/scheduler.ts",
+          "name": "LeaseTerminalState",
+          "kind": "type",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/scheduler.ts",
+          "name": "ScopeAdmissionRequest",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/scheduler.ts",
+          "name": "ScopeAdmission",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/scheduler.ts",
+          "name": "ScopeLease",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/scheduler.ts",
+          "name": "SchedulerError",
+          "kind": "class",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/scheduler.ts",
+          "name": "ScopeScheduler",
+          "kind": "class",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/scheduler.ts",
+          "name": "GitMutexOwner",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/scheduler.ts",
+          "name": "GitMutexIdentity",
+          "kind": "type",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/scheduler.ts",
+          "name": "ProjectGitMutexOptions",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/scheduler.ts",
+          "name": "GitMutexError",
+          "kind": "class",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/scheduler.ts",
+          "name": "ProjectGitMutex",
+          "kind": "class",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/scheduler.ts",
+          "name": "RunGitQueue",
+          "kind": "class",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/session.ts",
+          "name": "WorkerInit",
+          "kind": "type",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/session.ts",
+          "name": "runWorkerSession",
           "kind": "function",
           "visibility": "public"
         },
@@ -695,6 +1597,12 @@
         },
         {
           "file": "src/runtime/store.ts",
+          "name": "RunVersionError",
+          "kind": "class",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/store.ts",
           "name": "saveRun",
           "kind": "function",
           "visibility": "public"
@@ -703,6 +1611,168 @@
           "file": "src/runtime/store.ts",
           "name": "loadRun",
           "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/store.ts",
+          "name": "RunStateV2",
+          "kind": "type",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/store.ts",
+          "name": "RunRecordV2",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/store.ts",
+          "name": "V2AuthorityDescriptor",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/store.ts",
+          "name": "ResumeAuthorityEvidence",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/store.ts",
+          "name": "saveV2Run",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/store.ts",
+          "name": "loadV2Run",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/store.ts",
+          "name": "CallCheckpoint",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/store.ts",
+          "name": "ensureRunStorage",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/store.ts",
+          "name": "writeCallCheckpoint",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/store.ts",
+          "name": "readCallCheckpoint",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/store.ts",
+          "name": "writeControlReceipt",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/store.ts",
+          "name": "readControlReceipt",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/store.ts",
+          "name": "ResumeFingerprint",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/store.ts",
+          "name": "ResumeDivergedError",
+          "kind": "class",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/store.ts",
+          "name": "assertResumeFingerprint",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/worker-host.ts",
+          "name": "ChildRun",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/worker-host.ts",
+          "name": "HostChildExecutor",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/worker-host.ts",
+          "name": "HostAuditCallback",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/worker-host.ts",
+          "name": "SandboxPreflightCallback",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/worker-host.ts",
+          "name": "ProcessRegistryCallback",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/worker-host.ts",
+          "name": "WorkflowObserver",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/worker-host.ts",
+          "name": "WorkerRunOptions",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/worker-host.ts",
+          "name": "WorkerRun",
+          "kind": "class",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/worker-runtime.ts",
+          "name": "ActionProjection",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/worker-runtime.ts",
+          "name": "WorkerRuntimeOptions",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/worker-runtime.ts",
+          "name": "WorkflowError",
+          "kind": "class",
+          "visibility": "public"
+        },
+        {
+          "file": "src/runtime/worker-runtime.ts",
+          "name": "WorkerRuntime",
+          "kind": "class",
           "visibility": "public"
         }
       ],
@@ -717,6 +1787,126 @@
         "security"
       ],
       "relations": [
+        {
+          "kind": "imports",
+          "from": "src/runtime/control.ts#ControlledActionAdmission",
+          "to": "src/runtime/scheduler.ts#ScopeLease"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/control.ts#RunControlOptions",
+          "to": "src/runtime/scheduler.ts#ScopeScheduler"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/control.ts#RunControlOptions",
+          "to": "src/runtime/scheduler.ts#ScopeLease"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/control.ts#RunControl",
+          "to": "src/runtime/scheduler.ts#ScopeLease"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/control.ts#RunControl",
+          "to": "src/runtime/scheduler.ts#LeaseTerminalState"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/engine.ts#CodingWorkflowStartOptions",
+          "to": "src/runtime/worker-runtime.ts#ActionProjection"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/engine.ts#CodingWorkflowStartOptions",
+          "to": "src/runtime/worker-host.ts#HostChildExecutor"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/engine.ts#CodingWorkflowStartOptions",
+          "to": "src/runtime/worker-host.ts#WorkflowObserver"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/engine.ts#CodingWorkflowStartOptions",
+          "to": "src/runtime/worker-host.ts#HostAuditCallback"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/engine.ts#CodingWorkflowStartOptions",
+          "to": "src/runtime/worker-host.ts#SandboxPreflightCallback"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/engine.ts#CodingWorkflowStartOptions",
+          "to": "src/runtime/worker-host.ts#ProcessRegistryCallback"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/engine.ts#CodingWorkflowStartOptions",
+          "to": "src/runtime/protocol.ts#TaskControlDescriptor"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/engine.ts#CodingWorkflowEngine",
+          "to": "src/runtime/worker-host.ts#WorkerRun"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/gates.ts#GateCoordinator",
+          "to": "src/runtime/events.ts#EventLog"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/host-authority.ts#ManifestHostAuthority",
+          "to": "src/runtime/repair.ts#ReviewFindingReceipt"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/ledger.ts#LedgerOptions",
+          "to": "src/runtime/events.ts#EventLog"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/ledger.ts#RunLedger",
+          "to": "src/runtime/events.ts#EventLog"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/ledger.ts#RunLedger",
+          "to": "src/runtime/store.ts#CallCheckpoint"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/ledger.ts#RunLedger",
+          "to": "src/runtime/store.ts#writeCallCheckpoint"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/ledger.ts#RunLedger",
+          "to": "src/runtime/store.ts#readCallCheckpoint"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/ledger.ts#RunLedger",
+          "to": "src/runtime/store.ts#writeControlReceipt"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/ledger.ts#RunLedger",
+          "to": "src/runtime/store.ts#ensureRunStorage"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/protocol.ts#encodeMessage",
+          "to": "src/runtime/realm.ts#materializeFromRealm"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/repair.ts#RepairCoordinator",
+          "to": "src/runtime/events.ts#EventLog"
+        },
         {
           "kind": "imports",
           "from": "src/runtime/runner.ts#startRun",
@@ -754,16 +1944,404 @@
         },
         {
           "kind": "imports",
+          "from": "src/runtime/runner.ts#StartV2RunOptions",
+          "to": "src/runtime/store.ts#V2AuthorityDescriptor"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/runner.ts#V2LifecycleResult",
+          "to": "src/runtime/store.ts#RunRecordV2"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/runner.ts#V2LifecycleResult",
+          "to": "src/runtime/gates.ts#GateReceipt"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/runner.ts#startV2Run",
+          "to": "src/runtime/store.ts#RunRecordV2"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/runner.ts#startV2Run",
+          "to": "src/runtime/control.ts#CancelControl"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/runner.ts#startV2Run",
+          "to": "src/runtime/store.ts#saveV2Run"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/runner.ts#runV2Script",
+          "to": "src/runtime/store.ts#RunRecordV2"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/runner.ts#runV2Script",
+          "to": "src/runtime/store.ts#V2AuthorityDescriptor"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/runner.ts#runV2Script",
+          "to": "src/runtime/ledger.ts#RunLedger"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/runner.ts#runV2Script",
+          "to": "src/runtime/control.ts#OwnerLease"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/runner.ts#runV2Script",
+          "to": "src/runtime/control.ts#createLocalCancelCapability"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/runner.ts#runV2Script",
+          "to": "src/runtime/control.ts#CancelControl"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/runner.ts#runV2Script",
+          "to": "src/runtime/scheduler.ts#ScopeScheduler"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/runner.ts#runV2Script",
+          "to": "src/runtime/engine.ts#CodingWorkflowEngine"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/runner.ts#runV2Script",
+          "to": "src/runtime/control.ts#RunControl"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/runner.ts#runV2Script",
+          "to": "src/runtime/control.ts#CancelSocket"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/runner.ts#runV2Script",
+          "to": "src/runtime/store.ts#saveV2Run"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/runner.ts#runV2Script",
+          "to": "src/runtime/protocol.ts#CallDescriptor"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/runner.ts#runV2Script",
+          "to": "src/runtime/engine.ts#ChildRun"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/runner.ts#runV2Script",
+          "to": "src/runtime/protocol.ts#CodingAgentResult"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/runner.ts#runV2Script",
+          "to": "src/runtime/control.ts#ControlError"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/runner.ts#runV2Script",
+          "to": "src/runtime/protocol.ts#TaskControlDescriptor"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/runner.ts#runV2Script",
+          "to": "src/runtime/gates.ts#GateCoordinator"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/runner.ts#projectV2Run",
+          "to": "src/runtime/store.ts#RunRecordV2"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/runner.ts#projectV2Run",
+          "to": "src/runtime/store.ts#loadV2Run"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/runner.ts#projectV2Run",
+          "to": "src/runtime/ledger.ts#RunLedger"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/runner.ts#projectV2Run",
+          "to": "src/runtime/store.ts#saveV2Run"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/runner.ts#ResumeV2RunOptions",
+          "to": "src/runtime/store.ts#ResumeFingerprint"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/runner.ts#ResumeV2RunOptions",
+          "to": "src/runtime/store.ts#V2AuthorityDescriptor"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/runner.ts#resumeV2Run",
+          "to": "src/runtime/store.ts#ResumeFingerprint"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/runner.ts#resumeV2Run",
+          "to": "src/runtime/store.ts#RunRecordV2"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/runner.ts#resumeV2Run",
+          "to": "src/runtime/store.ts#ResumeAuthorityEvidence"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/runner.ts#resumeV2Run",
+          "to": "src/runtime/store.ts#saveV2Run"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/runner.ts#resumeV2Run",
+          "to": "src/runtime/store.ts#assertResumeFingerprint"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/runner.ts#resumeV2Run",
+          "to": "src/runtime/control.ts#OwnerLease"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/runner.ts#cancelV2Run",
+          "to": "src/runtime/store.ts#RunRecordV2"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/runner.ts#cancelV2Run",
+          "to": "src/runtime/control.ts#ControlError"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/runner.ts#cancelV2Run",
+          "to": "src/runtime/control.ts#readLocalCancelCapability"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/runner.ts#cancelV2Run",
+          "to": "src/runtime/control.ts#cancelProof"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/runner.ts#cancelV2Run",
+          "to": "src/runtime/control.ts#cancelReasonDigest"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/runner.ts#cancelV2Run",
+          "to": "src/runtime/control.ts#requestCancelSocket"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/runner.ts#cancelV2Run",
+          "to": "src/runtime/control.ts#CancelControl"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/runner.ts#runV2Lifecycle",
+          "to": "src/runtime/control.ts#OwnerLease"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/runner.ts#cleanupV2Run",
+          "to": "src/runtime/store.ts#RunRecordV2"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/runner.ts#cleanupV2Run",
+          "to": "src/runtime/store.ts#saveV2Run"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/session.ts#WorkerInit",
+          "to": "src/runtime/worker-runtime.ts#WorkerRuntimeOptions"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/session.ts#runWorkerSession",
+          "to": "src/runtime/worker-runtime.ts#WorkerRuntime"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/session.ts#runWorkerSession",
+          "to": "src/runtime/protocol.ts#encodeMessage"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/session.ts#runWorkerSession",
+          "to": "src/runtime/protocol.ts#MessageLedger"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/session.ts#runWorkerSession",
+          "to": "src/runtime/protocol.ts#HostToWorkerMessage"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/session.ts#runWorkerSession",
+          "to": "src/runtime/protocol.ts#ProtocolError"
+        },
+        {
+          "kind": "imports",
           "from": "src/runtime/store.ts#RunRecord",
           "to": "src/runtime/state.ts#RunState"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/store.ts#RunRecordV2",
+          "to": "src/runtime/ledger.ts#CallLedgerEntry"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/store.ts#RunRecordV2",
+          "to": "src/runtime/ledger.ts#ControlLedgerEntry"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/worker-host.ts#ChildRun",
+          "to": "src/runtime/protocol.ts#CodingAgentResult"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/worker-host.ts#HostChildExecutor",
+          "to": "src/runtime/protocol.ts#CallDescriptor"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/worker-host.ts#HostAuditCallback",
+          "to": "src/runtime/protocol.ts#CallDescriptor"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/worker-host.ts#SandboxPreflightCallback",
+          "to": "src/runtime/protocol.ts#CallDescriptor"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/worker-host.ts#WorkflowObserver",
+          "to": "src/runtime/protocol.ts#CallDescriptor"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/worker-host.ts#WorkerRunOptions",
+          "to": "src/runtime/session.ts#WorkerInit"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/worker-host.ts#WorkerRun",
+          "to": "src/runtime/protocol.ts#WorkflowResult"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/worker-host.ts#WorkerRun",
+          "to": "src/runtime/protocol.ts#CallDescriptor"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/worker-host.ts#WorkerRun",
+          "to": "src/runtime/protocol.ts#MessageLedger"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/worker-host.ts#WorkerRun",
+          "to": "src/runtime/protocol.ts#HostToWorkerMessage"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/worker-host.ts#WorkerRun",
+          "to": "src/runtime/protocol.ts#encodeMessage"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/worker-host.ts#WorkerRun",
+          "to": "src/runtime/protocol.ts#WorkerToHostMessage"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/worker-runtime.ts#WorkerRuntimeOptions",
+          "to": "src/runtime/protocol.ts#WorkerToHostMessage"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/worker-runtime.ts#WorkerRuntime",
+          "to": "src/runtime/protocol.ts#CodingAgentResult"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/worker-runtime.ts#WorkerRuntime",
+          "to": "src/runtime/realm.ts#compileWorkflowScript"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/worker-runtime.ts#WorkerRuntime",
+          "to": "src/runtime/realm.ts#renderThrown"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/worker-runtime.ts#WorkerRuntime",
+          "to": "src/runtime/protocol.ts#HostToWorkerMessage"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/worker-runtime.ts#WorkerRuntime",
+          "to": "src/runtime/protocol.ts#PROTOCOL_VERSION"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/worker-runtime.ts#WorkerRuntime",
+          "to": "src/runtime/realm.ts#materializeFromRealm"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/worker-runtime.ts#WorkerRuntime",
+          "to": "src/runtime/protocol.ts#WorkerToHostMessage"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/worker-runtime.ts#WorkerRuntime",
+          "to": "src/runtime/protocol.ts#CallDescriptor"
+        },
+        {
+          "kind": "imports",
+          "from": "src/runtime/worker-runtime.ts#WorkerRuntime",
+          "to": "src/runtime/protocol.ts#TaskControlDescriptor"
         }
       ],
       "owner_role": "backend",
       "responsibility": "start, resume, cancel, checkpoint and clean up runs",
       "read_scope": [
+        "src/runtime/control.ts",
+        "src/runtime/engine.ts",
+        "src/runtime/events.ts",
+        "src/runtime/gates.ts",
+        "src/runtime/host-authority.ts",
+        "src/runtime/ledger.ts",
+        "src/runtime/protocol.ts",
+        "src/runtime/realm.ts",
+        "src/runtime/repair.ts",
         "src/runtime/runner.ts",
+        "src/runtime/scheduler.ts",
+        "src/runtime/session.ts",
         "src/runtime/state.ts",
         "src/runtime/store.ts",
+        "src/runtime/worker-host.ts",
+        "src/runtime/worker-runtime.ts",
         "tests/integration/runtime.test.ts",
         "tests/integration/gates-checkpoint.test.ts"
       ],
@@ -781,6 +2359,30 @@
         "src/adapters/process.ts"
       ],
       "symbols": [
+        {
+          "file": "src/adapters/process.ts",
+          "name": "ProcessGroupIdentity",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/adapters/process.ts",
+          "name": "createProcessGroupIdentity",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/adapters/process.ts",
+          "name": "ProcessIdentityError",
+          "kind": "class",
+          "visibility": "public"
+        },
+        {
+          "file": "src/adapters/process.ts",
+          "name": "ProcessGroupRegistry",
+          "kind": "class",
+          "visibility": "public"
+        },
         {
           "file": "src/adapters/process.ts",
           "name": "ProcessOptions",
@@ -819,9 +2421,156 @@
       ],
       "module_root": "security",
       "entries": [
-        "src/security/policy.ts"
+        "src/security/audit.ts",
+        "src/security/capability.ts",
+        "src/security/policy.ts",
+        "src/security/sandbox.ts"
       ],
       "symbols": [
+        {
+          "file": "src/security/audit.ts",
+          "name": "WorktreeEntryType",
+          "kind": "type",
+          "visibility": "public"
+        },
+        {
+          "file": "src/security/audit.ts",
+          "name": "WorktreeEntry",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/security/audit.ts",
+          "name": "WorktreeAudit",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/security/audit.ts",
+          "name": "WorktreeAuditComparison",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/security/audit.ts",
+          "name": "QuarantineEvidence",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/security/audit.ts",
+          "name": "captureWorktreeAudit",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/security/audit.ts",
+          "name": "compareWorktreeAudits",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/security/audit.ts",
+          "name": "quarantineWorktree",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/security/audit.ts",
+          "name": "isWorktreeQuarantined",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/security/capability.ts",
+          "name": "Host",
+          "kind": "type",
+          "visibility": "public"
+        },
+        {
+          "file": "src/security/capability.ts",
+          "name": "HostExecutionMode",
+          "kind": "type",
+          "visibility": "public"
+        },
+        {
+          "file": "src/security/capability.ts",
+          "name": "ActionCapability",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/security/capability.ts",
+          "name": "TaskCapability",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/security/capability.ts",
+          "name": "ActionCapabilityManifest",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/security/capability.ts",
+          "name": "TaskState",
+          "kind": "type",
+          "visibility": "public"
+        },
+        {
+          "file": "src/security/capability.ts",
+          "name": "ActionState",
+          "kind": "type",
+          "visibility": "public"
+        },
+        {
+          "file": "src/security/capability.ts",
+          "name": "ActionAdmissionRequest",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/security/capability.ts",
+          "name": "ActionAdmission",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/security/capability.ts",
+          "name": "AgentPacketInput",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/security/capability.ts",
+          "name": "ScheduledActionAdmission",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/security/capability.ts",
+          "name": "ActionAdmissionError",
+          "kind": "class",
+          "visibility": "public"
+        },
+        {
+          "file": "src/security/capability.ts",
+          "name": "admitAction",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/security/capability.ts",
+          "name": "admitActionWithScheduler",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/security/capability.ts",
+          "name": "buildAgentPacket",
+          "kind": "function",
+          "visibility": "public"
+        },
         {
           "file": "src/security/policy.ts",
           "name": "validateRoleCommand",
@@ -851,6 +2600,72 @@
           "name": "redact",
           "kind": "function",
           "visibility": "public"
+        },
+        {
+          "file": "src/security/sandbox.ts",
+          "name": "SandboxProbe",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/security/sandbox.ts",
+          "name": "ActionSandboxCapability",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/security/sandbox.ts",
+          "name": "SandboxSpawnSpec",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/security/sandbox.ts",
+          "name": "SandboxProviderOptions",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/security/sandbox.ts",
+          "name": "ActionSandboxError",
+          "kind": "class",
+          "visibility": "public"
+        },
+        {
+          "file": "src/security/sandbox.ts",
+          "name": "requireActionSandbox",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/security/sandbox.ts",
+          "name": "createActionSandboxCapability",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/security/sandbox.ts",
+          "name": "BrokeredSandboxProvider",
+          "kind": "class",
+          "visibility": "public"
+        },
+        {
+          "file": "src/security/sandbox.ts",
+          "name": "ModelTransportBroker",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/security/sandbox.ts",
+          "name": "createModelTransportBroker",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/security/sandbox.ts",
+          "name": "runBrokerProbe",
+          "kind": "function",
+          "visibility": "public"
         }
       ],
       "related_files": [],
@@ -862,7 +2677,10 @@
       "owner_role": "standards-review",
       "responsibility": "enforce commands, scopes and redaction rules",
       "read_scope": [
-        "src/security/policy.ts"
+        "src/security/audit.ts",
+        "src/security/capability.ts",
+        "src/security/policy.ts",
+        "src/security/sandbox.ts"
       ],
       "shared_entry": false
     },
@@ -935,6 +2753,78 @@
         {
           "file": "src/git/operator.ts",
           "name": "deleteOwnedBranches",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/git/operator.ts",
+          "name": "GitResourceKind",
+          "kind": "type",
+          "visibility": "public"
+        },
+        {
+          "file": "src/git/operator.ts",
+          "name": "GitResourceReceipt",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/git/operator.ts",
+          "name": "V2Worktree",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/git/operator.ts",
+          "name": "V2GitOperatorOptions",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/git/operator.ts",
+          "name": "CreatePlanOptions",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/git/operator.ts",
+          "name": "MergeDryRun",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/git/operator.ts",
+          "name": "GitCommitReceipt",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/git/operator.ts",
+          "name": "ReconcileResult",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/git/operator.ts",
+          "name": "V2GitOperatorError",
+          "kind": "class",
+          "visibility": "public"
+        },
+        {
+          "file": "src/git/operator.ts",
+          "name": "V2GitOperator",
+          "kind": "class",
+          "visibility": "public"
+        },
+        {
+          "file": "src/git/operator.ts",
+          "name": "GitOperatorV2",
+          "kind": "variable",
+          "visibility": "public"
+        },
+        {
+          "file": "src/git/operator.ts",
+          "name": "createV2GitOperator",
           "kind": "function",
           "visibility": "public"
         }
@@ -1312,6 +3202,18 @@
         },
         {
           "file": "src/utils/fs.ts",
+          "name": "appendFsync",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/utils/fs.ts",
+          "name": "syncDirectory",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/utils/fs.ts",
           "name": "atomicDirectory",
           "kind": "function",
           "visibility": "public"
@@ -1343,6 +3245,12 @@
         {
           "file": "src/utils/paths.ts",
           "name": "normalizeScope",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/utils/paths.ts",
+          "name": "canonicalPath",
           "kind": "function",
           "visibility": "public"
         },

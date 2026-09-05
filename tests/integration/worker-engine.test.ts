@@ -69,30 +69,33 @@ describe('worker workflow engine lifecycle', () => {
     const run = start(`await new Promise(() => {}); return 'never';`, undefined);
     await run.terminateWorkerForTest();
 
-    await expect(run.result).resolves.toMatchObject({ stop_reason: 'error', error: expect.stringMatching(/worker/i) });
+    await expect(run.result).resolves.toMatchObject({ stop_reason: 'error', error: expect.stringMatching(/worker/i) as unknown });
     await run.dispose();
   });
 
   it('first terminal result wins and dropped hook promises cannot reject the run', async () => {
     const records: CallDescriptor[] = [];
+    const lifecycle: string[] = [];
     const childResult = deferred<CodingAgentResult>();
     const run = start(`agent('dropped', { actionId: 'build', callId: 'call-1' }); return { ok: true };`, {
       async start(descriptor) {
         records.push(descriptor);
         return { id: 'child-dropped', result: childResult.promise, dispose: async () => undefined };
       },
-    });
+    }, { observer: { agentEnd: (_descriptor: CallDescriptor, outcome: 'completed' | 'failed' | 'cancelled') => { lifecycle.push(`end:${outcome}`); if (outcome === 'failed') throw new Error('observer failure'); } } });
 
     await expect(run.result).resolves.toMatchObject({ stop_reason: 'completed', value: { ok: true } });
     childResult.reject(new Error('late child failure'));
+    await new Promise((resolve) => setTimeout(resolve, 20));
     await expect(run.dispose()).resolves.toBeUndefined();
     expect(records).toHaveLength(1);
+    expect(lifecycle).toContain('end:failed');
   });
 
   it('returns an error result for an unserializable workflow value', async () => {
     const run = start(`return { bad: undefined };`);
 
-    await expect(run.result).resolves.toMatchObject({ stop_reason: 'error', error: expect.stringMatching(/undefined/i) });
+    await expect(run.result).resolves.toMatchObject({ stop_reason: 'error', error: expect.stringMatching(/undefined/i) as unknown });
     await run.dispose();
   });
 

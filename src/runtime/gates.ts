@@ -85,7 +85,8 @@ export class GateCoordinator {
     return receipt;
   }
 
-  recordScriptGateState(_gateId: string, _state: string): never {
+  recordScriptGateState(...args: [string, string]): never {
+    void args;
     throw new GateError('GATE_HOST_OWNED', 'gate state can only be written by the host gate coordinator');
   }
 

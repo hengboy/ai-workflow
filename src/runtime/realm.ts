@@ -13,7 +13,7 @@ export class ScriptCompileError extends Error {
 }
 
 function plainPrototype(value: object): boolean {
-  const prototype = Object.getPrototypeOf(value);
+  const prototype = Object.getPrototypeOf(value) as object | null;
   return prototype === null || Object.getPrototypeOf(prototype) === null;
 }
 
