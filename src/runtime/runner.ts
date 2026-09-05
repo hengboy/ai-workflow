@@ -446,9 +446,9 @@ export async function runV2Script(options: V2ScriptRunOptions): Promise<RunRecor
     throw error;
   } finally {
     const teardownErrors: string[] = [];
-    await ownerRenewal?.stop().catch((error) => teardownErrors.push(`owner renewal: ${error instanceof Error ? error.message : String(error)}`));
-    await liveWorker?.dispose().catch((error) => teardownErrors.push(`Worker: ${error instanceof Error ? error.message : String(error)}`));
-    if (socketStarted) await cancelSocket.close().catch((error) => teardownErrors.push(`cancel socket: ${error instanceof Error ? error.message : String(error)}`));
+    await ownerRenewal?.stop().catch((error: unknown) => teardownErrors.push(`owner renewal: ${error instanceof Error ? error.message : String(error)}`));
+    await liveWorker?.dispose().catch((error: unknown) => teardownErrors.push(`Worker: ${error instanceof Error ? error.message : String(error)}`));
+    if (socketStarted) await cancelSocket.close().catch((error: unknown) => teardownErrors.push(`cancel socket: ${error instanceof Error ? error.message : String(error)}`));
     if (setupFailed && operator) {
       try { await operator.cleanup(); }
       catch (error) { teardownErrors.push(`resource cleanup retained: ${error instanceof Error ? error.message : String(error)}`); }
