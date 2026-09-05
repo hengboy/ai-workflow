@@ -1,6 +1,6 @@
-import { basename, dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, relative, resolve, sep } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { readFile, rm } from 'node:fs/promises';
+import { readFile, realpath, rm } from 'node:fs/promises';
 import type { Workflow } from '../workflow/types.js';
 import { objectDigest, sha256 } from '../utils/hash.js';
 import { verifyApproval } from '../workflow/approval.js';
@@ -150,6 +150,31 @@ export interface V2ScriptRunOptions {
   cancelPeerUid?: (socket: import('node:net').Socket) => number | Promise<number>;
 }
 
+async function readApprovedScriptArtifacts(project: string, manifest: CodingCapabilityManifest): Promise<{ manifestDigest: string; script: string; args: unknown; scriptDigest: string; argsDigest: string }> {
+  const planDirectory = join(project, '.ai-workflow', 'plans', manifest.plan_id);
+  const diskManifest = JSON.parse(await readFile(join(planDirectory, 'workflow.json'), 'utf8')) as CodingCapabilityManifest;
+  const manifestDigest = objectDigest(diskManifest);
+  if (manifestDigest !== objectDigest(manifest)) throw new Error('Approved manifest changed before run');
+  const planRoot = await realpath(planDirectory);
+  const readPlanFile = async (path: string, label: string): Promise<Buffer> => {
+    const candidate = path.startsWith('.ai-workflow/') ? resolve(project, path) : resolve(planDirectory, path);
+    const { lstat } = await import('node:fs/promises');
+    const stats = await lstat(candidate);
+    const actual = await realpath(candidate);
+    const planRelative = relative(planRoot, actual);
+    if (stats.isSymbolicLink() || !stats.isFile() || planRelative === '..' || planRelative.startsWith(`..${sep}`)) throw new Error(`${label} must be a plan-local regular file: ${candidate}`);
+    return readFile(actual);
+  };
+  const scriptBytes = await readPlanFile(diskManifest.script.path, 'script');
+  const argsBytes = await readPlanFile(diskManifest.args.path, 'args');
+  const scriptDigest = sha256(scriptBytes);
+  const argsDigest = sha256(argsBytes);
+  if (scriptDigest !== diskManifest.script.bytes_digest || argsDigest !== diskManifest.args.bytes_digest) throw new Error('Approved artifact digest drift');
+  let args: unknown;
+  try { args = JSON.parse(argsBytes.toString('utf8')) as unknown; } catch (error) { throw new Error(`Approved args are invalid JSON: ${error instanceof Error ? error.message : String(error)}`); }
+  return { manifestDigest, script: scriptBytes.toString('utf8'), args, scriptDigest, argsDigest };
+}
+
 export interface V2LifecycleResult {
   run_state: RunRecordV2['run_state'];
   gates: Record<string, GateReceipt>;
@@ -177,7 +202,8 @@ export async function startV2Run(options: StartV2RunOptions): Promise<RunRecordV
 }
 
 export async function runV2Script(options: V2ScriptRunOptions): Promise<RunRecordV2> {
-  const manifestDigest = objectDigest(options.manifest);
+  const approved = await readApprovedScriptArtifacts(options.project, options.manifest);
+  const manifestDigest = approved.manifestDigest;
   const planDirectory = join(options.project, '.ai-workflow', 'plans', options.manifest.plan_id);
   const manifestPath = join(planDirectory, 'workflow.json');
   const scriptPath = join(planDirectory, options.manifest.script.path);
@@ -187,7 +213,7 @@ export async function runV2Script(options: V2ScriptRunOptions): Promise<RunRecor
   const approvalDigest = await exists(approvalPath) ? objectDigest(JSON.parse(await readFile(approvalPath, 'utf8')) as unknown) : 'missing';
   const runAuthority: V2AuthorityDescriptor = {
     authority_version: '1.0.0', manifest_path: manifestPath, manifest_digest: manifestDigest,
-    script_path: scriptPath, script_digest: options.scriptDigest, args_path: argsPath, args_digest: options.argsDigest,
+    script_path: scriptPath, script_digest: approved.scriptDigest, args_path: argsPath, args_digest: approved.argsDigest,
     approval_path: approvalPath, approval_digest: approvalDigest,
     profile_digest: objectDigest({ host: options.manifest.host, adapter: options.manifest.host_execution.adapter, engine: options.manifest.engine }),
     sandbox_digest: objectDigest(options.manifest.host_execution),
@@ -212,7 +238,6 @@ export async function runV2Script(options: V2ScriptRunOptions): Promise<RunRecor
   const cancelControl = new CancelControl({ root: options.project, runId: options.runId, owner: { osUid: owner.owner.osUid, identityDigest }, fencingEpoch: record.fencing_epoch, nonce: cancelAuthority.challenge_nonce, socketPath: cancelAuthority.socket_path, localCapability });
   const scheduler = new ScopeScheduler({ maxConcurrent: options.manifest.limits.max_concurrent_agents });
   // The socket handler is installed before the Worker is created and observes this holder.
-  // eslint-disable-next-line prefer-const
   let liveWorker: ReturnType<CodingWorkflowEngine['start']> | undefined;
   const liveActions = new Map<string, { callId: string; controller: AbortController; completion?: Promise<void> }>();
   let cancelRequested = false;
@@ -253,6 +278,9 @@ export async function runV2Script(options: V2ScriptRunOptions): Promise<RunRecor
       return outcome;
     },
   });
+  let ownerRenewal: import('./control.js').OwnerLeaseRenewal | undefined;
+  let operator: V2GitOperator | undefined;
+  try {
   await cancelSocket.start();
   await writeJson(authorityPath, persistedAuthority);
   await events.append({ type: 'run/lease-acquired', payload: { state: 'executing', manifest_digest: manifestDigest } });
@@ -260,7 +288,7 @@ export async function runV2Script(options: V2ScriptRunOptions): Promise<RunRecor
   const taskStates: Record<string, import('../security/capability.js').TaskState> = Object.fromEntries(options.manifest.tasks.map((task) => [task.task_id, task.depends_on.length ? 'pending' : 'ready']));
   const actionMap = new Map(options.manifest.actions.map((action) => [action.action_id, action]));
   const actionObservations = new Map<string, TaskActionObservation[]>();
-  const operator = new V2GitOperator({ project: options.project, runId: options.runId, manifestDigest, fencingEpoch: record.fencing_epoch, targetBranch: options.manifest.project.target_branch });
+   operator = new V2GitOperator({ project: options.project, runId: options.runId, manifestDigest, fencingEpoch: record.fencing_epoch, targetBranch: options.manifest.project.target_branch });
   const planWorktree = await operator.createPlanWorktree({ baseBranch: options.manifest.project.target_branch });
   const taskWorktrees = new Map<string, V2Worktree>();
   for (const task of options.manifest.tasks) taskWorktrees.set(task.task_id, await operator.createTaskWorktree(planWorktree, task.task_id));
@@ -272,19 +300,25 @@ export async function runV2Script(options: V2ScriptRunOptions): Promise<RunRecor
       if (!action) throw new Error(`ACTION_NOT_AUTHORIZED: ${descriptor.action_id}`);
       const worktree = taskWorktrees.get(action.task_id);
       if (!worktree) throw new Error(`TASK_NOT_AUTHORIZED: ${action.task_id}`);
-      const controlled = await runControl.admitAction({ manifest: options.manifest, action_id: action.action_id, run_id: options.runId, cwd: worktree.path, attempt: 1, task_states: taskStates, action_states: actionStates, active_hosts: [options.manifest.host] });
-      const { lease } = controlled;
-      await ledger.prepareCall({ callId: descriptor.call_id, callOrdinal: descriptor.call_ordinal, descriptor: descriptor as unknown as import('./ledger.js').CallDescriptor });
-      await ledger.dispatchIntent(descriptor.call_id);
-      actionStates[action.action_id] = 'dispatch_intent';
-      const controller = new AbortController();
-      if (signal.aborted) controller.abort(signal.reason);
-      signal.addEventListener('abort', () => controller.abort(signal.reason), { once: true });
-      await ledger.markRunning(descriptor.call_id);
-      actionStates[action.action_id] = 'running';
-      const packet: AgentPacket = { packet_version: '1.0.0', run_id: options.runId, plan_id: options.manifest.plan_id, task_id: action.task_id, role: action.role, objective: `Execute approved action ${action.action_id}`, cwd: worktree.path, read_paths: action.read_scope, write_paths: action.write_scope, evidence: action.requires_actions, screenshot_dir: `.ai-workflow/plans/${options.manifest.plan_id}/screenshot/`, allowed_commands: action.allowed_commands, timeout_ms: options.manifest.limits.sync_timeout_ms, result_schema: 'schemas/result.schema.json' };
-      const beforeAudit = await captureWorktreeAudit(worktree.path);
-      const result = invokeHost(options.manifest.host, 'Execute approved action', packet, { signal: controller.signal, sandbox: new BrokeredSandboxProvider(undefined, { projectRoot: options.project, writePaths: action.write_scope.map((path) => join(worktree.path, path)) }) }) as unknown as Promise<CodingAgentResult>;
+       const controlled = await runControl.admitAction({ manifest: options.manifest, action_id: action.action_id, run_id: options.runId, cwd: worktree.path, attempt: 1, task_states: taskStates, action_states: actionStates, active_hosts: [options.manifest.host] });
+       const { lease } = controlled;
+       const controller = new AbortController();
+       liveActions.set(lease.admission_id, { callId: descriptor.call_id, controller });
+       try {
+         await runControl.assertActionActive(lease);
+         await ledger.prepareCall({ callId: descriptor.call_id, callOrdinal: descriptor.call_ordinal, descriptor: descriptor as unknown as import('./ledger.js').CallDescriptor });
+         await runControl.assertActionActive(lease);
+         await ledger.dispatchIntent(descriptor.call_id);
+         actionStates[action.action_id] = 'dispatch_intent';
+         if (signal.aborted) controller.abort(signal.reason);
+         signal.addEventListener('abort', () => controller.abort(signal.reason), { once: true });
+         await runControl.assertActionActive(lease);
+         await ledger.markRunning(descriptor.call_id);
+         actionStates[action.action_id] = 'running';
+         const packet: AgentPacket = { packet_version: '1.0.0', run_id: options.runId, plan_id: options.manifest.plan_id, task_id: action.task_id, role: action.role, objective: `Execute approved action ${action.action_id}`, cwd: worktree.path, read_paths: action.read_scope, write_paths: action.write_scope, evidence: action.requires_actions, screenshot_dir: `.ai-workflow/plans/${options.manifest.plan_id}/screenshot/`, allowed_commands: action.allowed_commands, timeout_ms: options.manifest.limits.sync_timeout_ms, result_schema: 'schemas/result.schema.json' };
+         await runControl.assertActionActive(lease);
+         const beforeAudit = await captureWorktreeAudit(worktree.path);
+         const result = invokeHost(options.manifest.host, 'Execute approved action', packet, { signal: controller.signal, sandbox: new BrokeredSandboxProvider(undefined, { projectRoot: options.project, writePaths: action.write_scope.map((path) => join(worktree.path, path)) }) }) as unknown as Promise<CodingAgentResult>;
       const observed = result.then(async (value) => {
         if (lease.released) throw new ControlError('CANCEL_CONTROL_STALE', 'action was cancelled before the host result was observed');
         const typed = value as unknown as import('../generated/coding-agent-result.schema.js').CodingAgentResult;
@@ -317,12 +351,22 @@ export async function runV2Script(options: V2ScriptRunOptions): Promise<RunRecor
         }
         throw error;
       });
-      liveActions.set(lease.admission_id, { callId: descriptor.call_id, controller, completion: observed.then(() => undefined, () => undefined) });
-      return { id: descriptor.call_id, result: observed, dispose: () => Promise.resolve(controller.abort('disposed')) };
+         const completion = observed.then(() => undefined, () => undefined);
+         liveActions.set(lease.admission_id, { callId: descriptor.call_id, controller, completion });
+         return { id: descriptor.call_id, result: observed, dispose: () => Promise.resolve(controller.abort('disposed')) };
+       } catch (error) {
+         await runControl.releaseAction(lease, 'cancelled', async () => { if (await ledger.replaySubmissionOrder().then((entries) => entries.some((entry) => entry.call_id === descriptor.call_id))) await ledger.reconcileCall(descriptor.call_id).catch(() => undefined); }).catch(() => undefined);
+         liveActions.delete(lease.admission_id);
+         throw error;
+       }
     },
   };
   const trace: string[] = [];
-  liveWorker = new CodingWorkflowEngine().start({ runId: options.runId, script: options.script, args: options.args, manifestDigest, scriptDigest: options.scriptDigest, argsDigest: options.argsDigest, actions: options.manifest.actions.map((action) => ({ action_id: action.action_id, task_id: action.task_id, action_digest: objectDigest(action) })), maxConcurrentAgents: options.manifest.limits.max_concurrent_agents, maxTotalAgents: options.manifest.limits.max_total_agents, maxItemsPerCall: options.manifest.limits.max_items_per_call, syncTimeoutMs: options.manifest.limits.sync_timeout_ms, disposeGraceMs: options.manifest.limits.dispose_grace_ms, childExecutor, taskControl: async (descriptor: TaskControlDescriptor) => {
+  ownerRenewal = runControl.startOwnerRenewal({ intervalMs: 10_000, onFailure: async (error) => {
+    await events.append({ type: 'run/error', payload: { state: 'paused', stop_reason: 'error', reason: `owner lease renewal failed: ${error instanceof Error ? error.message : String(error)}` } });
+    liveWorker?.cancel('owner lease renewal failed');
+  } });
+  liveWorker = new CodingWorkflowEngine().start({ runId: options.runId, script: approved.script, args: approved.args, manifestDigest, scriptDigest: approved.scriptDigest, argsDigest: approved.argsDigest, actions: options.manifest.actions.map((action) => ({ action_id: action.action_id, task_id: action.task_id, action_digest: objectDigest(action) })), maxConcurrentAgents: options.manifest.limits.max_concurrent_agents, maxTotalAgents: options.manifest.limits.max_total_agents, maxItemsPerCall: options.manifest.limits.max_items_per_call, syncTimeoutMs: options.manifest.limits.sync_timeout_ms, disposeGraceMs: options.manifest.limits.dispose_grace_ms, childExecutor, taskControl: async (descriptor: TaskControlDescriptor) => {
     if (descriptor.operation !== 'skip-task' && descriptor.operation !== 'finalize-task') throw new Error('unsupported task control operation');
     const task = options.manifest.tasks.find((candidate) => candidate.task_id === descriptor.task_id);
     if (!task || !descriptor.task_id) throw new Error('task control requires an authorized task');
@@ -330,10 +374,11 @@ export async function runV2Script(options: V2ScriptRunOptions): Promise<RunRecor
     let receipt;
     if (descriptor.operation === 'skip-task') {
        receipt = await coordinator.skipTask({ taskId: task.task_id, controlId: descriptor.control_id, controlOrdinal: descriptor.control_ordinal, activation: task.activation, requiredActionIds: [], actions: [], predecessorStates: Object.fromEntries(task.depends_on.map((dependency) => [dependency, ['done', 'finalized'].includes(taskStates[dependency] ?? '') ? 'finalized' : 'pending'])), reason: descriptor.reason ?? '' });
-    } else if (task.finalization_mode === 'commit-and-merge') {
-      const taskWorktree = taskWorktrees.get(task.task_id);
-      if (!taskWorktree) throw new Error(`TASK_CLOSURE_INCOMPLETE: task worktree is missing: ${task.task_id}`);
-       receipt = await coordinator.finalizeTask({ taskId: task.task_id, controlId: descriptor.control_id, controlOrdinal: descriptor.control_ordinal, activation: task.activation, requiredActionIds: task.required_actions, actions: actionObservations.get(task.task_id) ?? [], predecessorStates: Object.fromEntries(task.depends_on.map((dependency) => [dependency, ['done', 'finalized'].includes(taskStates[dependency] ?? '') ? 'finalized' : 'pending'])), finalizationMode: task.finalization_mode, taskWorktree, planWorktree, writeScope: options.manifest.actions.filter((action) => action.task_id === task.task_id).flatMap((action) => action.write_scope), operator });
+     } else if (task.finalization_mode === 'commit-and-merge') {
+       const taskWorktree = taskWorktrees.get(task.task_id);
+       if (!taskWorktree) throw new Error(`TASK_CLOSURE_INCOMPLETE: task worktree is missing: ${task.task_id}`);
+       if (!operator) throw new Error('Git operator is unavailable');
+        receipt = await coordinator.finalizeTask({ taskId: task.task_id, controlId: descriptor.control_id, controlOrdinal: descriptor.control_ordinal, activation: task.activation, requiredActionIds: task.required_actions, actions: actionObservations.get(task.task_id) ?? [], predecessorStates: Object.fromEntries(task.depends_on.map((dependency) => [dependency, ['done', 'finalized'].includes(taskStates[dependency] ?? '') ? 'finalized' : 'pending'])), finalizationMode: task.finalization_mode, taskWorktree, planWorktree, writeScope: options.manifest.actions.filter((action) => action.task_id === task.task_id).flatMap((action) => action.write_scope), operator });
     } else {
        receipt = await coordinator.finalizeTask({ taskId: task.task_id, controlId: descriptor.control_id, controlOrdinal: descriptor.control_ordinal, activation: task.activation, requiredActionIds: task.required_actions, actions: actionObservations.get(task.task_id) ?? [], predecessorStates: Object.fromEntries(task.depends_on.map((dependency) => [dependency, ['done', 'finalized'].includes(taskStates[dependency] ?? '') ? 'finalized' : 'pending'])), finalizationMode: task.finalization_mode });
     }
@@ -363,10 +408,17 @@ export async function runV2Script(options: V2ScriptRunOptions): Promise<RunRecor
     await events.append({ type: 'run/error', payload: { state: 'paused', stop_reason: 'blocked', reason: 'approved script did not close every required task before host authority review' } });
   }
   await saveV2Run(options.project, record);
-  if (record.run_state !== 'paused') await ownerLease.release(owner);
-  await liveWorker.dispose();
-  await cancelSocket.close();
   return record;
+  } finally {
+    await ownerRenewal?.stop();
+    await liveWorker?.dispose();
+    await cancelSocket.close();
+    if (operator) record.resources = operator.resources as unknown[];
+    await saveV2Run(options.project, record).catch(() => undefined);
+    await runControl.releaseOwner().catch((error: unknown) => {
+      if (!(error instanceof ControlError) || error.code !== 'LEASE_LOST') throw error;
+    });
+  }
 }
 
 async function runV2HostAuthorityLifecycle(options: V2ScriptRunOptions, record: RunRecordV2, gates: GateCoordinator, operator: V2GitOperator, plan: V2Worktree, events: EventLog, approvedBaseline: { branch: string; head: string | null }): Promise<void> {

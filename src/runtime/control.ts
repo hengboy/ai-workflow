@@ -459,6 +459,10 @@ export class RunControl {
     return this.owner;
   }
 
+  async releaseOwner(): Promise<void> {
+    await this.options.ownerLease.release(this.owner);
+  }
+
   startOwnerRenewal(options: { intervalMs?: number; onFailure?: (error: unknown) => Promise<void> | void } = {}): OwnerLeaseRenewal {
     const intervalMs = options.intervalMs ?? 10_000;
     if (!Number.isSafeInteger(intervalMs) || intervalMs < 1) throw new ControlError('LEASE_LOST', 'owner renewal interval must be positive');
@@ -520,6 +524,15 @@ export class RunControl {
       throw new ControlError('CANCEL_CONTROL_STALE', 'action admission is no longer active');
     }
     await this.options.ownerLease.assertCurrent(this.owner);
+  }
+
+  async releaseAction(lease: ScopeLease, state: LeaseTerminalState, reconcile: () => Promise<void> | void = () => undefined): Promise<void> {
+    if (lease.released) {
+      this.admitted.delete(lease.admission_id);
+      return;
+    }
+    await lease.releaseAfterReconcile(state, reconcile);
+    this.admitted.delete(lease.admission_id);
   }
 
   async settleAction(lease: ScopeLease, state: LeaseTerminalState, reconcile: () => Promise<void> | void = () => undefined): Promise<void> {

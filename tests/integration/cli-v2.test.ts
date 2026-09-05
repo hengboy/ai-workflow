@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { frozenPlan, gitInit, temporary } from '../helpers.js';
 import { parseMarkdown, renderMarkdown } from '../../src/utils/frontmatter.js';
+import { runV2Script } from '../../src/runtime/runner.js';
 
 const exec = promisify(execFile);
 
@@ -255,6 +256,20 @@ else result();
     await writeFile(join(plan, 'workflow.args.json'), '{"changed":true}\n');
 
     await expect(workflowCli(project, ['run', 'start', '--workflow', workflow, '--host', 'codex', '--project', project])).rejects.toThrow(/digest drift|approval/i);
+  });
+
+  it('runs only manifest artifacts when the direct runner caller supplies replacements', async () => {
+    const project = await temporary('ai-workflow-direct-v2-');
+    await gitInit(project);
+    const plan = await frozenPlan(project);
+    await writeFile(join(plan, 'workflow.js'), "phase('manifest-script'); return { source: 'manifest' };\n");
+    const generated = await workflowCli(project, ['workflow', 'generate', '--plan', plan, '--host', 'codex']);
+    const workflow = (JSON.parse(generated.stdout) as { workflow: string });
+    const manifest = JSON.parse(await readFile(workflow.workflow, 'utf8')) as import('../../src/generated/coding-manifest.schema.js').CodingCapabilityManifest;
+    await workflowCli(project, ['workflow', 'approve', workflow.workflow, '--project', project]);
+    const record = await runV2Script({ project, runId: 'direct-runner-replacement', manifest, script: "throw new Error('caller script must not run');", args: { caller: true }, scriptDigest: 'sha256:' + 'f'.repeat(64), argsDigest: 'sha256:' + 'f'.repeat(64) });
+    expect(record.run_state).toBe('paused');
+    await expect(readFile(join(project, '.ai-workflow/runs/direct-runner-replacement/events.jsonl'), 'utf8')).resolves.toContain('manifest-script');
   });
 
   it('initializes the v2 run path and installs all host coding guidance in an isolated home', async () => {
