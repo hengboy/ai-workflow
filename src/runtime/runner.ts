@@ -225,7 +225,7 @@ export async function runV2Script(options: V2ScriptRunOptions): Promise<RunRecor
   const argsPath = join(planDirectory, options.manifest.args.path);
   const approvalPath = join(planDirectory, 'approval.receipt.json');
   const baseline = await gitBaseline(options.project);
-  const approvalDigest = await exists(approvalPath) ? objectDigest(JSON.parse(await readFile(approvalPath, 'utf8')) as unknown) : 'missing';
+  const approvalDigest = approved.approvalDigest;
   const runAuthority: V2AuthorityDescriptor = {
     authority_version: '1.0.0', manifest_path: manifestPath, manifest_digest: manifestDigest,
     script_path: scriptPath, script_digest: approved.scriptDigest, args_path: argsPath, args_digest: approved.argsDigest,
@@ -241,22 +241,52 @@ export async function runV2Script(options: V2ScriptRunOptions): Promise<RunRecor
   const ledger = new RunLedger({ directory, runId: options.runId, fencingEpoch: record.fencing_epoch, eventLog: events });
   const uid = process.getuid?.();
   if (uid === undefined) throw new Error('CANCEL_UNAUTHORIZED: local process identity is unavailable');
-  const ownerUid = uid ?? 0;
-  const ownerLease = new OwnerLease({ root: options.project, runId: options.runId, owner: { osUid: ownerUid, identityDigest: objectDigest({ runId: options.runId, manifest: manifestDigest }) }, process: { pid: process.pid, pgid: process.pid, startIdentity: `${process.pid}:${record.started_at}`, spawnNonce: record.run_id }, leaseMs: 30_000 });
-  const owner = await ownerLease.acquire({ wait: false });
   const authorityPath = join(directory, 'control', 'cancel-authority.json');
   const cancelAuthority = JSON.parse(await readFile(authorityPath, 'utf8')) as import('./control.js').CancelAuthority;
   const { writeJson } = await import('../utils/fs.js');
-  const identityDigest = owner.owner.identityDigest;
+  const identityDigest = objectDigest({ runId: options.runId, manifest: manifestDigest });
   const localCapability = await createLocalCancelCapability(options.project, options.runId, record.fencing_epoch);
-  const persistedAuthority = { ...cancelAuthority, owner_uid: owner.owner.osUid, owner_identity_digest: identityDigest, local_control_path: join(directory, 'control', 'owner-capability.json') };
-  const cancelControl = new CancelControl({ root: options.project, runId: options.runId, owner: { osUid: owner.owner.osUid, identityDigest }, fencingEpoch: record.fencing_epoch, nonce: cancelAuthority.challenge_nonce, socketPath: cancelAuthority.socket_path, localCapability });
-  const scheduler = new ScopeScheduler({ maxConcurrent: options.manifest.limits.max_concurrent_agents });
-  // The socket handler is installed before the Worker is created and observes this holder.
+  const cancelControl = new CancelControl({ root: options.project, runId: options.runId, owner: { osUid: uid, identityDigest }, fencingEpoch: record.fencing_epoch, nonce: cancelAuthority.challenge_nonce, socketPath: cancelAuthority.socket_path, localCapability });
+  let runControl: RunControl | undefined;
   let liveWorker: ReturnType<CodingWorkflowEngine['start']> | undefined;
   const liveActions = new Map<string, { callId: string; controller: AbortController; completion?: Promise<void> }>();
   let cancelRequested = false;
-  const runControl = new RunControl({
+  const cancelSocket = new CancelSocket(cancelControl, {
+    socketPath: cancelAuthority.socket_path,
+    ...(options.cancelPeerUid === undefined ? {} : { peerUid: options.cancelPeerUid }),
+    requestCancel: async (request) => {
+      const outcome = runControl ? await runControl.requestCancel(request) : await cancelControl.requestCancel(request);
+      if (outcome.won) {
+        cancelRequested = true;
+        liveWorker?.cancel(outcome.intent.reason);
+      }
+      return outcome;
+    },
+    requestLocalCancel: async (request) => {
+      const outcome = runControl ? await runControl.requestLocalCancel(request) : await cancelControl.requestLocalCancel(request);
+      if (outcome.won) {
+        cancelRequested = true;
+        liveWorker?.cancel(outcome.intent.reason);
+      }
+      return outcome;
+    },
+  });
+  let ownerLease: OwnerLease | undefined;
+  let owner: import('./control.js').OwnerLeaseRecord | undefined;
+  let ownerRenewal: { stop(): Promise<void> } | undefined;
+  let operator: V2GitOperator | undefined;
+  let socketStarted = false;
+  let setupFailed = false;
+  let ownerRenewalFailure: Error | undefined;
+  try {
+  socketStarted = true;
+  await cancelSocket.start();
+  const ownerUid = uid;
+  ownerLease = new OwnerLease({ root: options.project, runId: options.runId, owner: { osUid: ownerUid, identityDigest }, process: { pid: process.pid, pgid: process.pid, startIdentity: `${process.pid}:${record.started_at}`, spawnNonce: record.run_id }, leaseMs: 30_000 });
+  owner = await ownerLease.acquire({ wait: false });
+  const persistedAuthority = { ...cancelAuthority, owner_uid: owner.owner.osUid, owner_identity_digest: identityDigest, local_control_path: join(directory, 'control', 'owner-capability.json') };
+  const scheduler = new ScopeScheduler({ maxConcurrent: options.manifest.limits.max_concurrent_agents });
+  const activeRunControl = new RunControl({
     ownerLease,
     owner,
     cancelControl,
@@ -271,32 +301,8 @@ export async function runV2Script(options: V2ScriptRunOptions): Promise<RunRecor
       if (action) await ledger.reconcileCall(action.callId);
     },
   });
-  const cancelSocket = new CancelSocket(cancelControl, {
-    socketPath: cancelAuthority.socket_path,
-    ...(options.cancelPeerUid === undefined ? {} : { peerUid: options.cancelPeerUid }),
-    requestCancel: async (request) => {
-      const outcome = await runControl.requestCancel(request);
-      if (outcome.won) {
-        cancelRequested = true;
-        liveWorker?.cancel(outcome.intent.reason);
-        await liveWorker?.result;
-      }
-      return outcome;
-    },
-    requestLocalCancel: async (request) => {
-      const outcome = await runControl.requestLocalCancel(request);
-      if (outcome.won) {
-        cancelRequested = true;
-        liveWorker?.cancel(outcome.intent.reason);
-        await liveWorker?.result;
-      }
-      return outcome;
-    },
-  });
-  let ownerRenewal: { stop(): Promise<void> } | undefined;
-  let operator: V2GitOperator | undefined;
-  try {
-  await cancelSocket.start();
+  runControl = activeRunControl;
+  const control = activeRunControl;
   await writeJson(authorityPath, persistedAuthority);
   await events.append({ type: 'run/lease-acquired', payload: { state: 'executing', manifest_digest: manifestDigest } });
   const actionStates: Record<string, import('../security/capability.js').ActionState> = {};
@@ -315,23 +321,23 @@ export async function runV2Script(options: V2ScriptRunOptions): Promise<RunRecor
       if (!action) throw new Error(`ACTION_NOT_AUTHORIZED: ${descriptor.action_id}`);
       const worktree = taskWorktrees.get(action.task_id);
       if (!worktree) throw new Error(`TASK_NOT_AUTHORIZED: ${action.task_id}`);
-       const controlled = await runControl.admitAction({ manifest: options.manifest, action_id: action.action_id, run_id: options.runId, cwd: worktree.path, attempt: 1, task_states: taskStates, action_states: actionStates, active_hosts: [options.manifest.host] });
+        const controlled = await control.admitAction({ manifest: options.manifest, action_id: action.action_id, run_id: options.runId, cwd: worktree.path, attempt: 1, task_states: taskStates, action_states: actionStates, active_hosts: [options.manifest.host] });
        const { lease } = controlled;
        const controller = new AbortController();
        liveActions.set(lease.admission_id, { callId: descriptor.call_id, controller });
        try {
-         await runControl.assertActionActive(lease);
+          await control.assertActionActive(lease);
          await ledger.prepareCall({ callId: descriptor.call_id, callOrdinal: descriptor.call_ordinal, descriptor: descriptor as unknown as import('./ledger.js').CallDescriptor });
-         await runControl.assertActionActive(lease);
+          await control.assertActionActive(lease);
          await ledger.dispatchIntent(descriptor.call_id);
          actionStates[action.action_id] = 'dispatch_intent';
          if (signal.aborted) controller.abort(signal.reason);
          signal.addEventListener('abort', () => controller.abort(signal.reason), { once: true });
-         await runControl.assertActionActive(lease);
+          await control.assertActionActive(lease);
          await ledger.markRunning(descriptor.call_id);
          actionStates[action.action_id] = 'running';
          const packet: AgentPacket = { packet_version: '1.0.0', run_id: options.runId, plan_id: options.manifest.plan_id, task_id: action.task_id, role: action.role, objective: `Execute approved action ${action.action_id}`, cwd: worktree.path, read_paths: action.read_scope, write_paths: action.write_scope, evidence: action.requires_actions, screenshot_dir: `.ai-workflow/plans/${options.manifest.plan_id}/screenshot/`, allowed_commands: action.allowed_commands, timeout_ms: options.manifest.limits.sync_timeout_ms, result_schema: 'schemas/result.schema.json' };
-         await runControl.assertActionActive(lease);
+          await control.assertActionActive(lease);
          const beforeAudit = await captureWorktreeAudit(worktree.path);
          const result = invokeHost(options.manifest.host, 'Execute approved action', packet, { signal: controller.signal, sandbox: new BrokeredSandboxProvider(undefined, { projectRoot: options.project, writePaths: action.write_scope.map((path) => join(worktree.path, path)) }) }) as unknown as Promise<CodingAgentResult>;
       const observed = result.then(async (value) => {
@@ -345,7 +351,7 @@ export async function runV2Script(options: V2ScriptRunOptions): Promise<RunRecor
         if (violations.length) {
           await events.append({ type: 'call/audit-failed', call_id: descriptor.call_id, task_id: action.task_id, payload: { action_id: action.action_id, state: 'blocked', reason: `changed paths outside scope: ${violations.join(', ')}` } });
           await events.append({ type: 'call/reconcile-required', call_id: descriptor.call_id, task_id: action.task_id, payload: { action_id: action.action_id, state: 'reconcile_required', reason: 'action result failed scope audit' } });
-          await runControl.settleAction(lease, 'blocked');
+          await control.settleAction(lease, 'blocked');
           liveActions.delete(lease.admission_id);
           throw new Error(`ACTION_SCOPE_VIOLATION: ${violations.join(', ')}`);
         }
@@ -356,12 +362,12 @@ export async function runV2Script(options: V2ScriptRunOptions): Promise<RunRecor
           state: value.status === 'done' ? 'checkpointed' : 'failed',
           result: { status: value.status, tests: value.tests.filter((test): test is { command: string; status: 'passed' | 'failed' | 'skipped' } => typeof test === 'object' && test !== null && typeof (test as { command?: unknown }).command === 'string' && ['passed', 'failed', 'skipped'].includes((test as { status?: unknown }).status as string)) },
         }]);
-        await runControl.settleAction(lease, value.status === 'done' ? 'completed' : 'blocked', value.status === 'done' ? () => undefined : async () => { await ledger.reconcileCall(descriptor.call_id); });
+        await control.settleAction(lease, value.status === 'done' ? 'completed' : 'blocked', value.status === 'done' ? () => undefined : async () => { await ledger.reconcileCall(descriptor.call_id); });
         liveActions.delete(lease.admission_id);
         return value;
       }, async (error: unknown) => {
         if (!lease.released) {
-          await runControl.settleAction(lease, 'blocked', async () => { await ledger.reconcileCall(descriptor.call_id); });
+          await control.settleAction(lease, 'blocked', async () => { await ledger.reconcileCall(descriptor.call_id); });
           liveActions.delete(lease.admission_id);
         }
         throw error;
@@ -370,7 +376,7 @@ export async function runV2Script(options: V2ScriptRunOptions): Promise<RunRecor
          liveActions.set(lease.admission_id, { callId: descriptor.call_id, controller, completion });
          return { id: descriptor.call_id, result: observed, dispose: () => Promise.resolve(controller.abort('disposed')) };
        } catch (error) {
-         await runControl.releaseAction(lease, 'cancelled', async () => { if (await ledger.replaySubmissionOrder().then((entries) => entries.some((entry) => entry.call_id === descriptor.call_id))) await ledger.reconcileCall(descriptor.call_id).catch(() => undefined); }).catch(() => undefined);
+          await control.releaseAction(lease, 'cancelled', async () => { if (await ledger.replaySubmissionOrder().then((entries) => entries.some((entry) => entry.call_id === descriptor.call_id))) await ledger.reconcileCall(descriptor.call_id).catch(() => undefined); }).catch(() => undefined);
          liveActions.delete(lease.admission_id);
          throw error;
        }
@@ -378,6 +384,7 @@ export async function runV2Script(options: V2ScriptRunOptions): Promise<RunRecor
   };
   const trace: string[] = [];
   ownerRenewal = runControl.startOwnerRenewal({ intervalMs: 10_000, onFailure: async (error) => {
+    ownerRenewalFailure = error instanceof Error ? error : new Error(String(error));
     await events.append({ type: 'run/error', payload: { state: 'paused', stop_reason: 'error', reason: `owner lease renewal failed: ${error instanceof Error ? error.message : String(error)}` } });
     liveWorker?.cancel('owner lease renewal failed');
   } });
@@ -407,7 +414,13 @@ export async function runV2Script(options: V2ScriptRunOptions): Promise<RunRecor
   record.run_state = 'executing';
   const result = await liveWorker.result;
   for (const entry of trace) await events.append({ type: entry.startsWith('phase:') ? 'workflow/phase' : 'workflow/log', payload: entry.startsWith('phase:') ? { title: entry.slice('phase:'.length) } : { message: entry.slice('log:'.length) } });
-  if (result.stop_reason === 'cancelled') { record.run_state = 'cancelled'; record.stop_reason = 'cancelled'; await events.append({ type: 'run/cancelled', payload: { state: 'cancelled', stop_reason: 'cancelled' } }); }
+  if (ownerRenewalFailure || result.stop_reason === 'error') {
+    record.run_state = 'paused';
+    record.stop_reason = 'error';
+    setupFailed = true;
+    await events.append({ type: 'run/error', payload: { state: 'paused', stop_reason: 'error', reason: ownerRenewalFailure?.message ?? result.error ?? 'Worker execution failed' } });
+  }
+  else if (result.stop_reason === 'cancelled') { record.run_state = 'cancelled'; record.stop_reason = 'cancelled'; await events.append({ type: 'run/cancelled', payload: { state: 'cancelled', stop_reason: 'cancelled' } }); }
   else { record.run_state = 'paused'; record.stop_reason = result.stop_reason === 'completed' ? 'blocked' : 'error'; }
   record.call_ledger = await ledger.replaySubmissionOrder();
   record.control_ledger = await ledger.replayControlOrder();
@@ -417,22 +430,49 @@ export async function runV2Script(options: V2ScriptRunOptions): Promise<RunRecor
     const taskClosure = Object.fromEntries(options.manifest.tasks.map((task) => [task.task_id, { state: taskStates[task.task_id] === 'done' ? 'skipped' as const : 'finalized' as const }]));
     const closure = await gates.runGate('task-closure', { taskClosure });
     if (closure.state === 'passed') {
-  await runV2HostAuthorityLifecycle(options, record, gates, operator, planWorktree, events, baseline);
+      await runV2HostAuthorityLifecycle(options, record, gates, operator, planWorktree, events, baseline);
+      if (record.stop_reason === 'error') setupFailed = true;
     }
   } else if (record.run_state === 'paused' && record.stop_reason === 'blocked') {
     await events.append({ type: 'run/error', payload: { state: 'paused', stop_reason: 'blocked', reason: 'approved script did not close every required task before host authority review' } });
   }
   await saveV2Run(options.project, record);
   return record;
+  } catch (error) {
+    setupFailed = true;
+    record.run_state = 'paused';
+    record.stop_reason = 'error';
+    await events.append({ type: 'run/error', payload: { state: 'paused', stop_reason: 'error', reason: `setup failure: ${error instanceof Error ? error.message : String(error)}` } }).catch(() => undefined);
+    throw error;
   } finally {
-    await ownerRenewal?.stop();
-    await liveWorker?.dispose();
-    await cancelSocket.close();
+    const teardownErrors: string[] = [];
+    await ownerRenewal?.stop().catch((error) => teardownErrors.push(`owner renewal: ${error instanceof Error ? error.message : String(error)}`));
+    await liveWorker?.dispose().catch((error) => teardownErrors.push(`Worker: ${error instanceof Error ? error.message : String(error)}`));
+    if (socketStarted) await cancelSocket.close().catch((error) => teardownErrors.push(`cancel socket: ${error instanceof Error ? error.message : String(error)}`));
+    if (setupFailed && operator) {
+      try { await operator.cleanup(); }
+      catch (error) { teardownErrors.push(`resource cleanup retained: ${error instanceof Error ? error.message : String(error)}`); }
+    }
+    const retainedPaths: string[] = [];
+    if (setupFailed) {
+      const receiptIds = new Set(operator?.resources.map((resource) => resource.resource_id) ?? []);
+      for (const event of (await events.read()).events) {
+        if (event.type !== 'resource/create-intent' || !event.payload.resource_id || receiptIds.has(event.payload.resource_id) || !event.payload.path) continue;
+        const path = resolve(options.project, event.payload.path);
+        if (await exists(path)) retainedPaths.push(event.payload.path);
+      }
+      for (const task of options.manifest.tasks) {
+        const path = join(directory, 'worktrees', 'tasks', task.task_id);
+        if (await exists(path)) retainedPaths.push(relative(options.project, path).replaceAll('\\', '/'));
+      }
+    }
+    if (retainedPaths.length) teardownErrors.push(`unowned setup paths retained: ${retainedPaths.join(', ')}`);
     if (operator) record.resources = operator.resources as unknown[];
-    await saveV2Run(options.project, record).catch(() => undefined);
-    await runControl.releaseOwner().catch((error: unknown) => {
-      if (!(error instanceof ControlError) || error.code !== 'LEASE_LOST') throw error;
+    if (ownerLease && owner) await ownerLease.release(owner).catch((error: unknown) => {
+      if (!(error instanceof ControlError) || error.code !== 'LEASE_LOST') teardownErrors.push(`owner lease release: ${error instanceof Error ? error.message : String(error)}`);
     });
+    if (teardownErrors.length) await events.append({ type: 'resource/retained', payload: { state: 'paused', reason: teardownErrors.join('; '), resource_kinds: operator?.resources.map((resource) => resource.kind) ?? [] } }).catch(() => undefined);
+    await saveV2Run(options.project, record).catch(() => undefined);
   }
 }
 
@@ -492,7 +532,9 @@ async function runV2HostAuthorityLifecycle(options: V2ScriptRunOptions, record: 
     record.resources = operator.resources as unknown[];
     await events.append({ type: 'run/end', payload: { state: 'complete', stop_reason: 'completed' } });
   } catch (error) {
-    await pause(`host authority blocked: ${error instanceof Error ? error.message : String(error)}`);
+    record.run_state = 'paused';
+    record.stop_reason = 'error';
+    await events.append({ type: 'run/error', payload: { state: 'paused', stop_reason: 'error', reason: `host authority setup failure: ${error instanceof Error ? error.message : String(error)}` } });
   }
 }
 
