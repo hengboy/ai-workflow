@@ -131,6 +131,9 @@ function validateHostCapability(manifest: ActionCapabilityManifest, action: Acti
 function validateDependencies(request: ActionAdmissionRequest, action: ActionCapability, task: TaskCapability): void {
   const taskState = request.task_states[task.task_id];
   if (taskState !== 'ready' && taskState !== 'running') reject('TASK_NOT_AUTHORIZED', `task is not ready: ${task.task_id}`);
+  for (const dependency of task.depends_on ?? []) {
+    if (!['done', 'finalized'].includes(request.task_states[dependency] ?? '')) reject('TASK_NOT_AUTHORIZED', `task dependency is not complete: ${dependency}`);
+  }
   for (const dependency of action.requires_actions ?? []) {
     const state = request.action_states[dependency];
     if (state !== 'done' && state !== 'checkpointed' && state !== 'observed') reject('ACTION_NOT_READY', `action dependency is not complete: ${dependency}`);

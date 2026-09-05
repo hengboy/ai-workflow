@@ -26,7 +26,7 @@ import { CodingWorkflowEngine, type ChildRun } from './engine.js';
 import { ScopeScheduler } from './scheduler.js';
 import { admitAction } from '../security/capability.js';
 import type { CodingCapabilityManifest } from '../generated/coding-manifest.schema.js';
-import type { ActionCapability, ActionCapabilityManifest } from '../security/capability.js';
+import type { ActionCapability, ActionCapabilityManifest, TaskState } from '../security/capability.js';
 import type { CallDescriptor, CodingAgentResult, TaskControlDescriptor } from './protocol.js';
 import { BrokeredSandboxProvider } from '../security/sandbox.js';
 import { CancelControl, CancelSocket, ControlError, OwnerLease, RunControl, createLocalCancelCapability, readLocalCancelCapability, requestCancelSocket, cancelProof, cancelReasonDigest } from './control.js';
@@ -664,7 +664,7 @@ async function runScriptLifecycle(options: V2LifecycleOptions, record: RunRecord
   const scheduler = new ScopeScheduler({ maxConcurrent: Math.max(1, options.manifest.actions.length) });
   const taskWorktrees = new Map<string, V2Worktree>();
   for (const task of options.manifest.tasks) taskWorktrees.set(task.task_id, await operator.createTaskWorktree(plan, task.task_id));
-  const taskStates = Object.fromEntries(options.manifest.tasks.map((task) => [task.task_id, 'ready' as const]));
+  const taskStates: Record<string, TaskState> = Object.fromEntries(options.manifest.tasks.map((task) => [task.task_id, 'ready' as const]));
   const actionStates: Record<string, 'prepared' | 'dispatch_intent' | 'running' | 'observed' | 'checkpointed' | 'done'> = {};
   const observations = new Map<string, TaskActionObservation[]>();
   const tasks = new Map<string, { worktree: V2Worktree; state: 'finalized' | 'committed' | 'skipped' }>();
@@ -745,7 +745,8 @@ async function runScriptLifecycle(options: V2LifecycleOptions, record: RunRecord
     const worktree = taskWorktrees.get(task.task_id);
     if (!worktree || task.required_actions.some((actionId) => !observations.get(task.task_id)?.some((observation) => observation.action_id === actionId))) return lifecyclePaused(options.project, record, new GateCoordinator({ directory, runId: options.runId, fencingEpoch: record.fencing_epoch, manifestDigest: options.manifest.manifest_digest }), trace, `approved script did not close task actions: ${task.task_id}`, operator);
     const finalized = await coordinator.finalizeTask({ taskId: task.task_id, controlId: `finalize-${task.task_id}`, controlOrdinal: tasks.size + 1, activation: task.activation, requiredActionIds: task.required_actions, actions: observations.get(task.task_id) ?? [], predecessorStates: {}, finalizationMode: task.finalization_mode, ...(task.finalization_mode === 'commit-and-merge' ? { taskWorktree: worktree, planWorktree: plan, writeScope: actions.filter((action) => action.task_id === task.task_id).flatMap((action) => action.write_scope), operator } : {}) });
-    tasks.set(task.task_id, { worktree, state: finalized.state });
+     tasks.set(task.task_id, { worktree, state: finalized.state });
+     taskStates[task.task_id] = finalized.state === 'skipped' ? 'done' : 'finalized';
     trace.push(`task-${task.task_id}:${finalized.state}`);
   }
   const gates = new GateCoordinator({ directory, runId: options.runId, fencingEpoch: record.fencing_epoch, manifestDigest: options.manifest.manifest_digest });
