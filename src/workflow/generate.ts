@@ -91,7 +91,25 @@ export async function generateManifest(planDirectory: string, host: Host): Promi
   });
   const compilation = compileTaskCapabilities(tasks);
   const actionIds = compilation.actions.map((action) => action.action_id);
-  const scriptSnapshot = await snapshotWorkflowScript({ projectDirectory: project, planDirectory, planId: plan.planId, actionIds });
+  const taskById = new Map(compilation.tasks.map((task) => [task.task_id, task]));
+  const orderedTasks: typeof compilation.tasks = [];
+  const visited = new Set<string>();
+  const visitTask = (taskId: string): void => {
+    if (visited.has(taskId)) return;
+    const task = taskById.get(taskId);
+    if (!task) return;
+    visited.add(taskId);
+    for (const dependency of task.depends_on) visitTask(dependency);
+    orderedTasks.push(task);
+  };
+  for (const task of compilation.tasks) visitTask(task.task_id);
+  const scriptSnapshot = await snapshotWorkflowScript({
+    projectDirectory: project,
+    planDirectory,
+    planId: plan.planId,
+    actionIds,
+    taskControls: orderedTasks.map((task) => ({ taskId: task.task_id, requiredActionIds: task.required_actions, controlId: `finalize/${task.task_id}` })),
+  });
   const artifacts = await collectRawArtifacts({ projectDirectory: project, planDirectory });
   const projectCapability = { git_common_dir_digest: sha256('.git'), target_branch: 'main' };
   const hostExecutionBase = {

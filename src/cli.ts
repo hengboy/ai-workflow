@@ -175,6 +175,23 @@ context.command('candidate').requiredOption('--project <project>', projectOption
 context.command('locate').requiredOption('--project <project>', projectOption).option('--feature <id>').option('--symbol <symbol>').option('--task <id>').option('--root <path...>').option('--maintain-index').option('--depth <count>', 'follow direct relations to this depth', Number).option('--verify').action(async (options: { project: string; feature?: string; symbol?: string; task?: string; root?: string[]; maintainIndex?: boolean; depth?: number; verify?: boolean }) => print(await locateContext(resolveProjectRoot(options.project), { ...options, ...(options.root ? { roots: options.root } : {}), ...(options.maintainIndex !== undefined ? { maintenanceAuthorized: options.maintainIndex } : {}) })));
 context.command('discover').requiredOption('--project <project>', projectOption).requiredOption('--packet <path>').action(async ({ project, packet }: { project: string; packet: string }) => print(await discoverFallback(resolveProjectRoot(project), await jsonFile<FallbackPacket>(packet))));
 const run = program.command('run');
+run.command('wizard').description('Validate, generate and optionally approve/start a coding run').requiredOption('--plan <directory>').requiredOption('--host <host>').requiredOption('--project <project>').option('--confirm', 'approve and start after displaying the summary').action(async (options: { plan: string; host: Host; project: string; confirm?: boolean }) => {
+  const directory = resolve(options.plan);
+  const project = resolveProjectRoot(options.project);
+  const document = await readPlan(directory);
+  const canonicalDirectory = join(project, '.ai-workflow', 'plans', document.planId);
+  if (directory !== canonicalDirectory) throw new Error(`Workflow plan directory must be canonical: ${canonicalDirectory}`);
+  const manifest = requireV2Manifest(await generateManifest(directory, options.host));
+  const validation = await validateWorkflow(manifest, project);
+  if (!validation.valid) throw new Error(validation.errors.join('; '));
+  print({ plan_id: manifest.plan_id, host: manifest.host, actions: manifest.actions.length, tasks: manifest.tasks.map((task) => task.task_id), write_scope: [...new Set(manifest.actions.flatMap((action) => action.write_scope))], tests: [...new Set(manifest.actions.flatMap((action) => action.test_commands))], risks: ['baseline drift', 'scope violations', 'host failures', 'failed gates'], confirmed: Boolean(options.confirm) });
+  if (!options.confirm) return;
+  await approveV2Manifest(join(directory, 'workflow.json'), manifest, project);
+  const script = await readFile(join(directory, manifest.script.path), 'utf8');
+  const args = JSON.parse(await readFile(join(directory, manifest.args.path), 'utf8')) as unknown;
+  const runId = `run-${manifest.plan_id}-${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
+  print(await runV2Script({ project, runId, manifest, script, args, scriptDigest: manifest.script.bytes_digest, argsDigest: manifest.args.bytes_digest }));
+});
 run.command('start').requiredOption('--workflow <path>').requiredOption('--host <host>').requiredOption('--project <project>').action(async (options: { workflow: string; host: string; project: string }) => {
   const manifest = requireV2Manifest(await jsonFile<unknown>(options.workflow));
   if (manifest.host !== options.host) throw new Error(`Host mismatch: manifest=${manifest.host}, requested=${options.host}`);

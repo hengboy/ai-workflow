@@ -18,6 +18,16 @@ async function workflowCli(project: string, arguments_: string[], env?: NodeJS.P
 }
 
 describe('v2 CLI artifacts', () => {
+  it('keeps the wizard preview behind the approval boundary', async () => {
+    const project = await temporary('ai-workflow-cli-wizard-');
+    await gitInit(project);
+    const plan = await frozenPlan(project);
+    const preview = await workflowCli(project, ['run', 'wizard', '--plan', plan, '--host', 'codex', '--project', project]);
+    expect(JSON.parse(preview.stdout)).toMatchObject({ plan_id: '20260831-example', host: 'codex', confirmed: false });
+    await expect(readFile(join(plan, 'approval.receipt.json'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(readdir(join(project, '.ai-workflow/runs'))).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
   it('generates a v2 manifest from plan-local script and args files', async () => {
     const project = await temporary('ai-workflow-cli-v2-');
     const plan = await frozenPlan(project);

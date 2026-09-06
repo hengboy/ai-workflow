@@ -950,7 +950,15 @@ export async function cleanupV2Run(project: string, runId: string): Promise<RunR
   await operator.reconcile();
   await operator.cleanup();
   record.resources = operator.resources as unknown[];
-  record.run_state = record.run_state === 'cancelled' ? 'cancelled' : 'complete';
+  const retained = record.resources.some((resource) => !resource || typeof resource !== 'object' || (resource as { state?: unknown }).state === 'retained' || (resource as { status?: unknown }).status === 'retained');
+  if (retained) {
+    record.run_state = 'cancelled-with-retained-resources';
+    record.stop_reason = 'cancelled';
+  } else if (record.run_state === 'cancelled') {
+    record.run_state = 'cancelled';
+  } else {
+    record.run_state = 'complete';
+  }
   await saveV2Run(project, record);
   return record;
 }

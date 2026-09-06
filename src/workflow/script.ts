@@ -10,6 +10,7 @@ export interface ScriptSnapshotOptions {
   planDirectory: string;
   planId: string;
   actionIds: string[];
+  taskControls?: Array<{ taskId: string; requiredActionIds: string[]; controlId?: string }>;
 }
 
 export interface ScriptBytesSnapshot {
@@ -35,7 +36,8 @@ export interface WorkflowScriptSnapshot {
 
 export type ScriptCall =
   | { kind: 'action'; actionId: string; callId: string }
-  | { kind: 'pipeline'; actionId: string; callId: string; itemKeys: string[] };
+  | { kind: 'pipeline'; actionId: string; callId: string; itemKeys: string[] }
+  | { kind: 'control'; taskId: string; controlId: string };
 
 const forbiddenIdentifiers = new Set([
   'process', 'Buffer', 'require', 'eval', 'Function', 'WebAssembly', 'Date', 'globalThis', 'fetch',
@@ -130,6 +132,11 @@ function parseScript(source: string, actionIds: string[]): ScriptCall[] {
           if (callIds.has(callId)) throw new Error(`Script call ID is duplicated: ${callId}`);
           callIds.add(callId);
           calls.push({ kind: 'action', actionId, callId });
+        } else if (method === 'finalizeTask') {
+          if (node.arguments.length !== 2) throw new Error('Script finalizeTask requires task ID and control ID');
+          const taskId = stringLiteral(node.arguments[0], 'task ID');
+          const controlId = stringLiteral(node.arguments[1], 'control ID');
+          calls.push({ kind: 'control', taskId, controlId });
         } else if (method === 'pipeline') {
           const config = node.arguments[1];
           if (!config || !ts.isObjectLiteralExpression(config)) throw new Error('Script pipeline requires an itemKeys object');
@@ -146,8 +153,21 @@ function parseScript(source: string, actionIds: string[]): ScriptCall[] {
   return calls;
 }
 
-function defaultScript(actionIds: string[]): Buffer {
-  return Buffer.from(`${actionIds.map((actionId, index) => `await agent(${JSON.stringify(`Execute ${actionId}`)}, { actionId: ${JSON.stringify(actionId)}, callId: ${JSON.stringify(`action/${String(index + 1).padStart(4, '0')}/${actionId}`)} });`).join('\n')}\n`, 'utf8');
+function defaultScript(actionIds: string[], taskControls: Array<{ taskId: string; requiredActionIds: string[]; controlId?: string }> = []): Buffer {
+  let ordinal = 0;
+  const lines: string[] = [];
+  for (const task of taskControls) {
+    for (const actionId of task.requiredActionIds) {
+      ordinal += 1;
+      lines.push(`await agent(${JSON.stringify(`Execute ${actionId}`)}, { actionId: ${JSON.stringify(actionId)}, callId: ${JSON.stringify(`action/${String(ordinal).padStart(4, '0')}/${actionId}`)} });`);
+    }
+    lines.push(`await finalizeTask(${JSON.stringify(task.taskId)}, ${JSON.stringify(task.controlId ?? `finalize/${task.taskId}`)});`);
+  }
+  if (!taskControls.length) for (const actionId of actionIds) {
+    ordinal += 1;
+    lines.push(`await agent(${JSON.stringify(`Execute ${actionId}`)}, { actionId: ${JSON.stringify(actionId)}, callId: ${JSON.stringify(`action/${String(ordinal).padStart(4, '0')}/${actionId}`)} });`);
+  }
+  return Buffer.from(`${lines.join('\n')}\n`, 'utf8');
 }
 
 function defaultMeta(planId: string): CodingWorkflowMeta {
@@ -179,7 +199,7 @@ async function argsSnapshot(planDirectory: string): Promise<ArgsBytesSnapshot> {
 export async function snapshotWorkflowScript(options: ScriptSnapshotOptions): Promise<WorkflowScriptSnapshot> {
   const planDirectory = await planPath(options.projectDirectory, options.planDirectory);
   const scriptRaw = await readPlanLocalFile(resolve(planDirectory, 'workflow.js'));
-  const script = scriptRaw ?? defaultScript(options.actionIds);
+  const script = scriptRaw ?? defaultScript(options.actionIds, options.taskControls);
   if (!scriptRaw) await writeFile(resolve(planDirectory, 'workflow.js'), script, { flag: 'wx' });
   if (script.length > 1_000_000) throw new Error('workflow.js exceeds the script size policy');
   const calls = parseScript(script.toString('utf8'), options.actionIds);

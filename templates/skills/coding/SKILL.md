@@ -42,6 +42,8 @@ Generate with:
 
 `ai-workflow workflow generate --plan <directory> --host <host>`
 
+For the guided flow, use `ai-workflow run wizard --plan <directory> --host <host> --project <absolute-project-root>`. The wizard is preview-only until the user explicitly adds `--confirm`; the lower-level generate, approve, and start commands remain available for audit.
+
 The command writes the canonical `workflow.json`, snapshots plan-local regular files
 `workflow.js` and `workflow.args.json`, and validates their AST and byte digests.
 Optional `--script <plan-local-file>` and `--args <plan-local-json>` inputs must be

@@ -24,6 +24,7 @@ ai-workflow profile activate <name>
 ai-workflow init /path/to/project
 ai-workflow update /path/to/project
 ai-workflow workflow generate --plan .ai-workflow/plans/<planId> --host codex [--script <plan-local-file>] [--args <plan-local-json>]
+ai-workflow run wizard --plan .ai-workflow/plans/<planId> --host codex --project . [--confirm]
 ai-workflow workflow validate .ai-workflow/plans/<planId>/workflow.json --project .
 ai-workflow workflow explain .ai-workflow/plans/<planId>/workflow.json
 ai-workflow workflow approve .ai-workflow/plans/<planId>/workflow.json
@@ -39,6 +40,8 @@ ai-workflow context discover --project . --packet <fallback.json>
 ```
 
 `workflow generate` always writes the v2 manifest to the canonical `.ai-workflow/plans/<plan-id>/workflow.json` inside the project. `--script` and `--args` accept only regular files inside that plan directory. Symlinks, external paths, stdin, v1 artifacts and start-time replacement are rejected.
+
+`run wizard` validates and summarizes the plan before approval. Without `--confirm` it creates no approval receipt and no run; with `--confirm` it approves and starts the run.
 
 `--project` is always a project root directory path. From that directory use `--project .` (project root directory path); from elsewhere pass an absolute path such as `--project /path/to/project`. Internal orchestration uses absolute project-root paths, and a relative `--candidate` is resolved from that project root.
 
