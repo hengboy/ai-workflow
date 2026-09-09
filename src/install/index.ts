@@ -31,9 +31,9 @@ const activeProfileRelative = '.config/ai-workflow/active-profile';
 const projectManifestRelative = '.ai-workflow/project-manifest.json';
 const marketplaceRelative = '.agents/plugins/marketplace.json';
 const skillsRelative = '.agents/skills';
-const projectTemplates = ['AGENTS.md', 'CLAUDE.md', 'MEMORY.md', 'navigation.json', 'navigation.md', 'config.yaml'] as const;
+const projectTemplates = ['AGENTS.md', 'CLAUDE.md', 'MEMORY.md', 'navigation.json', 'navigation.md'] as const;
 function projectTargets(): Array<{ source: string; target: string }> {
-  return projectTemplates.map((name) => ({ source: join('templates/project', name), target: name === 'navigation.json' || name === 'navigation.md' ? `.ai-workflow/index/${name}` : name === 'config.yaml' ? '.ai-workflow/config.yaml' : name }));
+  return projectTemplates.map((name) => ({ source: join('templates/project', name), target: name === 'navigation.json' || name === 'navigation.md' ? `.ai-workflow/index/${name}` : name }));
 }
 async function projectTemplateContents(): Promise<Array<{ target: string; contents: string }>> {
   return Promise.all(projectTargets().map(async ({ source, target }) => ({ target, contents: await readFile(new URL(`../../${source}`, import.meta.url), 'utf8') })));

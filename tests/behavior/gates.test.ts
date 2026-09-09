@@ -28,7 +28,6 @@ describe('write gates', () => {
       'MEMORY.md',
       '.ai-workflow/index/navigation.json',
       '.ai-workflow/index/navigation.md',
-      '.ai-workflow/config.yaml'
     ]);
   });
   it('skips a managed file that the project user changed', async () => {
@@ -64,6 +63,6 @@ describe('write gates', () => {
     await expect(updateProject(root)).rejects.toThrow(/Project update requires .ai-workflow\/project-manifest\.json/);
     expect(await exists(join(root, '.ai-workflow/project-manifest.json'))).toBe(false);
   });
-  it('init preflights conflicts without partial writes', async () => { const root = await temporary(); const { writeFile } = await import('node:fs/promises'); await writeFile(join(root, 'MEMORY.md'), 'existing'); await expect(initializeProject(root)).rejects.toThrow(/no files written/); expect(await exists(join(root, 'AGENTS.md'))).toBe(false); expect(await exists(join(root, '.ai-workflow/config.yaml'))).toBe(false); });
+  it('init preflights conflicts without partial writes', async () => { const root = await temporary(); const { writeFile } = await import('node:fs/promises'); await writeFile(join(root, 'MEMORY.md'), 'existing'); await expect(initializeProject(root)).rejects.toThrow(/no files written/); expect(await exists(join(root, 'AGENTS.md'))).toBe(false); });
   it('init reports merge content for every conflict', async () => { const root = await temporary(); const { writeFile } = await import('node:fs/promises'); await writeFile(join(root, 'MEMORY.md'), 'existing'); await expect(initializeProject(root)).rejects.toThrow(/MEMORY\.md.*---/s); });
 });
