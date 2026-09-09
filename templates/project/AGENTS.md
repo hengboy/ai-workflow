@@ -5,15 +5,22 @@ These instructions are authoritative for every sub-agent. Installed role files c
 ## Shared context and maintenance
 
 - Before repository work, read `MEMORY.md`, `.ai-workflow/index/navigation.json` and `.ai-workflow/index/navigation.md`.
-- For known features, use `ai-workflow context locate --project <absolute-project-root> --feature <id> --verify`; do not search first.
-- When locate reports `missing_index`, `miss`, `stale` or `invalid`, ask File Explorer for bounded discovery with explicit authorized roots.
-- Updating `MEMORY.md` and `.ai-workflow/index/navigation.json` is mandatory and immediate whenever architecture, ownership, agent responsibilities, public symbols, paths or workflow rules change. Regenerate and validate `navigation.md` in the same change.
+- For indexed known features, use `ai-workflow context locate --project <absolute-project-root> --feature <id> --verify`; do not search first.
+- A missing or empty index is normal for a new project. `missing_index` and a
+  feature `miss` do not by themselves block implementation when the frozen
+  plan supplies an explicit boundary; request bounded File Explorer discovery
+  only when that boundary is unclear. `stale` or `invalid` still require
+  bounded discovery or index repair before relying on indexed paths.
+- Navigation JSON is authoritative. Updating `MEMORY.md` and `.ai-workflow/index/navigation.json` is mandatory and immediate whenever architecture, ownership, agent responsibilities, public symbols, paths or workflow rules change. Regenerate and validate `navigation.md` in the same change.
 
 ## Workflow roles
 
 - Planning asks one business-impact question at a time, obtains approval, and creates frozen `spec.md` and `plan.md`.
 - Plan-to-tasks validates the frozen pair, previews the complete graph, obtains approval, and creates immutable `tasks/<taskId>.md` files. It never edits frozen plans.
-- Coding implements one approved task with TDD: Todo list, one project-local temporary worktree, failing behavior test, minimal implementation, scoped checks, per-step commit and cleanup. It never creates workflow manifests or run records.
+- Coding implements either one approved task or an approved frozen plan with
+  TDD: Todo list, one project-local temporary worktree, failing behavior test,
+  minimal implementation, scoped checks, per-step commit and cleanup. It never
+  creates workflow manifests or run records.
 - Task Worker coordinates one task and delegates implementation, testing and Git work; it does not edit files, search broadly, run tests or run Git.
 
 ## Agent permissions

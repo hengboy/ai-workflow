@@ -10,9 +10,16 @@ production change must be driven by a behavior test in a red -> green loop.
 
 ## Preconditions
 
-- Read `MEMORY.md`, both navigation index files, the frozen `spec.md`, `plan.md` and the assigned task file.
-- Use only the task's exact read and write scopes and declared commands.
-- If a path or requirement is unclear, stop and request File Explorer support.
+- Read `MEMORY.md`, both navigation index files, and the frozen `spec.md` and `plan.md`.
+- A plan may be implemented either as a whole or through its split tasks. When a
+  `tasks/<taskId>.md` is assigned, use only that task's exact read and write
+  scopes and declared commands. When no task files exist, use the frozen plan's
+  explicit scope and acceptance criteria as the implementation boundary.
+- A missing or empty navigation index is normal for a new project. A locate
+  `missing_index` or feature `miss` result must not block implementation when
+  the plan (or an authorized bounded discovery result) identifies the paths and
+  symbols. Request File Explorer only when the implementation boundary remains
+  unclear.
 - Before implementation, confirm the target is a Git repository, record the current branch, and create one temporary worktree under `<project>/.worktrees/<name>`; perform all implementation and checks there.
 - Create a Todo list before editing and keep it current. Each step must state its
   scope, acceptance evidence and commit point.
