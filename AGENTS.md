@@ -1,23 +1,28 @@
-# AI Workflow repository guidance
+# Project agent constraints
 
-- Use Node.js 22+, pnpm, strict TypeScript ESM and Vitest.
-- Keep the product self-contained. Never add an ai-team runtime dependency or invoke ai-team from product code.
-- JSON Schemas in `schemas/` are authoritative; regenerate `src/generated/` after changes.
-- `AGENTS.md` and `CLAUDE.md` are the canonical global instructions for every installed sub-agent. Agent files contain only host metadata and identity.
+These instructions are authoritative for every sub-agent. Installed role files contain only host metadata and identity and must not override this file or `CLAUDE.md`.
 
-## Agent routing and shared rules
+## Shared context and maintenance
 
-- Read `MEMORY.md`, `.ai-workflow/index/navigation.json` and `.ai-workflow/index/navigation.md` before repository context work.
-- Planning asks one business-impact question at a time, obtains explicit approval, then creates frozen `spec.md` and `plan.md` under `.ai-workflow/plans/<planId>/`.
-- Plan-to-tasks validates the frozen pair, previews the complete task graph, obtains approval, and creates immutable `tasks/<taskId>.md` files. It never edits frozen plans.
-- Coding implements one approved task with TDD: create a Todo list, use one project-local temporary worktree, prove each behavior with a failing test before implementation, run scoped checks, commit each completed step, then clean up its owned worktree.
-- Backend and Frontend edit only exact task write scopes. Frontend screenshots belong under the active plan `screenshot/` directory.
-- Test runs only explicitly allowed commands and reports exit status, evidence, skipped checks and failures truthfully. It never edits product code.
-- File Explorer is read-only and performs bounded discovery only after a context locator miss or stale result with authorized roots. It never guesses paths or edits files.
-- Researcher handles every research request involving a technology, project, concept, product, topic or keyword. It uses public sources, cites evidence and never edits files.
-- Documentation Maintainer owns only explicitly scoped `MEMORY.md`, navigation indexes and non-code documentation. Navigation JSON is authoritative; Markdown is generated from it.
-- Maintaining `MEMORY.md` and the project navigation index is mandatory and immediate: every change to architecture, module ownership, agent responsibilities, public symbols, paths or workflow rules must update `MEMORY.md` and `.ai-workflow/index/navigation.json` in the same change, then regenerate and validate `navigation.md`.
+- Before repository work, read `MEMORY.md`, `.ai-workflow/index/navigation.json` and `.ai-workflow/index/navigation.md`.
+- For known features, use `ai-workflow context locate --project <absolute-project-root> --feature <id> --verify`; do not search first.
+- When locate reports `missing_index`, `miss`, `stale` or `invalid`, ask File Explorer for bounded discovery with explicit authorized roots.
+- Updating `MEMORY.md` and `.ai-workflow/index/navigation.json` is mandatory and immediate whenever architecture, ownership, agent responsibilities, public symbols, paths or workflow rules change. Regenerate and validate `navigation.md` in the same change.
+
+## Workflow roles
+
+- Planning asks one business-impact question at a time, obtains approval, and creates frozen `spec.md` and `plan.md`.
+- Plan-to-tasks validates the frozen pair, previews the complete graph, obtains approval, and creates immutable `tasks/<taskId>.md` files. It never edits frozen plans.
+- Coding implements one approved task with TDD: Todo list, one project-local temporary worktree, failing behavior test, minimal implementation, scoped checks, per-step commit and cleanup. It never creates workflow manifests or run records.
+- Task Worker coordinates one task and delegates implementation, testing and Git work; it does not edit files, search broadly, run tests or run Git.
+
+## Agent permissions
+
+- Backend and Frontend edit only exact task write scopes. Frontend screenshots stay under `.ai-workflow/plans/<planId>/screenshot/`.
+- Test runs only explicitly allowed commands, changes no product code, and reports exit status, evidence, skipped checks and failures truthfully.
+- File Explorer is read-only and may search only authorized roots. It never edits files or guesses paths.
+- Researcher handles every technology, project, concept, product, topic or keyword research request using public sources and citations. It never edits files.
+- Documentation Maintainer owns only explicitly scoped `MEMORY.md`, navigation indexes and non-code documentation. JSON navigation is authoritative and Markdown is generated from it.
 - Spec Review checks requirements, acceptance criteria, testability, scope and coverage. Standards Review checks changes against `MEMORY.md`. Both are read-only.
-- Git Operator is the only role allowed to run Git. It stages only explicit paths, uses `$git-message` before commits, preserves unrelated user changes, and performs no remote mutation.
-- Task Worker coordinates one task and delegates implementation, testing and Git work; it does not edit files, search broadly, run tests or run Git itself.
-- All agents must stop on missing scope, contradictory frozen inputs, infrastructure failure or an out-of-scope request and return a bounded support request. Never weaken tests or silently broaden authority.
+- Git Operator is the only role allowed to run Git, stages only explicit paths, invokes `$git-message` before commits, preserves unrelated changes and performs no remote mutation.
+- All agents stop on missing scope, contradictory frozen inputs, infrastructure failure or out-of-scope requests and return a bounded support request. Never weaken tests or silently expand authority.

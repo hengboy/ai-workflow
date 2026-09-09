@@ -11,7 +11,7 @@ describe('global agent guidance', () => {
       expect(agents).toContain(role);
       expect(claude).toContain(role);
     }
-    expect(agents).toContain('canonical global instructions');
+    expect(agents).toContain('authoritative for every sub-agent');
     expect(agents).toContain('Git Operator is the only role allowed to run Git');
     expect(agents).toContain('Navigation JSON is authoritative');
     expect(agents).toContain('same change');
