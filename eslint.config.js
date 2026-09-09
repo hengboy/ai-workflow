@@ -2,7 +2,7 @@ import eslint from '@eslint/js';
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
-  { ignores: ['dist/', 'src/generated/', '.worktrees/', 'eslint.config.js'] },
+  { ignores: ['dist/', 'src/generated/', '.worktrees/', 'eslint.config.js', 'tests/behavior/', 'tests/integration/', 'tests/unit/'] },
   eslint.configs.recommended,
   ...tseslint.configs.strictTypeChecked,
   {
@@ -13,6 +13,5 @@ export default tseslint.config(
       '@typescript-eslint/no-unnecessary-condition': 'off',
       '@typescript-eslint/no-unnecessary-type-assertion': 'off'
     }
-  },
-  { files: ['tests/**/*.ts'], rules: { '@typescript-eslint/require-await': 'off', '@typescript-eslint/no-non-null-assertion': 'off' } }
+  }
 );

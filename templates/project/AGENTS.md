@@ -1,13 +1,28 @@
 # Project agent constraints
 
-- All coding commands operate on v2 `workflow.json` manifests generated from frozen plan inputs. Do not introduce a v1 workflow or run record.
-- File Explorer performs bounded fallback discovery only. It may read and search authorized paths, but must not modify `MEMORY.md`, navigation indexes or other files.
-- Documentation Maintainer owns explicitly scoped indexes, `MEMORY.md` and non-code/non-plan documentation; it must not modify source, tests, schemas or frozen plans.
-- Known work starts by reading `MEMORY.md`, `.ai-workflow/index/navigation.json` and `.ai-workflow/index/navigation.md`, then using `ai-workflow context locate`.
-- Action scripts use approved `actionId`, stable `callId` and stable pipeline `itemKey` values. They cannot expand task, host, role, scope or gate authority.
-- The host-native broker owns model transport and credentials. The brokered executor enforces process groups, denied executor network and project write scope; this is a trusted boundary, not a malicious-code security sandbox.
-- Scope audit evidence must precede action admission. Git Operator exclusively executes Git and owns the Git mutex, run queue, resource receipts, worktrees, commits and merges.
-- v2 worktrees are `.ai-workflow/runs/<runId>/worktrees/plan`, `.ai-workflow/runs/<runId>/worktrees/tasks/<taskId>`, `.ai-workflow/runs/<runId>/worktrees/repair` and `.ai-workflow/runs/<runId>/worktrees/repair-tests/<taskId>`.
-- Repair-test actions use the plan head after repair merge and require targeted finding rechecks. They do not authorize a second repair round.
-- All other roles stay inside packet read/write scopes and allowed commands. Screenshots belong in `.ai-workflow/plans/<planId>/screenshot/`.
-- Sessions are serial: pass the complete prior handoff before starting the next session, and keep command output and durable receipts with the run.
+These instructions are authoritative for every sub-agent. Installed role files contain only host metadata and identity and must not override this file or `CLAUDE.md`.
+
+## Shared context and maintenance
+
+- Before repository work, read `MEMORY.md`, `.ai-workflow/index/navigation.json` and `.ai-workflow/index/navigation.md`.
+- For known features, use `ai-workflow context locate --project <absolute-project-root> --feature <id> --verify`; do not search first.
+- When locate reports `missing_index`, `miss`, `stale` or `invalid`, ask File Explorer for bounded discovery with explicit authorized roots.
+- Updating `MEMORY.md` and `.ai-workflow/index/navigation.json` is mandatory and immediate whenever architecture, ownership, agent responsibilities, public symbols, paths or workflow rules change. Regenerate and validate `navigation.md` in the same change.
+
+## Workflow roles
+
+- Planning asks one business-impact question at a time, obtains approval, and creates frozen `spec.md` and `plan.md`.
+- Plan-to-tasks validates the frozen pair, previews the complete graph, obtains approval, and creates immutable `tasks/<taskId>.md` files. It never edits frozen plans.
+- Coding implements one approved task with TDD: Todo list, one project-local temporary worktree, failing behavior test, minimal implementation, scoped checks, per-step commit and cleanup. It never creates workflow manifests or run records.
+- Task Worker coordinates one task and delegates implementation, testing and Git work; it does not edit files, search broadly, run tests or run Git.
+
+## Agent permissions
+
+- Backend and Frontend edit only exact task write scopes. Frontend screenshots stay under `.ai-workflow/plans/<planId>/screenshot/`.
+- Test runs only explicitly allowed commands, changes no product code, and reports exit status, evidence, skipped checks and failures truthfully.
+- File Explorer is read-only and may search only authorized roots. It never edits files or guesses paths.
+- Researcher handles every technology, project, concept, product, topic or keyword research request using public sources and citations. It never edits files.
+- Documentation Maintainer owns only explicitly scoped `MEMORY.md`, navigation indexes and non-code documentation. JSON navigation is authoritative and Markdown is generated from it.
+- Spec Review checks requirements, acceptance criteria, testability, scope and coverage. Standards Review checks changes against `MEMORY.md`. Both are read-only.
+- Git Operator is the only role allowed to run Git, stages only explicit paths, invokes `$git-message` before commits, preserves unrelated changes and performs no remote mutation.
+- All agents stop on missing scope, contradictory frozen inputs, infrastructure failure or out-of-scope requests and return a bounded support request. Never weaken tests or silently expand authority.

@@ -1,136 +1,41 @@
 ---
 name: coding
-description: Generate, approve and execute a v2 trusted workflow from frozen plan documents.
+description: Implements an approved task with test-driven development and bounded scope.
 ---
 
 # Coding
 
-## Outcome
-
-Generate, inspect, approve and execute one v2 manifest from one frozen plan. The local
-`ai-workflow` runtime owns orchestration. Use exactly one selected native host CLI per
-run; never call provider APIs or an external workflow framework.
+Implement one approved task using a red-green test-driven loop.
 
 ## Preconditions
 
-- The project is initialized and Git has a committed baseline on the target branch.
-- `spec.md` and `plan.md` are frozen, share a valid plan ID and pass digest checks.
-- Task files, navigation files and profile inputs are frozen before generation.
-- Host is exactly one of `codex`, `claude` or `opencode`.
-- The plan directory is `.ai-workflow/plans/<plan-id>`.
+- Read `MEMORY.md`, both navigation index files, the frozen `spec.md`, `plan.md` and the assigned task file.
+- Use only the task's exact read and write scopes and declared commands.
+- If a path or requirement is unclear, stop and request File Explorer support.
+- Before implementation, confirm the target is a Git repository, record the current branch, and create one temporary worktree under `<project>/.worktrees/<name>`; perform all implementation and checks there.
+- Create a Todo list before editing and keep it current. Treat each task step as an independent red-green, verification and commit unit.
 
-Run `ai-workflow plan validate --plan <directory>` before generating the artifact.
-Do not silently repair frozen inputs. Return to planning or task splitting when the
-requirements, task graph, host or scope must change.
+## Procedure
 
-Use the shared frozen-plan digest protocol: validate the frozen plan and its
-`read_scope` before generating any coding artifact. A task's `read_scope` must be
-fixed context plus exact locator paths; it must not be `src/`, `tests/` or the
-project root.
+1. Write one behavior-level regression test and confirm it fails for the expected reason.
+2. Make the smallest implementation that makes that test pass.
+3. Repeat for each acceptance criterion, then run the task's complete validation commands.
+4. Preserve existing behavior, avoid unrelated cleanup and report every changed path and check result.
 
-## Navigation-first context
+After each step, run the narrowest relevant checks, inspect the diff once, and commit that step with the `git-commit` skill. After all steps, merge the temporary branch back, rerun affected checks, and remove only the owned worktree and branch. Never stage unrelated user changes.
 
-Read `MEMORY.md`, `.ai-workflow/index/navigation.json` and
-`.ai-workflow/index/navigation.md` first. For each task feature, run
-`ai-workflow context locate --project <absolute-project-root> --feature <id> --verify`
-and read only its exact `read_order`. A missing, stale, invalid or missed locator is a
-bounded File Explorer handoff, not permission to search the repository broadly.
+## Test quality
 
-## Plan-local artifacts
+- Test public behavior rather than private implementation details.
+- Use independent expected values and preserve regression tests for defects.
+- Do not weaken assertions, suppress failures, or add unrelated compatibility layers.
+- Run the narrowest relevant test first, then the required typecheck, lint, build or integration checks.
 
-Generate with:
-
-`ai-workflow workflow generate --plan <directory> --host <host>`
-
-For the guided flow, use `ai-workflow run wizard --plan <directory> --host <host> --project <absolute-project-root>`. The wizard is preview-only until the user explicitly adds `--confirm`; the lower-level generate, approve, and start commands remain available for audit.
-
-The command writes the canonical `workflow.json`, snapshots plan-local regular files
-`workflow.js` and `workflow.args.json`, and validates their AST and byte digests.
-Optional `--script <plan-local-file>` and `--args <plan-local-json>` inputs must be
-regular files inside the canonical plan directory. Symlinks, external paths, stdin,
-and start-time script or args replacement are rejected.
-
-The manifest is the immutable capability boundary. It contains the action graph,
-task dependencies, read/write scopes, concurrency groups, test commands, repair
-capabilities, review rechecks and mandatory gates. Do not edit a generated manifest
-to expand task, host, role, action, scope or Git authority.
-
-## Script review
-
-Review `workflow.js` as trusted orchestration code. Each submission uses an approved
-`actionId` and a stable unique `callId`; each pipeline uses stable unique `itemKey`
-values. Check the resulting action graph, dependency order, scope audit and digest
-values before approval. The script chooses approved calls only; it cannot create new
-capabilities or bypass host-owned gates.
-
-## Approval and trusted boundary
-
-Explain and validate before asking for explicit user approval:
-
-`ai-workflow workflow explain <directory>/workflow.json`
-
-`ai-workflow workflow validate <directory>/workflow.json --project <absolute-project-root>`
-
-After confirmation, run `ai-workflow workflow approve <directory>/workflow.json`.
-The v2 receipt binds the manifest, script, args, input artifacts, profile route,
-sandbox policy, target branch and baseline. The trusted boundary is the host and
-runtime contract, not a claim that a Worker or VM contains malicious code.
-
-## Broker and executor
-
-The host-native broker owns model transport and credentials. The action executor is
-brokered, process-group controlled, network denied and project-write enforced. The
-broker/executor split must be visible in the preflight evidence. Opaque native host
-commands are protocol and audit data; they are not an in-process command allowlist.
-If the required brokered sandbox capability is unavailable, fail closed.
-
-## Execution and Git
-
-Start only the approved artifact:
-
-`ai-workflow run start --workflow <directory>/workflow.json --host <host> --project <absolute-project-root>`
-
-v2 resources use only these paths:
-
-- `.ai-workflow/runs/<runId>/worktrees/plan`
-- `.ai-workflow/runs/<runId>/worktrees/tasks/<taskId>`
-- `.ai-workflow/runs/<runId>/worktrees/repair`
-- `.ai-workflow/runs/<runId>/worktrees/repair-tests/<taskId>`
-
-Git mutation runs through the Git mutex and run queue. Git Operator owns resource
-receipts, commits, merges and ownership-safe cleanup. No push, pull, fetch, rebase,
-reset, clean, stash or remote mutation is allowed.
-
-## Repair and lifecycle control
-
-Use durable evidence for `status`, `resume`, `cancel` and `cleanup`:
-
-`ai-workflow run status <runId> --project <absolute-project-root>`
-
-`ai-workflow run resume <runId> --project <absolute-project-root>`
-
-`ai-workflow run cancel <runId> --project <absolute-project-root>`
-
-`ai-workflow run cleanup <runId> --project <absolute-project-root>`
-
-Resume only after checkpoint, digest, baseline, resource and idempotency evidence is
-reconciled. Cancel stops new scheduling and preserves evidence. Cleanup removes only
-owned, clean resources. A repair may change only finding-mapped approved scope.
-Each affected task gets an independent `repair-test` from the plan head after repair
-merge, followed by targeted finding recheck. A second repair request pauses the run.
-
-## Serial sessions
-
-Coding sessions are serial. One session owns one approved plan and one run at a time.
-Pass the complete prior handoff to the next session, record command output and
-receipts, and do not start a later session while the current one is active. Do not
-perform intermediate architecture or final implementation review in this skill.
+Do not generate workflow manifests or run records. Do not expand scope, search outside the packet, publish, or edit frozen planning artifacts. Git operations are allowed only through Git Operator or the prescribed `git-commit` step.
 
 ## Completion checklist
 
-- plan-local script and args are present, regular and digest-matched;
-- manifest validation, scope audit, sandbox preflight and approval receipt pass;
-- every action has stable `actionId`, `callId` and, when applicable, `itemKey` evidence;
-- task closure, plan validation, reviews, repair closure, baseline and integration gates pass;
-- required repair-tests and finding rechecks are closed;
-- summary, receipts, tests and Git integration evidence are recorded before cleanup.
+- Every assigned REQ/AC has implementation and test evidence.
+- Negative cases and failure output are reported truthfully.
+- Screenshots remain under the plan's `screenshot/` directory.
+- Return `done` only when all scoped checks pass; otherwise return `blocked` or `failed` with support requests.

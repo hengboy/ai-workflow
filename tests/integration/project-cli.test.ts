@@ -18,7 +18,7 @@ describe('project CLI', () => {
     expect(JSON.parse(stdout)).toMatchObject({
       updated: [],
       skipped: [],
-      unchanged: ['AGENTS.md', 'MEMORY.md', '.ai-workflow/index/navigation.json', '.ai-workflow/index/navigation.md', '.ai-workflow/config.yaml']
+      unchanged: ['AGENTS.md', 'CLAUDE.md', 'MEMORY.md', '.ai-workflow/index/navigation.json', '.ai-workflow/index/navigation.md', '.ai-workflow/config.yaml']
     });
   });
 });

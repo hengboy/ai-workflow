@@ -23,7 +23,8 @@ If the requested path or ownership is unclear, return `blocked` with a support r
 1. Read the supplied documentation and project context before editing.
 2. For navigation changes, update the JSON-authoritative index through the approved context maintenance command and validate the generated Markdown view.
 3. Preserve durable standards in `MEMORY.md` and keep README or other documentation accurate without changing product behavior.
-4. Run only the explicitly allowed documentation checks and report changed paths and evidence.
+4. Treat maintenance as a same-change hard gate: when architecture, ownership, agent responsibilities, public symbols, paths or workflow rules change, update `MEMORY.md` and `navigation.json` immediately, regenerate `navigation.md`, and validate both files before reporting completion.
+5. Run only the explicitly allowed documentation checks and report changed paths and evidence.
 
 ## Permissions
 

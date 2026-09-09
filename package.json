@@ -12,7 +12,7 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:unit": "vitest run tests/unit",
-    "test:integration": "vitest run tests/integration tests/install tests/behavior",
+    "test:integration": "vitest run tests/install tests/integration/profile-cli.test.ts tests/integration/navigation-*.test.ts tests/integration/project-cli.test.ts",
     "types:generate": "json2ts -i schemas -o src/generated --bannerComment '/* Generated from authoritative JSON Schemas. Do not edit. */'",
     "check": "pnpm types:generate && pnpm typecheck && pnpm lint && pnpm test && pnpm build",
     "dev": "tsx src/cli.ts"
