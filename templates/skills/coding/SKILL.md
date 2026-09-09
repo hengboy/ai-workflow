@@ -18,8 +18,9 @@ production change must be driven by a behavior test in a red -> green loop.
 - A missing or empty navigation index is normal for a new project. A locate
   `missing_index` or feature `miss` result must not block implementation when
   the plan (or an authorized bounded discovery result) identifies the paths and
-  symbols. Request File Explorer only when the implementation boundary remains
-  unclear.
+  symbols. For an unsplit plan, do not invoke File Explorer merely because the
+  feature is absent from the index; use the frozen plan's scope directly.
+  Request File Explorer only when the implementation boundary remains unclear.
 - Before implementation, confirm the target is a Git repository, record the current branch, and create one temporary worktree under `<project>/.worktrees/<name>`; perform all implementation and checks there.
 - Create a Todo list before editing and keep it current. Each step must state its
   scope, acceptance evidence and commit point.

@@ -9,7 +9,8 @@ These instructions are authoritative for every sub-agent. Installed role files c
 - A missing or empty index is normal for a new project. `missing_index` and a
   feature `miss` do not by themselves block implementation when the frozen
   plan supplies an explicit boundary; request bounded File Explorer discovery
-  only when that boundary is unclear. `stale` or `invalid` still require
+  only when that boundary is unclear. For an unsplit plan, do not invoke
+  File Explorer merely because the feature is absent from the index. `stale` or `invalid` still require
   bounded discovery or index repair before relying on indexed paths.
 - Navigation JSON is authoritative. Updating `MEMORY.md` and `.ai-workflow/index/navigation.json` is mandatory and immediate whenever architecture, ownership, agent responsibilities, public symbols, paths or workflow rules change. Regenerate and validate `navigation.md` in the same change.
 
