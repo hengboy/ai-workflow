@@ -269,3 +269,50 @@ describe('navigation re-export recognition', () => {
     expect(result.errors).toContain('Navigation index is stale: src/index.ts no longer contains Missing');
   });
 });
+
+function projectRootNavigation(): NavigationIndex {
+  return {
+    version: 1,
+    module_roots: [{ id: 'project', path: '.', owner_role: 'shared', responsibility: 'project', language: 'typescript', entry_kinds: ['exported-symbol'] }],
+    features: [{
+      id: 'src', name: 'src', aliases: [], module_root: 'project', entries: ['src/a.ts'],
+      symbols: [{ file: 'src/a.ts', name: 'alpha', kind: 'function', visibility: 'public' }],
+      related_files: [], tests: [], depends_on: [], relations: [],
+      owner_role: 'shared', responsibility: 'project', read_scope: ['src/a.ts'], shared_entry: false
+    }]
+  };
+}
+
+async function generatedDirectoriesProject(index = projectRootNavigation()): Promise<string> {
+  const project = await temporary('ai-workflow-navigation-semantic-generated-');
+  await mkdir(join(project, 'src'), { recursive: true });
+  await mkdir(join(project, 'dist'), { recursive: true });
+  await mkdir(join(project, 'node_modules/pkg'), { recursive: true });
+  await mkdir(join(project, 'target'), { recursive: true });
+  await mkdir(join(project, '.ai-workflow/index'), { recursive: true });
+  await writeFile(join(project, 'src/a.ts'), 'export function alpha(): void {}\n');
+  await writeFile(join(project, 'dist/generated.ts'), 'export function generated(): void {}\n');
+  await writeFile(join(project, 'node_modules/pkg/index.ts'), 'export function pkg(): void {}\n');
+  await writeFile(join(project, 'target/Generated.java'), 'public class Generated {}\n');
+  await writeFile(join(project, '.ai-workflow/index/navigation.json'), `${JSON.stringify(index)}\n`);
+  await writeFile(join(project, '.ai-workflow/index/navigation.md'), renderNavigation(index));
+  return project;
+}
+
+describe('navigation coverage exclusion parity with discovery', () => {
+  it('accepts a project-root exported-symbol root when generated and dependency directories exist', async () => {
+    const project = await generatedDirectoriesProject();
+
+    await expect(validateContext(project)).resolves.toMatchObject({ valid: true, errors: [] });
+  });
+
+  it('still rejects a genuinely unclassified source file outside generated and dependency directories', async () => {
+    const project = await generatedDirectoriesProject();
+    await writeFile(join(project, 'src/b.ts'), 'export function beta(): void {}\n');
+
+    const result = await validateContext(project);
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain('Navigation index is stale: unclassified module file src/b.ts');
+  });
+});

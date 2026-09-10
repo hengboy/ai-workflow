@@ -6,7 +6,7 @@ import { formatSchemaErrors, schemaValidator } from '../utils/schema.js';
 import { renderNavigation, type NavigationIndex, type NavigationModuleRoot } from './navigation.js';
 import { resolveCandidatePath, resolveProjectRoot } from './paths.js';
 import { analyzeModule } from './discovery/adapters.js';
-import { scanProject } from './discovery/scanner.js';
+import { isExcludedDirectory, scanProject } from './discovery/scanner.js';
 import type { CandidateModuleRoot } from './discovery/types.js';
 
 function compareStrings(left: string, right: string): number {
@@ -66,8 +66,10 @@ async function typeScriptFiles(project: string, directory: string): Promise<stri
   const files: string[] = [];
   for (const entry of await readdir(directory, { withFileTypes: true })) {
     const path = join(directory, entry.name);
-    if (entry.isDirectory()) files.push(...await typeScriptFiles(project, path));
-    else if (entry.isFile() && /\.(?:ts|tsx|js|jsx|mjs|cjs)$/.test(entry.name)) files.push(relative(project, path));
+    if (entry.isDirectory()) {
+      if (isExcludedDirectory(entry.name)) continue;
+      files.push(...await typeScriptFiles(project, path));
+    } else if (entry.isFile() && /\.(?:ts|tsx|js|jsx|mjs|cjs)$/.test(entry.name)) files.push(relative(project, path));
   }
   return files;
 }
@@ -76,8 +78,10 @@ async function regularFiles(project: string, directory: string): Promise<string[
   const files: string[] = [];
   for (const entry of await readdir(directory, { withFileTypes: true })) {
     const path = join(directory, entry.name);
-    if (entry.isDirectory()) files.push(...await regularFiles(project, path));
-    else if (entry.isFile()) files.push(relative(project, path));
+    if (entry.isDirectory()) {
+      if (isExcludedDirectory(entry.name)) continue;
+      files.push(...await regularFiles(project, path));
+    } else if (entry.isFile()) files.push(relative(project, path));
   }
   return files;
 }
