@@ -29,6 +29,20 @@ non-blocked delegated step remains.
   commit, merge and finalization; Git Operator is the only role allowed to run
   Git and specialists never dispatch children.
 
+## Surface routing
+
+Route each task by its `surface` attribute to the directly dispatched role:
+
+- `backend` → Backend Developer
+- `frontend` → Frontend Developer
+- `cross-stack` → Backend Developer then Frontend Developer in dependency order
+- `research` → Researcher
+- `documentation` → Documentation Maintainer
+- `test` → Test
+- `docs` → Documentation Maintainer
+
+An empty or unknown `surface` fails before execution.
+
 ## Preconditions
 
 - Read `MEMORY.md`, both navigation index files, and the frozen `spec.md` and `plan.md`.
