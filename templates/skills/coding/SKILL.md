@@ -25,9 +25,7 @@ non-blocked delegated step remains.
 - When a test must be written or changed, delegate that test work to the
   `test` sub-agent first. The implementation sub-agent may consume the test
   and fix production code, but must not write the test itself.
-- The primary orchestrator directly dispatches Git Operator for every per-step
-  commit, merge and finalization; Git Operator is the only role allowed to run
-  Git and specialists never dispatch children.
+- The primary orchestrator directly dispatches Git Operator for every per-step commit, merge and finalization; Git Operator is the only role allowed to run Git and uses the prescribed `git-commit` conventions, and specialists never dispatch children.
 
 ## Surface routing
 
@@ -74,8 +72,7 @@ starting the next step.
 
 Treat every Todo step as an independent red -> green, verification and commit
 unit. After its checks pass, self-check the behavior, boundaries and scope once,
-then use the `git-commit` skill immediately. Commit only that step's changes and
-record its hash. Do not combine steps or proceed to the next step before this
+then dispatch Git Operator, which uses the prescribed `git-commit` conventions, to commit only that step's changes; record the returned hash. Do not combine steps or proceed to the next step before this
 commit succeeds.
 
 ## Procedure
@@ -138,8 +135,9 @@ next behavior. A test that passes initially is not coverage evidence.
 ## Verification and Commit
 
 Run the narrowest relevant test after each slice, then the declared typecheck,
-lint, build or integration checks. After each step, self-check once and commit
-only that step with `git-commit`; after all steps merge the temporary branch,
+lint, build or integration checks. After each step, self-check once and dispatch
+Git Operator to commit only that step using the prescribed `git-commit`
+conventions; after all steps merge the temporary branch,
 rerun affected checks, and clean up only the owned worktree and branch.
 
 The dual-axis review is mandatory exactly once after implementation completes:
@@ -148,7 +146,7 @@ Standards Review checks `MEMORY.md`. Report both reviewers' findings together
 and wait for the user's repair selection. Never merge code before this gate is
 resolved.
 
-Do not generate workflow manifests or run records. Do not expand scope, search outside the packet, publish, or edit frozen planning artifacts. Git operations are allowed only through Git Operator or the prescribed `git-commit` step.
+Do not generate workflow manifests or run records. Do not expand scope, search outside the packet, publish, or edit frozen planning artifacts. Git operations are allowed only through Git Operator, which uses the prescribed `git-commit` conventions.
 
 ## Completion checklist
 

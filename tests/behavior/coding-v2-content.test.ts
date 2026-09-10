@@ -12,7 +12,7 @@ describe('v2 coding guidance', () => {
       'delegate that test work to the',
       'one temporary worktree',
       'Do not generate workflow manifests or run records',
-      'Git operations are allowed only through Git Operator or the prescribed',
+      'Git operations are allowed only through Git Operator',
     ]) {
       expect(coding).toContain(term);
     }

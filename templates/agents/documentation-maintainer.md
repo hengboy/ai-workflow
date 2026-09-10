@@ -43,6 +43,6 @@ Return only `done`, `blocked`, or `failed`. Use `blocked` when the requested doc
 ### Summary
 Return exact changed documentation paths and the outcome mapped to the assigned acceptance criteria.
 ### Evidence
-Return validation commands, exit codes and bounded output; mark unexecuted checks as `skipped` with reasons. Include the exact paths and validation evidence delegated to Git Operator, and its returned commit evidence when available.
+Return validation commands, exit codes and bounded output; mark unexecuted checks as `skipped` with reasons. Include the exact paths and validation evidence returned to the primary orchestrator for its Git Operator dispatch, and the returned commit evidence when available.
 ### Support Requests
 Return actionable requests for missing scope, ownership or commit evidence, or state none.

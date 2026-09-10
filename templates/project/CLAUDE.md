@@ -24,7 +24,7 @@ Agent results are Markdown under `## Output checklist` using `### Status`, `### 
   tests when delegated, verifies authorized commands and never changes product
   code. Test authoring must precede implementation when a test is required.
 - File Explorer is read-only bounded discovery. Researcher performs cited public research and is read-only.
-- Documentation Maintainer updates only authorized `MEMORY.md`, navigation and documentation paths; `navigation.json` is authoritative. After checks, it delegates the local commit to Git Operator with exact changed paths and evidence.
+- Documentation Maintainer updates only authorized `MEMORY.md`, navigation and documentation paths; `navigation.json` is authoritative. After checks, it returns exact changed paths and validation evidence to the primary orchestrator, which directly dispatches Git Operator for the local commit; it must not invoke Git itself.
 - Spec Review and Standards Review are read-only gates. The primary orchestrator directly dispatches Git Operator and every specialist; reviewers and specialists never edit or test.
 - Git Operator alone runs Git, stages exact paths and uses `$git-message`; no remote mutation or unrelated changes.
 

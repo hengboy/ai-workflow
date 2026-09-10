@@ -8,7 +8,7 @@ import { createNavigationCandidate, refreshContext, validateContext, verifyNavig
 import { locateContext } from './context/locate.js';
 import { discoverFallback, type FallbackPacket } from './context/fallback.js';
 import { resolveCandidatePath, resolveProjectRoot } from './context/paths.js';
-import { readPlan } from './workflow/parse.js';
+import { readPlan, readTasks } from './workflow/parse.js';
 
 const hosts = ['codex', 'claude', 'opencode'] as const;
 function hostList(value: string): Host[] { if (value === 'all') return [...hosts]; if (!hosts.includes(value as Host)) throw new Error(`Invalid host: ${value}`); return [value as Host]; }
@@ -26,6 +26,7 @@ profile.command('activate').argument('<name>').option('--home <path>').action(as
 const plan = program.command('plan');
 plan.command('validate').requiredOption('--plan <directory>').action(async ({ plan: directory }: { plan: string }) => {
   const document = await readPlan(resolve(directory));
+  await readTasks(resolve(directory));
   print({ valid: true, plan_id: document.planId, digests: { spec: document.specDigest, plan: document.planDigest, combined: document.digest } });
 });
 

@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { readTasks } from '../../src/workflow/parse.js';
 import { renderMarkdown } from '../../src/utils/frontmatter.js';
 import { packagePath } from '../../src/utils/schema.js';
 import { frozenPlan, temporary } from '../helpers.js';
 
+const exec = promisify(execFile);
 const supportedSurfaces = ['backend', 'frontend', 'cross-stack', 'test', 'docs', 'research', 'documentation'];
 
 function taskAttributes(overrides: Record<string, unknown> = {}): Record<string, unknown> {
@@ -88,5 +91,51 @@ describe('task surface routing', () => {
     );
     expect(coding).toMatch(/cross-stack[^.]{0,120}?dependency order/i);
     expect(coding).toMatch(/empty or unknown[^.]{0,40}?surface[^.]{0,40}?(?:fail|reject)[^.]{0,40}?before execution/i);
+  });
+
+  it('fails plan validate before execution when a task surface is invalid', async () => {
+    const root = await temporary();
+    const plan = await frozenPlan(root);
+    await writeTaskFile(plan, taskAttributes({ surface: 'mobile-ios' }));
+
+    await expect(exec('pnpm', ['exec', 'tsx', 'src/cli.ts', 'plan', 'validate', '--plan', plan])).rejects.toThrow(/allowed surfaces/i);
+  });
+
+  it('validates a plan whose task surface is supported', async () => {
+    const root = await temporary();
+    const plan = await frozenPlan(root);
+    await writeTaskFile(plan, taskAttributes({ surface: 'backend' }));
+
+    const { stdout } = await exec('pnpm', ['exec', 'tsx', 'src/cli.ts', 'plan', 'validate', '--plan', plan]);
+
+    expect(stdout).toContain('"valid": true');
+  });
+
+  it('does not expose the removed role in schemas or generated declarations', async () => {
+    for (const directory of [packagePath('schemas'), packagePath('src', 'generated')]) {
+      for (const entry of await readdir(directory)) {
+        const path = join(directory, entry);
+        const text = await readFile(path, 'utf8');
+        expect(text, path).not.toMatch(/task[- _]?worker/i);
+      }
+    }
+  });
+
+  it('preserves the one-repair gate in implementation and test roles', async () => {
+    const backend = await readFile(packagePath('templates', 'agents', 'backend.md'), 'utf8');
+    const frontend = await readFile(packagePath('templates', 'agents', 'frontend.md'), 'utf8');
+    const test = await readFile(packagePath('templates', 'agents', 'test.md'), 'utf8');
+
+    expect(backend).toMatch(/one repair round is available/i);
+    expect(frontend).toMatch(/one repair round/i);
+    expect(test).toMatch(/one developer repair round/i);
+  });
+
+  it('rejects a task with a project-root read scope', async () => {
+    const root = await temporary();
+    const plan = await frozenPlan(root);
+    await writeTaskFile(plan, taskAttributes({ surface: 'backend', read_scope: ['.'] }));
+
+    await expect(readTasks(plan)).rejects.toThrow(/Invalid task scope/i);
   });
 });

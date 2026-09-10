@@ -146,9 +146,12 @@ agents:
     const home = await temporary('ai-workflow-agent-upgrade-');
     const legacy = join(home, '.config/opencode/agents/ai-workflow-backend.md');
     const unrelated = join(home, '.config/opencode/agents/ai-workflow-unrelated.md');
+    const sameNamedElsewhere = join(home, '.claude/agents/ai-workflow-backend.md');
     await mkdir(join(home, '.config/opencode/agents'), { recursive: true });
     await writeFile(legacy, 'legacy managed agent');
     await writeFile(unrelated, 'keep');
+    await mkdir(join(home, '.claude/agents'), { recursive: true });
+    await writeFile(sameNamedElsewhere, 'keep');
     await mkdir(join(home, '.config/ai-workflow'), { recursive: true });
     await writeFile(join(home, '.config/ai-workflow/install-manifest.json'), JSON.stringify({
       version: '0.1.0',
@@ -161,6 +164,7 @@ agents:
     expect(await exists(legacy)).toBe(false);
     expect(await exists(join(home, '.config/opencode/agents/backend.md'))).toBe(true);
     expect(await exists(unrelated)).toBe(true);
+    expect(await exists(sameNamedElsewhere)).toBe(true);
   });
   it('removes previously managed prefixed skill directories during an upgrade', async () => {
     const home = await temporary('ai-workflow-skill-upgrade-');
