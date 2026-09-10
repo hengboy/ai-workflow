@@ -86,7 +86,6 @@ describe('action capability admission', () => {
       read_paths: ['src'],
       write_paths: ['src/output.ts'],
       allowed_commands: ['pnpm test'],
-      result_schema: 'schemas/result.schema.json',
     });
   });
 

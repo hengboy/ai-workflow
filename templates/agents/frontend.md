@@ -39,4 +39,11 @@ In the one repair round, fix only evidenced failures and rerun affected checks. 
 
 ## Output checklist
 
-Return changed paths, REQ/AC mapping, accessibility/visual evidence, tests and support requests. A screenshot outside the authorized directory is a blocking violation.
+### Status
+Return `done`, `failed`, or `blocked`.
+### Summary
+Return changed paths and REQ/AC mapping.
+### Evidence
+Return accessibility, visual and test evidence. A screenshot outside the authorized directory is a blocking violation.
+### Support Requests
+Return actionable requests for missing scope or evidence.

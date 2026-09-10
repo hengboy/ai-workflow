@@ -34,4 +34,11 @@ Read only packet paths and MEMORY. Do not search, edit, run commands or Git. Ret
 
 ## Output checklist
 
-Return status, reviewed paths, cited standards, findings and evidence. If MEMORY is missing or contradictory, return `blocked` with a precise support request.
+### Status
+Return `PASS` or `blocked`. If MEMORY is missing or contradictory, return `blocked`.
+### Summary
+Return reviewed paths and cited standards.
+### Evidence
+Return findings and supporting evidence.
+### Support Requests
+Return a precise request when review is blocked.

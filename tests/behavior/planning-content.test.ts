@@ -108,7 +108,12 @@ describe('native prompt contracts', () => {
     expect(explorer).toMatch(/authorized module roots|allowed module roots/i);
     expect(explorer).toMatch(/navigation\.json/i);
     expect(explorer).toMatch(/may only read files and search authorized paths/i);
-    expect(explorer).toMatch(/summary.*changed_paths.*evidence.*tests.*findings.*git_refs.*support_requests/is);
+    expect(explorer).toMatch(/## Status.*## Summary.*## Evidence.*## Support Requests/is);
+    expect(explorer).toMatch(/Found Paths/i);
+    expect(explorer).toMatch(/(?:Do not|Never|must not|禁止).{0,80}JSON envelope/i);
+    expect(explorer).not.toContain('schemas/result.schema.json');
+    expect(explorer).not.toMatch(/result envelope/i);
+    expect(explorer).not.toContain('changed_paths');
 
     for (const skill of ['planning', 'plan-to-tasks', 'coding']) {
       const text = await readFile(packagePath('templates', 'skills', skill, 'SKILL.md'), 'utf8');

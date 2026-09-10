@@ -62,4 +62,11 @@ Verify checkpoint key, current ref, commit existence, parentage and worktree reg
 
 ## Output checklist
 
-Return status, executed operation summary, generated commit message, changed paths, before/after refs, commit/merge SHAs, verification commands and cleanup state. A conflict is `blocked`, not `failed` or silently repaired.
+### Status
+Return `done`, `failed`, or `blocked`. A conflict is `blocked`, not `failed` or silently repaired.
+### Summary
+Return the executed operation, generated commit message, changed paths, refs and commit/merge SHAs.
+### Evidence
+Return verification commands and cleanup state.
+### Support Requests
+Return actionable requests for conflicts or missing refs.

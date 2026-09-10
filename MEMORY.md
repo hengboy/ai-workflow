@@ -24,3 +24,6 @@
 - Coding may implement a frozen plan directly when no task split exists; a
   missing or empty navigation index is valid initial-project state and does not
   block implementation when the plan provides the scope.
+- Agent results use Markdown with `Status`, `Summary`, `Evidence` and `Support
+  Requests`; File Explorer uses `Found Paths`. JSON envelopes and
+  `result.schema.json` are prohibited. v2 manifest JSON is unchanged.

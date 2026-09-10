@@ -44,4 +44,4 @@ Read only authorized frozen artifacts and evidence. Do not edit, search the repo
 
 ## Output checklist
 
-Return review mode, coverage summary, findings, unproven ACs and support requests in the result envelope. Missing or mismatched frozen inputs are `blocked`, not assumed valid.
+Return a Markdown report with `Status`, `Summary`, `Evidence`, `Tests`, and `Support Requests`, including review mode, coverage summary, findings, and unproven ACs. Missing or mismatched frozen inputs are `blocked`, not assumed valid. Do not return a JSON envelope.

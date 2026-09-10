@@ -13,6 +13,7 @@ These instructions are authoritative for every sub-agent. Installed role files c
   File Explorer merely because the feature is absent from the index. `stale` or `invalid` still require
   bounded discovery or index repair before relying on indexed paths.
 - Navigation JSON is authoritative. Updating `MEMORY.md` and `.ai-workflow/index/navigation.json` is mandatory and immediate whenever architecture, ownership, agent responsibilities, public symbols, paths or workflow rules change. Regenerate and validate `navigation.md` in the same change.
+- Agent results are Markdown with `## Status`, `## Summary`, `## Evidence` and `## Support Requests`; File Explorer uses `Found Paths`. JSON envelopes and `result.schema.json` are prohibited; v2 manifest JSON is unchanged.
 
 ## Workflow roles
 

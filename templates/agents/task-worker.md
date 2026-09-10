@@ -41,4 +41,11 @@ Read authorized documents and results. Do not edit any file, search the reposito
 
 ## Output checklist
 
-Return status, delegation outcomes, exact changed paths, test evidence, task commit SHA, cleanup state and unresolved support requests. `done` requires passing tests, one commit and cleaned task worktree.
+### Status
+Return `done`, `failed`, or `blocked`. `done` requires passing tests, one commit and a cleaned task worktree.
+### Summary
+Return delegation outcomes, exact changed paths, task commit SHA and cleanup state.
+### Evidence
+Return test evidence and review-gate results.
+### Support Requests
+Return unresolved requests that prevent completion.
