@@ -81,10 +81,10 @@ export async function analyzeModule(request: ModuleAnalysisRequest): Promise<Ada
   return analyzer(request);
 }
 
-export async function detectModules(_root: string, facts: DiscoveryFacts): Promise<CandidateModuleRoot[]> {
+export function detectModules(_root: string, facts: DiscoveryFacts): Promise<CandidateModuleRoot[]> {
   const byPath = new Map<string, CandidateModuleRoot>();
   for (const root of [...detectJavaModules(facts), ...detectTypeScriptModules(facts)]) {
     if (!byPath.has(root.path)) byPath.set(root.path, root);
   }
-  return [...byPath.values()].sort((left, right) => compareStrings(left.path, right.path));
+  return Promise.resolve([...byPath.values()].sort((left, right) => compareStrings(left.path, right.path)));
 }
