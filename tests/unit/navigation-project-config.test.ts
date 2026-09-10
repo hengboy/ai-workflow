@@ -366,4 +366,74 @@ features:
     expect(result.errors.length).toBeGreaterThan(0);
     expect(result.errors.some((error) => error.includes(owned) || /duplicate|ownership/i.test(error))).toBe(true);
   });
+
+  it('reports a feature path outside its declared module boundary', async () => {
+    const root = await projectWithConfig(`version: 1
+modules:
+  - id: backend
+    path: backend
+    languages: [java]
+    source_roots: [src/main/java]
+    test_roots: [src/test/java]
+features:
+  - id: users
+    name: Users
+    module_root: backend
+    paths: [frontend/src/notes.txt]
+`);
+    await mkdir(join(root, 'backend/src/main/java'), { recursive: true });
+    await mkdir(join(root, 'backend/src/test/java'), { recursive: true });
+    await mkdir(join(root, 'frontend/src'), { recursive: true });
+    await writeFile(join(root, 'frontend/src/notes.txt'), 'notes\n');
+    const configPath = join(root, PROJECT_CONFIG_PATH);
+    const before = await readFile(configPath, 'utf8');
+
+    const result = await loadProjectConfig(root);
+
+    expect(result.errors.length).toBeGreaterThan(0);
+    expect(result.errors.some((error) => error.includes('frontend/src/notes.txt') || /within|contain|outside|module/i.test(error))).toBe(true);
+    expect(await readFile(configPath, 'utf8')).toBe(before);
+  });
+
+  it('rejects a module declared inside an excluded generated directory', async () => {
+    const root = await projectWithConfig(`version: 1
+modules:
+  - id: generated
+    path: dist
+    languages: [java]
+    source_roots: [.]
+    test_roots: []
+features: []
+`);
+    await mkdir(join(root, 'dist'), { recursive: true });
+    await writeFile(join(root, 'dist/Generated.java'), 'package generated;\n');
+
+    const result = await loadProjectConfig(root);
+
+    expect(result.errors.length).toBeGreaterThan(0);
+    expect(result.errors.some((error) => error.includes('dist') || /exclud/i.test(error))).toBe(true);
+  });
+
+  it('rejects a feature path declared inside an excluded directory', async () => {
+    const root = await projectWithConfig(`version: 1
+modules:
+  - id: root
+    path: .
+    languages: [java]
+    source_roots: [src]
+    test_roots: []
+features:
+  - id: workflow
+    name: Workflow
+    module_root: root
+    paths: [.ai-workflow/notes.txt]
+`);
+    await mkdir(join(root, 'src'), { recursive: true });
+    await writeFile(join(root, '.ai-workflow/notes.txt'), 'notes\n');
+
+    const result = await loadProjectConfig(root);
+
+    expect(result.errors.length).toBeGreaterThan(0);
+    expect(result.errors.some((error) => error.includes('.ai-workflow') || /exclud/i.test(error))).toBe(true);
+  });
 });

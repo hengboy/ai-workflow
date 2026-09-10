@@ -285,4 +285,25 @@ describe('generated project locate and refresh (Step 5 fixtures)', () => {
       status: 'hit', feature: 'com.example', entries: ['backend/src/main/java/com/example/BackendApp.java']
     });
   });
+
+  it('preserves Java test classification across an authorized refresh', async () => {
+    const { project, index } = await initProject({
+      'pom.xml': '<project></project>\n',
+      'src/main/java/com/example/app/Application.java': 'package com.example.app;\n\n@SpringBootApplication\npublic class Application {}\n',
+      'src/main/java/com/example/app/Plain.java': 'package com.example.app;\n\npublic class Plain {}\n',
+      'src/test/java/com/example/app/ApplicationTest.java': 'package com.example.app;\n\npublic class ApplicationTest {}\n'
+    });
+    const feature = index.features.find((entry) => entry.id === 'com.example.app');
+    expect(feature).toBeDefined();
+    expect(feature!.tests).toEqual(['src/test/java/com/example/app/ApplicationTest.java']);
+
+    await refresh(project, '.', 'src/main/java/com/example/app/Application.java');
+
+    const refreshed = JSON.parse(await readFile(join(project, '.ai-workflow/index/navigation.json'), 'utf8')) as NavigationIndex;
+    const refreshedFeature = refreshed.features.find((entry) => entry.id === 'com.example.app');
+    expect(refreshedFeature?.tests).toEqual(['src/test/java/com/example/app/ApplicationTest.java']);
+    expect(refreshedFeature?.related_files.some((path) => path.startsWith('src/test/java/'))).toBe(false);
+    const validation = await exec('pnpm', ['exec', 'tsx', 'src/cli.ts', 'context', 'validate', '--project', project, '--all']);
+    expect(JSON.parse(validation.stdout)).toEqual({ valid: true, errors: [] });
+  });
 });

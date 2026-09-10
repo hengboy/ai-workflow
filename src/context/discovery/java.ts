@@ -19,7 +19,8 @@ function projectPrefix(moduleRootPath: string, declared: string): string {
 }
 
 function isWithin(path: string, prefix: string): boolean {
-  return prefix !== '' && (path === prefix || path.startsWith(`${prefix}/`));
+  if (prefix === '' || prefix === '.') return true;
+  return path === prefix || path.startsWith(`${prefix}/`);
 }
 
 const JAVA_BUILD_FILES = new Set(['pom.xml', 'build.gradle', 'build.gradle.kts']);

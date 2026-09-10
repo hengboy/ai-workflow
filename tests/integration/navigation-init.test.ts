@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { initializeProject, updateProject } from '../../src/install/index.js';
+import { validateContext } from '../../src/context/validate.js';
 import { renderNavigation, type NavigationIndex } from '../../src/context/navigation.js';
 import { sha256 } from '../../src/utils/hash.js';
 import { exists } from '../../src/utils/fs.js';
@@ -283,6 +284,72 @@ describe('Step 5 end-to-end discovery fixtures', () => {
     ]));
     expect(index.features.some((feature) => feature.id === 'frontend' && feature.entries.includes('frontend/src/app.ts'))).toBe(true);
     expect(index.features.some((feature) => feature.id === 'com.example' && feature.entries.includes('backend/src/main/java/com/example/BackendApp.java'))).toBe(true);
+  });
+});
+
+describe('review repair regressions', () => {
+  it('supplements a configured module with uncovered files without failing validation', async () => {
+    const root = await temporary();
+    await mkdir(join(root, 'app/src'), { recursive: true });
+    await mkdir(join(root, 'app/scripts'), { recursive: true });
+    await mkdir(join(root, '.ai-workflow'), { recursive: true });
+    await writeFile(join(root, 'app/src/index.ts'), 'export function index(): void {}\n');
+    await writeFile(join(root, 'app/scripts/tool.ts'), 'export function tool(): void {}\n');
+    await writeFile(join(root, projectConfig), `version: 1
+modules:
+  - id: app
+    path: app
+    languages: [typescript]
+    source_roots: [src]
+    test_roots: []
+features: []
+`);
+
+    await initializeProject(root);
+
+    const index = JSON.parse(await readText(root, navigationJson)) as NavigationIndex;
+    const covered = new Set(index.features.flatMap((feature) => [...feature.entries, ...feature.related_files]));
+    expect(covered).toContain('app/scripts/tool.ts');
+    const validation = await validateContext(root);
+    expect(validation).toEqual({ valid: true, errors: [] });
+  });
+
+  it('initializes and validates a root-level unknown-language configured module', async () => {
+    const root = await temporary();
+    await mkdir(join(root, 'src'), { recursive: true });
+    await mkdir(join(root, '.ai-workflow'), { recursive: true });
+    await writeFile(join(root, 'src/main.rs'), 'fn main() {}\n');
+    await writeFile(join(root, projectConfig), `version: 1
+modules:
+  - id: rust
+    path: .
+    languages: [rust]
+    source_roots: [.]
+    test_roots: []
+features: []
+`);
+
+    await initializeProject(root);
+
+    const validation = await validateContext(root);
+    expect(validation).toEqual({ valid: true, errors: [] });
+  });
+
+  it('indexes TypeScript files in a root module shared with a Maven project', async () => {
+    const root = await temporary();
+    await mkdir(join(root, 'src/main/java/com/example'), { recursive: true });
+    await writeFile(join(root, 'pom.xml'), '<project></project>\n');
+    await writeFile(join(root, 'src/main/java/com/example/App.java'), 'package com.example;\n\n@SpringBootApplication\npublic class App {}\n');
+    await writeFile(join(root, 'root.ts'), 'export function helper(): void {}\n');
+    await writeFile(join(root, 'vitest.config.ts'), 'export default {};\n');
+
+    await initializeProject(root);
+
+    const index = JSON.parse(await readText(root, navigationJson)) as NavigationIndex;
+    const covered = new Set(index.features.flatMap((feature) => [...feature.entries, ...feature.related_files]));
+    expect(covered).toContain('root.ts');
+    const validation = await validateContext(root);
+    expect(validation).toEqual({ valid: true, errors: [] });
   });
 });
 

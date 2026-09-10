@@ -132,7 +132,7 @@ function configuredPlan(module: ProjectConfigModule, facts: DiscoveryFacts): Mod
   return {
     candidate,
     languages,
-    sourceRoots: module.sourceRoots.map((root) => joinProject(path, root)),
+    sourceRoots: [path],
     testRoots: module.testRoots.map((root) => joinProject(path, root)),
     files: { files: facts.files.filter((file) => isWithinPath(file.path, path)) }
   };
@@ -154,6 +154,20 @@ function conventionalJavaRoot(modulePath: string, conventional: string, files: D
 
 function discoveredPlan(module: CandidateModuleRoot, facts: DiscoveryFacts): ModulePlan {
   const path = normalizePath(module.path);
+  if (module.language === 'mixed') {
+    const moduleFiles = facts.files.filter((file) => isWithinPath(file.path, path));
+    const languages: string[] = [];
+    if (moduleFiles.some((file) => file.language === 'java')) languages.push('java');
+    if (moduleFiles.some((file) => isSemanticLanguage(file.language))) languages.push('typescript');
+    const javaTestRoot = conventionalJavaRoot(path, 'src/test/java', moduleFiles);
+    return {
+      candidate: module,
+      languages: languages.length > 0 ? languages : [module.language],
+      sourceRoots: [path],
+      testRoots: javaTestRoot ? [javaTestRoot] : [],
+      files: { files: moduleFiles }
+    };
+  }
   const semantic = isSemanticLanguage(module.language);
   const moduleFiles = semantic
     ? facts.files.filter((file) => isSemanticLanguage(file.language) && topLevelDirectory(file.path) === path)

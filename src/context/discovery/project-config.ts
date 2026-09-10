@@ -3,7 +3,7 @@ import { isAbsolute, join, relative, resolve } from 'node:path';
 import { parse } from 'yaml';
 import { schemaValidator, formatSchemaErrors } from '../../utils/schema.js';
 import { exists } from '../../utils/fs.js';
-import type { DiscoveredFile } from './scanner.js';
+import { isExcludedDirectory, type DiscoveredFile } from './scanner.js';
 
 export interface ProjectConfigModule {
   id: string;
@@ -76,6 +76,17 @@ function normalizeRelative(path: string): string {
   return path.replace(/\\/g, '/').replace(/\/+$/, '');
 }
 
+function hasExcludedSegment(path: string): boolean {
+  return normalizeRelative(path).split('/').some((segment) => isExcludedDirectory(segment));
+}
+
+function isWithinModule(path: string, modulePath: string): boolean {
+  const normalizedModule = normalizeRelative(modulePath);
+  if (normalizedModule === '' || normalizedModule === '.') return true;
+  const normalizedPath = normalizeRelative(path);
+  return normalizedPath === normalizedModule || normalizedPath.startsWith(`${normalizedModule}/`);
+}
+
 function overlaps(left: string, right: string): boolean {
   return left === right || left.startsWith(`${right}/`) || right.startsWith(`${left}/`);
 }
@@ -131,6 +142,10 @@ async function collectErrors(
       errors.push(`module "${module.id}" path "${module.path}" must be project-relative and stay inside the project`);
       continue;
     }
+    if (hasExcludedSegment(module.path)) {
+      errors.push(`module "${module.id}" path "${module.path}" is inside an excluded directory`);
+      continue;
+    }
     if (!(await exists(moduleAbsolute))) {
       errors.push(`module "${module.id}" path "${module.path}" does not exist`);
     }
@@ -138,6 +153,10 @@ async function collectErrors(
     for (const sourceRoot of module.sourceRoots) {
       if (isAbsolute(sourceRoot) || hasParentSegment(sourceRoot)) {
         errors.push(`module "${module.id}" source root "${sourceRoot}" must be relative to the module`);
+        continue;
+      }
+      if (hasExcludedSegment(sourceRoot)) {
+        errors.push(`module "${module.id}" source root "${sourceRoot}" is inside an excluded directory`);
         continue;
       }
       const absolute = join(moduleAbsolute, sourceRoot);
@@ -149,6 +168,10 @@ async function collectErrors(
     for (const testRoot of module.testRoots) {
       if (isAbsolute(testRoot) || hasParentSegment(testRoot)) {
         errors.push(`module "${module.id}" test root "${testRoot}" must be relative to the module`);
+        continue;
+      }
+      if (hasExcludedSegment(testRoot)) {
+        errors.push(`module "${module.id}" test root "${testRoot}" is inside an excluded directory`);
         continue;
       }
       const absolute = join(moduleAbsolute, testRoot);
@@ -173,6 +196,7 @@ async function collectErrors(
   }
 
   for (const feature of features) {
+    const ownerModule = modules.find((module) => module.id === feature.moduleRoot);
     if (!moduleIds.has(feature.moduleRoot)) {
       errors.push(`feature "${feature.id}" module_root "${feature.moduleRoot}" does not reference a declared module`);
     }
@@ -184,6 +208,16 @@ async function collectErrors(
       const absolute = resolve(root, featurePath);
       if (escapesProject(root, absolute)) {
         errors.push(`feature "${feature.id}" path "${featurePath}" must be project-relative and stay inside the project`);
+        continue;
+      }
+      if (hasExcludedSegment(featurePath)) {
+        errors.push(`feature "${feature.id}" path "${featurePath}" is inside an excluded directory`);
+        continue;
+      }
+      if (ownerModule && !isWithinModule(featurePath, ownerModule.path)) {
+        errors.push(
+          `feature "${feature.id}" path "${featurePath}" is outside its module "${ownerModule.id}" (${ownerModule.path})`
+        );
         continue;
       }
       if (!(await exists(absolute))) {

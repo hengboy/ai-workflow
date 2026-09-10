@@ -40,7 +40,8 @@ function projectPrefix(moduleRootPath: string, declared: string): string {
 }
 
 function isWithin(path: string, prefix: string): boolean {
-  return prefix !== '' && (path === prefix || path.startsWith(`${prefix}/`));
+  if (prefix === '' || prefix === '.') return true;
+  return path === prefix || path.startsWith(`${prefix}/`);
 }
 
 function structuralCandidate(request: ModuleAnalysisRequest): AdapterResult {
@@ -84,7 +85,18 @@ export async function analyzeModule(request: ModuleAnalysisRequest): Promise<Ada
 export function detectModules(_root: string, facts: DiscoveryFacts): Promise<CandidateModuleRoot[]> {
   const byPath = new Map<string, CandidateModuleRoot>();
   for (const root of [...detectJavaModules(facts), ...detectTypeScriptModules(facts)]) {
-    if (!byPath.has(root.path)) byPath.set(root.path, root);
+    const existing = byPath.get(root.path);
+    if (!existing) {
+      byPath.set(root.path, root);
+      continue;
+    }
+    if (existing.language === root.language) continue;
+    byPath.set(root.path, {
+      ...existing,
+      language: 'mixed',
+      entryKinds: [...new Set([...existing.entryKinds, ...root.entryKinds])],
+      responsibility: existing.responsibility.length > 0 ? existing.responsibility : root.responsibility
+    });
   }
   return Promise.resolve([...byPath.values()].sort((left, right) => compareStrings(left.path, right.path)));
 }

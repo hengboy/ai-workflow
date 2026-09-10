@@ -26,7 +26,8 @@ function projectPrefix(moduleRootPath: string, declared: string): string {
 }
 
 function isWithin(path: string, prefix: string): boolean {
-  return prefix !== '' && (path === prefix || path.startsWith(`${prefix}/`));
+  if (prefix === '' || prefix === '.') return true;
+  return path === prefix || path.startsWith(`${prefix}/`);
 }
 
 const TEST_PATTERN = /\.(?:test|spec)\.(?:ts|tsx|js|jsx|mjs|cjs)$/;

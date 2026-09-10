@@ -6,7 +6,7 @@ import { formatSchemaErrors, schemaValidator } from '../utils/schema.js';
 import { renderNavigation, type NavigationIndex, type NavigationModuleRoot } from './navigation.js';
 import { resolveCandidatePath, resolveProjectRoot } from './paths.js';
 import { analyzeModule } from './discovery/adapters.js';
-import { isExcludedDirectory, scanProject } from './discovery/scanner.js';
+import { isExcludedDirectory, scanProject, type DiscoveredFile } from './discovery/scanner.js';
 import type { CandidateModuleRoot } from './discovery/types.js';
 
 function compareStrings(left: string, right: string): number {
@@ -112,6 +112,18 @@ function includesChangedPath(entries: string[], changedPaths: string[]): boolean
   }));
 }
 
+function isWithinNavigationRoot(path: string, modulePath: string): boolean {
+  const normalizedModule = navigationPath(modulePath);
+  if (normalizedModule === '.' || normalizedModule === '') return true;
+  return path === normalizedModule || path.startsWith(`${normalizedModule}/`);
+}
+
+function conventionalJavaTestRoot(modulePath: string, files: DiscoveredFile[]): string | undefined {
+  const normalizedModule = navigationPath(modulePath);
+  const root = normalizedModule === '.' || normalizedModule === '' ? 'src/test/java' : `${normalizedModule}/src/test/java`;
+  return files.some((file) => file.path === root || file.path.startsWith(`${root}/`)) ? root : undefined;
+}
+
 function declarations(source: ts.SourceFile): Map<string, Array<{ kind: string; exported: boolean }>> {
   const result = new Map<string, Array<{ kind: string; exported: boolean }>>();
   const add = (name: string | undefined, kind: string, exported: boolean): void => {
@@ -208,6 +220,8 @@ export async function createNavigationCandidate(project: string, taskTarget: str
     if (!insideAuthorizedRoots(moduleRoot.path, moduleRoots)) continue;
     const features = navigation.features.filter((entry) => entry.module_root === moduleRoot.id);
     if (!features.length) continue;
+    const moduleFiles = facts.files.filter((file) => isWithinNavigationRoot(file.path, moduleRoot.path));
+    const javaTestRoot = conventionalJavaTestRoot(moduleRoot.path, moduleFiles);
     const candidateRoot: CandidateModuleRoot = {
       id: moduleRoot.id,
       path: moduleRoot.path,
@@ -216,7 +230,13 @@ export async function createNavigationCandidate(project: string, taskTarget: str
       language: moduleRoot.language,
       entryKinds: [...moduleRoot.entry_kinds]
     };
-    const result = await analyzeModule({ root, facts, moduleRoot: candidateRoot, sourceRoots: [moduleRoot.path], testRoots: [] });
+    const result = await analyzeModule({
+      root,
+      facts: { files: moduleFiles },
+      moduleRoot: candidateRoot,
+      sourceRoots: [moduleRoot.path],
+      testRoots: javaTestRoot ? [javaTestRoot] : []
+    });
     for (const current of features) {
       if (!includesChangedPath(current.entries, changedPaths)) continue;
       const candidate = result.candidates.length === 1 ? result.candidates[0] : result.candidates.find((entry) => entry.id === current.id);
@@ -341,12 +361,12 @@ async function validateModuleCoverage(project: string, index: NavigationIndex, e
         }
       }
       if (hasFileCapability) {
-        const files = (await regularFiles(project, path)).sort(compareStrings);
-        const expected = moduleRoot.language === 'java'
-          ? files.filter((file) => file.endsWith('.java'))
-          : hasSymbolCapability ? files.filter((file) => !file.endsWith('.ts') && !file.endsWith('.tsx')) : files;
-        const covered = new Set(index.features.filter((feature) => feature.module_root === moduleRoot.id).flatMap((feature) => [...feature.entries, ...feature.related_files, ...feature.tests, ...feature.symbols.map((symbol) => symbol.file)]));
-        for (const file of expected) if (!covered.has(file)) errors.push(`Navigation index is stale: unclassified module file ${file}`);
+        const javaRelated = moduleRoot.language === 'java' || hasSymbolCapability;
+        if (javaRelated) {
+          const files = (await regularFiles(project, path)).sort(compareStrings).filter((file) => file.endsWith('.java'));
+          const covered = new Set(index.features.filter((feature) => feature.module_root === moduleRoot.id).flatMap((feature) => [...feature.entries, ...feature.related_files, ...feature.tests, ...feature.symbols.map((symbol) => symbol.file)]));
+          for (const file of files) if (!covered.has(file)) errors.push(`Navigation index is stale: unclassified module file ${file}`);
+        }
       }
     } catch {
       errors.push(`${moduleRoot.path}: expected a concrete module root directory`);
