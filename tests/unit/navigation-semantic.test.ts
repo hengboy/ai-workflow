@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mkdir, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { validateContext, verifyNavigation } from '../../src/context/validate.js';
 import { renderNavigation, type NavigationIndex } from '../../src/context/navigation.js';
@@ -106,5 +106,111 @@ describe('navigation semantic validation', () => {
 
     expect(result.valid).toBe(false);
     expect(result.errors).toContain('src/workflow: module root symlink escapes project');
+  });
+});
+
+function javaNavigation(): NavigationIndex {
+  return {
+    version: 1,
+    module_roots: [{ id: 'backend', path: 'backend', owner_role: 'shared', responsibility: 'java backend', language: 'java', entry_kinds: ['file'] }],
+    features: [{
+      id: 'com.example.app', name: 'com.example.app', aliases: [], module_root: 'backend',
+      entries: ['backend/src/main/java/com/example/app/Application.java'],
+      symbols: [],
+      related_files: ['backend/src/main/java/com/example/app/Plain.java'],
+      tests: ['backend/src/test/java/com/example/app/ApplicationTest.java'],
+      depends_on: [], relations: [], owner_role: 'shared', responsibility: 'java package',
+      read_scope: [
+        'backend/src/main/java/com/example/app/Application.java',
+        'backend/src/main/java/com/example/app/Plain.java',
+        'backend/src/test/java/com/example/app/ApplicationTest.java'
+      ],
+      shared_entry: false
+    }]
+  };
+}
+
+async function javaProject(index = javaNavigation()): Promise<string> {
+  const project = await temporary('ai-workflow-navigation-semantic-java-');
+  await mkdir(join(project, 'backend/src/main/java/com/example/app'), { recursive: true });
+  await mkdir(join(project, 'backend/src/test/java/com/example/app'), { recursive: true });
+  await mkdir(join(project, '.ai-workflow/index'), { recursive: true });
+  await writeFile(join(project, 'backend/src/main/java/com/example/app/Application.java'), 'package com.example.app;\n\n@SpringBootApplication\npublic class Application {}\n');
+  await writeFile(join(project, 'backend/src/main/java/com/example/app/Plain.java'), 'package com.example.app;\n\npublic class Plain {}\n');
+  await writeFile(join(project, 'backend/src/test/java/com/example/app/ApplicationTest.java'), 'package com.example.app;\n\nclass ApplicationTest {}\n');
+  await writeFile(join(project, 'MEMORY.md'), '# Memory\n');
+  await writeFile(join(project, '.ai-workflow/index/navigation.json'), `${JSON.stringify(index)}\n`);
+  await writeFile(join(project, '.ai-workflow/index/navigation.md'), renderNavigation(index));
+  return project;
+}
+
+async function rustProject(): Promise<string> {
+  const project = await temporary('ai-workflow-navigation-semantic-rust-');
+  await mkdir(join(project, 'src/rust'), { recursive: true });
+  await mkdir(join(project, '.ai-workflow/index'), { recursive: true });
+  await writeFile(join(project, 'src/rust/main.rs'), 'fn main() {}\n');
+  const index: NavigationIndex = {
+    version: 1,
+    module_roots: [{ id: 'rust-root', path: 'src/rust', owner_role: 'shared', responsibility: 'rust', language: 'rust', entry_kinds: ['exported-symbol'] }],
+    features: [{
+      id: 'rust-feature', name: 'rust feature', aliases: [], module_root: 'rust-root',
+      entries: ['src/rust/main.rs'], symbols: [], related_files: [], tests: [], depends_on: [], relations: [],
+      owner_role: 'shared', responsibility: 'rust feature', read_scope: ['src/rust/main.rs'], shared_entry: false
+    }]
+  };
+  await writeFile(join(project, '.ai-workflow/index/navigation.json'), `${JSON.stringify(index)}\n`);
+  await writeFile(join(project, '.ai-workflow/index/navigation.md'), renderNavigation(index));
+  return project;
+}
+
+describe('navigation structural compatibility', () => {
+  it('accepts a structural Java file-only root with empty symbols and relations', async () => {
+    const project = await javaProject();
+
+    await expect(validateContext(project)).resolves.toMatchObject({ valid: true, errors: [] });
+  });
+
+  it('verifies a selected structural Java feature', async () => {
+    const project = await javaProject();
+
+    await expect(verifyNavigation(project, 'com.example.app')).resolves.toMatchObject({ valid: true, errors: [] });
+  });
+
+  it('marks a structural Java root stale when an unclassified module file appears', async () => {
+    const project = await javaProject();
+    await writeFile(join(project, 'backend/src/main/java/com/example/app/Extra.java'), 'package com.example.app;\n\npublic class Extra {}\n');
+
+    const result = await validateContext(project);
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain('Navigation index is stale: unclassified module file backend/src/main/java/com/example/app/Extra.java');
+  });
+
+  it('marks a structural Java root stale when an indexed entry is deleted', async () => {
+    const project = await javaProject();
+    await rm(join(project, 'backend/src/main/java/com/example/app/Application.java'));
+
+    const result = await validateContext(project);
+
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((error) => error.includes('backend/src/main/java/com/example/app/Application.java'))).toBe(true);
+  });
+
+  it('still rejects an unsupported language that claims semantic exported-symbol capability', async () => {
+    const project = await rustProject();
+
+    const result = await validateContext(project);
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain('Unsupported navigation language parser: rust');
+  });
+
+  it('still fails TypeScript exported-symbol drift for semantic roots', async () => {
+    const project = await projectWithWorkflow(navigation(), "import { digestPlan } from './digest.js';\nexport function readPlan(): void { digestPlan(); }\nexport function parsePlan(): void {}\n");
+
+    const result = await validateContext(project);
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain('Navigation index is stale: added symbol src/workflow/parse.ts#parsePlan');
   });
 });
