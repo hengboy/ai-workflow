@@ -5,6 +5,13 @@ import { atomicDirectory, atomicWrite, exists } from '../utils/fs.js';
 import { formatSchemaErrors, schemaValidator } from '../utils/schema.js';
 import { renderNavigation, type NavigationIndex, type NavigationModuleRoot } from './navigation.js';
 import { resolveCandidatePath, resolveProjectRoot } from './paths.js';
+import { analyzeModule } from './discovery/adapters.js';
+import { isExcludedDirectory, scanProject, type DiscoveredFile } from './discovery/scanner.js';
+import type { CandidateModuleRoot } from './discovery/types.js';
+
+function compareStrings(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
 
 export interface ContextValidation { valid: boolean; errors: string[] }
 
@@ -59,8 +66,22 @@ async function typeScriptFiles(project: string, directory: string): Promise<stri
   const files: string[] = [];
   for (const entry of await readdir(directory, { withFileTypes: true })) {
     const path = join(directory, entry.name);
-    if (entry.isDirectory()) files.push(...await typeScriptFiles(project, path));
-    else if (entry.isFile() && (entry.name.endsWith('.ts') || entry.name.endsWith('.tsx'))) files.push(relative(project, path));
+    if (entry.isDirectory()) {
+      if (isExcludedDirectory(entry.name)) continue;
+      files.push(...await typeScriptFiles(project, path));
+    } else if (entry.isFile() && /\.(?:ts|tsx|js|jsx|mjs|cjs)$/.test(entry.name)) files.push(relative(project, path));
+  }
+  return files;
+}
+
+async function regularFiles(project: string, directory: string): Promise<string[]> {
+  const files: string[] = [];
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    const path = join(directory, entry.name);
+    if (entry.isDirectory()) {
+      if (isExcludedDirectory(entry.name)) continue;
+      files.push(...await regularFiles(project, path));
+    } else if (entry.isFile()) files.push(relative(project, path));
   }
   return files;
 }
@@ -91,6 +112,18 @@ function includesChangedPath(entries: string[], changedPaths: string[]): boolean
   }));
 }
 
+function isWithinNavigationRoot(path: string, modulePath: string): boolean {
+  const normalizedModule = navigationPath(modulePath);
+  if (normalizedModule === '.' || normalizedModule === '') return true;
+  return path === normalizedModule || path.startsWith(`${normalizedModule}/`);
+}
+
+function conventionalJavaTestRoot(modulePath: string, files: DiscoveredFile[]): string | undefined {
+  const normalizedModule = navigationPath(modulePath);
+  const root = normalizedModule === '.' || normalizedModule === '' ? 'src/test/java' : `${normalizedModule}/src/test/java`;
+  return files.some((file) => file.path === root || file.path.startsWith(`${root}/`)) ? root : undefined;
+}
+
 function declarations(source: ts.SourceFile): Map<string, Array<{ kind: string; exported: boolean }>> {
   const result = new Map<string, Array<{ kind: string; exported: boolean }>>();
   const add = (name: string | undefined, kind: string, exported: boolean): void => {
@@ -107,7 +140,10 @@ function declarations(source: ts.SourceFile): Map<string, Array<{ kind: string; 
     else if (ts.isInterfaceDeclaration(statement)) add(statement.name.text, 'interface', visibility);
     else if (ts.isEnumDeclaration(statement)) add(statement.name.text, 'enum', visibility);
     else if (ts.isTypeAliasDeclaration(statement)) add(statement.name.text, 'type', visibility);
-    else if (ts.isVariableStatement(statement)) for (const declaration of statement.declarationList.declarations) if (ts.isIdentifier(declaration.name)) add(declaration.name.text, declaration.initializer && (ts.isArrowFunction(declaration.initializer) || ts.isFunctionExpression(declaration.initializer)) ? 'function' : 'variable', visibility);
+    else if (ts.isVariableStatement(statement)) { for (const declaration of statement.declarationList.declarations) if (ts.isIdentifier(declaration.name)) add(declaration.name.text, declaration.initializer && (ts.isArrowFunction(declaration.initializer) || ts.isFunctionExpression(declaration.initializer)) ? 'function' : 'variable', visibility); }
+    else if (ts.isExportDeclaration(statement) && statement.exportClause && ts.isNamedExports(statement.exportClause)) {
+      for (const element of statement.exportClause.elements) add(element.name.text, statement.isTypeOnly || element.isTypeOnly ? 'type' : 'variable', true);
+    }
   }
   return result;
 }
@@ -127,7 +163,10 @@ function directImports(file: string, source: ts.SourceFile, files: Set<string>):
     const specifier = statement.moduleSpecifier.text;
     if (!specifier.startsWith('.')) continue;
     const base = join(dirname(file), specifier).replace(/\\/g, '/').replace(/\.(?:js|jsx|mjs|cjs|ts|tsx)$/, '');
-    const target = [`${base}.ts`, `${base}.tsx`, `${base}/index.ts`, `${base}/index.tsx`].find((candidate) => files.has(candidate));
+    const target = [
+      `${base}.ts`, `${base}.tsx`, `${base}.js`, `${base}.jsx`, `${base}.mjs`, `${base}.cjs`,
+      `${base}/index.ts`, `${base}/index.tsx`, `${base}/index.js`, `${base}/index.jsx`, `${base}/index.mjs`, `${base}/index.cjs`
+    ].find((candidate) => files.has(candidate));
     if (!target) continue;
     for (const imported of statement.importClause.namedBindings.elements) bindings.set(imported.name.text, { file: target, name: imported.propertyName?.text ?? imported.name.text });
   }
@@ -157,6 +196,7 @@ async function parseTypeScriptModuleRoot(project: string, root: NavigationModule
     const imports = directImports(file, source, fileSet);
     for (const [name, candidates] of declarations(source)) for (const candidate of candidates) if (candidate.exported) symbols.push({ file, name, kind: candidate.kind });
     for (const statement of source.statements) {
+      if (ts.isExportDeclaration(statement)) continue;
       const declared = declarations(ts.createSourceFile(file, statement.getText(source), ts.ScriptTarget.Latest, true));
       for (const [name, candidates] of declared) for (const candidate of candidates) if (candidate.exported) {
         const from = `${file}#${name}`;
@@ -175,22 +215,38 @@ export async function createNavigationCandidate(project: string, taskTarget: str
   const validator = await schemaValidator('navigation.schema.json');
   if (!validator(index)) throw new Error(formatSchemaErrors(validator.errors));
   const navigation = structuredClone(index);
+  const facts = await scanProject(root);
   for (const moduleRoot of navigation.module_roots) {
     if (!insideAuthorizedRoots(moduleRoot.path, moduleRoots)) continue;
-    const feature = navigation.features.filter((entry) => entry.module_root === moduleRoot.id);
-    if (!feature.length) continue;
-    const parser = languageParsers[moduleRoot.language];
-    if (!parser) continue;
-    const parsed = await parser(root, moduleRoot);
-    const owned = (await typeScriptFiles(root, join(root, moduleRoot.path))).filter((path) => rootFor(navigation, path)?.id === moduleRoot.id);
-    for (const current of feature) {
+    const features = navigation.features.filter((entry) => entry.module_root === moduleRoot.id);
+    if (!features.length) continue;
+    const moduleFiles = facts.files.filter((file) => isWithinNavigationRoot(file.path, moduleRoot.path));
+    const javaTestRoot = conventionalJavaTestRoot(moduleRoot.path, moduleFiles);
+    const candidateRoot: CandidateModuleRoot = {
+      id: moduleRoot.id,
+      path: moduleRoot.path,
+      ownerRole: moduleRoot.owner_role,
+      responsibility: moduleRoot.responsibility,
+      language: moduleRoot.language,
+      entryKinds: [...moduleRoot.entry_kinds]
+    };
+    const result = await analyzeModule({
+      root,
+      facts: { files: moduleFiles },
+      moduleRoot: candidateRoot,
+      sourceRoots: [moduleRoot.path],
+      testRoots: javaTestRoot ? [javaTestRoot] : []
+    });
+    for (const current of features) {
       if (!includesChangedPath(current.entries, changedPaths)) continue;
-      current.entries = owned;
-      current.related_files = [];
-      current.symbols = parsed.symbols.filter((symbol) => rootFor(navigation, symbol.file)?.id === moduleRoot.id).map((symbol) => ({ ...symbol, visibility: 'public' }));
-      current.relations = parsed.relations.filter((relation) => rootFor(navigation, relation.from.slice(0, relation.from.lastIndexOf('#')))?.id === moduleRoot.id);
+      const candidate = result.candidates.length === 1 ? result.candidates[0] : result.candidates.find((entry) => entry.id === current.id);
+      if (!candidate) continue;
+      current.entries = [...new Set(candidate.entries)].sort(compareStrings);
+      current.related_files = [...new Set(candidate.relatedFiles)].sort(compareStrings);
+      current.symbols = candidate.symbols.map((symbol) => ({ ...symbol }));
+      current.relations = candidate.relations.map((relation) => ({ ...relation }));
       current.owner_role = moduleRoot.owner_role;
-      current.read_scope = [...new Set([...current.entries, ...current.tests])];
+      current.read_scope = [...new Set([...current.entries, ...current.related_files, ...current.tests])].sort(compareStrings);
     }
   }
   const candidate: NavigationRefreshCandidate = { version: 1, task_target: taskTarget, authorized_module_roots: moduleRoots, changed_paths: changedPaths, maintenance_authorized: true, navigation };
@@ -222,7 +278,12 @@ async function validateTypeScriptSymbol(project: string, file: string, name: str
 
 async function validateSemantics(project: string, index: NavigationIndex, features: NavigationIndex['features'], errors: string[]): Promise<void> {
   const usedRoots = new Set(features.map((feature) => feature.module_root));
-  for (const root of index.module_roots) if (usedRoots.has(root.id) && root.language !== 'typescript' && root.language !== 'mixed') errors.push(`Unsupported navigation language parser: ${root.language}`);
+  for (const root of index.module_roots) {
+    if (!usedRoots.has(root.id)) continue;
+    if (!root.entry_kinds.includes('exported-symbol')) continue;
+    if (root.language === 'mixed' || languageParsers[root.language]) continue;
+    errors.push(`Unsupported navigation language parser: ${root.language}`);
+  }
   if (errors.length) return;
   for (const feature of features) {
     for (const symbol of feature.symbols) {
@@ -281,9 +342,11 @@ async function validateModuleRoots(project: string, index: NavigationIndex, root
 }
 
 async function validateModuleCoverage(project: string, index: NavigationIndex, errors: string[]): Promise<void> {
-  const registered = new Set(index.features.flatMap((feature) => [...feature.entries, ...feature.related_files, ...feature.symbols.map((symbol) => symbol.file)]));
+  const registered = new Set(index.features.flatMap((feature) => [...feature.entries, ...feature.related_files, ...feature.tests, ...feature.symbols.map((symbol) => symbol.file)]));
   for (const moduleRoot of index.module_roots) {
-    if (!moduleRoot.entry_kinds.includes('exported-symbol')) continue;
+    const hasSymbolCapability = moduleRoot.entry_kinds.includes('exported-symbol');
+    const hasFileCapability = moduleRoot.entry_kinds.includes('file');
+    if (!hasSymbolCapability && !hasFileCapability) continue;
     const path = join(project, moduleRoot.path);
     try {
       if (!(await lstat(path)).isDirectory()) { errors.push(`${moduleRoot.path}: expected a concrete module root directory`); continue; }
@@ -291,9 +354,19 @@ async function validateModuleCoverage(project: string, index: NavigationIndex, e
       if (!isWithin(await realpath(project), real)) { errors.push(`${moduleRoot.path}: module root symlink escapes project`); continue; }
       const hasFeature = index.features.some((feature) => feature.module_root === moduleRoot.id);
       if (!hasFeature) errors.push(`${moduleRoot.id}: featureless module root`);
-      for (const file of await typeScriptFiles(project, path)) {
-        const owner = rootFor(index, file);
-        if (owner?.id === moduleRoot.id && !registered.has(file)) errors.push(`Navigation index is stale: unclassified module file ${file}`);
+      if (hasSymbolCapability) {
+        for (const file of await typeScriptFiles(project, path)) {
+          const owner = rootFor(index, file);
+          if (owner?.id === moduleRoot.id && !registered.has(file)) errors.push(`Navigation index is stale: unclassified module file ${file}`);
+        }
+      }
+      if (hasFileCapability) {
+        const javaRelated = moduleRoot.language === 'java' || hasSymbolCapability;
+        if (javaRelated) {
+          const files = (await regularFiles(project, path)).sort(compareStrings).filter((file) => file.endsWith('.java'));
+          const covered = new Set(index.features.filter((feature) => feature.module_root === moduleRoot.id).flatMap((feature) => [...feature.entries, ...feature.related_files, ...feature.tests, ...feature.symbols.map((symbol) => symbol.file)]));
+          for (const file of files) if (!covered.has(file)) errors.push(`Navigation index is stale: unclassified module file ${file}`);
+        }
       }
     } catch {
       errors.push(`${moduleRoot.path}: expected a concrete module root directory`);
@@ -372,6 +445,11 @@ export async function validateContext(project: string): Promise<ContextValidatio
   const markdown = await readFile(join(root, '.ai-workflow/index/navigation.md'), 'utf8');
   if (markdown !== renderNavigation(result.index)) result.errors.push('navigation.md does not match navigation.json');
   return { valid: result.errors.length === 0, errors: result.errors };
+}
+
+export async function validateNavigationModel(project: string, index: NavigationIndex): Promise<ContextValidation> {
+  const { errors } = await validateIndex(resolveProjectRoot(project), undefined, index);
+  return { valid: errors.length === 0, errors };
 }
 
 export async function verifyNavigation(project: string, featureId: string): Promise<ContextValidation> {

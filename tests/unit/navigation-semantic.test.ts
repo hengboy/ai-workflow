@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mkdir, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { validateContext, verifyNavigation } from '../../src/context/validate.js';
 import { renderNavigation, type NavigationIndex } from '../../src/context/navigation.js';
@@ -106,5 +106,213 @@ describe('navigation semantic validation', () => {
 
     expect(result.valid).toBe(false);
     expect(result.errors).toContain('src/workflow: module root symlink escapes project');
+  });
+});
+
+function javaNavigation(): NavigationIndex {
+  return {
+    version: 1,
+    module_roots: [{ id: 'backend', path: 'backend', owner_role: 'shared', responsibility: 'java backend', language: 'java', entry_kinds: ['file'] }],
+    features: [{
+      id: 'com.example.app', name: 'com.example.app', aliases: [], module_root: 'backend',
+      entries: ['backend/src/main/java/com/example/app/Application.java'],
+      symbols: [],
+      related_files: ['backend/src/main/java/com/example/app/Plain.java'],
+      tests: ['backend/src/test/java/com/example/app/ApplicationTest.java'],
+      depends_on: [], relations: [], owner_role: 'shared', responsibility: 'java package',
+      read_scope: [
+        'backend/src/main/java/com/example/app/Application.java',
+        'backend/src/main/java/com/example/app/Plain.java',
+        'backend/src/test/java/com/example/app/ApplicationTest.java'
+      ],
+      shared_entry: false
+    }]
+  };
+}
+
+async function javaProject(index = javaNavigation()): Promise<string> {
+  const project = await temporary('ai-workflow-navigation-semantic-java-');
+  await mkdir(join(project, 'backend/src/main/java/com/example/app'), { recursive: true });
+  await mkdir(join(project, 'backend/src/test/java/com/example/app'), { recursive: true });
+  await mkdir(join(project, '.ai-workflow/index'), { recursive: true });
+  await writeFile(join(project, 'backend/src/main/java/com/example/app/Application.java'), 'package com.example.app;\n\n@SpringBootApplication\npublic class Application {}\n');
+  await writeFile(join(project, 'backend/src/main/java/com/example/app/Plain.java'), 'package com.example.app;\n\npublic class Plain {}\n');
+  await writeFile(join(project, 'backend/src/test/java/com/example/app/ApplicationTest.java'), 'package com.example.app;\n\nclass ApplicationTest {}\n');
+  await writeFile(join(project, 'MEMORY.md'), '# Memory\n');
+  await writeFile(join(project, '.ai-workflow/index/navigation.json'), `${JSON.stringify(index)}\n`);
+  await writeFile(join(project, '.ai-workflow/index/navigation.md'), renderNavigation(index));
+  return project;
+}
+
+async function rustProject(): Promise<string> {
+  const project = await temporary('ai-workflow-navigation-semantic-rust-');
+  await mkdir(join(project, 'src/rust'), { recursive: true });
+  await mkdir(join(project, '.ai-workflow/index'), { recursive: true });
+  await writeFile(join(project, 'src/rust/main.rs'), 'fn main() {}\n');
+  const index: NavigationIndex = {
+    version: 1,
+    module_roots: [{ id: 'rust-root', path: 'src/rust', owner_role: 'shared', responsibility: 'rust', language: 'rust', entry_kinds: ['exported-symbol'] }],
+    features: [{
+      id: 'rust-feature', name: 'rust feature', aliases: [], module_root: 'rust-root',
+      entries: ['src/rust/main.rs'], symbols: [], related_files: [], tests: [], depends_on: [], relations: [],
+      owner_role: 'shared', responsibility: 'rust feature', read_scope: ['src/rust/main.rs'], shared_entry: false
+    }]
+  };
+  await writeFile(join(project, '.ai-workflow/index/navigation.json'), `${JSON.stringify(index)}\n`);
+  await writeFile(join(project, '.ai-workflow/index/navigation.md'), renderNavigation(index));
+  return project;
+}
+
+describe('navigation structural compatibility', () => {
+  it('accepts a structural Java file-only root with empty symbols and relations', async () => {
+    const project = await javaProject();
+
+    await expect(validateContext(project)).resolves.toMatchObject({ valid: true, errors: [] });
+  });
+
+  it('verifies a selected structural Java feature', async () => {
+    const project = await javaProject();
+
+    await expect(verifyNavigation(project, 'com.example.app')).resolves.toMatchObject({ valid: true, errors: [] });
+  });
+
+  it('marks a structural Java root stale when an unclassified module file appears', async () => {
+    const project = await javaProject();
+    await writeFile(join(project, 'backend/src/main/java/com/example/app/Extra.java'), 'package com.example.app;\n\npublic class Extra {}\n');
+
+    const result = await validateContext(project);
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain('Navigation index is stale: unclassified module file backend/src/main/java/com/example/app/Extra.java');
+  });
+
+  it('marks a structural Java root stale when an indexed entry is deleted', async () => {
+    const project = await javaProject();
+    await rm(join(project, 'backend/src/main/java/com/example/app/Application.java'));
+
+    const result = await validateContext(project);
+
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((error) => error.includes('backend/src/main/java/com/example/app/Application.java'))).toBe(true);
+  });
+
+  it('still rejects an unsupported language that claims semantic exported-symbol capability', async () => {
+    const project = await rustProject();
+
+    const result = await validateContext(project);
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain('Unsupported navigation language parser: rust');
+  });
+
+  it('still fails TypeScript exported-symbol drift for semantic roots', async () => {
+    const project = await projectWithWorkflow(navigation(), "import { digestPlan } from './digest.js';\nexport function readPlan(): void { digestPlan(); }\nexport function parsePlan(): void {}\n");
+
+    const result = await validateContext(project);
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain('Navigation index is stale: added symbol src/workflow/parse.ts#parsePlan');
+  });
+});
+
+function reexportNavigation(relationTo = 'src/index.ts#Profile'): NavigationIndex {
+  return {
+    version: 1,
+    module_roots: [{ id: 'src', path: 'src', owner_role: 'shared', responsibility: 'source', language: 'typescript', entry_kinds: ['exported-symbol'] }],
+    features: [{
+      id: 'src', name: 'src', aliases: [], module_root: 'src',
+      entries: ['src/index.ts', 'src/schema.ts', 'src/use.ts'],
+      symbols: [
+        { file: 'src/index.ts', name: 'Profile', kind: 'type', visibility: 'public' },
+        { file: 'src/schema.ts', name: 'Profile', kind: 'interface', visibility: 'public' },
+        { file: 'src/use.ts', name: 'useProfile', kind: 'function', visibility: 'public' }
+      ],
+      related_files: [], tests: [], depends_on: [],
+      relations: [{ kind: 'imports', from: 'src/use.ts#useProfile', to: relationTo }],
+      owner_role: 'shared', responsibility: 'source',
+      read_scope: ['src/index.ts', 'src/schema.ts', 'src/use.ts'], shared_entry: false
+    }]
+  };
+}
+
+async function reexportProject(index = reexportNavigation()): Promise<string> {
+  const project = await temporary('ai-workflow-navigation-semantic-reexport-');
+  await mkdir(join(project, 'src'), { recursive: true });
+  await mkdir(join(project, '.ai-workflow/index'), { recursive: true });
+  await writeFile(join(project, 'src/schema.ts'), 'export interface Profile { name: string; }\n');
+  await writeFile(join(project, 'src/index.ts'), "import type { Profile } from './schema.js';\nexport type { Profile };\n");
+  await writeFile(join(project, 'src/use.ts'), "import type { Profile } from './index.js';\nexport function useProfile(value: Profile): void { void value; }\n");
+  await writeFile(join(project, '.ai-workflow/index/navigation.json'), `${JSON.stringify(index)}\n`);
+  await writeFile(join(project, '.ai-workflow/index/navigation.md'), renderNavigation(index));
+  return project;
+}
+
+describe('navigation re-export recognition', () => {
+  it('recognizes a re-exported public type during full validation', async () => {
+    const project = await reexportProject();
+
+    await expect(validateContext(project)).resolves.toMatchObject({ valid: true, errors: [] });
+  });
+
+  it('accepts a feature relation endpoint that resolves through a re-export', async () => {
+    const project = await reexportProject();
+
+    await expect(verifyNavigation(project, 'src')).resolves.toMatchObject({ valid: true, errors: [] });
+  });
+
+  it('still rejects a feature relation endpoint naming a genuinely missing symbol', async () => {
+    const project = await reexportProject(reexportNavigation('src/index.ts#Missing'));
+
+    const result = await verifyNavigation(project, 'src');
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain('Navigation index is stale: src/index.ts no longer contains Missing');
+  });
+});
+
+function projectRootNavigation(): NavigationIndex {
+  return {
+    version: 1,
+    module_roots: [{ id: 'project', path: '.', owner_role: 'shared', responsibility: 'project', language: 'typescript', entry_kinds: ['exported-symbol'] }],
+    features: [{
+      id: 'src', name: 'src', aliases: [], module_root: 'project', entries: ['src/a.ts'],
+      symbols: [{ file: 'src/a.ts', name: 'alpha', kind: 'function', visibility: 'public' }],
+      related_files: [], tests: [], depends_on: [], relations: [],
+      owner_role: 'shared', responsibility: 'project', read_scope: ['src/a.ts'], shared_entry: false
+    }]
+  };
+}
+
+async function generatedDirectoriesProject(index = projectRootNavigation()): Promise<string> {
+  const project = await temporary('ai-workflow-navigation-semantic-generated-');
+  await mkdir(join(project, 'src'), { recursive: true });
+  await mkdir(join(project, 'dist'), { recursive: true });
+  await mkdir(join(project, 'node_modules/pkg'), { recursive: true });
+  await mkdir(join(project, 'target'), { recursive: true });
+  await mkdir(join(project, '.ai-workflow/index'), { recursive: true });
+  await writeFile(join(project, 'src/a.ts'), 'export function alpha(): void {}\n');
+  await writeFile(join(project, 'dist/generated.ts'), 'export function generated(): void {}\n');
+  await writeFile(join(project, 'node_modules/pkg/index.ts'), 'export function pkg(): void {}\n');
+  await writeFile(join(project, 'target/Generated.java'), 'public class Generated {}\n');
+  await writeFile(join(project, '.ai-workflow/index/navigation.json'), `${JSON.stringify(index)}\n`);
+  await writeFile(join(project, '.ai-workflow/index/navigation.md'), renderNavigation(index));
+  return project;
+}
+
+describe('navigation coverage exclusion parity with discovery', () => {
+  it('accepts a project-root exported-symbol root when generated and dependency directories exist', async () => {
+    const project = await generatedDirectoriesProject();
+
+    await expect(validateContext(project)).resolves.toMatchObject({ valid: true, errors: [] });
+  });
+
+  it('still rejects a genuinely unclassified source file outside generated and dependency directories', async () => {
+    const project = await generatedDirectoriesProject();
+    await writeFile(join(project, 'src/b.ts'), 'export function beta(): void {}\n');
+
+    const result = await validateContext(project);
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain('Navigation index is stale: unclassified module file src/b.ts');
   });
 });

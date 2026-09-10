@@ -4,6 +4,7 @@ import { promisify } from 'node:util';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { renderNavigation, type NavigationIndex } from '../../src/context/navigation.js';
+import { initializeProject } from '../../src/install/index.js';
 import { temporary } from '../helpers.js';
 
 const exec = promisify(execFile);
@@ -95,5 +96,94 @@ describe('context validate CLI', () => {
     }
 
     expect(JSON.parse(output)).toEqual({ valid: false, errors: ['Duplicate feature alias: frozen-plan'] });
+  });
+});
+
+describe('generated project validation (Step 5 fixtures)', () => {
+  it('validates an empty initialized project as all-valid', async () => {
+    const project = await temporary('ai-workflow-navigation-empty-');
+    await initializeProject(project);
+
+    const { stdout } = await exec('pnpm', ['exec', 'tsx', 'src/cli.ts', 'context', 'validate', '--project', project, '--all']);
+
+    expect(JSON.parse(stdout)).toEqual({ valid: true, errors: [] });
+  });
+
+  it('validates a TypeScript project whose test file lives inside the module root', async () => {
+    const project = await temporary('ai-workflow-navigation-ts-');
+    await mkdir(join(project, 'src'), { recursive: true });
+    await writeFile(join(project, 'src/a.ts'), 'export function alpha(): void {}\n');
+    await writeFile(join(project, 'src/b.ts'), "import { alpha } from './a.js';\nexport function beta(): void { alpha(); }\n");
+    await writeFile(join(project, 'src/a.test.ts'), 'import { beta } from "./b.js";\n');
+    await initializeProject(project);
+
+    const { stdout } = await exec('pnpm', ['exec', 'tsx', 'src/cli.ts', 'context', 'validate', '--project', project, '--all']);
+
+    expect(JSON.parse(stdout)).toEqual({ valid: true, errors: [] });
+  });
+
+  it('validates a JavaScript project through the TypeScript compiler capability', async () => {
+    const project = await temporary('ai-workflow-navigation-js-');
+    await mkdir(join(project, 'src'), { recursive: true });
+    await writeFile(join(project, 'src/index.js'), 'export function start(): void {}\n');
+    await writeFile(join(project, 'src/util.js'), 'function helper(): void {}\n');
+    await initializeProject(project);
+
+    const { stdout } = await exec('pnpm', ['exec', 'tsx', 'src/cli.ts', 'context', 'validate', '--project', project, '--all']);
+
+    expect(JSON.parse(stdout)).toEqual({ valid: true, errors: [] });
+  });
+
+  it('validates a Maven Java project and reports an added structural file as stale', async () => {
+    const project = await temporary('ai-workflow-navigation-maven-');
+    await mkdir(join(project, 'src/main/java/com/example/app'), { recursive: true });
+    await writeFile(join(project, 'pom.xml'), '<project></project>\n');
+    await writeFile(join(project, 'src/main/java/com/example/app/Application.java'), 'package com.example.app;\n\n@SpringBootApplication\npublic class Application {}\n');
+    await initializeProject(project);
+
+    const first = await exec('pnpm', ['exec', 'tsx', 'src/cli.ts', 'context', 'validate', '--project', project, '--all']);
+    expect(JSON.parse(first.stdout)).toEqual({ valid: true, errors: [] });
+
+    await writeFile(join(project, 'src/main/java/com/example/app/Extra.java'), 'package com.example.app;\n\npublic class Extra {}\n');
+    let drifted = '';
+    try {
+      await exec('pnpm', ['exec', 'tsx', 'src/cli.ts', 'context', 'validate', '--project', project, '--all']);
+    } catch (error: unknown) {
+      if (typeof error === 'object' && error !== null && 'stdout' in error && typeof error.stdout === 'string') drifted = error.stdout;
+    }
+
+    expect(JSON.parse(drifted)).toEqual({
+      valid: false,
+      errors: ['Navigation index is stale: unclassified module file src/main/java/com/example/app/Extra.java']
+    });
+  });
+
+  it.each([
+    ['Groovy', 'build.gradle', 'plugins { id "java" }\n'],
+    ['Kotlin', 'build.gradle.kts', 'plugins { id("java") }\n']
+  ])('validates a Gradle %s Java project as all-valid', async (_label, buildFile, buildContents) => {
+    const project = await temporary('ai-workflow-navigation-gradle-');
+    await mkdir(join(project, 'src/main/java/com/example/app'), { recursive: true });
+    await writeFile(join(project, buildFile), buildContents);
+    await writeFile(join(project, 'src/main/java/com/example/app/App.java'), 'package com.example.app;\n\n@SpringBootApplication\npublic class App {}\n');
+    await initializeProject(project);
+
+    const { stdout } = await exec('pnpm', ['exec', 'tsx', 'src/cli.ts', 'context', 'validate', '--project', project, '--all']);
+
+    expect(JSON.parse(stdout)).toEqual({ valid: true, errors: [] });
+  });
+
+  it('validates a mixed frontend/backend project as all-valid', async () => {
+    const project = await temporary('ai-workflow-navigation-mixed-');
+    await mkdir(join(project, 'frontend/src'), { recursive: true });
+    await mkdir(join(project, 'backend/src/main/java/com/example'), { recursive: true });
+    await writeFile(join(project, 'frontend/src/app.ts'), 'export function render(): void {}\n');
+    await writeFile(join(project, 'backend/pom.xml'), '<project></project>\n');
+    await writeFile(join(project, 'backend/src/main/java/com/example/BackendApp.java'), 'package com.example;\n\n@SpringBootApplication\npublic class BackendApp {}\n');
+    await initializeProject(project);
+
+    const { stdout } = await exec('pnpm', ['exec', 'tsx', 'src/cli.ts', 'context', 'validate', '--project', project, '--all']);
+
+    expect(JSON.parse(stdout)).toEqual({ valid: true, errors: [] });
   });
 });
