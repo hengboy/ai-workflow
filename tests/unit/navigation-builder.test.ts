@@ -10,6 +10,7 @@ import {
   renderNavigationJson
 } from '../../src/context/discovery/builder.js';
 import { renderNavigation, type NavigationIndex } from '../../src/context/navigation.js';
+import { formatSchemaErrors, schemaValidator } from '../../src/utils/schema.js';
 import { temporary } from '../helpers.js';
 
 function compareStrings(left: string, right: string): number {
@@ -358,5 +359,37 @@ describe('buildNavigation configured modules (AC-012)', () => {
       }
     }
     for (const path of testPaths) expect(testCounts.get(path)).toBe(1);
+  });
+});
+
+describe('buildNavigation export-less projects (schema validity)', () => {
+  it.each([
+    {
+      name: 'plain source with only a default export',
+      files: { 'src/plain.ts': 'const value = 1;\nexport default value;\n' },
+      covered: ['src/plain.ts']
+    },
+    {
+      name: 'root config exporting nothing named',
+      files: { 'vitest.config.ts': 'export default {};\n' },
+      covered: ['vitest.config.ts']
+    }
+  ])('keeps every feature non-empty and schema-valid: $name', async ({ files, covered }) => {
+    const validate = await schemaValidator('navigation.schema.json');
+    const { root, facts } = await fixture(files);
+    const { index } = await buildNavigation(root, facts);
+
+    const valid = validate(index);
+    expect(formatSchemaErrors(validate.errors)).toBe('');
+    expect(valid).toBe(true);
+
+    for (const feature of index.features) {
+      expect(feature.entries.length, `feature ${feature.id}`).toBeGreaterThanOrEqual(1);
+    }
+
+    const coveredPaths = new Set(index.features.flatMap((feature) => [...feature.entries, ...feature.related_files]));
+    for (const path of covered) {
+      expect(coveredPaths.has(path), path).toBe(true);
+    }
   });
 });

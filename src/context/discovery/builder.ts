@@ -224,10 +224,24 @@ function generateFeature(
   used: Set<string>,
   owned: Set<string>
 ): NavigationFeature | undefined {
-  const entries = sortedUnique(candidate.entries.filter((path) => !owned.has(path)));
-  const relatedFiles = sortedUnique(candidate.relatedFiles.filter((path) => !owned.has(path)));
-  const tests = sortedUnique(candidate.tests.filter((path) => !owned.has(path)));
+  let entries = sortedUnique(candidate.entries.filter((path) => !owned.has(path)));
+  let relatedFiles = sortedUnique(candidate.relatedFiles.filter((path) => !owned.has(path)));
+  let tests = sortedUnique(candidate.tests.filter((path) => !owned.has(path)));
   if (entries.length === 0 && relatedFiles.length === 0 && tests.length === 0) return undefined;
+
+  // Safety net: the navigation schema requires at least one entry per feature.
+  // When ownership filtering removed every entry but files remain, promote the
+  // remaining files deterministically, preferring related files over tests, so
+  // no file is dropped and each stays covered exactly once.
+  if (entries.length === 0) {
+    if (relatedFiles.length > 0) {
+      entries = relatedFiles;
+      relatedFiles = [];
+    } else {
+      entries = tests;
+      tests = [];
+    }
+  }
 
   const allowed = new Set([...entries, ...relatedFiles, ...tests]);
   const symbols = candidate.symbols.filter((symbol) => allowed.has(symbol.file));

@@ -184,6 +184,14 @@ export async function analyzeTypeScriptModule(request: ModuleAnalysisRequest): P
     }
   }
 
+  // Structural fallback: when a module has source files but none export a named
+  // declaration, promote every source file to an entry so the feature never has
+  // an empty `entries` array (navigation schema requires minItems: 1).
+  if (sourceFiles.length > 0 && entries.length === 0) {
+    entries.push(...relatedFiles);
+    relatedFiles.length = 0;
+  }
+
   entries.sort(compareStrings);
   relatedFiles.sort(compareStrings);
   symbols.sort(
