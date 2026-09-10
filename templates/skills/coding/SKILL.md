@@ -5,8 +5,26 @@ description: Implements an approved task with test-driven development and bounde
 
 # Coding
 
-Implement one approved task exclusively through test-driven development. Every
-production change must be driven by a behavior test in a red -> green loop.
+Implement approved coding work exclusively through delegated sub-agents and
+test-driven development. The orchestrating agent must keep dispatching until
+the scoped work is complete; it must not pause for progress reports while a
+non-blocked delegated step remains.
+
+## Delegation and Scheduling
+
+- An unsplit plan is executed serially: delegate one sub-agent for each plan
+  step, wait for its result, verify it, then dispatch the next step.
+- A split plan is executed serially: delegate one sub-agent for each task in
+  dependency order, wait for its result, verify it, then dispatch the next
+  task.
+- A small bug fix or small request is delegated as one complete unit to one
+  sub-agent.
+- The orchestrator owns scheduling, dependency progression and automatic
+  continuation. Interrupt the sequence only for a real blocker, failed gate,
+  missing authorization or required user decision.
+- When a test must be written or changed, delegate that test work to the
+  `test` sub-agent first. The implementation sub-agent may consume the test
+  and fix production code, but must not write the test itself.
 
 ## Preconditions
 
@@ -25,7 +43,8 @@ production change must be driven by a behavior test in a red -> green loop.
 - Create a Todo list before editing and keep it current. Each step must state its
   scope, acceptance evidence and commit point.
 - Before writing a test, state the public interface and observable boundary it
-  will exercise. If that boundary is unclear, stop and request clarification.
+  will exercise and provide it to the `test` sub-agent. If that boundary is
+  unclear, stop and request clarification.
 
 ## Pre-Implementation Todo
 

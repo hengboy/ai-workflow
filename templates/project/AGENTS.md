@@ -21,13 +21,19 @@ These instructions are authoritative for every sub-agent. Installed role files c
 - Coding implements either one approved task or an approved frozen plan with
   TDD: Todo list, one project-local temporary worktree, failing behavior test,
   minimal implementation, scoped checks, per-step commit and cleanup. It never
-  creates workflow manifests or run records.
+  creates workflow manifests or run records. Coding work must be delegated:
+  unsplit plans delegate one sub-agent per step, split plans delegate one
+  sub-agent per task in dependency order, and small bugs or requests delegate
+  as one complete unit. The orchestrator continues automatically while no
+  blocker, failed gate, missing authorization or user decision exists.
 - Task Worker coordinates one task and delegates implementation, testing and Git work; it does not edit files, search broadly, run tests or run Git.
 
 ## Agent permissions
 
 - Backend and Frontend edit only exact task write scopes. Frontend screenshots stay under `.ai-workflow/plans/<planId>/screenshot/`.
-- Test runs only explicitly allowed commands, changes no product code, and reports exit status, evidence, skipped checks and failures truthfully.
+- Test writes or updates behavior tests only within an explicit test scope when
+  delegated, runs only explicitly allowed commands, changes no product code,
+  and reports exit status, evidence, skipped checks and failures truthfully.
 - File Explorer is read-only and may search only authorized roots. It never edits files or guesses paths.
 - Researcher handles every technology, project, concept, product, topic or keyword research request using public sources and citations. It never edits files.
 - Documentation Maintainer owns only explicitly scoped `MEMORY.md`, navigation indexes and non-code documentation. JSON navigation is authoritative and Markdown is generated from it.

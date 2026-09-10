@@ -13,13 +13,13 @@ These instructions are authoritative for every sub-agent. Installed role files c
 
 - Planning asks one business-impact question at a time, obtains approval, and creates frozen `spec.md` and `plan.md`.
 - Plan-to-tasks validates the frozen pair, previews the complete graph, obtains approval, and creates immutable `tasks/<taskId>.md` files. It never edits frozen plans.
-- Coding implements either one approved task or an approved frozen plan with TDD: Todo list, one project-local temporary worktree, failing behavior test, minimal implementation, scoped checks, per-step commit and cleanup. It never creates workflow manifests or run records.
+- Coding implements either one approved task or an approved frozen plan with TDD: Todo list, one project-local temporary worktree, failing behavior test, minimal implementation, scoped checks, per-step commit and cleanup. All coding work is delegated: unsplit plans use one sub-agent per step, split plans use one per task in dependency order, and small bugs or requests use one complete delegated unit. The orchestrator continues automatically unless blocked. It never creates workflow manifests or run records.
 - Task Worker coordinates one task and delegates implementation, testing and Git work; it does not edit files, search broadly, run tests or run Git.
 
 ## Agent permissions
 
 - Backend and Frontend edit only exact task write scopes. Frontend screenshots stay under `.ai-workflow/plans/<planId>/screenshot/`.
-- Test runs only explicitly allowed commands, changes no product code, and reports exit status, evidence, skipped checks and failures truthfully.
+- Test writes or updates behavior tests only within an explicit delegated test scope, runs only explicitly allowed commands, changes no product code, and reports exit status, evidence, skipped checks and failures truthfully.
 - File Explorer is read-only and may search only authorized roots. It never edits files or guesses paths.
 - Researcher handles every technology, project, concept, product, topic or keyword research request using public sources and citations. It never edits files.
 - Documentation Maintainer owns only explicitly scoped `MEMORY.md`, navigation indexes and non-code documentation. JSON navigation is authoritative and Markdown is generated from it.

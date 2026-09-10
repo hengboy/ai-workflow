@@ -16,4 +16,15 @@ describe('v2 coding guidance', () => {
     expect(text).toContain('.ai-workflow/runs/<runId>/worktrees/repair-tests/<taskId>');
     expect(text).not.toMatch(/--adjustments-stdin|workflow\.candidate\.json|fixed six|固定六节点|<project>\/\.worktrees|VM.*安全沙箱/i);
   });
+
+  it('requires delegated serial execution and test-agent-authored tests', async () => {
+    const coding = await readFile(packagePath('templates', 'skills', 'coding', 'SKILL.md'), 'utf8');
+    const testAgent = await readFile(packagePath('templates', 'agents', 'test.md'), 'utf8');
+    expect(coding).toContain('An unsplit plan is executed serially');
+    expect(coding).toContain('A split plan is executed serially');
+    expect(coding).toContain('A small bug fix or small request is delegated as one complete unit');
+    expect(coding).toContain('delegate that test work to the');
+    expect(testAgent).toContain('write or update scoped behavior tests');
+    expect(testAgent).toContain('public interface plus observable boundary');
+  });
 });
