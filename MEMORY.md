@@ -18,6 +18,7 @@
 - No external workflow framework and no provider API calls.
 - No push, publish, remote mutation, automatic rebase or mixed-host run.
 - Planning artifacts are frozen and validated before task splitting.
+- Planning and plan-to-tasks never commit their artifacts: `.ai-workflow/` is gitignored, so `spec.md`, `plan.md` and task files remain local, untracked files.
 - User configuration is preserved unless an install manifest proves ownership.
 - After Documentation Maintainer's documentation checks pass, the primary orchestrator directly dispatches Git Operator for that local commit, with exact changed paths and evidence.
 - The `task-worker` role is removed; the primary orchestrator directly dispatches every specialist and Git Operator, and legacy profiles referencing `task-worker` are rejected before any mutation.

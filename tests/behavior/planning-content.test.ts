@@ -46,7 +46,7 @@ describe('native prompt contracts', () => {
     expect(text).toMatch(/must not write.*temporary|不得写入.*临时目录/i);
     expect(text).toMatch(/spec\.md.*plan\.md.*\.ai-workflow\/plans.*plan id.*digest|\.ai-workflow\/plans.*plan id.*spec\.md.*plan\.md.*digest/is);
   });
-  it('installs a message-only commit skill and routes every Git Operator commit through it', async () => {
+  it('installs a message-only commit skill while planning and plan-to-tasks leave gitignored artifacts uncommitted', async () => {
     const messageSkill = await readFile(packagePath('templates', 'skills', 'git-message', 'SKILL.md'), 'utf8');
     expect(messageSkill).toMatch(/^name: git-message$/m);
     expect(messageSkill).toMatch(/Conventional Commits/i);
@@ -55,13 +55,13 @@ describe('native prompt contracts', () => {
     const operator = await readFile(packagePath('templates', 'agents', 'git-operator.md'), 'utf8');
     expect(operator).toMatch(/before every direct commit.*invoke.*\$git-message/is);
 
-    const planning = await readFile(packagePath('templates', 'skills', 'planning', 'SKILL.md'), 'utf8');
-    expect(planning).toMatch(/primary orchestrator\s+directly\s+dispatch(?:es|ed)\s+Git\s+Operator[\s\S]*spec\.md[\s\S]*plan\.md/i);
-    expect(planning).toMatch(/automatic local commit/i);
-
-    const tasks = await readFile(packagePath('templates', 'skills', 'plan-to-tasks', 'SKILL.md'), 'utf8');
-    expect(tasks).toMatch(/primary orchestrator\s+directly\s+dispatch(?:es|ed)\s+Git\s+Operator[\s\S]*task files/i);
-    expect(tasks).toMatch(/automatic local commit/i);
+    for (const name of ['planning', 'plan-to-tasks']) {
+      const text = await readFile(packagePath('templates', 'skills', name, 'SKILL.md'), 'utf8');
+      expect(text).toMatch(/gitignored/i);
+      expect(text).toMatch(/do not stage or commit/i);
+      expect(text).not.toMatch(/automatic local commit/i);
+      expect(text).not.toMatch(/directly\s+dispatch(?:es|ed)?\s+Git\s+Operator/i);
+    }
   });
   it('keeps skill metadata and example templates inside their owning skill', async () => {
     const skillRoot = packagePath('templates', 'skills');
@@ -182,18 +182,19 @@ describe('native prompt contracts', () => {
       expect(template).not.toMatch(/--project <project>/i);
     }
   });
-  it('has planning and plan-to-tasks return commit evidence while the primary orchestrator directly dispatches Git Operator', async () => {
+  it('keeps planning and plan-to-tasks from committing their gitignored artifacts', async () => {
     for (const name of ['planning', 'plan-to-tasks']) {
       const text = await readFile(packagePath('templates', 'skills', name, 'SKILL.md'), 'utf8');
-      // AC-003 / REQ-002: actor identity — the primary orchestrator directly dispatches Git Operator.
-      expect(text).toMatch(/primary orchestrator\s+directly\s+dispatches\s+Git\s+Operator/i);
-      // AC-003: the specialist returns exact paths/evidence to the primary orchestrator.
-      expect(text).toMatch(/exact.*paths.*(?:evidence|primary orchestrator)|provide.*(?:exact|completed).*(?:paths|evidence).*primary orchestrator/is);
+      // Planning and task artifacts live under the gitignored .ai-workflow directory.
+      expect(text).toMatch(/gitignored/i);
+      // The specialist neither stages nor commits its own artifacts.
+      expect(text).toMatch(/do not stage or commit/i);
+      // REQ-002: no automatic commit or Git Operator dispatch from these roles.
+      expect(text).not.toMatch(/automatic local commit/i);
+      expect(text).not.toMatch(/directly\s+dispatch(?:es|ed)?\s+Git\s+Operator/i);
+      expect(text).not.toMatch(/Git Operator must use `\$git-message`/);
       // REQ-002: the specialist never dispatches Task Worker (no nested child dispatch).
       expect(text).not.toMatch(/delegate\s+(?:to\s+)?(?:the\s+)?`?task[- ]worker`?|dispatch\s+(?:to\s+)?(?:the\s+)?`?task[- ]worker`?/i);
-      // REQ-003: the commit gate is preserved.
-      expect(text).toMatch(/Git Operator must use `\$git-message`/);
-      expect(text).toMatch(/do not stage, commit, or repair Git state/i);
     }
   });
   it('has Documentation Maintainer return commit evidence while the primary orchestrator directly dispatches Git Operator', async () => {
