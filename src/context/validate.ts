@@ -67,7 +67,7 @@ async function typeScriptFiles(project: string, directory: string): Promise<stri
   for (const entry of await readdir(directory, { withFileTypes: true })) {
     const path = join(directory, entry.name);
     if (entry.isDirectory()) files.push(...await typeScriptFiles(project, path));
-    else if (entry.isFile() && (entry.name.endsWith('.ts') || entry.name.endsWith('.tsx'))) files.push(relative(project, path));
+    else if (entry.isFile() && /\.(?:ts|tsx|js|jsx|mjs|cjs)$/.test(entry.name)) files.push(relative(project, path));
   }
   return files;
 }
@@ -144,7 +144,10 @@ function directImports(file: string, source: ts.SourceFile, files: Set<string>):
     const specifier = statement.moduleSpecifier.text;
     if (!specifier.startsWith('.')) continue;
     const base = join(dirname(file), specifier).replace(/\\/g, '/').replace(/\.(?:js|jsx|mjs|cjs|ts|tsx)$/, '');
-    const target = [`${base}.ts`, `${base}.tsx`, `${base}/index.ts`, `${base}/index.tsx`].find((candidate) => files.has(candidate));
+    const target = [
+      `${base}.ts`, `${base}.tsx`, `${base}.js`, `${base}.jsx`, `${base}.mjs`, `${base}.cjs`,
+      `${base}/index.ts`, `${base}/index.tsx`, `${base}/index.js`, `${base}/index.jsx`, `${base}/index.mjs`, `${base}/index.cjs`
+    ].find((candidate) => files.has(candidate));
     if (!target) continue;
     for (const imported of statement.importClause.namedBindings.elements) bindings.set(imported.name.text, { file: target, name: imported.propertyName?.text ?? imported.name.text });
   }
@@ -311,7 +314,7 @@ async function validateModuleRoots(project: string, index: NavigationIndex, root
 }
 
 async function validateModuleCoverage(project: string, index: NavigationIndex, errors: string[]): Promise<void> {
-  const registered = new Set(index.features.flatMap((feature) => [...feature.entries, ...feature.related_files, ...feature.symbols.map((symbol) => symbol.file)]));
+  const registered = new Set(index.features.flatMap((feature) => [...feature.entries, ...feature.related_files, ...feature.tests, ...feature.symbols.map((symbol) => symbol.file)]));
   for (const moduleRoot of index.module_roots) {
     const hasSymbolCapability = moduleRoot.entry_kinds.includes('exported-symbol');
     const hasFileCapability = moduleRoot.entry_kinds.includes('file');

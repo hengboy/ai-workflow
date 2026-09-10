@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { mkdir, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 import { renderNavigation, type NavigationIndex } from '../../src/context/navigation.js';
+import { initializeProject } from '../../src/install/index.js';
 import { temporary } from '../helpers.js';
 
 const exec = promisify(execFile);
@@ -168,5 +169,120 @@ describe('context locate CLI', () => {
     await expect(locate(project, '--feature', 'workflow-parsing', '--depth', '0')).resolves.toMatchObject({ related_features: [] });
     await expect(locate(project, '--feature', 'workflow-parsing', '--depth', '1')).resolves.toMatchObject({ related_features: ['workflow-digest'] });
     await expect(locate(project, '--feature', 'workflow-parsing', '--depth', '2')).resolves.toMatchObject({ related_features: ['workflow-digest', 'workflow-output'] });
+  });
+});
+
+describe('generated project locate and refresh (Step 5 fixtures)', () => {
+  async function initProject(files: Record<string, string>): Promise<{ project: string; index: NavigationIndex }> {
+    const project = await temporary('ai-workflow-navigation-e2e-');
+    for (const [path, contents] of Object.entries(files)) {
+      await mkdir(join(project, dirname(path)), { recursive: true });
+      await writeFile(join(project, path), contents);
+    }
+    await initializeProject(project);
+    const index = JSON.parse(await readFile(join(project, '.ai-workflow/index/navigation.json'), 'utf8')) as NavigationIndex;
+    return { project, index };
+  }
+
+  async function refresh(project: string, root: string, path: string): Promise<void> {
+    await exec('pnpm', ['exec', 'tsx', 'src/cli.ts', 'context', 'candidate', '--project', project, '--output', '.ai-workflow/candidate.json', '--task-target', 'task-001', '--root', root, '--path', path]);
+    await exec('pnpm', ['exec', 'tsx', 'src/cli.ts', 'context', 'refresh', '--project', project, '--candidate', '.ai-workflow/candidate.json', '--write']);
+  }
+
+  it('locates and refreshes a generated TypeScript feature with its tests without losing coverage', async () => {
+    const { project, index } = await initProject({
+      'src/a.ts': 'export function alpha(): void {}\n',
+      'src/b.ts': "import { alpha } from './a.js';\nexport function beta(): void { alpha(); }\n",
+      'src/a.test.ts': 'import { beta } from "./b.js";\n'
+    });
+    const feature = index.features.find((entry) => entry.entries.includes('src/a.ts'));
+    expect(feature).toBeDefined();
+
+    await expect(locate(project, '--feature', feature!.id, '--verify')).resolves.toMatchObject({
+      status: 'hit',
+      feature: feature!.id,
+      entries: ['src/a.ts', 'src/b.ts'],
+      symbols: ['src/a.ts#alpha', 'src/b.ts#beta'],
+      tests: ['src/a.test.ts']
+    });
+
+    await refresh(project, 'src', 'src/a.ts');
+
+    const refreshed = JSON.parse(await readFile(join(project, '.ai-workflow/index/navigation.json'), 'utf8')) as NavigationIndex;
+    const refreshedFeature = refreshed.features.find((entry) => entry.id === feature!.id);
+    expect(refreshedFeature?.entries).toEqual(['src/a.ts', 'src/b.ts']);
+    expect(refreshedFeature?.tests).toEqual(['src/a.test.ts']);
+    expect(refreshedFeature?.symbols.map((symbol) => `${symbol.file}#${symbol.name}`)).toEqual(['src/a.ts#alpha', 'src/b.ts#beta']);
+    expect(refreshedFeature?.relations).toEqual([{ kind: 'imports', from: 'src/b.ts#beta', to: 'src/a.ts#alpha' }]);
+    const validation = await exec('pnpm', ['exec', 'tsx', 'src/cli.ts', 'context', 'validate', '--project', project, '--all']);
+    expect(JSON.parse(validation.stdout)).toEqual({ valid: true, errors: [] });
+  });
+
+  it('refreshes a generated TypeScript feature without losing entries, symbols or relations', async () => {
+    const { project, index } = await initProject({
+      'src/a.ts': 'export function alpha(): void {}\n',
+      'src/b.ts': "import { alpha } from './a.js';\nexport function beta(): void { alpha(); }\n"
+    });
+    const feature = index.features.find((entry) => entry.entries.includes('src/a.ts'));
+    expect(feature).toBeDefined();
+
+    await refresh(project, 'src', 'src/a.ts');
+
+    const refreshed = JSON.parse(await readFile(join(project, '.ai-workflow/index/navigation.json'), 'utf8')) as NavigationIndex;
+    const refreshedFeature = refreshed.features.find((entry) => entry.id === feature!.id);
+    expect(refreshedFeature?.entries).toEqual(['src/a.ts', 'src/b.ts']);
+    expect(refreshedFeature?.symbols.map((symbol) => `${symbol.file}#${symbol.name}`)).toEqual(['src/a.ts#alpha', 'src/b.ts#beta']);
+    expect(refreshedFeature?.relations).toEqual([{ kind: 'imports', from: 'src/b.ts#beta', to: 'src/a.ts#alpha' }]);
+    const validation = await exec('pnpm', ['exec', 'tsx', 'src/cli.ts', 'context', 'validate', '--project', project, '--all']);
+    expect(JSON.parse(validation.stdout)).toEqual({ valid: true, errors: [] });
+  });
+
+  it('locates a generated JavaScript feature with verification', async () => {
+    const { project, index } = await initProject({
+      'src/index.js': 'export function start(): void {}\n',
+      'src/util.js': 'function helper(): void {}\n'
+    });
+    const feature = index.features.find((entry) => entry.entries.includes('src/index.js'));
+    expect(feature).toBeDefined();
+
+    await expect(locate(project, '--feature', feature!.id, '--verify')).resolves.toMatchObject({
+      status: 'hit',
+      feature: feature!.id,
+      entries: ['src/index.js'],
+      symbols: ['src/index.js#start']
+    });
+  });
+
+  it('locates a Maven Java package feature with its annotated entries and test', async () => {
+    const { project } = await initProject({
+      'pom.xml': '<project></project>\n',
+      'src/main/java/com/example/app/Application.java': 'package com.example.app;\n\n@SpringBootApplication\npublic class Application {}\n',
+      'src/main/java/com/example/app/UserService.java': 'package com.example.app;\n\n@Service\npublic class UserService {}\n',
+      'src/main/java/com/example/app/Plain.java': 'package com.example.app;\n\npublic class Plain {}\n',
+      'src/test/java/com/example/app/ApplicationTest.java': 'package com.example.app;\n\npublic class ApplicationTest {}\n'
+    });
+
+    await expect(locate(project, '--feature', 'com.example.app', '--verify')).resolves.toMatchObject({
+      status: 'hit',
+      feature: 'com.example.app',
+      entries: ['src/main/java/com/example/app/Application.java', 'src/main/java/com/example/app/UserService.java'],
+      related_files: ['src/main/java/com/example/app/Plain.java'],
+      tests: ['src/test/java/com/example/app/ApplicationTest.java']
+    });
+  });
+
+  it('locates both generated features of a mixed frontend/backend project with verification', async () => {
+    const { project } = await initProject({
+      'frontend/src/app.ts': 'export function render(): void {}\n',
+      'backend/pom.xml': '<project></project>\n',
+      'backend/src/main/java/com/example/BackendApp.java': 'package com.example;\n\n@SpringBootApplication\npublic class BackendApp {}\n'
+    });
+
+    await expect(locate(project, '--feature', 'frontend', '--verify')).resolves.toMatchObject({
+      status: 'hit', feature: 'frontend', entries: ['frontend/src/app.ts'], symbols: ['frontend/src/app.ts#render']
+    });
+    await expect(locate(project, '--feature', 'com.example', '--verify')).resolves.toMatchObject({
+      status: 'hit', feature: 'com.example', entries: ['backend/src/main/java/com/example/BackendApp.java']
+    });
   });
 });

@@ -147,16 +147,24 @@ function discoveredSourceRoots(files: DiscoveredFile[]): string[] {
   return [...prefixes].filter((prefix) => prefix !== '' && prefix !== '.').sort(compareStrings);
 }
 
+function conventionalJavaRoot(modulePath: string, conventional: string, files: DiscoveredFile[]): string | undefined {
+  const root = joinProject(modulePath, conventional);
+  return files.some((file) => isWithinPath(file.path, root)) ? root : undefined;
+}
+
 function discoveredPlan(module: CandidateModuleRoot, facts: DiscoveryFacts): ModulePlan {
   const path = normalizePath(module.path);
-  const moduleFiles = isSemanticLanguage(module.language)
+  const semantic = isSemanticLanguage(module.language);
+  const moduleFiles = semantic
     ? facts.files.filter((file) => isSemanticLanguage(file.language) && topLevelDirectory(file.path) === path)
     : facts.files.filter((file) => isWithinPath(file.path, path));
+  const javaSourceRoot = semantic ? undefined : conventionalJavaRoot(path, 'src/main/java', moduleFiles);
+  const javaTestRoot = semantic ? undefined : conventionalJavaRoot(path, 'src/test/java', moduleFiles);
   return {
     candidate: module,
     languages: [module.language],
-    sourceRoots: isSemanticLanguage(module.language) ? discoveredSourceRoots(moduleFiles) : [path],
-    testRoots: [],
+    sourceRoots: semantic ? discoveredSourceRoots(moduleFiles) : javaSourceRoot ? [javaSourceRoot] : [path],
+    testRoots: javaTestRoot ? [javaTestRoot] : [],
     files: { files: moduleFiles }
   };
 }

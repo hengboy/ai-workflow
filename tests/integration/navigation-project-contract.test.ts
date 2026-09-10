@@ -1,10 +1,15 @@
 import { describe, expect, it } from 'vitest';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { locateContext } from '../../src/context/locate.js';
 import { renderNavigation, type NavigationIndex } from '../../src/context/navigation.js';
 import { createNavigationCandidate } from '../../src/context/validate.js';
+import { initializeProject, updateProject } from '../../src/install/index.js';
 import { temporary } from '../helpers.js';
+
+const exec = promisify(execFile);
 
 const navigation: NavigationIndex = {
   version: 1,
@@ -82,5 +87,53 @@ describe('project navigation contract', () => {
     expect(candidate.version).toBe(1);
     expect(candidate.navigation.version).toBe(1);
     expect(candidate.navigation.features.map((feature) => feature.id)).toEqual(['shared-feature', 'another-feature']);
+  });
+
+  it('keeps explicit module and feature bindings exact while discovering uncovered territory', async () => {
+    const project = await temporary('ai-workflow-navigation-config-');
+    await mkdir(join(project, '.ai-workflow'), { recursive: true });
+    await mkdir(join(project, 'backend/src/main/java/com/example/users'), { recursive: true });
+    await mkdir(join(project, 'backend/src/main/java/com/example/admin'), { recursive: true });
+    await mkdir(join(project, 'backend/src/it/java/com/example/it'), { recursive: true });
+    await mkdir(join(project, 'frontend/src'), { recursive: true });
+    await writeFile(join(project, 'backend/src/main/java/com/example/users/UsersService.java'), 'package com.example.users;\n\n@Service\npublic class UsersService {}\n');
+    await writeFile(join(project, 'backend/src/main/java/com/example/admin/AdminController.java'), 'package com.example.admin;\n\npublic class AdminController {}\n');
+    await writeFile(join(project, 'backend/src/it/java/com/example/it/ItCheck.java'), 'package com.example.it;\n\npublic class ItCheck {}\n');
+    await writeFile(join(project, 'frontend/src/app.ts'), 'export function render(): void {}\n');
+    const configPath = join(project, '.ai-workflow/project.yml');
+    const configBytes = [
+      'version: 1',
+      'modules:',
+      '  - id: backend',
+      '    path: backend',
+      '    languages: [java]',
+      '    source_roots: [src/main/java, src/it/java]',
+      '    test_roots: []',
+      'features:',
+      '  - id: users',
+      '    name: Users',
+      '    module_root: backend',
+      '    paths: [backend/src/main/java/com/example/users]',
+      ''
+    ].join('\n');
+    await writeFile(configPath, configBytes);
+
+    await initializeProject(project);
+
+    const index = JSON.parse(await readFile(join(project, '.ai-workflow/index/navigation.json'), 'utf8')) as NavigationIndex;
+    const backend = index.module_roots.find((root) => root.id === 'backend');
+    expect(backend).toMatchObject({ id: 'backend', path: 'backend', language: 'java', entry_kinds: ['file'] });
+    const users = index.features.find((feature) => feature.id === 'users');
+    expect(users).toMatchObject({ module_root: 'backend', entries: ['backend/src/main/java/com/example/users/UsersService.java'] });
+    expect(index.features.some((feature) => feature.id === 'com.example.admin')).toBe(true);
+    expect(index.features.some((feature) => feature.id === 'com.example.it')).toBe(true);
+    expect(index.features.some((feature) => feature.id === 'frontend' && feature.entries.includes('frontend/src/app.ts'))).toBe(true);
+
+    const { stdout } = await exec('pnpm', ['exec', 'tsx', 'src/cli.ts', 'context', 'validate', '--project', project, '--all']);
+    expect(JSON.parse(stdout)).toEqual({ valid: true, errors: [] });
+
+    const report = await updateProject(project);
+    expect(report.skipped).toEqual(['.ai-workflow/index/navigation.json', '.ai-workflow/index/navigation.md']);
+    expect(await readFile(configPath, 'utf8')).toBe(configBytes);
   });
 });
