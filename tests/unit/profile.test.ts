@@ -45,4 +45,13 @@ agents:
     await expect(loadProfile(home, '../invalid')).rejects.toThrow(/Invalid profile name/);
     await expect(loadProfile(home, 'invalid')).rejects.toThrow(/Invalid profile/);
   });
+
+  it('rejects a legacy task-worker profile and names the removed role', async () => {
+    const home = await temporary('ai-workflow-profile-legacy-');
+    const directory = join(home, '.config/ai-workflow/profiles');
+    await mkdir(directory, { recursive: true });
+    await writeFile(join(directory, 'legacy.yaml'), 'version: 1.0.0\nagents:\n  task-worker:\n    codex:\n      model: gpt-5.6\n      reasoning_effort: low\n');
+
+    await expect(loadProfile(home, 'legacy')).rejects.toThrow(/task-worker/);
+  });
 });

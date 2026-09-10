@@ -12,7 +12,7 @@ describe('native prompt contracts', () => {
       expect(text.split('\n').length).toBeGreaterThan(50);
     }
   });
-  it('gives all ten roles structured permissions and output contracts', async () => { const root = packagePath('templates', 'agents'); const files = (await readdir(root)).filter((name) => name.endsWith('.md')); expect(files).toHaveLength(10); for (const name of files) { const text = await readFile(join(root, name), 'utf8'); expect(text).toMatch(/## (Mission|Mission and authority)/); expect(text).toMatch(/## (Permissions|Prohibited actions)/); expect(text).toMatch(/## Output checklist/); } });
+  it('gives all nine roles structured permissions and output contracts', async () => { const root = packagePath('templates', 'agents'); const files = (await readdir(root)).filter((name) => name.endsWith('.md')); expect(files).toHaveLength(9); for (const name of files) { const text = await readFile(join(root, name), 'utf8'); expect(text).toMatch(/## (Mission|Mission and authority)/); expect(text).toMatch(/## (Permissions|Prohibited actions)/); expect(text).toMatch(/## Output checklist/); } });
   it('requires numbered clarification questions and explained recommended options', async () => {
     const text = await readFile(packagePath('templates', 'skills', 'planning', 'SKILL.md'), 'utf8');
     expect(text).toMatch(/问题 N：/);

@@ -11,7 +11,6 @@ const roleHeadings = {
   researcher: '# Researcher',
   'spec-review': '# Spec Review',
   'standards-review': '# Standards Review',
-  'task-worker': '# Task Worker',
   test: '# Test'
 } as const;
 

@@ -11,7 +11,7 @@
     "plan_id": { "type": "string", "minLength": 1 },
     "task_id": { "type": "string" },
     "feature": { "type": "string" },
-    "role": { "enum": ["file-explorer", "git-operator", "task-worker", "backend", "frontend", "test", "standards-review", "spec-review", "researcher", "documentation-maintainer"] },
+    "role": { "enum": ["file-explorer", "git-operator", "backend", "frontend", "test", "standards-review", "spec-review", "researcher", "documentation-maintainer"] },
     "objective": { "type": "string", "minLength": 1 },
     "cwd": { "type": "string", "minLength": 1 },
     "read_paths": { "type": "array", "uniqueItems": true, "items": { "type": "string" } },
