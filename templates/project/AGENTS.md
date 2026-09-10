@@ -27,7 +27,7 @@ These instructions are authoritative for every sub-agent. Installed role files c
   sub-agent per task in dependency order, and small bugs or requests delegate
   as one complete unit. The orchestrator continues automatically while no
   blocker, failed gate, missing authorization or user decision exists.
-- Task Worker coordinates one task and delegates implementation, testing and Git work; it does not edit files, search broadly, run tests or run Git.
+- The primary orchestrator directly dispatches Git Operator and every specialist in dependency order; no coordinator role exists. For split and unsplit coding it directly dispatches Git Operator, File Explorer, the implementation role, Test, both reviews, an optional repair, and finalization.
 - After Coding implementation completes, exactly one Spec Review and one Standards Review must run before any worktree merge. Findings go to the user for repair selection; unresolved review findings block merge.
 
 ## Agent permissions

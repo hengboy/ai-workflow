@@ -6,7 +6,7 @@ describe('global agent guidance', () => {
   it('keeps the root instructions authoritative for routing and boundaries', async () => {
     const agents = await readFile(packagePath('AGENTS.md'), 'utf8');
     const claude = await readFile(packagePath('CLAUDE.md'), 'utf8');
-    const required = ['Planning', 'Plan-to-tasks', 'Coding', 'Backend', 'Frontend', 'Test', 'File Explorer', 'Researcher', 'Documentation Maintainer', 'Spec Review', 'Standards Review', 'Git Operator', 'Task Worker'];
+    const required = ['Planning', 'Plan-to-tasks', 'Coding', 'Backend', 'Frontend', 'Test', 'File Explorer', 'Researcher', 'Documentation Maintainer', 'Spec Review', 'Standards Review', 'Git Operator'];
     for (const role of required) {
       expect(agents).toContain(role);
       expect(claude).toContain(role);
@@ -27,5 +27,16 @@ describe('global agent guidance', () => {
     expect(claude).toContain('Spec Review');
     expect(agents).toContain('TDD');
     expect(claude).toContain('TDD');
+  });
+
+  it('requires the primary orchestrator to directly dispatch Git Operator and forbids specialist Task Worker delegation', async () => {
+    const agents = await readFile(packagePath('AGENTS.md'), 'utf8');
+    const claude = await readFile(packagePath('CLAUDE.md'), 'utf8');
+    for (const text of [agents, claude]) {
+      // REQ-002 / AC-003: the primary orchestrator directly dispatches Git Operator.
+      expect(text).toMatch(/directly\s+dispatch(?:es|ing)?\s+Git\s+Operator|primary orchestrator\s+directly\s+dispatches\s+Git\s+Operator/i);
+      // REQ-002: no specialist (or Task Worker) is described as dispatching children.
+      expect(text).not.toMatch(/Task\s+Worker\s+(?:coordinates|delegates)|delegates\s+(?:implementation|work)\s+and\s+Git/i);
+    }
   });
 });

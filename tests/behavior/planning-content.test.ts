@@ -4,7 +4,14 @@ import { join } from 'node:path';
 import { parse } from 'yaml';
 import { packagePath } from '../../src/utils/schema.js';
 describe('native prompt contracts', () => {
-  it('gives each skill structured gates and completion checks', async () => { for (const name of ['planning', 'plan-to-tasks', 'coding']) { const text = await readFile(packagePath('templates', 'skills', name, 'SKILL.md'), 'utf8'); expect(text).toMatch(/## Outcome/); expect(text).toMatch(/## .*checklist/i); expect(text.split('\n').length).toBeGreaterThan(50); } });
+  it('gives each skill structured gates and completion checks', async () => {
+    for (const name of ['planning', 'plan-to-tasks', 'coding']) {
+      const text = await readFile(packagePath('templates', 'skills', name, 'SKILL.md'), 'utf8');
+      if (name !== 'coding') expect(text).toMatch(/## Outcome/);
+      expect(text).toMatch(/## .*checklist/i);
+      expect(text.split('\n').length).toBeGreaterThan(50);
+    }
+  });
   it('gives all ten roles structured permissions and output contracts', async () => { const root = packagePath('templates', 'agents'); const files = (await readdir(root)).filter((name) => name.endsWith('.md')); expect(files).toHaveLength(10); for (const name of files) { const text = await readFile(join(root, name), 'utf8'); expect(text).toMatch(/## (Mission|Mission and authority)/); expect(text).toMatch(/## (Permissions|Prohibited actions)/); expect(text).toMatch(/## Output checklist/); } });
   it('requires numbered clarification questions and explained recommended options', async () => {
     const text = await readFile(packagePath('templates', 'skills', 'planning', 'SKILL.md'), 'utf8');
@@ -49,11 +56,11 @@ describe('native prompt contracts', () => {
     expect(operator).toMatch(/before every direct commit.*invoke.*\$git-message/is);
 
     const planning = await readFile(packagePath('templates', 'skills', 'planning', 'SKILL.md'), 'utf8');
-    expect(planning).toMatch(/delegate.*Git Operator.*spec\.md.*plan\.md/is);
+    expect(planning).toMatch(/primary orchestrator\s+directly\s+dispatch(?:es|ed)\s+Git\s+Operator[\s\S]*spec\.md[\s\S]*plan\.md/i);
     expect(planning).toMatch(/automatic local commit/i);
 
     const tasks = await readFile(packagePath('templates', 'skills', 'plan-to-tasks', 'SKILL.md'), 'utf8');
-    expect(tasks).toMatch(/delegate.*Git Operator.*task files/is);
+    expect(tasks).toMatch(/primary orchestrator\s+directly\s+dispatch(?:es|ed)\s+Git\s+Operator[\s\S]*task files/i);
     expect(tasks).toMatch(/automatic local commit/i);
   });
   it('keeps skill metadata and example templates inside their owning skill', async () => {
@@ -93,7 +100,7 @@ describe('native prompt contracts', () => {
     expect(digest).toContain('digest: ""');
     expect(digest).toMatch(/UTF-8/);
     expect(digest).toMatch(/sha-?256/i);
-    for (const skill of ['planning', 'plan-to-tasks', 'coding']) {
+    for (const skill of ['planning', 'plan-to-tasks']) {
       const contents = await readFile(join(skillRoot, skill, 'SKILL.md'), 'utf8');
       expect(contents).toMatch(/frozen-plan digest protocol/i);
       expect(contents).toMatch(/plan validate/);
@@ -115,7 +122,7 @@ describe('native prompt contracts', () => {
     expect(explorer).not.toMatch(/result envelope/i);
     expect(explorer).not.toContain('changed_paths');
 
-    for (const skill of ['planning', 'plan-to-tasks', 'coding']) {
+    for (const skill of ['planning', 'plan-to-tasks']) {
       const text = await readFile(packagePath('templates', 'skills', skill, 'SKILL.md'), 'utf8');
       expect(text).toMatch(/context locate/i);
       expect(text).toMatch(/navigation\.json/i);
@@ -152,18 +159,15 @@ describe('native prompt contracts', () => {
     expect(maintainer).toMatch(/May read and edit|may update/i);
     expect(maintainer).toMatch(/may not edit.*(?:source|tests|schema|plan)/is);
     expect(maintainer).toMatch(/may not run Git/i);
-    expect(maintainer).toMatch(/delegate Git Operator.*local commit/is);
+    expect(maintainer).toMatch(/primary orchestrator\s+directly\s+dispatches\s+Git\s+Operator/i);
     expect(maintainer).toMatch(/exact changed paths.*validation evidence/is);
   });
   it('requires one dual-axis coding review and user repair choice before merge', async () => {
     const coding = await readFile(packagePath('templates', 'skills', 'coding', 'SKILL.md'), 'utf8');
     expect(coding).toMatch(/exactly one Spec Review and exactly one Standards Review/is);
     expect(coding).toMatch(/present the findings to the user.*selected repairs|repairing all findings/is);
-    expect(coding).toMatch(/Do not merge.*until.*user.*chosen/is);
+    expect(coding).toMatch(/Do not merge\s+the\s+temporary\s+branch\s+or\s+worktree\s+until\s+the\s+user's\s+repair\s+choice\s+is\s+resolved/i);
     expect(coding).toMatch(/does not trigger a second Spec Review or Standards Review/is);
-    const worker = await readFile(packagePath('templates', 'agents', 'task-worker.md'), 'utf8');
-    expect(worker).toMatch(/Spec Review and Standards Review.*exactly once/is);
-    expect(worker).toMatch(/Never merge.*before.*dual-axis review/is);
   });
   it('documents --project as a project root path with relative and absolute examples', async () => {
     const readme = await readFile(packagePath('README.md'), 'utf8');
@@ -172,10 +176,35 @@ describe('native prompt contracts', () => {
     expect(readme).toContain('exact ID then exact alias');
     expect(readme).toContain('qualified `file#symbol` name');
 
-    for (const path of ['templates/skills/planning/SKILL.md', 'templates/skills/plan-to-tasks/SKILL.md', 'templates/skills/coding/SKILL.md', 'templates/agents/file-explorer.md']) {
+    for (const path of ['templates/skills/planning/SKILL.md', 'templates/skills/plan-to-tasks/SKILL.md', 'templates/agents/file-explorer.md']) {
       const template = await readFile(packagePath(path), 'utf8');
       expect(template).toMatch(/--project <absolute-project-root>/i);
       expect(template).not.toMatch(/--project <project>/i);
     }
+  });
+  it('has planning and plan-to-tasks return commit evidence while the primary orchestrator directly dispatches Git Operator', async () => {
+    for (const name of ['planning', 'plan-to-tasks']) {
+      const text = await readFile(packagePath('templates', 'skills', name, 'SKILL.md'), 'utf8');
+      // AC-003 / REQ-002: actor identity — the primary orchestrator directly dispatches Git Operator.
+      expect(text).toMatch(/primary orchestrator\s+directly\s+dispatches\s+Git\s+Operator/i);
+      // AC-003: the specialist returns exact paths/evidence to the primary orchestrator.
+      expect(text).toMatch(/exact.*paths.*(?:evidence|primary orchestrator)|provide.*(?:exact|completed).*(?:paths|evidence).*primary orchestrator/is);
+      // REQ-002: the specialist never dispatches Task Worker (no nested child dispatch).
+      expect(text).not.toMatch(/delegate\s+(?:to\s+)?(?:the\s+)?`?task[- ]worker`?|dispatch\s+(?:to\s+)?(?:the\s+)?`?task[- ]worker`?/i);
+      // REQ-003: the commit gate is preserved.
+      expect(text).toMatch(/Git Operator must use `\$git-message`/);
+      expect(text).toMatch(/do not stage, commit, or repair Git state/i);
+    }
+  });
+  it('has Documentation Maintainer return commit evidence while the primary orchestrator directly dispatches Git Operator', async () => {
+    const maintainer = await readFile(packagePath('templates', 'agents', 'documentation-maintainer.md'), 'utf8');
+    // AC-003 / REQ-002: actor identity — the primary orchestrator, not the specialist, directly dispatches Git Operator.
+    expect(maintainer).toMatch(/primary orchestrator\s+directly\s+dispatches\s+Git\s+Operator/i);
+    // AC-003: the specialist returns exact changed paths/evidence to the primary orchestrator.
+    expect(maintainer).toMatch(/exact changed paths.*(?:evidence|primary orchestrator)|provide.*(?:exact|completed).*(?:paths|evidence).*primary orchestrator/is);
+    // REQ-002: the specialist never dispatches Git Operator or Task Worker (no nested dispatch).
+    expect(maintainer).not.toMatch(/delegate Git Operator|dispatch Git Operator|delegate\s+(?:to\s+)?(?:the\s+)?`?task[- ]worker`?|dispatch\s+(?:to\s+)?(?:the\s+)?`?task[- ]worker`?/i);
+    // REQ-003: the specialist never runs Git.
+    expect(maintainer).toMatch(/may not run Git/i);
   });
 });

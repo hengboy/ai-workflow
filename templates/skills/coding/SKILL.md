@@ -25,6 +25,9 @@ non-blocked delegated step remains.
 - When a test must be written or changed, delegate that test work to the
   `test` sub-agent first. The implementation sub-agent may consume the test
   and fix production code, but must not write the test itself.
+- The primary orchestrator directly dispatches Git Operator for every per-step
+  commit, merge and finalization; Git Operator is the only role allowed to run
+  Git and specialists never dispatch children.
 
 ## Preconditions
 

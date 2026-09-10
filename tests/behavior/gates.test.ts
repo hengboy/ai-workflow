@@ -25,6 +25,7 @@ describe('write gates', () => {
     expect(report.skipped).toEqual([]);
     expect(report.unchanged).toEqual([
       'AGENTS.md',
+      'CLAUDE.md',
       'MEMORY.md',
       '.ai-workflow/index/navigation.json',
       '.ai-workflow/index/navigation.md',
