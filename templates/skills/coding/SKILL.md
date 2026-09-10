@@ -76,15 +76,18 @@ commit succeeds.
 6. Run the task's complete validation commands and report every changed path and
    check result.
 
-After all steps, run exactly one Spec Review and exactly one Standards Review in
-parallel against the completed implementation. Collect every finding from both
-axes and present the findings to the user for a choice of selected repairs or
-repairing all findings. Do not merge the temporary branch or worktree until the
-user has chosen and the selected repairs have been completed and verified. A
+After all implementation steps are complete, delegate the complete authorized
+validation to the `test` sub-agent and wait for a passing result. Do not dispatch
+the dual-axis reviews while this validation is pending or failing. Only after
+the `test` sub-agent has verified the completed implementation may you run
+exactly one Spec Review and exactly one Standards Review in parallel against it.
+Collect every finding from both axes and present the findings to the user for a
+choice of selected repairs or repairing all findings. Do not merge the
+temporary branch or worktree until the user's repair choice is resolved. A
 review repair does not trigger a second Spec Review or Standards Review. Only
 after this single dual-axis review gate is resolved may Git Operator merge the
-temporary branch back, rerun affected checks, and remove only the owned worktree
-and branch. Never stage unrelated user changes.
+temporary branch back, rerun affected checks, and remove only the owned
+worktree and branch. Never stage unrelated user changes.
 
 ## Test Boundaries
 

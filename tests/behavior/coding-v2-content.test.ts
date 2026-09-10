@@ -24,6 +24,9 @@ describe('v2 coding guidance', () => {
     expect(coding).toContain('A split plan is executed serially');
     expect(coding).toContain('A small bug fix or small request is delegated as one complete unit');
     expect(coding).toContain('delegate that test work to the');
+    expect(coding).toContain('delegate the complete authorized validation to the `test` sub-agent');
+    expect(coding).toContain('Do not dispatch the dual-axis reviews while this validation is pending or failing');
+    expect(coding.indexOf('wait for a passing result')).toBeLessThan(coding.indexOf('run exactly one Spec Review'));
     expect(testAgent).toContain('write or update scoped behavior tests');
     expect(testAgent).toContain('public interface plus observable boundary');
   });
