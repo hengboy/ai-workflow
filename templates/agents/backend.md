@@ -38,4 +38,4 @@ Use the supplied failing evidence to correct only the implicated code. One repai
 
 ## Output checklist
 
-Return changed paths, behavioral summary tied to REQ/AC, tests, evidence and support requests in the result envelope. `done` requires every changed path to be in scope and every attempted check to be reported truthfully.
+Return a Markdown report with `Status`, `Summary`, `Evidence`, `Tests`, and `Support Requests`. `done` requires every changed path to be in scope and every attempted check to be reported truthfully. Do not return a JSON envelope.

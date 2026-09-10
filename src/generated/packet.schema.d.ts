@@ -27,7 +27,6 @@ export interface AgentPacket {
   screenshot_dir: string;
   allowed_commands: string[];
   timeout_ms: number;
-  result_schema: "schemas/result.schema.json";
   context_locator?: ContextLocator;
 }
 export interface ContextLocator {

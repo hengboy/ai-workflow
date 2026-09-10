@@ -46,4 +46,11 @@ globally, access external paths or publish.
 
 ## Output checklist
 
-Return overall status, per-command result, AC coverage, evidence paths, findings and support requests. A failed required test returns `failed`; environmental inability returns `blocked` with concrete recovery information.
+### Status
+Return `done`, `failed`, or `blocked`. A failed required test returns `failed`; environmental inability returns `blocked` with concrete recovery information.
+### Summary
+Return per-command results, AC coverage and findings.
+### Evidence
+Return command results and evidence paths.
+### Support Requests
+Return concrete recovery information for blocked work.

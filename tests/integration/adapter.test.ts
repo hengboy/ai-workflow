@@ -5,7 +5,7 @@ import { invokeHost } from '../../src/adapters/process.js';
 import { temporary } from '../helpers.js';
 import type { AgentPacket } from '../../src/generated/packet.schema.js';
 
-function packet(cwd: string, role: AgentPacket['role'] = 'backend'): AgentPacket { return { packet_version: '1.0.0', run_id: 'run', plan_id: '20260831-example', task_id: 'task-001-example', role, objective: 'test', cwd, read_paths: [], write_paths: [], evidence: [], screenshot_dir: '.ai-workflow/plans/20260831-example/screenshot/', allowed_commands: [], timeout_ms: 5000, result_schema: 'schemas/result.schema.json' }; }
+function packet(cwd: string, role: AgentPacket['role'] = 'backend'): AgentPacket { return { packet_version: '1.0.0', run_id: 'run', plan_id: '20260831-example', task_id: 'task-001-example', role, objective: 'test', cwd, read_paths: [], write_paths: [], evidence: [], screenshot_dir: '.ai-workflow/plans/20260831-example/screenshot/', allowed_commands: [], timeout_ms: 5000 }; }
 describe('host adapter', () => {
   it('normalizes the legacy File Explorer answer and paths without losing information', async () => {
     const root = await temporary();

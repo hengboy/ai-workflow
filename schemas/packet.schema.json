@@ -4,7 +4,7 @@
   "title": "AgentPacket",
   "type": "object",
   "additionalProperties": false,
-  "required": ["packet_version", "run_id", "plan_id", "role", "objective", "cwd", "read_paths", "write_paths", "evidence", "screenshot_dir", "allowed_commands", "timeout_ms", "result_schema"],
+  "required": ["packet_version", "run_id", "plan_id", "role", "objective", "cwd", "read_paths", "write_paths", "evidence", "screenshot_dir", "allowed_commands", "timeout_ms"],
   "properties": {
     "packet_version": { "const": "1.0.0" },
     "run_id": { "type": "string", "minLength": 1 },
@@ -20,7 +20,6 @@
     "screenshot_dir": { "type": "string", "pattern": "^\\.ai-workflow/plans/.+/screenshot/?$" },
     "allowed_commands": { "type": "array", "uniqueItems": true, "items": { "type": "string" } },
     "timeout_ms": { "type": "integer", "minimum": 1000, "maximum": 3600000 },
-    "result_schema": { "const": "schemas/result.schema.json" },
     "context_locator": { "$ref": "#/definitions/contextLocator" }
   },
   "definitions": {

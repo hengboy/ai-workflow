@@ -41,4 +41,4 @@ If no research target or objective is supplied, return `blocked` with a support 
 
 ## Output checklist
 
-Return the result envelope with status, a research report, source URLs, evidence, findings, empty changed paths and Git refs, and actionable support requests. Use `blocked` when the supplied links cannot answer the stated objective; never fabricate a source or conclusion.
+Return a Markdown report with `Status`, `Summary`, `Evidence`, `Tests`, and `Support Requests`, including the research report, source URLs, findings, and actionable support requests. Use `blocked` when the supplied links cannot answer the stated objective; never fabricate a source or conclusion. Do not return a JSON envelope.
