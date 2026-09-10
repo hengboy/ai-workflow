@@ -22,14 +22,11 @@ describe('write gates', () => {
     const report = await updateProject(root);
 
     expect(report.updated).toEqual([]);
-    expect(report.skipped).toEqual([]);
-    expect(report.unchanged).toEqual([
-      'AGENTS.md',
-      'CLAUDE.md',
-      'MEMORY.md',
+    expect(report.skipped).toEqual([
       '.ai-workflow/index/navigation.json',
       '.ai-workflow/index/navigation.md',
     ]);
+    expect(report.unchanged).toEqual(['AGENTS.md', 'CLAUDE.md', 'MEMORY.md']);
   });
   it('skips a managed file that the project user changed', async () => {
     const root = await temporary();
@@ -38,7 +35,14 @@ describe('write gates', () => {
 
     const report = await updateProject(root);
 
-    expect(report.skipped).toEqual(['MEMORY.md']);
+    expect(report.updated).toEqual([]);
+    expect(report.skipped).toHaveLength(3);
+    expect(report.skipped).toEqual(expect.arrayContaining([
+      'MEMORY.md',
+      '.ai-workflow/index/navigation.json',
+      '.ai-workflow/index/navigation.md',
+    ]));
+    expect(report.unchanged).toEqual(['AGENTS.md', 'CLAUDE.md']);
     expect(await (await import('node:fs/promises')).readFile(join(root, 'MEMORY.md'), 'utf8')).toBe('project notes');
   });
   it('replaces an unmodified older managed template with the current template', async () => {

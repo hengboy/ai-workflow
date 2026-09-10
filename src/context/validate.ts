@@ -416,6 +416,11 @@ export async function validateContext(project: string): Promise<ContextValidatio
   return { valid: result.errors.length === 0, errors: result.errors };
 }
 
+export async function validateNavigationModel(project: string, index: NavigationIndex): Promise<ContextValidation> {
+  const { errors } = await validateIndex(resolveProjectRoot(project), undefined, index);
+  return { valid: errors.length === 0, errors };
+}
+
 export async function verifyNavigation(project: string, featureId: string): Promise<ContextValidation> {
   const root = resolveProjectRoot(project); const result = await validateIndex(root, new Set([featureId]));
   if (!result.index) return { valid: false, errors: result.errors };

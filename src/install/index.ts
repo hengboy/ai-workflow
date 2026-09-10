@@ -1,10 +1,15 @@
 import { homedir } from 'node:os';
 import { basename, dirname, extname, join, relative, resolve } from 'node:path';
-import { readFile, rm } from 'node:fs/promises';
+import { readFile, rm, rmdir, writeFile } from 'node:fs/promises';
 import { atomicWrite, exists, readJson, writeJson } from '../utils/fs.js';
 import { sha256 } from '../utils/hash.js';
 import { renderHost, renderSkills, type RenderedFile } from './render.js';
 import { loadProfile, type Profile } from '../profile/index.js';
+import { renderNavigation } from '../context/navigation.js';
+import { scanProject } from '../context/discovery/scanner.js';
+import { loadProjectConfig } from '../context/discovery/project-config.js';
+import { buildNavigation } from '../context/discovery/builder.js';
+import { validateNavigationModel } from '../context/validate.js';
 import type { Host } from '../workflow/types.js';
 
 interface ManifestFile { path: string; digest: string; kind: 'file' | 'directory' }
@@ -29,6 +34,8 @@ export interface ProfileActivationReport {
 const manifestRelative = '.config/ai-workflow/install-manifest.json';
 const activeProfileRelative = '.config/ai-workflow/active-profile';
 const projectManifestRelative = '.ai-workflow/project-manifest.json';
+const navigationJsonRelative = '.ai-workflow/index/navigation.json';
+const navigationMarkdownRelative = '.ai-workflow/index/navigation.md';
 const marketplaceRelative = '.agents/plugins/marketplace.json';
 const skillsRelative = '.agents/skills';
 const projectTemplates = ['AGENTS.md', 'CLAUDE.md', 'MEMORY.md', 'navigation.json', 'navigation.md'] as const;
@@ -154,20 +161,63 @@ export async function uninstall(hosts: Host[], options: { home?: string } = {}):
   await writeJson(join(home, manifestRelative), manifest); return manifest;
 }
 
+async function removeEmptyDirectory(path: string): Promise<void> {
+  try { await rmdir(path); } catch { /* missing or not empty */ }
+}
+
 export async function initializeProject(project: string): Promise<string[]> {
-  const root = resolve(project); const created: string[] = [];
+  const root = resolve(project);
   const templates = await projectTemplateContents();
-  const conflicts: Array<{ target: string; contents: string }> = []; for (const item of templates) if (await exists(join(root, item.target))) conflicts.push(item);
+  const conflicts: Array<{ target: string; contents: string }> = [];
+  for (const item of templates) if (await exists(join(root, item.target))) conflicts.push(item);
   if (conflicts.length) throw new Error(`Initialization conflicts; no files written. Merge these templates manually:\n${conflicts.map((item) => `${item.target}\n--- proposed ---\n${item.contents}`).join('\n')}`);
-  for (const item of templates) { await atomicWrite(join(root, item.target), item.contents); created.push(item.target); }
-  const ignorePath = join(root, '.gitignore'); const ignore = await exists(ignorePath) ? await readFile(ignorePath, 'utf8') : '';
-  const lines = ignore.split(/\r?\n/).map((line) => line.trim());
-  const additions: string[] = [];
-  if (!lines.some((line) => line === '.ai-workflow' || line === '.ai-workflow/')) additions.push('.ai-workflow/');
-  if (!lines.includes('*.log')) additions.push('*.log');
-  if (additions.length) { await atomicWrite(ignorePath, `${ignore.trimEnd()}${ignore ? '\n' : ''}${additions.join('\n')}\n`); created.push('.gitignore'); }
-  await writeJson(join(root, projectManifestRelative), { version: 1, files: Object.fromEntries(templates.map((item) => [item.target, sha256(item.contents)])) } satisfies ProjectManifest);
-  created.push(projectManifestRelative);
+
+  const facts = await scanProject(root);
+  const configResult = await loadProjectConfig(root, facts.files);
+  if (configResult.errors.length) throw new Error(configResult.errors.join('\n'));
+  const { index } = await buildNavigation(root, facts, configResult.config);
+  const validation = await validateNavigationModel(root, index);
+  if (!validation.valid) throw new Error(validation.errors.join('\n'));
+
+  const proposed = new Map(templates.map((item) => [item.target, item.contents]));
+  proposed.set(navigationJsonRelative, `${JSON.stringify(index, null, 2)}\n`);
+  proposed.set(navigationMarkdownRelative, renderNavigation(index));
+  const published = projectTargets().map(({ target }) => ({ target, contents: proposed.get(target) as string }));
+
+  const ignorePath = join(root, '.gitignore');
+  const ignoreExisted = await exists(ignorePath);
+  const ignoreOriginal = ignoreExisted ? await readFile(ignorePath, 'utf8') : '';
+  const indexDirectory = join(root, '.ai-workflow/index');
+  const aiWorkflowDirectory = join(root, '.ai-workflow');
+  const indexDirectoryExisted = await exists(indexDirectory);
+  const aiWorkflowDirectoryExisted = await exists(aiWorkflowDirectory);
+  const manifestPath = join(root, projectManifestRelative);
+  const created: string[] = [];
+  const writtenFiles: string[] = [];
+  try {
+    for (const item of published) {
+      await atomicWrite(join(root, item.target), item.contents);
+      writtenFiles.push(join(root, item.target));
+      created.push(item.target);
+    }
+    const lines = ignoreOriginal.split(/\r?\n/).map((line) => line.trim());
+    const additions: string[] = [];
+    if (!lines.some((line) => line === '.ai-workflow' || line === '.ai-workflow/')) additions.push('.ai-workflow/');
+    if (!lines.includes('*.log')) additions.push('*.log');
+    if (additions.length) { await atomicWrite(ignorePath, `${ignoreOriginal.trimEnd()}${ignoreOriginal ? '\n' : ''}${additions.join('\n')}\n`); created.push('.gitignore'); }
+    const files: Record<string, string> = {};
+    for (const item of published) files[item.target] = sha256(item.contents);
+    await writeJson(manifestPath, { version: 1, files } satisfies ProjectManifest);
+    created.push(projectManifestRelative);
+  } catch (error) {
+    for (const path of writtenFiles) await rm(path, { force: true });
+    await rm(manifestPath, { force: true });
+    if (ignoreExisted) await writeFile(ignorePath, ignoreOriginal);
+    else await rm(ignorePath, { force: true });
+    if (!indexDirectoryExisted) await removeEmptyDirectory(indexDirectory);
+    if (!aiWorkflowDirectoryExisted) await removeEmptyDirectory(aiWorkflowDirectory);
+    throw error;
+  }
   return created;
 }
 
@@ -176,8 +226,9 @@ export async function updateProject(project: string): Promise<{ updated: string[
   if (!(await exists(manifestPath))) throw new Error(`Project update requires ${projectManifestRelative}; initialize a new project or merge the current templates manually.`);
   const manifest = await readJson<ProjectManifest>(manifestPath);
   if (manifest.version !== 1) throw new Error(`Unsupported project manifest version: ${String(manifest.version)}`);
-  const updated: string[] = []; const skipped: string[] = []; const unchanged: string[] = [];
+  const updated: string[] = []; const skipped: string[] = [navigationJsonRelative, navigationMarkdownRelative]; const unchanged: string[] = [];
   for (const template of await projectTemplateContents()) {
+    if (template.target === navigationJsonRelative || template.target === navigationMarkdownRelative) continue;
     const path = join(root, template.target); const expected = manifest.files[template.target];
     if (!expected || !(await exists(path)) || sha256(await readFile(path)) !== expected) { skipped.push(template.target); continue; }
     const digest = sha256(template.contents);

@@ -25,8 +25,8 @@ describe('project CLI', () => {
     expect(await exists(join(project, '.ai-workflow/project-manifest.json'))).toBe(true);
     expect(JSON.parse(stdout)).toMatchObject({
       updated: [],
-      skipped: [],
-      unchanged: ['AGENTS.md', 'CLAUDE.md', 'MEMORY.md', '.ai-workflow/index/navigation.json', '.ai-workflow/index/navigation.md']
+      skipped: ['.ai-workflow/index/navigation.json', '.ai-workflow/index/navigation.md'],
+      unchanged: ['AGENTS.md', 'CLAUDE.md', 'MEMORY.md']
     });
   });
 
