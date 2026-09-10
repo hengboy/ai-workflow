@@ -26,4 +26,4 @@
   block implementation when the plan provides the scope.
 - Agent results use Markdown with `Status`, `Summary`, `Evidence` and `Support
   Requests`; File Explorer uses `Found Paths`. JSON envelopes and
-  `result.schema.json` are prohibited. v2 manifest JSON is unchanged.
+  are prohibited. v2 manifest JSON is unchanged.

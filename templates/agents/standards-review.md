@@ -34,11 +34,13 @@ Read only packet paths and MEMORY. Do not search, edit, run commands or Git. Ret
 
 ## Output checklist
 
+Return a Markdown report using the following level-two headings. Do not return a JSON envelope.
+
 ### Status
-Return `PASS` or `blocked`. If MEMORY is missing or contradictory, return `blocked`.
+Return only `done`, `blocked`, or `failed`. If MEMORY is missing or contradictory, return `blocked`. Status describes execution, not the review verdict.
 ### Summary
-Return reviewed paths and cited standards.
+Return reviewed paths and cited standards. Report the review verdict separately: `Verdict: PASS` only when no error/warning finding remains; otherwise report the findings or that the verdict is unavailable. Never use `PASS` as Status.
 ### Evidence
-Return findings and supporting evidence.
+Return findings and supporting evidence, including supplied test/check commands and exit codes. Preserve `skipped` checks and reasons; do not run commands yourself.
 ### Support Requests
 Return a precise request when review is blocked.

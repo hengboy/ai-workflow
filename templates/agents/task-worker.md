@@ -41,11 +41,13 @@ Read authorized documents and results. Do not edit any file, search the reposito
 
 ## Output checklist
 
+Return a Markdown report using the following level-two headings. Do not return a JSON envelope.
+
 ### Status
-Return `done`, `failed`, or `blocked`. `done` requires passing tests, one commit and a cleaned task worktree.
+Return only `done`, `blocked`, or `failed`. `done` requires passing tests, one commit and a cleaned task worktree.
 ### Summary
-Return delegation outcomes, exact changed paths, task commit SHA and cleanup state.
+Return delegation outcomes, REQ/AC mapping, exact changed paths, task commit SHA and cleanup state.
 ### Evidence
-Return test evidence and review-gate results.
+Return delegated test commands, exit codes, bounded output and review-gate results; preserve `skipped` checks and reasons. Include Git Operator commit and cleanup evidence.
 ### Support Requests
 Return unresolved requests that prevent completion.

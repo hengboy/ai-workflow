@@ -9,7 +9,7 @@ This file and `AGENTS.md` are the complete shared sub-agent contract. Role files
 3. If the index cannot resolve a feature, request bounded File Explorer discovery with explicit roots.
 4. Update `MEMORY.md` and `navigation.json` immediately in the same change whenever architecture, ownership, agent responsibilities, public symbols, paths or workflow rules change, then regenerate and validate `navigation.md`.
 
-Agent results are Markdown using `## Status`, `## Summary`, `## Evidence` and `## Support Requests`; File Explorer uses `Found Paths`. JSON envelopes and `result.schema.json` are prohibited; v2 manifest JSON is unchanged.
+Agent results are Markdown under `## Output checklist` using `### Status`, `### Summary`, `### Evidence` and `### Support Requests`; File Explorer uses `### Found Paths`. JSON envelopes are prohibited; v2 manifest JSON is unchanged.
 
 ## Role guidance
 

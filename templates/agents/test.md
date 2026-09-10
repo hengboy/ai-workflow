@@ -46,11 +46,13 @@ globally, access external paths or publish.
 
 ## Output checklist
 
+Return a Markdown report using the following level-two headings. Do not return a JSON envelope.
+
 ### Status
-Return `done`, `failed`, or `blocked`. A failed required test returns `failed`; environmental inability returns `blocked` with concrete recovery information.
+Return only `done`, `blocked`, or `failed`. A failed required test returns `failed`; environmental inability returns `blocked` with concrete recovery information.
 ### Summary
-Return per-command results, AC coverage and findings.
+Return exact changed test paths, per-command results, REQ/AC coverage and findings.
 ### Evidence
-Return command results and evidence paths.
+Return each command, exit code, duration, redacted bounded output and evidence paths; mark unexecuted checks as `skipped` with reasons.
 ### Support Requests
 Return concrete recovery information for blocked work.

@@ -39,11 +39,13 @@ In the one repair round, fix only evidenced failures and rerun affected checks. 
 
 ## Output checklist
 
+Return a Markdown report using the following level-two headings. Do not return a JSON envelope.
+
 ### Status
-Return `done`, `failed`, or `blocked`.
+Return only `done`, `blocked`, or `failed`.
 ### Summary
 Return changed paths and REQ/AC mapping.
 ### Evidence
-Return accessibility, visual and test evidence. A screenshot outside the authorized directory is a blocking violation.
+Return accessibility, visual and test evidence, including each attempted check command, exit code and bounded output; mark unexecuted checks as `skipped` with reasons. A screenshot outside the authorized directory is a blocking violation.
 ### Support Requests
 Return actionable requests for missing scope or evidence.

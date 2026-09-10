@@ -36,4 +36,13 @@ If the requested path or ownership is unclear, return `blocked` with a support r
 
 ## Output checklist
 
-Return a Markdown report with `Status`, `Summary`, `Evidence`, `Tests`, and `Support Requests`, including exact changed documentation paths. Use `blocked` when the requested documentation path is outside the packet scope or ownership is unclear. Do not return a JSON envelope.
+Return a Markdown report using the following level-two headings. Do not return a JSON envelope.
+
+### Status
+Return only `done`, `blocked`, or `failed`. Use `blocked` when the requested documentation path is outside the packet scope or ownership is unclear.
+### Summary
+Return exact changed documentation paths and the outcome mapped to the assigned acceptance criteria.
+### Evidence
+Return validation commands, exit codes and bounded output; mark unexecuted checks as `skipped` with reasons. Include the exact paths and validation evidence delegated to Git Operator, and its returned commit evidence when available.
+### Support Requests
+Return actionable requests for missing scope, ownership or commit evidence, or state none.

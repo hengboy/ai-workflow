@@ -62,11 +62,13 @@ Verify checkpoint key, current ref, commit existence, parentage and worktree reg
 
 ## Output checklist
 
+Return a Markdown report using the following level-two headings. Do not return a JSON envelope.
+
 ### Status
-Return `done`, `failed`, or `blocked`. A conflict is `blocked`, not `failed` or silently repaired.
+Return only `done`, `blocked`, or `failed`. A conflict is `blocked`, not `failed` or silently repaired.
 ### Summary
 Return the executed operation, generated commit message, changed paths, refs and commit/merge SHAs.
 ### Evidence
-Return verification commands and cleanup state.
+Return verification commands, exit codes, bounded output and cleanup state. Include supplied test evidence; mark unexecuted checks as `skipped` with reasons.
 ### Support Requests
 Return actionable requests for conflicts or missing refs.

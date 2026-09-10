@@ -38,4 +38,13 @@ Use the supplied failing evidence to correct only the implicated code. One repai
 
 ## Output checklist
 
-Return a Markdown report with `Status`, `Summary`, `Evidence`, `Tests`, and `Support Requests`. `done` requires every changed path to be in scope and every attempted check to be reported truthfully. Do not return a JSON envelope.
+Return a Markdown report using the following level-two headings. Do not return a JSON envelope.
+
+### Status
+Return only `done`, `blocked`, or `failed`. `done` requires every changed path to be in scope and every attempted check to be reported truthfully.
+### Summary
+Return exact changed paths and the behavioral summary mapped to assigned REQ/AC.
+### Evidence
+Return each attempted build/test command, exit code and bounded output; mark unexecuted checks as `skipped` with reasons.
+### Support Requests
+Return actionable requests for missing scope or evidence, or state none.

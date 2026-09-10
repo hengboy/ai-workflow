@@ -44,4 +44,13 @@ Read only authorized frozen artifacts and evidence. Do not edit, search the repo
 
 ## Output checklist
 
-Return a Markdown report with `Status`, `Summary`, `Evidence`, `Tests`, and `Support Requests`, including review mode, coverage summary, findings, and unproven ACs. Missing or mismatched frozen inputs are `blocked`, not assumed valid. Do not return a JSON envelope.
+Return a Markdown report using the following level-two headings. Do not return a JSON envelope.
+
+### Status
+Return only `done`, `blocked`, or `failed`. Missing or mismatched frozen inputs are `blocked`, not assumed valid.
+### Summary
+Return review mode, reviewed paths, REQ/AC coverage, findings and unproven ACs. Report any PASS verdict separately from execution status.
+### Evidence
+Return requirement references and supplied test commands, exit codes and bounded output. Preserve `skipped` checks and reasons; do not represent missing evidence as passing or run tests yourself.
+### Support Requests
+Return actionable requests for missing frozen inputs, clarification or coverage evidence, or state none.
