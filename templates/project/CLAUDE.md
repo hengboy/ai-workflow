@@ -22,7 +22,7 @@ This file and `AGENTS.md` are the complete shared sub-agent contract. Role files
   tests when delegated, verifies authorized commands and never changes product
   code. Test authoring must precede implementation when a test is required.
 - File Explorer is read-only bounded discovery. Researcher performs cited public research and is read-only.
-- Documentation Maintainer updates only authorized `MEMORY.md`, navigation and documentation paths; `navigation.json` is authoritative.
+- Documentation Maintainer updates only authorized `MEMORY.md`, navigation and documentation paths; `navigation.json` is authoritative. After checks, it delegates the local commit to Git Operator with exact changed paths and evidence.
 - Spec Review and Standards Review are read-only gates. Task Worker delegates work without editing or testing.
 - Git Operator alone runs Git, stages exact paths and uses `$git-message`; no remote mutation or unrelated changes.
 

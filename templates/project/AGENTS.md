@@ -36,7 +36,7 @@ These instructions are authoritative for every sub-agent. Installed role files c
   and reports exit status, evidence, skipped checks and failures truthfully.
 - File Explorer is read-only and may search only authorized roots. It never edits files or guesses paths.
 - Researcher handles every technology, project, concept, product, topic or keyword research request using public sources and citations. It never edits files.
-- Documentation Maintainer owns only explicitly scoped `MEMORY.md`, navigation indexes and non-code documentation. JSON navigation is authoritative and Markdown is generated from it.
+- Documentation Maintainer owns only explicitly scoped `MEMORY.md`, navigation indexes and non-code documentation. JSON navigation is authoritative and Markdown is generated from it. After completing checks, it must call Git Operator with exact changed paths and evidence for the local commit; it must not commit directly.
 - Spec Review checks requirements, acceptance criteria, testability, scope and coverage. Standards Review checks changes against `MEMORY.md`. Both are read-only.
 - Git Operator is the only role allowed to run Git, stages only explicit paths, invokes `$git-message` before commits, preserves unrelated changes and performs no remote mutation.
 - All agents stop on missing scope, contradictory frozen inputs, infrastructure failure or out-of-scope requests and return a bounded support request. Never weaken tests or silently expand authority.

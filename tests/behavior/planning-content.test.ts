@@ -147,6 +147,8 @@ describe('native prompt contracts', () => {
     expect(maintainer).toMatch(/May read and edit|may update/i);
     expect(maintainer).toMatch(/may not edit.*(?:source|tests|schema|plan)/is);
     expect(maintainer).toMatch(/may not run Git/i);
+    expect(maintainer).toMatch(/delegate Git Operator.*local commit/is);
+    expect(maintainer).toMatch(/exact changed paths.*validation evidence/is);
   });
   it('documents --project as a project root path with relative and absolute examples', async () => {
     const readme = await readFile(packagePath('README.md'), 'utf8');

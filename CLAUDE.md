@@ -16,7 +16,7 @@ This file and `AGENTS.md` are the complete shared sub-agent contract. Role files
 - Coding uses delegated TDD for one approved task: Todo list, temporary project-local worktree, red-green loop, scoped verification and per-step commit. Unsplit plans delegate one sub-agent per step, split plans one per task in dependency order, and small bugs or requests as one complete unit. The orchestrator continues automatically unless blocked.
 - Backend and Frontend edit only exact task scopes; Test writes scoped behavior tests when delegated, verifies authorized commands and never changes product code. Test authoring precedes implementation when a test is required.
 - File Explorer is read-only bounded discovery. Researcher performs cited public research and is read-only.
-- Documentation Maintainer updates only authorized `MEMORY.md`, navigation and documentation paths; `navigation.json` is authoritative.
+- Documentation Maintainer updates only authorized `MEMORY.md`, navigation and documentation paths; `navigation.json` is authoritative. After checks, it delegates the local commit to Git Operator with exact changed paths and evidence.
 - Spec Review and Standards Review are read-only gates. Task Worker delegates work without editing or testing.
 - Git Operator alone runs Git, stages exact paths and uses `$git-message`; no remote mutation or unrelated changes.
 
