@@ -124,7 +124,10 @@ function declarations(source: ts.SourceFile): Map<string, Array<{ kind: string; 
     else if (ts.isInterfaceDeclaration(statement)) add(statement.name.text, 'interface', visibility);
     else if (ts.isEnumDeclaration(statement)) add(statement.name.text, 'enum', visibility);
     else if (ts.isTypeAliasDeclaration(statement)) add(statement.name.text, 'type', visibility);
-    else if (ts.isVariableStatement(statement)) for (const declaration of statement.declarationList.declarations) if (ts.isIdentifier(declaration.name)) add(declaration.name.text, declaration.initializer && (ts.isArrowFunction(declaration.initializer) || ts.isFunctionExpression(declaration.initializer)) ? 'function' : 'variable', visibility);
+    else if (ts.isVariableStatement(statement)) { for (const declaration of statement.declarationList.declarations) if (ts.isIdentifier(declaration.name)) add(declaration.name.text, declaration.initializer && (ts.isArrowFunction(declaration.initializer) || ts.isFunctionExpression(declaration.initializer)) ? 'function' : 'variable', visibility); }
+    else if (ts.isExportDeclaration(statement) && statement.exportClause && ts.isNamedExports(statement.exportClause)) {
+      for (const element of statement.exportClause.elements) add(element.name.text, statement.isTypeOnly || element.isTypeOnly ? 'type' : 'variable', true);
+    }
   }
   return result;
 }
@@ -177,6 +180,7 @@ async function parseTypeScriptModuleRoot(project: string, root: NavigationModule
     const imports = directImports(file, source, fileSet);
     for (const [name, candidates] of declarations(source)) for (const candidate of candidates) if (candidate.exported) symbols.push({ file, name, kind: candidate.kind });
     for (const statement of source.statements) {
+      if (ts.isExportDeclaration(statement)) continue;
       const declared = declarations(ts.createSourceFile(file, statement.getText(source), ts.ScriptTarget.Latest, true));
       for (const [name, candidates] of declared) for (const candidate of candidates) if (candidate.exported) {
         const from = `${file}#${name}`;

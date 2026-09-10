@@ -74,6 +74,11 @@ function topLevelDeclarations(source: ts.SourceFile): Declaration[] {
             : 'variable';
         result.push({ name: declaration.name.text, kind, exported });
       }
+    } else if (ts.isExportDeclaration(statement) && statement.exportClause && ts.isNamedExports(statement.exportClause)) {
+      for (const element of statement.exportClause.elements) {
+        const kind = statement.isTypeOnly || element.isTypeOnly ? 'type' : 'variable';
+        result.push({ name: element.name.text, kind, exported: true });
+      }
     }
   }
   return result;
@@ -173,6 +178,7 @@ export async function analyzeTypeScriptModule(request: ModuleAnalysisRequest): P
     }
     const imports = directImports(file.path, source, analyzedFiles);
     for (const statement of source.statements) {
+      if (ts.isExportDeclaration(statement)) continue;
       const declared = topLevelDeclarations(ts.createSourceFile(file.path, statement.getText(source), ts.ScriptTarget.Latest, true));
       for (const declaration of declared) {
         if (!declaration.exported) continue;

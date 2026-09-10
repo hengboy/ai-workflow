@@ -214,3 +214,58 @@ describe('navigation structural compatibility', () => {
     expect(result.errors).toContain('Navigation index is stale: added symbol src/workflow/parse.ts#parsePlan');
   });
 });
+
+function reexportNavigation(relationTo = 'src/index.ts#Profile'): NavigationIndex {
+  return {
+    version: 1,
+    module_roots: [{ id: 'src', path: 'src', owner_role: 'shared', responsibility: 'source', language: 'typescript', entry_kinds: ['exported-symbol'] }],
+    features: [{
+      id: 'src', name: 'src', aliases: [], module_root: 'src',
+      entries: ['src/index.ts', 'src/schema.ts', 'src/use.ts'],
+      symbols: [
+        { file: 'src/index.ts', name: 'Profile', kind: 'type', visibility: 'public' },
+        { file: 'src/schema.ts', name: 'Profile', kind: 'interface', visibility: 'public' },
+        { file: 'src/use.ts', name: 'useProfile', kind: 'function', visibility: 'public' }
+      ],
+      related_files: [], tests: [], depends_on: [],
+      relations: [{ kind: 'imports', from: 'src/use.ts#useProfile', to: relationTo }],
+      owner_role: 'shared', responsibility: 'source',
+      read_scope: ['src/index.ts', 'src/schema.ts', 'src/use.ts'], shared_entry: false
+    }]
+  };
+}
+
+async function reexportProject(index = reexportNavigation()): Promise<string> {
+  const project = await temporary('ai-workflow-navigation-semantic-reexport-');
+  await mkdir(join(project, 'src'), { recursive: true });
+  await mkdir(join(project, '.ai-workflow/index'), { recursive: true });
+  await writeFile(join(project, 'src/schema.ts'), 'export interface Profile { name: string; }\n');
+  await writeFile(join(project, 'src/index.ts'), "import type { Profile } from './schema.js';\nexport type { Profile };\n");
+  await writeFile(join(project, 'src/use.ts'), "import type { Profile } from './index.js';\nexport function useProfile(value: Profile): void { void value; }\n");
+  await writeFile(join(project, '.ai-workflow/index/navigation.json'), `${JSON.stringify(index)}\n`);
+  await writeFile(join(project, '.ai-workflow/index/navigation.md'), renderNavigation(index));
+  return project;
+}
+
+describe('navigation re-export recognition', () => {
+  it('recognizes a re-exported public type during full validation', async () => {
+    const project = await reexportProject();
+
+    await expect(validateContext(project)).resolves.toMatchObject({ valid: true, errors: [] });
+  });
+
+  it('accepts a feature relation endpoint that resolves through a re-export', async () => {
+    const project = await reexportProject();
+
+    await expect(verifyNavigation(project, 'src')).resolves.toMatchObject({ valid: true, errors: [] });
+  });
+
+  it('still rejects a feature relation endpoint naming a genuinely missing symbol', async () => {
+    const project = await reexportProject(reexportNavigation('src/index.ts#Missing'));
+
+    const result = await verifyNavigation(project, 'src');
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain('Navigation index is stale: src/index.ts no longer contains Missing');
+  });
+});
