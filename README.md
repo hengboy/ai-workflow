@@ -22,11 +22,11 @@ ai-workflow install --host codex|claude|opencode|all
 ai-workflow uninstall --host codex|claude|opencode|all
 ai-workflow profile activate <name>
 ai-workflow init /path/to/project
-ai-workflow update /path/to/project
+ai-workflow update [/path/to/project]
 ai-workflow plan validate --plan .ai-workflow/plans/<planId>
-ai-workflow context validate --project . --all
-ai-workflow context validate --project . --feature <id>
-ai-workflow context locate --project . --feature <id> --verify
+ai-workflow context validate [--project .] --all
+ai-workflow context validate [--project .] --feature <id>
+ai-workflow context locate [--project .] --feature <id> --verify
 ai-workflow context candidate --project . --output <candidate.json> --task-target <id> --root <module-root> --path <changed-file>
 ai-workflow context refresh --project . --candidate <candidate.json> --write
 ai-workflow context discover --project . --packet <fallback.json>

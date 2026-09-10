@@ -8,6 +8,14 @@ import { temporary } from '../helpers.js';
 const exec = promisify(execFile);
 
 describe('project CLI', () => {
+  it('initializes the current directory when no project is provided', async () => {
+    const project = await temporary('ai-workflow-project-cli-current-');
+
+    await exec(process.execPath, [join(process.cwd(), 'node_modules/tsx/dist/cli.mjs'), join(process.cwd(), 'src/cli.ts'), 'init'], { cwd: project });
+
+    expect(await exists(join(project, '.ai-workflow/project-manifest.json'))).toBe(true);
+  });
+
   it('initializes a project with managed history and reports an unchanged update', async () => {
     const project = await temporary('ai-workflow-project-cli-');
 
