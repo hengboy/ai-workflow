@@ -17,8 +17,6 @@ function taskAttributes(overrides: Record<string, unknown> = {}): Record<string,
     requirements: ['REQ-001'],
     acceptance_criteria: ['AC-001'],
     depends_on: [],
-    feature: 'task-input',
-    locator_read_order: ['src/input.ts'],
     read_scope: [
       'MEMORY.md',
       '.ai-workflow/index/navigation.json',
@@ -44,6 +42,38 @@ describe('task surface routing', () => {
     const tasks = await readTasks(plan);
 
     expect(tasks[0]?.surface).toBe(surface);
+  });
+
+  it('accepts a task without feature, locator_read_order, or new_module_directories', async () => {
+    const root = await temporary();
+    const plan = await frozenPlan(root);
+    await writeTaskFile(plan, {
+      id: 'task-001-example',
+      requirements: ['REQ-001'],
+      acceptance_criteria: ['AC-001'],
+      depends_on: [],
+      surface: 'backend',
+      read_scope: [
+        'MEMORY.md',
+        '.ai-workflow/index/navigation.json',
+        '.ai-workflow/index/navigation.md',
+        'src/input.ts',
+      ],
+      write_scope: ['src/output.ts'],
+      test_commands: ['pnpm test'],
+    });
+
+    const tasks = await readTasks(plan);
+
+    expect(tasks).toHaveLength(1);
+    expect(tasks[0]?.surface).toBe('backend');
+    expect(tasks[0]?.readScope).toEqual([
+      'MEMORY.md',
+      '.ai-workflow/index/navigation.json',
+      '.ai-workflow/index/navigation.md',
+      'src/input.ts',
+    ]);
+    expect(tasks[0]?.writeScope).toEqual(['src/output.ts']);
   });
 
   it('rejects a task with an empty or missing surface before execution', async () => {
