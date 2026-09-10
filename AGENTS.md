@@ -15,6 +15,7 @@ These instructions are authoritative for every sub-agent. Installed role files c
 - Plan-to-tasks validates the frozen pair, previews the complete graph, obtains approval, and creates immutable `tasks/<taskId>.md` files. It never edits frozen plans.
 - Coding implements either one approved task or an approved frozen plan with TDD: Todo list, one project-local temporary worktree, failing behavior test, minimal implementation, scoped checks, per-step commit and cleanup. All coding work is delegated: unsplit plans use one sub-agent per step, split plans use one per task in dependency order, and small bugs or requests use one complete delegated unit. The orchestrator continues automatically unless blocked. It never creates workflow manifests or run records.
 - Task Worker coordinates one task and delegates implementation, testing and Git work; it does not edit files, search broadly, run tests or run Git.
+- After Coding implementation completes, exactly one Spec Review and one Standards Review must run before any worktree merge. Findings go to the user for repair selection; unresolved review findings block merge.
 
 ## Agent permissions
 

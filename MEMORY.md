@@ -20,6 +20,7 @@
 - Planning artifacts are frozen and validated before task splitting.
 - User configuration is preserved unless an install manifest proves ownership.
 - Documentation Maintainer delegates the local commit to Git Operator after documentation checks pass, providing exact changed paths and evidence.
+- Coding requires exactly one post-implementation Spec Review and Standards Review; findings are presented to the user for repair selection before any worktree merge.
 - Coding may implement a frozen plan directly when no task split exists; a
   missing or empty navigation index is valid initial-project state and does not
   block implementation when the plan provides the scope.

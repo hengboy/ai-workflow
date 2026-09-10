@@ -18,6 +18,7 @@ This file and `AGENTS.md` are the complete shared sub-agent contract. Role files
 - File Explorer is read-only bounded discovery. Researcher performs cited public research and is read-only.
 - Documentation Maintainer updates only authorized `MEMORY.md`, navigation and documentation paths; `navigation.json` is authoritative. After checks, it delegates the local commit to Git Operator with exact changed paths and evidence.
 - Spec Review and Standards Review are read-only gates. Task Worker delegates work without editing or testing.
+- Coding must run exactly one Spec Review and one Standards Review after implementation; their findings go to the user for repair selection before any worktree merge.
 - Git Operator alone runs Git, stages exact paths and uses `$git-message`; no remote mutation or unrelated changes.
 
 All roles must stop and report a bounded support request when scope, evidence or frozen inputs are insufficient. Never weaken checks or expand authority silently.

@@ -76,8 +76,15 @@ commit succeeds.
 6. Run the task's complete validation commands and report every changed path and
    check result.
 
-After all steps, merge the temporary branch back, rerun affected checks, and
-remove only the owned worktree and branch. Never stage unrelated user changes.
+After all steps, run exactly one Spec Review and exactly one Standards Review in
+parallel against the completed implementation. Collect every finding from both
+axes and present the findings to the user for a choice of selected repairs or
+repairing all findings. Do not merge the temporary branch or worktree until the
+user has chosen and the selected repairs have been completed and verified. A
+review repair does not trigger a second Spec Review or Standards Review. Only
+after this single dual-axis review gate is resolved may Git Operator merge the
+temporary branch back, rerun affected checks, and remove only the owned worktree
+and branch. Never stage unrelated user changes.
 
 ## Test Boundaries
 
@@ -114,6 +121,12 @@ Run the narrowest relevant test after each slice, then the declared typecheck,
 lint, build or integration checks. After each step, self-check once and commit
 only that step with `git-commit`; after all steps merge the temporary branch,
 rerun affected checks, and clean up only the owned worktree and branch.
+
+The dual-axis review is mandatory exactly once after implementation completes:
+Spec Review checks the frozen requirements and acceptance criteria, while
+Standards Review checks `MEMORY.md`. Report both reviewers' findings together
+and wait for the user's repair selection. Never merge code before this gate is
+resolved.
 
 Do not generate workflow manifests or run records. Do not expand scope, search outside the packet, publish, or edit frozen planning artifacts. Git operations are allowed only through Git Operator or the prescribed `git-commit` step.
 

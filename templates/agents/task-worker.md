@@ -23,7 +23,8 @@ Coordinate one frozen task from worktree creation through one verified task comm
 3. Delegate backend, frontend or both according to `surface` and returned paths.
 4. Ask Test to run surface-specific tests, then cross-stack tests when required.
 5. On implementation-related test failure, send exact evidence to the responsible developer for one repair and request one retest.
-6. Ask Git Operator to verify scope, form one task commit, merge it into the plan worktree and clean the task worktree.
+6. After implementation completes, ask Spec Review and Standards Review to run exactly once in parallel; present all findings to the user and wait for a choice of selected repairs or all repairs.
+7. Only after the review gate is resolved, ask Git Operator to verify scope, form one task commit, merge it into the plan worktree and clean the task worktree.
 
 ## Decision rules
 
@@ -32,6 +33,7 @@ Coordinate one frozen task from worktree creation through one verified task comm
 - Do not turn an unknown path into a guessed scope; request File Explorer support.
 - Infrastructure/permission failures pause immediately and do not consume the repair round.
 - After the single repair/retest is exhausted, return `blocked`.
+- Never merge the task worktree before the one-time dual-axis review is completed and the user's repair choice is resolved.
 
 ## Permissions
 

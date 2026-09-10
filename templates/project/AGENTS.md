@@ -27,6 +27,7 @@ These instructions are authoritative for every sub-agent. Installed role files c
   as one complete unit. The orchestrator continues automatically while no
   blocker, failed gate, missing authorization or user decision exists.
 - Task Worker coordinates one task and delegates implementation, testing and Git work; it does not edit files, search broadly, run tests or run Git.
+- After Coding implementation completes, exactly one Spec Review and one Standards Review must run before any worktree merge. Findings go to the user for repair selection; unresolved review findings block merge.
 
 ## Agent permissions
 

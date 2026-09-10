@@ -150,6 +150,16 @@ describe('native prompt contracts', () => {
     expect(maintainer).toMatch(/delegate Git Operator.*local commit/is);
     expect(maintainer).toMatch(/exact changed paths.*validation evidence/is);
   });
+  it('requires one dual-axis coding review and user repair choice before merge', async () => {
+    const coding = await readFile(packagePath('templates', 'skills', 'coding', 'SKILL.md'), 'utf8');
+    expect(coding).toMatch(/exactly one Spec Review and exactly one Standards Review/is);
+    expect(coding).toMatch(/present the findings to the user.*selected repairs|repairing all findings/is);
+    expect(coding).toMatch(/Do not merge.*until.*user.*chosen/is);
+    expect(coding).toMatch(/does not trigger a second Spec Review or Standards Review/is);
+    const worker = await readFile(packagePath('templates', 'agents', 'task-worker.md'), 'utf8');
+    expect(worker).toMatch(/Spec Review and Standards Review.*exactly once/is);
+    expect(worker).toMatch(/Never merge.*before.*dual-axis review/is);
+  });
   it('documents --project as a project root path with relative and absolute examples', async () => {
     const readme = await readFile(packagePath('README.md'), 'utf8');
     expect(readme).toContain('`--project .` (project root directory path)');
