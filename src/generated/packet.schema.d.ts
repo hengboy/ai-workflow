@@ -11,7 +11,6 @@ export interface AgentPacket {
   role:
     | "file-explorer"
     | "git-operator"
-    | "task-worker"
     | "backend"
     | "frontend"
     | "test"

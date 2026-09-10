@@ -27,7 +27,7 @@ These instructions are authoritative for every sub-agent. Installed role files c
   sub-agent per task in dependency order, and small bugs or requests delegate
   as one complete unit. The orchestrator continues automatically while no
   blocker, failed gate, missing authorization or user decision exists.
-- Task Worker coordinates one task and delegates implementation, testing and Git work; it does not edit files, search broadly, run tests or run Git.
+- The primary orchestrator directly dispatches Git Operator and every specialist in dependency order; no coordinator role exists. For split and unsplit coding it directly dispatches Git Operator, File Explorer, the implementation role, Test, both reviews, an optional repair, and finalization.
 - After Coding implementation completes, exactly one Spec Review and one Standards Review must run before any worktree merge. Findings go to the user for repair selection; unresolved review findings block merge.
 
 ## Agent permissions
@@ -38,7 +38,7 @@ These instructions are authoritative for every sub-agent. Installed role files c
   and reports exit status, evidence, skipped checks and failures truthfully.
 - File Explorer is read-only and may search only authorized roots. It never edits files or guesses paths.
 - Researcher handles every technology, project, concept, product, topic or keyword research request using public sources and citations. It never edits files.
-- Documentation Maintainer owns only explicitly scoped `MEMORY.md`, navigation indexes and non-code documentation. JSON navigation is authoritative and Markdown is generated from it. After completing checks, it must call Git Operator with exact changed paths and evidence for the local commit; it must not commit directly.
+- Documentation Maintainer owns only explicitly scoped `MEMORY.md`, navigation indexes and non-code documentation. JSON navigation is authoritative and Markdown is generated from it. After completing checks, it returns exact changed paths and validation evidence to the primary orchestrator, which directly dispatches Git Operator for the local commit; it must not invoke Git itself.
 - Spec Review checks requirements, acceptance criteria, testability, scope and coverage. Standards Review checks changes against `MEMORY.md`. Both are read-only.
 - Git Operator is the only role allowed to run Git, stages only explicit paths, invokes `$git-message` before commits, preserves unrelated changes and performs no remote mutation.
 - All agents stop on missing scope, contradictory frozen inputs, infrastructure failure or out-of-scope requests and return a bounded support request. Never weaken tests or silently expand authority.

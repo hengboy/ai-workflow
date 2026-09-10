@@ -25,7 +25,6 @@ export interface ModuleRoot {
   owner_role:
     | "file-explorer"
     | "git-operator"
-    | "task-worker"
     | "backend"
     | "frontend"
     | "test"
@@ -60,7 +59,6 @@ export interface Feature {
   owner_role:
     | "file-explorer"
     | "git-operator"
-    | "task-worker"
     | "backend"
     | "frontend"
     | "test"

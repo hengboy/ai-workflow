@@ -3,7 +3,6 @@
 export type Role =
   | "file-explorer"
   | "git-operator"
-  | "task-worker"
   | "backend"
   | "frontend"
   | "test"

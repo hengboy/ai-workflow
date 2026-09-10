@@ -29,7 +29,7 @@ agents:
       join(home, '.claude/agents'),
       join(home, '.config/opencode/agents')
     ]);
-    expect(report.installations.every((installation) => installation.agents.length === 10)).toBe(true);
+    expect(report.installations.every((installation) => installation.agents.length === 9)).toBe(true);
     expect(report.installations.every((installation) => installation.agents.some((agent) => agent.name === 'researcher'))).toBe(true);
     expect(report.installations.every((installation) => installation.agents.some((agent) => agent.name === 'documentation-maintainer'))).toBe(true);
     expect(report.installations[0]?.agents.find((agent) => agent.name === 'backend')).toMatchObject({
@@ -127,7 +127,7 @@ agents:
     expect(await exists(join(home, '.codex/agents/backend.toml'))).toBe(true);
     expect(await exists(join(home, '.codex/agents/ai-workflow-backend.toml'))).toBe(false);
     expect(await exists(join(home, '.claude/agents/backend.md'))).toBe(true);
-    expect(await exists(join(home, '.config/opencode/agents/task-worker.md'))).toBe(true);
+    expect(await exists(join(home, '.config/opencode/agents/task-worker.md'))).toBe(false);
     expect(await exists(join(home, '.config/opencode/agents/researcher.md'))).toBe(true);
     expect(await exists(join(home, '.config/opencode/agents/documentation-maintainer.md'))).toBe(true);
     expect(await exists(join(home, '.config/opencode/agents/ai-workflow-task-worker.md'))).toBe(false);
@@ -144,23 +144,27 @@ agents:
   });
   it('removes previously managed prefixed agents during an upgrade', async () => {
     const home = await temporary('ai-workflow-agent-upgrade-');
-    const legacy = join(home, '.config/opencode/agents/ai-workflow-task-worker.md');
+    const legacy = join(home, '.config/opencode/agents/ai-workflow-backend.md');
     const unrelated = join(home, '.config/opencode/agents/ai-workflow-unrelated.md');
+    const sameNamedElsewhere = join(home, '.claude/agents/ai-workflow-backend.md');
     await mkdir(join(home, '.config/opencode/agents'), { recursive: true });
     await writeFile(legacy, 'legacy managed agent');
     await writeFile(unrelated, 'keep');
+    await mkdir(join(home, '.claude/agents'), { recursive: true });
+    await writeFile(sameNamedElsewhere, 'keep');
     await mkdir(join(home, '.config/ai-workflow'), { recursive: true });
     await writeFile(join(home, '.config/ai-workflow/install-manifest.json'), JSON.stringify({
       version: '0.1.0',
       installed_at: new Date(0).toISOString(),
-      hosts: { opencode: [{ path: '.config/opencode/agents/ai-workflow-task-worker.md', digest: 'old', kind: 'file' }] }
+      hosts: { opencode: [{ path: '.config/opencode/agents/ai-workflow-backend.md', digest: 'old', kind: 'file' }] }
     }));
 
     await install(['opencode'], { home, version: '0.2.0' });
 
     expect(await exists(legacy)).toBe(false);
-    expect(await exists(join(home, '.config/opencode/agents/task-worker.md'))).toBe(true);
+    expect(await exists(join(home, '.config/opencode/agents/backend.md'))).toBe(true);
     expect(await exists(unrelated)).toBe(true);
+    expect(await exists(sameNamedElsewhere)).toBe(true);
   });
   it('removes previously managed prefixed skill directories during an upgrade', async () => {
     const home = await temporary('ai-workflow-skill-upgrade-');
@@ -248,5 +252,15 @@ agents:
 
     expect(await readFile(join(home, '.agents/plugins/marketplace.json'), 'utf8')).toBe('[]');
     expect(await exists(join(home, '.agents/skills/planning/SKILL.md'))).toBe(true);
+  });
+  it('rejects a legacy profile containing task-worker atomically and names the role', async () => {
+    const home = await temporary('ai-workflow-profile-legacy-');
+    await install(['codex'], { home });
+    const before = await readFile(join(home, '.codex/agents/backend.toml'), 'utf8');
+    const directory = join(home, '.config/ai-workflow/profiles'); await mkdir(directory, { recursive: true });
+    await writeFile(join(directory, 'legacy.yaml'), 'version: 1.0.0\nagents:\n  task-worker:\n    codex: { model: legacy, reasoning_effort: low }\n');
+    await expect(activateProfile('legacy', { home })).rejects.toThrow(/task-worker/);
+    expect(await getActiveProfile(home)).toBeUndefined();
+    expect(await readFile(join(home, '.codex/agents/backend.toml'), 'utf8')).toBe(before);
   });
 });

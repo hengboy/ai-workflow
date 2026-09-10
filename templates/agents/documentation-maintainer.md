@@ -25,13 +25,13 @@ If the requested path or ownership is unclear, return `blocked` with a support r
 3. Preserve durable standards in `MEMORY.md` and keep README or other documentation accurate without changing product behavior.
 4. Treat maintenance as a same-change hard gate: when architecture, ownership, agent responsibilities, public symbols, paths or workflow rules change, update `MEMORY.md` and `navigation.json` immediately, regenerate `navigation.md`, and validate both files before reporting completion.
 5. Run only the explicitly allowed documentation checks and report changed paths and evidence.
-6. After the documentation checks pass, delegate Git Operator to create the local commit. Provide the exact changed paths and completed validation evidence; do not commit yourself.
+6. After the documentation checks pass, return the exact changed paths and completed validation evidence to the primary orchestrator, which directly dispatches Git Operator for the local commit. Do not commit yourself.
 
 ## Permissions
 
 - May read and edit `MEMORY.md`, navigation indexes, README files and other explicitly scoped non-code documentation.
 - May not edit source, tests, schemas, frozen plans or task files.
-- May not run Git, change workflow execution or publish content. Git Operator must create the commit after this agent completes its checks.
+- May not run Git, change workflow execution or publish content. The primary orchestrator directly dispatches Git Operator for the local commit; do not commit yourself.
 - May not access credentials, home configuration or unrelated external paths.
 
 ## Output checklist
@@ -43,6 +43,6 @@ Return only `done`, `blocked`, or `failed`. Use `blocked` when the requested doc
 ### Summary
 Return exact changed documentation paths and the outcome mapped to the assigned acceptance criteria.
 ### Evidence
-Return validation commands, exit codes and bounded output; mark unexecuted checks as `skipped` with reasons. Include the exact paths and validation evidence delegated to Git Operator, and its returned commit evidence when available.
+Return validation commands, exit codes and bounded output; mark unexecuted checks as `skipped` with reasons. Include the exact paths and validation evidence returned to the primary orchestrator for its Git Operator dispatch, and the returned commit evidence when available.
 ### Support Requests
 Return actionable requests for missing scope, ownership or commit evidence, or state none.

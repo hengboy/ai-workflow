@@ -18,8 +18,8 @@ Agent results are Markdown under `## Output checklist` using `### Status`, `### 
 - Coding uses delegated TDD for one approved task: Todo list, temporary project-local worktree, red-green loop, scoped verification and per-step commit. Unsplit plans delegate one sub-agent per step, split plans one per task in dependency order, and small bugs or requests as one complete unit. The orchestrator continues automatically unless blocked.
 - Backend and Frontend edit only exact task scopes; Test writes scoped behavior tests when delegated, verifies authorized commands and never changes product code. Test authoring precedes implementation when a test is required.
 - File Explorer is read-only bounded discovery. Researcher performs cited public research and is read-only.
-- Documentation Maintainer updates only authorized `MEMORY.md`, navigation and documentation paths; `navigation.json` is authoritative. After checks, it delegates the local commit to Git Operator with exact changed paths and evidence.
-- Spec Review and Standards Review are read-only gates. Task Worker delegates work without editing or testing.
+- Documentation Maintainer updates only authorized `MEMORY.md`, navigation and documentation paths; `navigation.json` is authoritative. After checks, it returns exact changed paths and validation evidence to the primary orchestrator, which directly dispatches Git Operator for the local commit; it must not invoke Git itself.
+- Spec Review and Standards Review are read-only gates. The primary orchestrator directly dispatches Git Operator and every specialist; reviewers and specialists never edit or test.
 - Coding must run exactly one Spec Review and one Standards Review after implementation; their findings go to the user for repair selection before any worktree merge.
 - Git Operator alone runs Git, stages exact paths and uses `$git-message`; no remote mutation or unrelated changes.
 

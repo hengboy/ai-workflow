@@ -7,7 +7,7 @@
 ## Boundaries
 
 - `src/install`: shared-skill and host-agent rendering, atomic install/uninstall and project initialization.
-- `src/profile`: profile YAML discovery and authoritative schema validation.
+- `src/profile`: profile YAML discovery, authoritative schema validation and legacy-role migration rejection.
 - `src/workflow`: frozen-plan parsing and digest validation.
 - `src/context`: MEMORY/navigation consistency checks.
 - `schemas`: authoritative public protocol contracts.
@@ -19,7 +19,8 @@
 - No push, publish, remote mutation, automatic rebase or mixed-host run.
 - Planning artifacts are frozen and validated before task splitting.
 - User configuration is preserved unless an install manifest proves ownership.
-- Documentation Maintainer delegates the local commit to Git Operator after documentation checks pass, providing exact changed paths and evidence.
+- After Documentation Maintainer's documentation checks pass, the primary orchestrator directly dispatches Git Operator for that local commit, with exact changed paths and evidence.
+- The `task-worker` role is removed; the primary orchestrator directly dispatches every specialist and Git Operator, and legacy profiles referencing `task-worker` are rejected before any mutation.
 - Coding requires exactly one post-implementation Spec Review and Standards Review; findings are presented to the user for repair selection before any worktree merge.
 - Coding may implement a frozen plan directly when no task split exists; a
   missing or empty navigation index is valid initial-project state and does not

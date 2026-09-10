@@ -11,7 +11,6 @@ const roleHeadings = {
   researcher: '# Researcher',
   'spec-review': '# Spec Review',
   'standards-review': '# Standards Review',
-  'task-worker': '# Task Worker',
   test: '# Test'
 } as const;
 
@@ -28,7 +27,7 @@ function instructions(host: Host, contents: string): string {
 }
 
 describe('installed agent output contracts', () => {
-  it('renders all ten roles as Markdown contracts for every supported host', async () => {
+  it('renders all nine roles as Markdown contracts for every supported host', async () => {
     const hosts: Host[] = ['codex', 'claude', 'opencode'];
 
     for (const host of hosts) {
