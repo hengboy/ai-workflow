@@ -38,13 +38,14 @@ describe('installed agent output contracts', () => {
       for (const [role, heading] of Object.entries(roleHeadings) as [Role, string][]) {
         const file = files.find((candidate) => candidate.relativePath === `${role}${host === 'codex' ? '.toml' : '.md'}`);
         expect(file, `${host}/${role} output`).toBeDefined();
-        const body = instructions(host, file!.contents);
+        if (!file) throw new Error(`Missing file for ${host}/${role}`);
+        const body = instructions(host, file.contents);
 
         expect(body).toContain(heading);
-        expect(body).toMatch(/^## Status$/m);
-        expect(body).toMatch(/^## Summary$/m);
-        expect(body).toMatch(/^## Evidence$/m);
-        expect(body).toMatch(/^## Support Requests$/m);
+        expect(body).toMatch(/^### Status$/m);
+        expect(body).toMatch(/^### Summary$/m);
+        expect(body).toMatch(/^### Evidence$/m);
+        expect(body).toMatch(/^### Support Requests$/m);
         expect(body).toMatch(/Markdown/i);
         expect(body).toMatch(/(?:Do not|Never|must not|禁止).{0,80}JSON envelope/i);
         expect(body).not.toContain('schemas/result.schema.json');
@@ -58,7 +59,8 @@ describe('installed agent output contracts', () => {
     for (const host of ['codex', 'claude', 'opencode'] as Host[]) {
       const file = (await renderHost(host)).find((candidate) => candidate.relativePath.startsWith('file-explorer.'));
       expect(file).toBeDefined();
-      const body = instructions(host, file!.contents);
+      if (!file) throw new Error(`Missing file-explorer for ${host}`);
+      const body = instructions(host, file.contents);
       expect(body).toMatch(/Found Paths/i);
       expect(body).not.toContain('changed_paths');
     }

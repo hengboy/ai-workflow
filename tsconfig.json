@@ -12,5 +12,5 @@
     "skipLibCheck": true,
     "types": ["node", "vitest/globals"]
   },
-  "include": ["src/**/*.ts", "tests/install/install.test.ts", "tests/unit/profile.test.ts", "tests/integration/profile-cli.test.ts", "tests/integration/navigation-*.test.ts", "tests/integration/project-cli.test.ts", "tests/integration/global-agent-guidance.test.ts", "vitest.config.ts", "eslint.config.js"]
+  "include": ["src/**/*.ts", "tests/install/**/*.test.ts", "tests/unit/profile.test.ts", "tests/integration/profile-cli.test.ts", "tests/integration/navigation-*.test.ts", "tests/integration/project-cli.test.ts", "tests/integration/global-agent-guidance.test.ts", "vitest.config.ts", "eslint.config.js"]
 }

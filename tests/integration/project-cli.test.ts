@@ -29,4 +29,28 @@ describe('project CLI', () => {
       unchanged: ['AGENTS.md', 'CLAUDE.md', 'MEMORY.md', '.ai-workflow/index/navigation.json', '.ai-workflow/index/navigation.md']
     });
   });
+
+  it('adds .ai-workflow/ to .gitignore on init', async () => {
+    const project = await temporary('ai-workflow-project-cli-ignore-');
+
+    await exec('pnpm', ['exec', 'tsx', 'src/cli.ts', 'init', project]);
+
+    const { readFile } = await import('node:fs/promises');
+    const ignore = await readFile(join(project, '.gitignore'), 'utf8');
+    const lines = ignore.split(/\r?\n/).map((line) => line.trim());
+    expect(lines).toContain('.ai-workflow/');
+    expect(lines).toContain('*.log');
+  });
+
+  it('does not duplicate .ai-workflow entry if already present in .gitignore', async () => {
+    const project = await temporary('ai-workflow-project-cli-ignore-dup-');
+    const { writeFile, readFile } = await import('node:fs/promises');
+    await writeFile(join(project, '.gitignore'), 'node_modules/\n.ai-workflow/\n');
+
+    await exec('pnpm', ['exec', 'tsx', 'src/cli.ts', 'init', project]);
+
+    const ignore = await readFile(join(project, '.gitignore'), 'utf8');
+    const matches = ignore.split(/\r?\n/).map((line) => line.trim()).filter((line) => line === '.ai-workflow' || line === '.ai-workflow/');
+    expect(matches).toHaveLength(1);
+  });
 });

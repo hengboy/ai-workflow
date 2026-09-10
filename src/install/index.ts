@@ -160,7 +160,12 @@ export async function initializeProject(project: string): Promise<string[]> {
   const conflicts: Array<{ target: string; contents: string }> = []; for (const item of templates) if (await exists(join(root, item.target))) conflicts.push(item);
   if (conflicts.length) throw new Error(`Initialization conflicts; no files written. Merge these templates manually:\n${conflicts.map((item) => `${item.target}\n--- proposed ---\n${item.contents}`).join('\n')}`);
   for (const item of templates) { await atomicWrite(join(root, item.target), item.contents); created.push(item.target); }
-  const ignorePath = join(root, '.gitignore'); const ignore = await exists(ignorePath) ? await readFile(ignorePath, 'utf8') : ''; const additions = ['*.log'].filter((line) => !ignore.split(/\r?\n/).includes(line)); if (additions.length) { await atomicWrite(ignorePath, `${ignore.trimEnd()}${ignore ? '\n' : ''}${additions.join('\n')}\n`); created.push('.gitignore'); }
+  const ignorePath = join(root, '.gitignore'); const ignore = await exists(ignorePath) ? await readFile(ignorePath, 'utf8') : '';
+  const lines = ignore.split(/\r?\n/).map((line) => line.trim());
+  const additions: string[] = [];
+  if (!lines.some((line) => line === '.ai-workflow' || line === '.ai-workflow/')) additions.push('.ai-workflow/');
+  if (!lines.includes('*.log')) additions.push('*.log');
+  if (additions.length) { await atomicWrite(ignorePath, `${ignore.trimEnd()}${ignore ? '\n' : ''}${additions.join('\n')}\n`); created.push('.gitignore'); }
   await writeJson(join(root, projectManifestRelative), { version: 1, files: Object.fromEntries(templates.map((item) => [item.target, sha256(item.contents)])) } satisfies ProjectManifest);
   created.push(projectManifestRelative);
   return created;
