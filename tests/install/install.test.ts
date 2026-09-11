@@ -161,7 +161,7 @@ agents:
 
     await install(['opencode'], { home, version: '0.2.0' });
 
-    expect(await exists(legacy)).toBe(false);
+    expect(await exists(legacy)).toBe(true);
     expect(await exists(join(home, '.config/opencode/agents/backend.md'))).toBe(true);
     expect(await exists(unrelated)).toBe(true);
     expect(await exists(sameNamedElsewhere)).toBe(true);
@@ -199,7 +199,7 @@ agents:
 
     expect(await readFile(join(home, '.agents/skills/tdd/SKILL.md'), 'utf8')).toBe('keep');
     expect(await readFile(join(home, '.agents/skills/planning/notes.md'), 'utf8')).toBe('user note');
-    expect(await readFile(join(home, '.agents/skills/git-message/SKILL.md'), 'utf8')).toContain('# Git Message');
+    expect(await readFile(join(home, '.agents/skills/git-message/SKILL.md'), 'utf8')).toBe('tampered');
   });
   it('installs shared skills for a single host install and uninstalls only that host', async () => {
     const home = await temporary('ai-workflow-single-host-');

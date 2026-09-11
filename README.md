@@ -1,6 +1,6 @@
 # ai-workflow
 
-A self-contained macOS/Node.js 22 CLI that installs planning, task-splitting and TDD coding skills once into `~/.agents/skills`, plus native role agents for Codex, Claude Code and OpenCode. Planning produces frozen `spec.md`, `plan.md` and task documents; coding implements them directly with TDD.
+A self-contained macOS/Node.js 22 CLI for installing planning/context skills and native role agents for Codex, Claude Code and OpenCode. Planning produces frozen `spec.md`, `plan.md` and task documents; agents choose an appropriate level of planning and verification for each change.
 
 The product does not execute, depend on or provide compatibility for external workflow frameworks or provider APIs.
 

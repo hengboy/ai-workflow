@@ -15,12 +15,12 @@ Agent results are Markdown under `## Output checklist` using `### Status`, `### 
 
 - Planning clarifies one business-impact issue per turn, gets explicit approval, and freezes `spec.md` and `plan.md`.
 - Plan-to-tasks previews and validates the task graph before creating immutable task files.
-- Coding uses delegated TDD for one approved task: Todo list, temporary project-local worktree, red-green loop, scoped verification and per-step commit. Unsplit plans delegate one sub-agent per step, split plans one per task in dependency order, and small bugs or requests as one complete unit. The orchestrator continues automatically unless blocked.
+- Coding depth is proportional: small changes may be direct with focused verification; larger or high-risk work can use planning, TDD, worktrees, commits and specialist roles.
 - Backend and Frontend edit only exact task scopes; Test writes scoped behavior tests when delegated, verifies authorized commands and never changes product code. Test authoring precedes implementation when a test is required.
 - File Explorer is read-only bounded discovery. Researcher performs cited public research and is read-only.
 - Documentation Maintainer updates only authorized `MEMORY.md`, navigation and documentation paths; `navigation.json` is authoritative. After checks, it returns exact changed paths and validation evidence to the primary orchestrator, which directly dispatches Git Operator for the local commit; it must not invoke Git itself.
 - Spec Review and Standards Review are read-only gates. The primary orchestrator directly dispatches Git Operator and every specialist; reviewers and specialists never edit or test.
-- Coding must run exactly one Spec Review and one Standards Review after implementation; their findings go to the user for repair selection before any worktree merge.
+- Spec Review and Standards Review are recommended for larger or high-risk changes, not mandatory gates.
 - Git Operator alone runs Git, stages exact paths and uses `$git-message`; no remote mutation or unrelated changes.
 
 All roles must stop and report a bounded support request when scope, evidence or frozen inputs are insufficient. Never weaken checks or expand authority silently.

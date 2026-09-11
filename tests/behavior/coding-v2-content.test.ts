@@ -10,7 +10,7 @@ describe('v2 coding guidance', () => {
       'An unsplit plan is executed serially',
       'A split plan is executed serially',
       'delegate that test work to the',
-      'one temporary worktree',
+      'temporary worktree',
       'Do not generate workflow manifests or run records',
       'Git operations are allowed only through Git Operator',
     ]) {
@@ -25,9 +25,8 @@ describe('v2 coding guidance', () => {
     expect(coding).toContain('A split plan is executed serially');
     expect(coding).toContain('A small bug fix or small request is delegated as one complete unit');
     expect(coding).toContain('delegate that test work to the');
-    expect(coding).toContain('delegate the complete authorized validation to the `test` sub-agent');
-    expect(coding).toContain('Do not dispatch the dual-axis reviews while this validation is pending or failing');
-    expect(coding.indexOf('wait for a passing result')).toBeLessThan(coding.indexOf('run exactly one Spec Review'));
+    expect(coding).toContain('relevant validation');
+    expect(coding).toContain('request Test, Spec Review or Standards Review as useful');
     expect(testAgent).toMatch(/write or update scoped behavior tests/i);
     expect(testAgent).toContain('public interface plus observable boundary');
   });

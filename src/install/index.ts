@@ -13,7 +13,7 @@ import { validateNavigationModel } from '../context/validate.js';
 import type { Host } from '../workflow/types.js';
 
 interface ManifestFile { path: string; digest: string; kind: 'file' | 'directory' }
-interface InstallManifest { version: string; installed_at: string; skills?: ManifestFile[]; hosts: Partial<Record<Host, ManifestFile[]>> }
+interface InstallManifest { version: string; installed_at: string; skills?: ManifestFile[]; hosts: Partial<Record<Host, ManifestFile[]>>; skipped?: string[] }
 interface ProjectManifest { version: 1; files: Record<string, string> }
 export interface AgentInstallation {
   name: string;
@@ -53,8 +53,12 @@ function agentsRoot(home: string, host: Host): string {
 }
 function skillsRoot(home: string): string { return join(home, skillsRelative); }
 
-async function writeRendered(root: string, files: RenderedFile[]): Promise<void> {
-  for (const file of files) await atomicWrite(join(root, file.relativePath), file.contents);
+async function writeOwnedFile(home: string, file: RenderedFile, previous: ManifestFile[] | undefined, root: string): Promise<boolean> {
+  const path = join(root, file.relativePath);
+  const owned = previous?.find((item) => item.path === relative(home, path));
+  if (owned && (await exists(path)) && sha256(await readFile(path)) !== owned.digest) return false;
+  await atomicWrite(path, file.contents);
+  return true;
 }
 
 async function readManifest(home: string): Promise<InstallManifest> {
@@ -83,30 +87,40 @@ async function removeStaleOwnedFiles(home: string, previous: ManifestFile[], cur
     if (retained.has(file.path) || file.path === marketplaceRelative) continue;
     const path = resolve(home, file.path);
     if (!path.startsWith(`${home}/`)) throw new Error(`Unsafe manifest path: ${file.path}`);
+    if (file.kind === 'file' && (await exists(path)) && sha256(await readFile(path)) !== file.digest) continue;
     await rm(path, { recursive: file.kind === 'directory', force: true });
   }
 }
 
-export async function install(hosts: Host[], options: { home?: string; version?: string; profile?: Profile } = {}): Promise<InstallManifest> {
+async function installUnsafe(hosts: Host[], options: { home?: string; version?: string; profile?: Profile } = {}): Promise<InstallManifest> {
   const home = resolve(options.home ?? homedir()); const version = options.version ?? '0.1.0'; const manifest = await readManifest(home);
   const activeName = options.profile ? undefined : await getActiveProfile(home); const profile = options.profile ?? (activeName ? await loadProfile(home, activeName) : undefined);
   // Shared skills are host-neutral and installed once, independent of the requested host list.
   const skills = await renderSkills();
-  const ownedSkills: ManifestFile[] = [];
-  for (const file of skills) { const path = join(skillsRoot(home), file.relativePath); await atomicWrite(path, file.contents); ownedSkills.push({ path: relative(home, path), digest: sha256(file.contents), kind: 'file' }); }
+  const ownedSkills: ManifestFile[] = []; const skipped: string[] = [];
+  for (const file of skills) { const path = join(skillsRoot(home), file.relativePath); if (await writeOwnedFile(home, file, manifest.skills, skillsRoot(home))) ownedSkills.push({ path: relative(home, path), digest: sha256(file.contents), kind: 'file' }); else { const prior = manifest.skills?.find((item) => item.path === relative(home, path)); if (prior) { ownedSkills.push(prior); skipped.push(prior.path); } } }
   await removeStaleOwnedFiles(home, manifest.skills ?? [], ownedSkills);
   manifest.skills = ownedSkills;
   const renderedHosts = new Map<Host, RenderedFile[]>(); for (const host of hosts) renderedHosts.set(host, await renderHost(host, profile));
   for (const host of hosts) {
     const rendered = renderedHosts.get(host); if (!rendered) throw new Error(`Missing rendered host: ${host}`);
     const target = agentsRoot(home, host);
-    await writeRendered(target, rendered);
-    const owned = rendered.map((file) => ({ path: relative(home, join(target, file.relativePath)), digest: sha256(file.contents), kind: 'file' as const }));
+    const owned: ManifestFile[] = [];
+    for (const file of rendered) { const path = join(target, file.relativePath); if (await writeOwnedFile(home, file, manifest.hosts[host], target)) owned.push({ path: relative(home, path), digest: sha256(file.contents), kind: 'file' }); else { const prior = manifest.hosts[host]?.find((item) => item.path === relative(home, path)); if (prior) { owned.push(prior); skipped.push(prior.path); } } }
     if (host === 'codex') await removeMarketplaceEntry(home);
     await removeStaleOwnedFiles(home, manifest.hosts[host] ?? [], owned);
     manifest.hosts[host] = owned;
   }
-  manifest.version = version; manifest.installed_at = new Date().toISOString(); await writeJson(join(home, manifestRelative), manifest); return manifest;
+  manifest.version = version; manifest.installed_at = new Date().toISOString(); if (skipped.length) manifest.skipped = skipped; else delete manifest.skipped; await writeJson(join(home, manifestRelative), manifest); return manifest;
+}
+
+export async function install(hosts: Host[], options: { home?: string; version?: string; profile?: Profile } = {}): Promise<InstallManifest> {
+  const home = resolve(options.home ?? homedir()); const manifestPath = join(home, manifestRelative); const hadManifest = await exists(manifestPath); const previous = hadManifest ? await readFile(manifestPath) : undefined;
+  try { return await installUnsafe(hosts, options); } catch (error) {
+    if (previous) await atomicWrite(manifestPath, previous); else await rm(manifestPath, { force: true });
+    if (!hadManifest) { await rm(skillsRoot(home), { recursive: true, force: true }); for (const host of hosts) await rm(agentsRoot(home, host), { recursive: true, force: true }); await removeEmptyDirectory(join(home, '.agents')); await removeEmptyDirectory(join(home, '.codex')); await removeEmptyDirectory(join(home, '.config')); }
+    throw error;
+  }
 }
 
 export async function getActiveProfile(home: string): Promise<string | undefined> {
@@ -135,29 +149,48 @@ function profileInstallations(home: string, hosts: Host[], manifest: InstallMani
 export async function activateProfile(name: string, options: { home?: string; version?: string } = {}): Promise<ProfileActivationReport> {
   const home = resolve(options.home ?? homedir()); const profile = await loadProfile(home, name); const manifest = await readManifest(home);
   const hosts = (Object.keys(manifest.hosts) as Host[]).filter((host) => ['codex', 'claude', 'opencode'].includes(host));
-  const installed = hosts.length ? await install(hosts, { home, version: options.version ?? manifest.version, profile }) : manifest;
-  await atomicWrite(join(home, activeProfileRelative), `${name}\n`);
-  return { active_profile: name, hosts, installations: profileInstallations(home, hosts, installed, profile) };
+  for (const host of hosts) for (const file of manifest.hosts[host] ?? []) {
+    const path = resolve(home, file.path);
+    if (file.kind === 'file' && await exists(path) && sha256(await readFile(path)) !== file.digest) throw new Error(`Cannot activate profile because managed file was modified: ${file.path}`);
+  }
+  const snapshots = await Promise.all(hosts.flatMap((host) => (manifest.hosts[host] ?? []).filter((file) => file.kind === 'file').map(async (file) => ({ path: resolve(home, file.path), contents: await readFile(resolve(home, file.path)) }))));
+  const marker = join(home, activeProfileRelative); const oldMarker = await exists(marker) ? await readFile(marker) : undefined;
+  try {
+    const installed = hosts.length ? await install(hosts, { home, version: options.version ?? manifest.version, profile }) : manifest;
+    await atomicWrite(marker, `${name}\n`);
+    return { active_profile: name, hosts, installations: profileInstallations(home, hosts, installed, profile) };
+  } catch (error) {
+    for (const snapshot of snapshots) await atomicWrite(snapshot.path, snapshot.contents);
+    if (oldMarker) await atomicWrite(marker, oldMarker); else await rm(marker, { force: true });
+    throw error;
+  }
 }
 
 export async function uninstall(hosts: Host[], options: { home?: string } = {}): Promise<InstallManifest> {
   const home = resolve(options.home ?? homedir()); const manifest = await readManifest(home);
+  const skipped: string[] = [];
   for (const host of hosts) {
     for (const file of manifest.hosts[host] ?? []) {
       const path = resolve(home, file.path); if (!path.startsWith(`${home}/`)) throw new Error(`Unsafe manifest path: ${file.path}`);
       if (file.path === marketplaceRelative) continue;
+      if (file.kind === 'file' && (await exists(path)) && sha256(await readFile(path)) !== file.digest) { skipped.push(file.path); continue; }
       await rm(path, { recursive: file.kind === 'directory', force: true });
     }
     if (host === 'codex') await removeMarketplaceEntry(home);
+    const retained = (manifest.hosts[host] ?? []).filter((file) => skipped.includes(file.path));
     manifest.hosts = Object.fromEntries(Object.entries(manifest.hosts).filter(([key]) => key !== host)) as InstallManifest['hosts'];
+    if (retained.length) manifest.hosts[host] = retained;
   }
   if (Object.keys(manifest.hosts).length === 0) {
     for (const file of manifest.skills ?? []) {
       const path = resolve(home, file.path); if (!path.startsWith(`${home}/`)) throw new Error(`Unsafe manifest path: ${file.path}`);
-      await rm(path, { recursive: file.kind === 'directory', force: true });
+       if (file.kind === 'file' && (await exists(path)) && sha256(await readFile(path)) !== file.digest) { skipped.push(file.path); continue; }
+       await rm(path, { recursive: file.kind === 'directory', force: true });
     }
-    delete manifest.skills;
+    if (skipped.length) manifest.skills = (manifest.skills ?? []).filter((file) => skipped.includes(file.path));
+    else delete manifest.skills;
   }
+  if (skipped.length) manifest.skipped = skipped; else delete manifest.skipped;
   await writeJson(join(home, manifestRelative), manifest); return manifest;
 }
 

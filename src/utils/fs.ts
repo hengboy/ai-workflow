@@ -18,16 +18,20 @@ export async function writeJson(path: string, value: unknown): Promise<void> {
 export async function atomicWrite(path: string, contents: string | Buffer): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
   const temporary = join(dirname(path), `.${randomUUID()}.tmp`);
-  const handle = await open(temporary, 'w', 0o600);
+  let committed = false;
+  let handle: Awaited<ReturnType<typeof open>> | undefined;
   try {
+    handle = await open(temporary, 'w', 0o600);
     await handle.writeFile(contents);
     await handle.sync();
+    await rename(temporary, path);
+    committed = true;
+    await chmod(path, 0o600);
+    await syncDirectory(dirname(path));
   } finally {
-    await handle.close();
+    if (handle) await handle.close();
+    if (!committed) await rm(temporary, { force: true });
   }
-  await rename(temporary, path);
-  await chmod(path, 0o600);
-  await syncDirectory(dirname(path));
 }
 
 export async function appendFsync(path: string, contents: string | Buffer): Promise<void> {

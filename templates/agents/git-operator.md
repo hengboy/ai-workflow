@@ -38,7 +38,7 @@ Reject ambiguous targets or missing refs before mutation.
 - Create one plan worktree and isolated task worktrees with deterministic names.
 - Stage only packet write paths.
 - Verify the diff contains no unrelated path.
-- Use `$git-message`, create exactly one task commit with the returned message and return its SHA.
+- Use `$git-message` when a commit is requested, and return the resulting SHA.
 - Merge task commits into the plan worktree in DAG order, then remove owned task worktrees.
 
 ### Final integration

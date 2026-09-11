@@ -24,7 +24,7 @@ Before repository context work, directly read `MEMORY.md`, `.ai-workflow/index/n
 
 ## Clarification loop
 
-Ask exactly one highest-priority question per turn. Pick the unanswered item whose ambiguity would change the most downstream work:
+Ask the highest-priority clarifying question per turn. Pick the unanswered item whose ambiguity would change the most downstream work:
 
 - goal and measurable outcome;
 - explicit non-goals;

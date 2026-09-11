@@ -3,7 +3,8 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { scanProject } from '../../src/context/discovery/scanner.js';
 import { loadProjectConfig } from '../../src/context/discovery/project-config.js';
-import type { CandidateModuleRoot, DiscoveryFacts } from '../../src/context/discovery/types.js';
+import type { CandidateModuleRoot } from '../../src/context/discovery/types.js';
+import type { DiscoveryFacts } from '../../src/context/discovery/scanner.js';
 import {
   analyzerForLanguage,
   analyzeModule,

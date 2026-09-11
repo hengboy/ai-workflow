@@ -54,7 +54,7 @@ An empty or unknown `surface` fails before execution.
   symbols. For an unsplit plan, do not invoke File Explorer merely because the
   feature is absent from the index; use the frozen plan's scope directly.
   Request File Explorer only when the implementation boundary remains unclear.
-- Before implementation, confirm the target is a Git repository, record the current branch, and create one temporary worktree under `<project>/.worktrees/<name>`; perform all implementation and checks there.
+ - For larger or high-risk changes, consider a temporary worktree before implementation.
 - Create a Todo list before editing and keep it current. Each step must state its
   scope, acceptance evidence and commit point.
 - Before writing a test, state the public interface and observable boundary it
@@ -63,17 +63,11 @@ An empty or unknown `surface` fails before execution.
 
 ## Pre-Implementation Todo
 
-Before any implementation edit, create a Todo list. Mark exactly one step
-`in_progress`; each step must include its scope, acceptance standard and commit
-point. Update it immediately when a step is verified and committed, before
-starting the next step.
+Use a Todo list when it improves clarity; keep it proportional to the change.
 
 ## Step Execution, Verification and Commit
 
-Treat every Todo step as an independent red -> green, verification and commit
-unit. After its checks pass, self-check the behavior, boundaries and scope once,
-then dispatch Git Operator, which uses the prescribed `git-commit` conventions, to commit only that step's changes; record the returned hash. Do not combine steps or proceed to the next step before this
-commit succeeds.
+Choose focused tests and commits according to task risk and repository practice.
 
 ## Procedure
 
@@ -90,11 +84,8 @@ commit succeeds.
 6. Run the task's complete validation commands and report every changed path and
    check result.
 
-After all implementation steps are complete, delegate the complete authorized
-validation to the `test` sub-agent and wait for a passing result. Do not dispatch
-the dual-axis reviews while this validation is pending or failing. Only after
-the `test` sub-agent has verified the completed implementation may you run
-exactly one Spec Review and exactly one Standards Review in parallel against it.
+After implementation, run relevant validation. For larger or high-risk changes,
+request Test, Spec Review or Standards Review as useful.
 Collect every finding from both axes and present the findings to the user for a
 choice of selected repairs or repairing all findings. Do not merge the
 temporary branch or worktree until the user's repair choice is resolved. A

@@ -162,9 +162,9 @@ describe('native prompt contracts', () => {
     expect(maintainer).toMatch(/primary orchestrator\s+directly\s+dispatches\s+Git\s+Operator/i);
     expect(maintainer).toMatch(/exact changed paths.*validation evidence/is);
   });
-  it('requires one dual-axis coding review and user repair choice before merge', async () => {
+  it('describes optional risk-based coding review', async () => {
     const coding = await readFile(packagePath('templates', 'skills', 'coding', 'SKILL.md'), 'utf8');
-    expect(coding).toMatch(/exactly one Spec Review and exactly one Standards Review/is);
+    expect(coding).toMatch(/review.*risk|risk.*review/is);
     expect(coding).toMatch(/present the findings to the user.*selected repairs|repairing all findings/is);
     expect(coding).toMatch(/Do not merge\s+the\s+temporary\s+branch\s+or\s+worktree\s+until\s+the\s+user's\s+repair\s+choice\s+is\s+resolved/i);
     expect(coding).toMatch(/does not trigger a second Spec Review or Standards Review/is);
