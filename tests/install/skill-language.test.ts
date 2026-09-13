@@ -91,6 +91,7 @@ describe('installed skill output language', () => {
       const template = await readFile(templatePath, 'utf8');
       if (languageSkills.has(relativePath)) {
         expect(installed, `${relativePath} receives the directive`).not.toBe(template);
+        expect(installed.startsWith(template), `${relativePath} preserves its template`).toBe(true);
         expect(installed, `${relativePath} names the language`).toContain(zhMarker);
       } else {
         expect(installed, `${relativePath} matches its template`).toBe(template);
