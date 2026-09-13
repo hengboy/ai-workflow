@@ -5,6 +5,7 @@ import { atomicWrite, exists, readJson, writeJson } from '../utils/fs.js';
 import { sha256 } from '../utils/hash.js';
 import { renderHost, renderSkills, type RenderedFile } from './render.js';
 import { loadProfile, type Profile } from '../profile/index.js';
+import { loadOutputLanguage } from '../settings/index.js';
 import { renderNavigation } from '../context/navigation.js';
 import { scanProject } from '../context/discovery/scanner.js';
 import { loadProjectConfig } from '../context/discovery/project-config.js';
@@ -94,9 +95,11 @@ async function removeStaleOwnedFiles(home: string, previous: ManifestFile[], cur
 
 async function installUnsafe(hosts: Host[], options: { home?: string; version?: string; profile?: Profile } = {}): Promise<InstallManifest> {
   const home = resolve(options.home ?? homedir()); const version = options.version ?? '0.1.0'; const manifest = await readManifest(home);
+  // Resolve the output language before any render or write so an invalid configuration aborts pre-write.
+  const language = await loadOutputLanguage(home);
   const activeName = options.profile ? undefined : await getActiveProfile(home); const profile = options.profile ?? (activeName ? await loadProfile(home, activeName) : undefined);
   // Shared skills are host-neutral and installed once, independent of the requested host list.
-  const skills = await renderSkills();
+  const skills = await renderSkills(language);
   const ownedSkills: ManifestFile[] = []; const skipped: string[] = [];
   for (const file of skills) { const path = join(skillsRoot(home), file.relativePath); if (await writeOwnedFile(home, file, manifest.skills, skillsRoot(home))) ownedSkills.push({ path: relative(home, path), digest: sha256(file.contents), kind: 'file' }); else { const prior = manifest.skills?.find((item) => item.path === relative(home, path)); if (prior) { ownedSkills.push(prior); skipped.push(prior.path); } } }
   await removeStaleOwnedFiles(home, manifest.skills ?? [], ownedSkills);

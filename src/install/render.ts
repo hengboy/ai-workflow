@@ -3,9 +3,28 @@ import { basename, join, relative } from 'node:path';
 import { packagePath } from '../utils/schema.js';
 import { parseMarkdown } from '../utils/frontmatter.js';
 import type { Profile } from '../profile/index.js';
+import type { OutputLanguage } from '../settings/index.js';
 import type { Host } from '../workflow/types.js';
 
 export interface RenderedFile { relativePath: string; contents: string }
+
+const languageSkillPaths = new Set(['planning/SKILL.md', 'plan-to-tasks/SKILL.md']);
+
+function languageSection(language: OutputLanguage): string {
+  const name = language === 'en' ? 'English' : 'Simplified Chinese (zh-CN)';
+  return [
+    '## Output language',
+    '',
+    `Output language: ${name}`,
+    '',
+    `Write all natural-language prose in ${name}. Only natural-language prose may be translated; headings, table headers, YAML frontmatter keys and their order, \`REQ-###\`/\`AC-###\` identifiers, file paths, code and enumerated values such as \`surface\` remain English.`,
+    ''
+  ].join('\n');
+}
+
+function appendLanguageSection(source: string, language: OutputLanguage): string {
+  return `${source.endsWith('\n') ? source : `${source}\n`}\n${languageSection(language)}`;
+}
 
 function frontmatterFor(host: Host, source: string): string {
   if (host === 'codex') return source;
@@ -55,11 +74,13 @@ async function markdownFiles(root: string): Promise<string[]> {
   return (await filesRecursively(root)).filter((path) => path.endsWith('.md'));
 }
 
-export async function renderSkills(): Promise<RenderedFile[]> {
+export async function renderSkills(language: OutputLanguage): Promise<RenderedFile[]> {
   const skillRoot = packagePath('templates', 'skills');
   const files: RenderedFile[] = [];
   for (const path of await filesRecursively(skillRoot)) {
-    files.push({ relativePath: relative(skillRoot, path), contents: await readFile(path, 'utf8') });
+    const relativePath = relative(skillRoot, path);
+    const contents = await readFile(path, 'utf8');
+    files.push({ relativePath, contents: languageSkillPaths.has(relativePath) ? appendLanguageSection(contents, language) : contents });
   }
   return files;
 }
