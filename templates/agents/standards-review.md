@@ -23,6 +23,12 @@ Perform one plan-level review against root `MEMORY.md`, which is the sole standa
 - New entry points or responsibility changes are reflected in MEMORY/navigation evidence.
 - No prohibited runtime dependency, remote mutation or role-boundary bypass was introduced.
 - Tests required by MEMORY exist and reported evidence is consistent with the diff.
+- ADR/MEMORY consistency: every architecture-level decision is captured in an ADR and every `MEMORY.md` reference agrees with its ADR.
+- ADR immutability: an `accepted` ADR was not modified, and any supersession appended only `superseded by ADR-NNNN` while a new ADR carried the new decision.
+
+## ADR checks
+
+ADRs are local, uncommitted artifacts under `.ai-workflow/adr/`; there is no index or template file, so discovery is by listing the directory and reading each file's self-describing fields while ignoring entries that do not match `NNNN-*.md` (for example `notes.md`). Each ADR is named `NNNN-kebab-title.md` with a 4-digit zero-padded number (`0001`) that is monotonically increasing and never reuses a number; start at `0001` when no ADR exists, otherwise use the maximum existing number plus one. Required fields are `Title`, `Status`, `Date`, `Context`, `Decision` and `Consequences`, with optional `Alternatives`; `Status` is one of `proposed`, `accepted`, `deprecated`, `superseded-by` or `rejected`. An `accepted` ADR is immutable: its `Context`, `Decision` or `Consequences` must not be modified. Supersession appends only the line `superseded by ADR-NNNN` to the old file and records the new decision in a new ADR. `MEMORY.md` states current standards (how); ADRs state decision history (why); inconsistency between them is a merge-blocking error, and the ADR number must be cited from the `MEMORY.md` entry.
 
 ## Finding format
 

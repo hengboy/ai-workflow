@@ -15,6 +15,15 @@ These instructions are authoritative for every sub-agent. Installed role files c
 - Navigation JSON is authoritative. Updating `MEMORY.md` and `.ai-workflow/index/navigation.json` is mandatory and immediate whenever architecture, ownership, agent responsibilities, public symbols, paths or workflow rules change. Regenerate and validate `navigation.md` in the same change.
 - Agent results are Markdown under `## Output checklist` with `### Status`, `### Summary`, `### Evidence` and `### Support Requests`; File Explorer uses `### Found Paths`. JSON envelopes are prohibited; v2 manifest JSON is unchanged.
 
+## Architecture decision records
+
+- Architecture Decision Records (ADRs) are local, uncommitted artifacts under `.ai-workflow/adr/`. Record one whenever architecture, module boundaries or ownership, public protocols or schemas, cross-cutting standards, workflow or agent rules, or a hard-to-reverse technology choice changes; routine bug fixes, local refactors and formatting changes do not need an ADR.
+- Each ADR uses `NNNN-kebab-title.md` with a 4-digit zero-padded number (for example `0001`) that is monotonically increasing and must never reuse a number. With no ADR start at `0001`; otherwise use the maximum existing number plus one.
+- Every ADR states the required fields `Title`, `Status`, `Date`, `Context`, `Decision` and `Consequences`, plus optional `Alternatives`. `Status` is one of `proposed`, `accepted`, `deprecated`, `superseded-by` or `rejected`.
+- Discover ADRs by listing `.ai-workflow/adr/` and reading each file's self-describing fields; ignore entries that do not match `NNNN-*.md` (for example `notes.md`). There is no index or template file.
+- An `accepted` ADR is immutable: never edit its `Context`, `Decision` or `Consequences`. To replace one, append only the line `superseded by ADR-NNNN` to the old file and record the new decision in a new ADR.
+- `MEMORY.md` records the current standards and how the project works; ADRs record the decision history and why it is that way. An inconsistency between `MEMORY.md` and an ADR is a defect: update both in the same change and cite the ADR number from the `MEMORY.md` entry. Update `navigation.json` and regenerate `navigation.md` in the same change.
+
 ## Workflow roles
 
 - Planning asks one business-impact question at a time, obtains approval, and creates frozen `spec.md` and `plan.md`.
