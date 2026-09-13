@@ -8,6 +8,7 @@
 
 - `src/install`: shared-skill and host-agent rendering, atomic install/uninstall, and transactional project initialization/update with conflict preflight, actual-byte manifest digests and invocation-scoped rollback.
 - `src/profile`: profile YAML discovery, authoritative schema validation and legacy-role migration rejection.
+- `src/settings`: reads the user-owned `~/.config/ai-workflow/config.yaml` output-language setting, resolving `en`/`zh-CN` (default `en`) and failing before installation writes on unsupported or malformed configuration.
 - `src/workflow`: frozen-plan parsing and digest validation.
 - `src/context`: navigation lifecycle — capability-dispatched validation, verified locate and authorized refresh.
 - `src/context/discovery`: deterministic bounded repository scanning, optional user-owned `.ai-workflow/project.yml`, TypeScript/JavaScript semantic `exported-symbol` adapters via the TypeScript compiler, Java structural `file` adapters, and canonical navigation building.
@@ -21,6 +22,7 @@
 - Planning artifacts are frozen and validated before task splitting.
 - Planning and plan-to-tasks never commit their artifacts: `.ai-workflow/` is gitignored, so `spec.md`, `plan.md` and task files remain local, untracked files.
 - User configuration is preserved unless an install manifest proves ownership.
+- Install resolves the output language before any write and injects it only into the installed `planning` and `plan-to-tasks` skills; changing the language requires re-running `ai-workflow install` or `$switch-profile` because the directive is injected at install time.
 - Repository navigation is discovered from repository evidence and optional user-owned `.ai-workflow/project.yml`; the tool never generates, overwrites or claims ownership of that configuration.
 - Navigation JSON is authoritative and `navigation.md` is rendered from it. Structural `file` roots are validated by file existence and coverage; semantic `exported-symbol` roots by symbols and relations, except mixed-language roots, which full validation exempts (feature-scoped verification still checks indexed symbols and relations); unsupported semantic languages are rejected.
 - Project init validates configuration and the navigation model before publication, records actual written-byte digests, and on ordinary failure removes only invocation-created files and restores the original `.gitignore`.
