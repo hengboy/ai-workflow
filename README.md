@@ -85,7 +85,20 @@ Navigation is JSON-authoritative version-1 output produced by a single builder, 
 
 ## Profiles
 
-Store profiles at `~/.config/ai-workflow/profiles/<name>.yaml`, then activate one with `ai-workflow profile activate <name>` or the installed `$switch-profile` skill. Activation only accepts an existing, valid profile, records it as the single active profile and immediately reinstalls agents for every host already managed by ai-workflow. Its JSON report lists each host, agents directory, installed agent path and explicit profile model settings. Later `install` or upgrade commands automatically reuse that active profile.
+Store profiles at `~/.config/ai-workflow/profiles/<name>.yaml`, then activate one with `ai-workflow profile activate <name>` or the installed `$switch-profile` skill. `~/.config/ai-workflow/config.yaml` is the single configuration source, and it stores the top-level optional `active_profile` field alongside `output_language`. Activation only accepts an existing, valid profile, writes or updates `active_profile` in `config.yaml`, and immediately reinstalls agents for every host already managed by ai-workflow. It always targets the explicit `<name>` argument; it never reads the current `active_profile` value or a legacy marker as its activation target. Its JSON report lists each host, agents directory, installed agent path and explicit profile model settings. Later `install` or upgrade commands resolve the active profile from `active_profile` in `config.yaml` and reuse it automatically.
+
+Do not hand-edit the `active_profile` field in `config.yaml`; use `ai-workflow profile activate <name>` so the value is validated and agents are reinstalled.
+
+### Legacy active-profile marker migration
+
+Older ai-workflow versions stored the active profile in a standalone `~/.config/ai-workflow/active-profile` marker file. That marker is deprecated; `config.yaml` is the only runtime source, and an `install` without an explicit profile migrates the marker at most once:
+
+- When `config.yaml` has no `active_profile` and the `active-profile` marker holds a non-empty value, ai-workflow validates that value as a profile and, after a successful install, writes it to `active_profile` and deletes the marker.
+- When `config.yaml` already has an `active_profile`, that value wins; the marker cannot overwrite it and is deleted after a successful install.
+- When the marker value cannot be loaded as a valid profile, the command fails before writing any managed file, leaves `config.yaml` unchanged and keeps the marker.
+- `ai-workflow profile activate <name>` never activates the marker value, but deletes the marker after a successful explicit activation, even when the marker value is invalid.
+
+`uninstall` never creates, modifies or deletes `config.yaml`.
 
 Each agent can choose a different model and reasoning effort for each host. Missing host entries inherit that host's normal defaults.
 
@@ -112,7 +125,7 @@ Supported reasoning values are `low`, `medium`, `high`, `xhigh`, `max` and `ultr
 
 ## Output language
 
-Natural-language prose in generated planning artifacts (`spec.md`, `plan.md` and `tasks/*.md`) is localized through a user-owned configuration file at `~/.config/ai-workflow/config.yaml`.
+Natural-language prose in generated planning artifacts (`spec.md`, `plan.md` and `tasks/*.md`) is localized through `~/.config/ai-workflow/config.yaml`, the single user-owned configuration source that also carries the optional `active_profile` field described under Profiles.
 
 ```yaml
 output_language: zh-CN
@@ -121,7 +134,7 @@ output_language: zh-CN
 - `output_language` accepts `en` (English) or `zh-CN` (Simplified Chinese). The default is `en` when the file or the field is absent.
 - The language is resolved when `ai-workflow install` runs, so changing it requires re-running `ai-workflow install` or the installed `$switch-profile` skill, which reinstalls through the same path.
 - Only the installed `planning` and `plan-to-tasks` skills receive the directive, and only natural-language prose is translated: headings, table headers, YAML frontmatter keys and their order, `REQ-###`/`AC-###` identifiers, file paths, code and enumerated values such as `surface` remain English.
-- An unsupported value or malformed configuration fails installation before any managed file is written. The file is user-owned and is never written, overwritten or recorded in the install manifest.
+- An unsupported value or malformed configuration fails installation before any managed file is written. The file remains user-owned: ai-workflow reads `output_language` and writes only `active_profile`, preserving existing keys, and never records the file in the install manifest.
 
 ## Optional real-host smoke
 

@@ -6,9 +6,9 @@
 
 ## Boundaries
 
-- `src/install`: shared-skill and host-agent rendering, atomic install/uninstall, and transactional project initialization/update with conflict preflight, actual-byte manifest digests and invocation-scoped rollback.
+- `src/install`: shared-skill and host-agent rendering, atomic install/uninstall, and transactional project initialization/update with conflict preflight, actual-byte manifest digests and invocation-scoped rollback; resolves the active profile from `config.yaml` and performs a one-time migration of the deprecated `~/.config/ai-workflow/active-profile` marker (validate the candidate before any write, migrate and delete the marker only after a successful install or explicit activation, keep it on failure); `uninstall` never changes `config.yaml`.
 - `src/profile`: profile YAML discovery, authoritative schema validation and legacy-role migration rejection.
-- `src/settings`: reads the user-owned `~/.config/ai-workflow/config.yaml` output-language setting, resolving `en`/`zh-CN` (default `en`) and failing before installation writes on unsupported or malformed configuration.
+- `src/settings`: validates and reads the whole user-owned `~/.config/ai-workflow/config.yaml` (`output_language` plus optional `active_profile`), resolving `en`/`zh-CN` (default `en`), exposes `writeActiveProfile` to update `active_profile` while preserving existing keys, and fails before installation writes on unsupported or malformed configuration.
 - `src/workflow`: frozen-plan parsing and digest validation.
 - `src/context`: navigation lifecycle — capability-dispatched validation, verified locate and authorized refresh.
 - `src/context/discovery`: deterministic bounded repository scanning, optional user-owned `.ai-workflow/project.yml`, TypeScript/JavaScript semantic `exported-symbol` adapters via the TypeScript compiler, Java structural `file` adapters, and canonical navigation building.
