@@ -8,7 +8,7 @@ import type { Host } from '../workflow/types.js';
 
 export interface RenderedFile { relativePath: string; contents: string }
 
-const languageSkillPaths = new Set(['planning/SKILL.md', 'plan-to-tasks/SKILL.md']);
+const languageSkillPaths = new Set(['planning/SKILL.md', 'plan-to-tasks/SKILL.md', 'coding/SKILL.md']);
 
 function languageSection(language: OutputLanguage): string {
   const name = language === 'en' ? 'English' : 'Simplified Chinese (zh-CN)';
@@ -17,7 +17,9 @@ function languageSection(language: OutputLanguage): string {
     '',
     `Output language: ${name}`,
     '',
-    `Write all natural-language prose in ${name}. Only natural-language prose may be translated; headings, table headers, YAML frontmatter keys and their order, \`REQ-###\`/\`AC-###\` identifiers, file paths, code and enumerated values such as \`surface\` remain English.`,
+    `Write the agent's interactive and session natural-language prose in ${name}, including clarification questions, confirmation previews, progress narration and final summary.`,
+    '',
+    `In generated planning artifacts, only natural-language prose may be translated; headings, table headers, YAML frontmatter keys and their order, \`REQ-###\`/\`AC-###\` identifiers, file paths, code and enumerated values such as \`surface\` remain English.`,
     ''
   ].join('\n');
 }
