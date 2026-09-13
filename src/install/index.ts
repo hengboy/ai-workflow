@@ -1,6 +1,6 @@
 import { homedir } from 'node:os';
 import { basename, dirname, extname, join, relative, resolve } from 'node:path';
-import { readFile, rm, rmdir, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, rm, rmdir, writeFile } from 'node:fs/promises';
 import { atomicWrite, exists, readJson, writeJson } from '../utils/fs.js';
 import { sha256 } from '../utils/hash.js';
 import { renderHost, renderSkills, type RenderedFile } from './render.js';
@@ -36,6 +36,7 @@ const manifestRelative = '.config/ai-workflow/install-manifest.json';
 const activeProfileRelative = '.config/ai-workflow/active-profile';
 const settingsRelative = '.config/ai-workflow/config.yaml';
 const projectManifestRelative = '.ai-workflow/project-manifest.json';
+const adrRelative = '.ai-workflow/adr';
 const navigationJsonRelative = '.ai-workflow/index/navigation.json';
 const navigationMarkdownRelative = '.ai-workflow/index/navigation.md';
 const marketplaceRelative = '.agents/plugins/marketplace.json';
@@ -232,12 +233,20 @@ async function removeEmptyDirectory(path: string): Promise<void> {
   try { await rmdir(path); } catch { /* missing or not empty */ }
 }
 
+async function existingAdrFiles(root: string): Promise<string[]> {
+  const directory = join(root, adrRelative); if (!(await exists(directory))) return [];
+  return (await readdir(directory)).filter((name) => /^\d{4}-.*\.md$/.test(name)).map((name) => join(adrRelative, name));
+}
+
 export async function initializeProject(project: string): Promise<string[]> {
   const root = resolve(project);
   const templates = await projectTemplateContents();
   const conflicts: Array<{ target: string; contents: string }> = [];
   for (const item of templates) if (await exists(join(root, item.target))) conflicts.push(item);
   if (conflicts.length) throw new Error(`Initialization conflicts; no files written. Merge these templates manually:\n${conflicts.map((item) => `${item.target}\n--- proposed ---\n${item.contents}`).join('\n')}`);
+
+  const adrConflicts = await existingAdrFiles(root);
+  if (adrConflicts.length) throw new Error(`Initialization conflicts with existing ADRs; no files written. Merge or remove these ADRs manually:\n${adrConflicts.join('\n')}`);
 
   const facts = await scanProject(root);
   const configResult = await loadProjectConfig(root, facts.files);
@@ -256,12 +265,16 @@ export async function initializeProject(project: string): Promise<string[]> {
   const ignoreOriginal = ignoreExisted ? await readFile(ignorePath, 'utf8') : '';
   const indexDirectory = join(root, '.ai-workflow/index');
   const aiWorkflowDirectory = join(root, '.ai-workflow');
+  const adrDirectory = join(root, adrRelative);
   const indexDirectoryExisted = await exists(indexDirectory);
   const aiWorkflowDirectoryExisted = await exists(aiWorkflowDirectory);
+  const adrDirectoryExisted = await exists(adrDirectory);
   const manifestPath = join(root, projectManifestRelative);
   const created: string[] = [];
   const writtenFiles: string[] = [];
   try {
+    await mkdir(adrDirectory, { recursive: true });
+    created.push(adrRelative);
     for (const item of published) {
       await atomicWrite(join(root, item.target), item.contents);
       writtenFiles.push(join(root, item.target));
@@ -282,6 +295,7 @@ export async function initializeProject(project: string): Promise<string[]> {
     if (ignoreExisted) await writeFile(ignorePath, ignoreOriginal);
     else await rm(ignorePath, { force: true });
     if (!indexDirectoryExisted) await removeEmptyDirectory(indexDirectory);
+    if (!adrDirectoryExisted) await removeEmptyDirectory(adrDirectory);
     if (!aiWorkflowDirectoryExisted) await removeEmptyDirectory(aiWorkflowDirectory);
     throw error;
   }
