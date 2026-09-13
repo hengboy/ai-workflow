@@ -125,7 +125,7 @@ Supported reasoning values are `low`, `medium`, `high`, `xhigh`, `max` and `ultr
 
 ## Output language
 
-Natural-language prose in generated planning artifacts (`spec.md`, `plan.md` and `tasks/*.md`) is localized through `~/.config/ai-workflow/config.yaml`, the single user-owned configuration source that also carries the optional `active_profile` field described under Profiles.
+Natural-language prose in generated planning artifacts (`spec.md`, `plan.md` and `tasks/*.md`) and in the agent's own interactive/session output is localized through `~/.config/ai-workflow/config.yaml`, the single user-owned configuration source that also carries the optional `active_profile` field described under Profiles.
 
 ```yaml
 output_language: zh-CN
@@ -133,7 +133,8 @@ output_language: zh-CN
 
 - `output_language` accepts `en` (English) or `zh-CN` (Simplified Chinese). The default is `en` when the file or the field is absent.
 - The language is resolved when `ai-workflow install` runs, so changing it requires re-running `ai-workflow install` or the installed `$switch-profile` skill, which reinstalls through the same path.
-- Only the installed `planning` and `plan-to-tasks` skills receive the directive, and only natural-language prose is translated: headings, table headers, YAML frontmatter keys and their order, `REQ-###`/`AC-###` identifiers, file paths, code and enumerated values such as `surface` remain English.
+- The directive is injected into exactly the installed `planning`, `plan-to-tasks` and `coding` skills. Both the agent's interactive/session natural-language prose (clarification questions, confirmation previews, progress narration and final summary) and the natural-language prose of generated planning artifacts follow the configured language.
+- Only natural-language prose is translated: headings, table headers, YAML frontmatter keys and their order, `REQ-###`/`AC-###` identifiers, file paths, code and enumerated values such as `surface` remain English.
 - An unsupported value or malformed configuration fails installation before any managed file is written. The file remains user-owned: ai-workflow reads `output_language` and writes only `active_profile`, preserving existing keys, and never records the file in the install manifest.
 
 ## Optional real-host smoke
