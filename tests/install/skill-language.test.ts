@@ -15,7 +15,7 @@ const skillsRelative = '.agents/skills';
 const enMarker = 'Output language: English';
 const zhMarker = 'Output language: Simplified Chinese (zh-CN)';
 const directiveHeading = '## Output language';
-const languageSkills = new Set(['planning/SKILL.md', 'plan-to-tasks/SKILL.md']);
+const languageSkills = new Set(['planning/SKILL.md', 'plan-to-tasks/SKILL.md', 'coding/SKILL.md']);
 
 function agentsRelative(host: Host): string {
   if (host === 'codex') return '.codex/agents';
@@ -79,7 +79,7 @@ describe('installed skill output language', () => {
     }
   });
 
-  it('injects the directive only into the two language skills and no agent file', async () => {
+  it('injects the directive only into the three language skills and no agent file', async () => {
     const home = await temporary('ai-workflow-language-scope-');
     await seedConfig(home, 'output_language: zh-CN\n');
     await install(hosts, { home });
@@ -115,12 +115,16 @@ describe('installed skill output language', () => {
     await install(hosts, { home });
 
     const clauses = ['headings', 'table headers', 'frontmatter', 'REQ-###', 'AC-###', 'file paths', 'code', 'surface'];
+    const sessionClauses = ['clarification questions', 'confirmation previews', 'progress narration', 'final summary'];
     for (const skill of languageSkills) {
       const contents = await languageSkillContents(home, skill);
       expect(contents).toContain(directiveHeading);
       expect(contents).toContain(zhMarker);
       expect(contents).toContain('Simplified Chinese');
       for (const clause of clauses) {
+        expect(contents, `${skill} mentions ${clause}`).toContain(clause);
+      }
+      for (const clause of sessionClauses) {
         expect(contents, `${skill} mentions ${clause}`).toContain(clause);
       }
       expect(contents).toMatch(/remain English/);
@@ -161,9 +165,11 @@ describe('installed skill output language', () => {
     await seedConfig(home, 'output_language: zh-CN\n');
     await activateProfile('team', { home });
 
-    const contents = await languageSkillContents(home, 'planning/SKILL.md');
-    expect(contents).toContain(zhMarker);
-    expect(contents).not.toContain(enMarker);
+    for (const skill of languageSkills) {
+      const contents = await languageSkillContents(home, skill);
+      expect(contents, `${skill} uses the new language after activateProfile`).toContain(zhMarker);
+      expect(contents).not.toContain(enMarker);
+    }
   });
 
   it('preserves the user configuration and keeps it out of the install manifest', async () => {

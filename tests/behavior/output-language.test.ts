@@ -211,6 +211,13 @@ describe('localized planning artifacts', () => {
     expect(readme).toMatch(/default is `en`/);
     expect(readme).toMatch(/re-running `ai-workflow install`/);
     expect(readme).toMatch(/\$switch-profile/);
+    expect(readme).toContain('`planning`');
+    expect(readme).toContain('`plan-to-tasks`');
+    expect(readme).toContain('`coding`');
+    for (const category of ['clarification questions', 'confirmation previews', 'progress narration', 'final summary']) {
+      expect(readme, `README documents the ${category} session-prose category`).toContain(category);
+    }
+    expect(readme).not.toContain('Only the installed `planning` and `plan-to-tasks` skills receive the directive');
   });
 
   it('rejects a Chinese-prose frozen pair whose digest does not match (negative)', async () => {
