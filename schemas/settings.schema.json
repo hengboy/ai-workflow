@@ -6,6 +6,10 @@
   "additionalProperties": false,
   "properties": {
     "version": { "const": 1 },
-    "output_language": { "enum": ["en", "zh-CN"] }
+    "output_language": { "enum": ["en", "zh-CN"] },
+    "active_profile": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$"
+    }
   }
 }
