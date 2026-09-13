@@ -5,7 +5,7 @@ import { atomicWrite, exists, readJson, writeJson } from '../utils/fs.js';
 import { sha256 } from '../utils/hash.js';
 import { renderHost, renderSkills, type RenderedFile } from './render.js';
 import { loadProfile, type Profile } from '../profile/index.js';
-import { loadOutputLanguage } from '../settings/index.js';
+import { loadSettings, writeActiveProfile } from '../settings/index.js';
 import { renderNavigation } from '../context/navigation.js';
 import { scanProject } from '../context/discovery/scanner.js';
 import { loadProjectConfig } from '../context/discovery/project-config.js';
@@ -34,6 +34,7 @@ export interface ProfileActivationReport {
 }
 const manifestRelative = '.config/ai-workflow/install-manifest.json';
 const activeProfileRelative = '.config/ai-workflow/active-profile';
+const settingsRelative = '.config/ai-workflow/config.yaml';
 const projectManifestRelative = '.ai-workflow/project-manifest.json';
 const navigationJsonRelative = '.ai-workflow/index/navigation.json';
 const navigationMarkdownRelative = '.ai-workflow/index/navigation.md';
@@ -66,6 +67,19 @@ async function readManifest(home: string): Promise<InstallManifest> {
   const path = join(home, manifestRelative); return await exists(path) ? readJson<InstallManifest>(path) : { version: '1', installed_at: new Date(0).toISOString(), hosts: {} };
 }
 
+function settingsConfigPath(home: string): string { return join(home, settingsRelative); }
+function activeProfilePath(home: string): string { return join(home, activeProfileRelative); }
+
+// The legacy marker is deprecated: it is only read for one-time migration or unvalidated cleanup, never written.
+async function readMarker(home: string): Promise<string | undefined> {
+  const path = activeProfilePath(home); if (!(await exists(path))) return undefined;
+  const name = (await readFile(path, 'utf8')).trim(); return name || undefined;
+}
+async function readIfExists(path: string): Promise<Buffer | undefined> { return (await exists(path)) ? readFile(path) : undefined; }
+async function restoreIfChanged(path: string, contents: Buffer | undefined): Promise<void> {
+  if (contents === undefined) await rm(path, { force: true }); else await atomicWrite(path, contents);
+}
+
 // Legacy migration: previous versions recorded the Codex plugin in the shared marketplace.
 // ai-workflow no longer ships a Codex plugin, so strip only its own entry and leave other entries intact.
 async function removeMarketplaceEntry(home: string): Promise<void> {
@@ -95,11 +109,14 @@ async function removeStaleOwnedFiles(home: string, previous: ManifestFile[], cur
 
 async function installUnsafe(hosts: Host[], options: { home?: string; version?: string; profile?: Profile } = {}): Promise<InstallManifest> {
   const home = resolve(options.home ?? homedir()); const version = options.version ?? '0.1.0'; const manifest = await readManifest(home);
-  // Resolve the output language before any render or write so an invalid configuration aborts pre-write.
-  const language = await loadOutputLanguage(home);
-  const activeName = options.profile ? undefined : await getActiveProfile(home); const profile = options.profile ?? (activeName ? await loadProfile(home, activeName) : undefined);
+  // Resolve settings once before any render or write so an invalid active_profile aborts pre-write.
+  const settings = await loadSettings(home);
+  const explicit = options.profile;
+  // The deprecated marker is only consulted for installs without an explicit profile, as a one-time migration candidate.
+  const activeName = explicit ? undefined : (settings.active_profile ?? await readMarker(home));
+  const profile = explicit ?? (activeName ? await loadProfile(home, activeName) : undefined);
   // Shared skills are host-neutral and installed once, independent of the requested host list.
-  const skills = await renderSkills(language);
+  const skills = await renderSkills(settings.output_language);
   const ownedSkills: ManifestFile[] = []; const skipped: string[] = [];
   for (const file of skills) { const path = join(skillsRoot(home), file.relativePath); if (await writeOwnedFile(home, file, manifest.skills, skillsRoot(home))) ownedSkills.push({ path: relative(home, path), digest: sha256(file.contents), kind: 'file' }); else { const prior = manifest.skills?.find((item) => item.path === relative(home, path)); if (prior) { ownedSkills.push(prior); skipped.push(prior.path); } } }
   await removeStaleOwnedFiles(home, manifest.skills ?? [], ownedSkills);
@@ -114,12 +131,18 @@ async function installUnsafe(hosts: Host[], options: { home?: string; version?: 
     await removeStaleOwnedFiles(home, manifest.hosts[host] ?? [], owned);
     manifest.hosts[host] = owned;
   }
-  manifest.version = version; manifest.installed_at = new Date().toISOString(); if (skipped.length) manifest.skipped = skipped; else delete manifest.skipped; await writeJson(join(home, manifestRelative), manifest); return manifest;
+  manifest.version = version; manifest.installed_at = new Date().toISOString(); if (skipped.length) manifest.skipped = skipped; else delete manifest.skipped; await writeJson(join(home, manifestRelative), manifest);
+  // One-time migration after all managed writes succeed; an explicit profile never migrates or deletes the marker.
+  if (!explicit && settings.active_profile === undefined && activeName !== undefined) await writeActiveProfile(home, activeName);
+  if (!explicit) await rm(activeProfilePath(home), { force: true });
+  return manifest;
 }
 
 export async function install(hosts: Host[], options: { home?: string; version?: string; profile?: Profile } = {}): Promise<InstallManifest> {
   const home = resolve(options.home ?? homedir()); const manifestPath = join(home, manifestRelative); const hadManifest = await exists(manifestPath); const previous = hadManifest ? await readFile(manifestPath) : undefined;
+  const configPath = settingsConfigPath(home); const hadConfig = await exists(configPath); const previousConfig = hadConfig ? await readFile(configPath) : undefined;
   try { return await installUnsafe(hosts, options); } catch (error) {
+    await restoreIfChanged(configPath, previousConfig);
     if (previous) await atomicWrite(manifestPath, previous); else await rm(manifestPath, { force: true });
     if (!hadManifest) { await rm(skillsRoot(home), { recursive: true, force: true }); for (const host of hosts) await rm(agentsRoot(home, host), { recursive: true, force: true }); await removeEmptyDirectory(join(home, '.agents')); await removeEmptyDirectory(join(home, '.codex')); await removeEmptyDirectory(join(home, '.config')); }
     throw error;
@@ -127,8 +150,9 @@ export async function install(hosts: Host[], options: { home?: string; version?:
 }
 
 export async function getActiveProfile(home: string): Promise<string | undefined> {
-  const path = join(resolve(home), activeProfileRelative); if (!(await exists(path))) return undefined;
-  const name = (await readFile(path, 'utf8')).trim(); return name || undefined;
+  const resolved = resolve(home); const settings = await loadSettings(resolved);
+  if (settings.active_profile !== undefined) return settings.active_profile;
+  return readMarker(resolved);
 }
 
 function profileInstallations(home: string, hosts: Host[], manifest: InstallManifest, profile: Profile): HostInstallation[] {
@@ -150,21 +174,28 @@ function profileInstallations(home: string, hosts: Host[], manifest: InstallMani
 }
 
 export async function activateProfile(name: string, options: { home?: string; version?: string } = {}): Promise<ProfileActivationReport> {
-  const home = resolve(options.home ?? homedir()); const profile = await loadProfile(home, name); const manifest = await readManifest(home);
+  const home = resolve(options.home ?? homedir()); const profile = await loadProfile(home, name);
+  // Validate the existing configuration before any mutation so an illegal active_profile aborts pre-write.
+  await loadSettings(home);
+  const manifest = await readManifest(home);
   const hosts = (Object.keys(manifest.hosts) as Host[]).filter((host) => ['codex', 'claude', 'opencode'].includes(host));
   for (const host of hosts) for (const file of manifest.hosts[host] ?? []) {
     const path = resolve(home, file.path);
     if (file.kind === 'file' && await exists(path) && sha256(await readFile(path)) !== file.digest) throw new Error(`Cannot activate profile because managed file was modified: ${file.path}`);
   }
   const snapshots = await Promise.all(hosts.flatMap((host) => (manifest.hosts[host] ?? []).filter((file) => file.kind === 'file').map(async (file) => ({ path: resolve(home, file.path), contents: await readFile(resolve(home, file.path)) }))));
-  const marker = join(home, activeProfileRelative); const oldMarker = await exists(marker) ? await readFile(marker) : undefined;
+  const configPath = settingsConfigPath(home); const manifestPath = join(home, manifestRelative); const marker = activeProfilePath(home);
+  const configBefore = await readIfExists(configPath); const manifestBefore = await readIfExists(manifestPath); const markerBefore = await readIfExists(marker);
   try {
     const installed = hosts.length ? await install(hosts, { home, version: options.version ?? manifest.version, profile }) : manifest;
-    await atomicWrite(marker, `${name}\n`);
+    await writeActiveProfile(home, name);
+    await rm(marker, { force: true });
     return { active_profile: name, hosts, installations: profileInstallations(home, hosts, installed, profile) };
   } catch (error) {
     for (const snapshot of snapshots) await atomicWrite(snapshot.path, snapshot.contents);
-    if (oldMarker) await atomicWrite(marker, oldMarker); else await rm(marker, { force: true });
+    await restoreIfChanged(configPath, configBefore);
+    await restoreIfChanged(manifestPath, manifestBefore);
+    await restoreIfChanged(marker, markerBefore);
     throw error;
   }
 }
