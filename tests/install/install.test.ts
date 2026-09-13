@@ -1,9 +1,33 @@
 import { describe, expect, it } from 'vitest';
 import { join } from 'node:path';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import YAML from 'yaml';
 import { activateProfile, getActiveProfile, install, uninstall } from '../../src/install/index.js';
 import { exists } from '../../src/utils/fs.js';
 import { temporary } from '../helpers.js';
+
+function configPath(home: string): string {
+  return join(home, '.config/ai-workflow/config.yaml');
+}
+function markerPath(home: string): string {
+  return join(home, '.config/ai-workflow/active-profile');
+}
+async function readConfig(home: string): Promise<Record<string, unknown>> {
+  return YAML.parse(await readFile(configPath(home), 'utf8')) as Record<string, unknown>;
+}
+async function writeConfig(home: string, contents: string): Promise<void> {
+  await mkdir(join(home, '.config/ai-workflow'), { recursive: true });
+  await writeFile(configPath(home), contents);
+}
+async function writeMarker(home: string, contents: string): Promise<void> {
+  await mkdir(join(home, '.config/ai-workflow'), { recursive: true });
+  await writeFile(markerPath(home), contents);
+}
+async function writeProfile(home: string, name: string, model = name): Promise<void> {
+  const directory = join(home, '.config/ai-workflow/profiles');
+  await mkdir(directory, { recursive: true });
+  await writeFile(join(directory, `${name}.yaml`), `version: 1.0.0\nagents:\n  backend:\n    codex: { model: ${model}, reasoning_effort: high }\n`);
+}
 
 describe('host installation', () => {
   it('activates an existing profile and reinstalls every host agent with native model settings', async () => {
@@ -86,14 +110,18 @@ agents:
     expect(agent).toContain('model = "retained"');
     expect(agent).toContain('model_reasoning_effort = "xhigh"');
   });
-  it('rejects reinstall when the active profile no longer exists', async () => {
+  it('rejects an invalid migration candidate before writing and keeps the legacy marker (AC-008)', async () => {
     const home = await temporary('ai-workflow-profile-stale-');
-    await mkdir(join(home, '.config/ai-workflow'), { recursive: true });
-    await writeFile(join(home, '.config/ai-workflow/active-profile'), 'deleted\n');
+    await writeConfig(home, 'output_language: zh-CN\n');
+    await writeMarker(home, 'deleted\n');
+    const configBefore = await readFile(configPath(home));
 
     await expect(install(['codex'], { home })).rejects.toThrow(/Profile does not exist: deleted/);
 
     expect(await exists(join(home, '.codex/agents/backend.toml'))).toBe(false);
+    expect(await exists(join(home, '.agents/skills/planning/SKILL.md'))).toBe(false);
+    expect(await readFile(configPath(home))).toEqual(configBefore);
+    expect(await readFile(markerPath(home), 'utf8')).toBe('deleted\n');
   });
   it('installs shared skills and per-host agents, then precisely uninstalls owned files', async () => { const home = await temporary('ai-workflow-home-'); await mkdir(join(home, '.agents/plugins'), { recursive: true }); await writeFile(join(home, '.agents/plugins/marketplace.json'), JSON.stringify({ plugins: [{ name: 'keep', version: '1' }], setting: true })); await mkdir(join(home, '.codex/agents'), { recursive: true }); await writeFile(join(home, '.codex/agents/unrelated.md'), 'keep'); await install(['codex', 'claude', 'opencode'], { home }); expect(await exists(join(home, '.agents/skills/planning/SKILL.md'))).toBe(true); expect(await exists(join(home, '.agents/skills/git-message/SKILL.md'))).toBe(true); expect(await exists(join(home, '.agents/skills/switch-profile/SKILL.md'))).toBe(true); expect(await exists(join(home, '.codex/plugins/ai-workflow'))).toBe(false); expect(await exists(join(home, '.claude/skills/ai-workflow'))).toBe(false); expect(await exists(join(home, '.config/opencode/skills/planning/SKILL.md'))).toBe(false); expect(await readFile(join(home, '.agents/plugins/marketplace.json'), 'utf8')).toBe(JSON.stringify({ plugins: [{ name: 'keep', version: '1' }], setting: true })); const skill = await readFile(join(home, '.agents/skills/planning/SKILL.md'), 'utf8'); expect(skill).toContain('## Clarification loop'); await uninstall(['codex', 'claude', 'opencode'], { home }); expect(await exists(join(home, '.codex/agents/unrelated.md'))).toBe(true); expect(await exists(join(home, '.agents/skills/planning/SKILL.md'))).toBe(false); expect(await exists(join(home, '.codex/agents/backend.toml'))).toBe(false); const marketplace = JSON.parse(await readFile(join(home, '.agents/plugins/marketplace.json'), 'utf8')) as { plugins: Array<{ name: string }>; setting: boolean }; expect(marketplace.plugins.some((plugin) => plugin.name === 'keep')).toBe(true); expect(marketplace.plugins.some((plugin) => plugin.name === 'ai-workflow')).toBe(false); expect(marketplace.setting).toBe(true); });
   it('installs each skill with its metadata and nested reference templates', async () => {
@@ -262,5 +290,95 @@ agents:
     await expect(activateProfile('legacy', { home })).rejects.toThrow(/task-worker/);
     expect(await getActiveProfile(home)).toBeUndefined();
     expect(await readFile(join(home, '.codex/agents/backend.toml'), 'utf8')).toBe(before);
+  });
+  it('renders agents from config.yaml active_profile without a legacy marker (AC-004)', async () => {
+    const home = await temporary('ai-workflow-install-config-active-');
+    await writeProfile(home, 'team', 'gpt-5.6');
+    await writeConfig(home, 'active_profile: team\n');
+
+    await install(['codex'], { home });
+
+    const agent = await readFile(join(home, '.codex/agents/backend.toml'), 'utf8');
+    expect(agent).toContain('model = "gpt-5.6"');
+    expect(agent).toContain('model_reasoning_effort = "high"');
+    expect(await exists(markerPath(home))).toBe(false);
+  });
+  it('installs with default rendering when there is no active profile (AC-005)', async () => {
+    const home = await temporary('ai-workflow-install-default-');
+
+    await install(['codex'], { home });
+
+    const agent = await readFile(join(home, '.codex/agents/backend.toml'), 'utf8');
+    expect(agent).toContain('name = "backend"');
+    expect(agent).not.toMatch(/^model = /m);
+    expect(agent).not.toMatch(/^model_reasoning_effort = /m);
+    expect(await exists(configPath(home))).toBe(false);
+    expect(await exists(markerPath(home))).toBe(false);
+  });
+  it('migrates a legacy marker into config.yaml and preserves output_language (AC-006)', async () => {
+    const home = await temporary('ai-workflow-install-migrate-');
+    await writeProfile(home, 'opencode-go', 'gpt-5.6');
+    await writeConfig(home, 'output_language: zh-CN\n');
+    await writeMarker(home, 'opencode-go\n');
+
+    await install(['codex'], { home });
+
+    const config = await readConfig(home);
+    expect(config.active_profile).toBe('opencode-go');
+    expect(config.output_language).toBe('zh-CN');
+    expect(await exists(markerPath(home))).toBe(false);
+  });
+  it('prefers config.yaml active_profile over the legacy marker and deletes the marker (AC-007)', async () => {
+    const home = await temporary('ai-workflow-install-marker-conflict-');
+    await writeProfile(home, 'alpha', 'alpha-model');
+    await writeConfig(home, 'active_profile: alpha\n');
+    await writeMarker(home, 'beta\n');
+
+    await install(['codex'], { home });
+
+    const config = await readConfig(home);
+    expect(config.active_profile).toBe('alpha');
+    expect(await exists(markerPath(home))).toBe(false);
+    const agent = await readFile(join(home, '.codex/agents/backend.toml'), 'utf8');
+    expect(agent).toContain('model = "alpha-model"');
+  });
+  it.each([
+    ['a numeric active_profile', 'active_profile: 123\n'],
+    ['an empty active_profile', 'active_profile: ""\n'],
+    ['a path-like active_profile', 'active_profile: ../x\n']
+  ])('rejects %s during install before writing any managed file (AC-009)', async (_label, contents) => {
+    const home = await temporary('ai-workflow-install-invalid-active-');
+    await writeConfig(home, contents);
+    const configBefore = await readFile(configPath(home));
+
+    await expect(install(['codex'], { home })).rejects.toThrow(/active_profile/);
+
+    expect(await exists(join(home, '.codex/agents/backend.toml'))).toBe(false);
+    expect(await exists(join(home, '.agents/skills/planning/SKILL.md'))).toBe(false);
+    expect(await readFile(configPath(home))).toEqual(configBefore);
+  });
+  it('rejects an illegal config active_profile during activation before writing (AC-009)', async () => {
+    const home = await temporary('ai-workflow-activate-invalid-active-');
+    await writeProfile(home, 'team', 'gpt-5.6');
+    await install(['codex'], { home });
+    const agentBefore = await readFile(join(home, '.codex/agents/backend.toml'), 'utf8');
+    await writeConfig(home, 'active_profile: 123\n');
+    const configBefore = await readFile(configPath(home));
+
+    await expect(activateProfile('team', { home })).rejects.toThrow(/active_profile/);
+
+    expect(await readFile(join(home, '.codex/agents/backend.toml'), 'utf8')).toBe(agentBefore);
+    expect(await readFile(configPath(home))).toEqual(configBefore);
+  });
+  it('leaves config.yaml unchanged when a host is uninstalled (regression)', async () => {
+    const home = await temporary('ai-workflow-uninstall-config-');
+    await writeProfile(home, 'team', 'gpt-5.6');
+    await writeConfig(home, 'output_language: zh-CN\nactive_profile: team\n');
+    await install(['codex'], { home });
+    const before = await readFile(configPath(home));
+
+    await uninstall(['codex'], { home });
+
+    expect(await readFile(configPath(home))).toEqual(before);
   });
 });
