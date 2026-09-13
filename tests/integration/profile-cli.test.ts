@@ -18,10 +18,10 @@ function markerPath(home: string): string {
 async function readConfig(home: string): Promise<Record<string, unknown>> {
   return YAML.parse(await readFile(configPath(home), 'utf8')) as Record<string, unknown>;
 }
-async function writeProfile(home: string, name: string): Promise<void> {
+async function writeProfile(home: string, name: string, model = 'gpt-5.6-terra'): Promise<void> {
   const directory = join(home, '.config/ai-workflow/profiles');
   await mkdir(directory, { recursive: true });
-  await writeFile(join(directory, `${name}.yaml`), 'version: 1.0.0\nagents:\n  test:\n    codex: { model: gpt-5.6-terra, reasoning_effort: medium }\n');
+  await writeFile(join(directory, `${name}.yaml`), `version: 1.0.0\nagents:\n  test:\n    codex: { model: ${model}, reasoning_effort: medium }\n`);
 }
 async function writeConfig(home: string, contents: string): Promise<void> {
   await mkdir(join(home, '.config/ai-workflow'), { recursive: true });
@@ -92,5 +92,23 @@ describe('profile CLI', () => {
     const config = await readConfig(home);
     expect(config.active_profile).toBe('beta');
     expect(await exists(markerPath(home))).toBe(false);
+  });
+
+  it('keeps config.yaml active_profile over the legacy marker during activation (AC-007)', async () => {
+    const home = await temporary('ai-workflow-profile-cli-marker-conflict-');
+    await writeProfile(home, 'alpha', 'alpha-model');
+    await exec('pnpm', ['exec', 'tsx', 'src/cli.ts', 'install', '--host', 'codex', '--home', home]);
+    await writeConfig(home, 'active_profile: alpha\n');
+    await writeMarker(home, 'beta\n');
+
+    const { stdout } = await exec('pnpm', ['exec', 'tsx', 'src/cli.ts', 'profile', 'activate', 'alpha', '--home', home]);
+
+    const report = JSON.parse(stdout) as { active_profile: string };
+    expect(report.active_profile).toBe('alpha');
+    const config = await readConfig(home);
+    expect(config.active_profile).toBe('alpha');
+    expect(await exists(markerPath(home))).toBe(false);
+    const agent = await readFile(join(home, '.codex/agents/test.toml'), 'utf8');
+    expect(agent).toContain('model = "alpha-model"');
   });
 });
