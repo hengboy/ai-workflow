@@ -12,7 +12,8 @@ non-blocked delegated step remains.
 
 ## Delegation and Scheduling
 
-- An unsplit plan is executed serially: delegate one sub-agent for each plan
+- An unsplit plan is executed serially by each step's `Responsible role`:
+  delegate one sub-agent for each plan
   step, wait for its result, verify it, then dispatch the next step.
 - A split plan is executed serially: delegate one sub-agent for each task in
   dependency order, wait for its result, verify it, then dispatch the next
@@ -29,7 +30,8 @@ non-blocked delegated step remains.
 
 ## Surface routing
 
-Route each task by its `surface` attribute to the directly dispatched role:
+Surface routing applies only when `tasks/*.md` files exist. Each task must have
+an explicit `surface` attribute, and route it to the directly dispatched role:
 
 - `backend` → Backend Developer
 - `frontend` → Frontend Developer
@@ -40,6 +42,14 @@ Route each task by its `surface` attribute to the directly dispatched role:
 - `docs` → Documentation Maintainer
 
 An empty or unknown `surface` fails before execution.
+
+When no task files exist, execute the unsplit plan serially and route each step
+by its `Responsible role`; no plan-level routing attribute is required. Use this
+mapping: `backend` → Backend Developer, `frontend` → Frontend Developer,
+`cross-stack` → Backend Developer then Frontend Developer in dependency order,
+`research` → Researcher, `documentation` or `docs` → Documentation Maintainer,
+and `test` → Test. If a Responsible role cannot be mapped uniquely to one
+installed role, fail before execution and request clarification.
 
 ## Preconditions
 
@@ -137,7 +147,7 @@ Git Operator to commit only that step using the prescribed `git-commit`
 conventions; after all steps merge the temporary branch,
 rerun affected checks, and clean up only the owned worktree and branch.
 
-The dual-axis review is mandatory exactly once after implementation completes:
+For larger or high-risk changes, the dual-axis review runs exactly once after implementation completes:
 Spec Review checks the frozen requirements and acceptance criteria, while
 Standards Review checks `MEMORY.md`. Report both reviewers' findings together
 and wait for the user's repair selection. Never merge code before this gate is

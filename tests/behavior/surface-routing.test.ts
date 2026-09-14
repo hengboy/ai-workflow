@@ -76,14 +76,16 @@ describe('task surface routing', () => {
     expect(tasks[0]?.writeScope).toEqual(['src/output.ts']);
   });
 
-  it('rejects a task with an empty or missing surface before execution', async () => {
+  it.each([
+    ['missing', undefined],
+    ['empty', ''],
+    ['whitespace-only', '   '],
+    ['non-string', null],
+  ])('rejects a task with a %s surface before execution', async (_description, surface) => {
     const root = await temporary();
     const plan = await frozenPlan(root);
 
-    await writeTaskFile(plan, taskAttributes());
-    await expect(readTasks(plan)).rejects.toThrow(/surface/i);
-
-    await writeTaskFile(plan, taskAttributes({ surface: '' }));
+    await writeTaskFile(plan, taskAttributes({ surface }));
     await expect(readTasks(plan)).rejects.toThrow(/surface/i);
   });
 
