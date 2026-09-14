@@ -26,9 +26,11 @@ const PHASE_STATEMENTS = [
 
 const PROPOSED_STATEMENTS = ['may be recorded as proposed', 'becomes accepted'];
 
-const REQUIRED_FIELDS = ['Title', 'Status', 'Date', 'Context', 'Decision', 'Consequences', 'Alternatives'];
+const REQUIRED_FIELDS = ['Title', 'Status', 'Date', 'Summary', 'Context', 'Decision', 'Consequences', 'Alternatives'];
 
 const STATUS_VALUES = ['proposed', 'accepted', 'deprecated', 'superseded-by', 'rejected'];
+
+const INDEX_COMMAND = 'ai-workflow adr index';
 
 const ADR_TRIGGERS: Array<[string, RegExp]> = [
   ['architecture', /architecture/i],
@@ -66,13 +68,20 @@ describe('local ADR contract content', () => {
       for (const status of STATUS_VALUES) {
         expect(text, `${path} status ${status}`).toContain(status);
       }
-      expect(text, `${path} supersession line`).toContain('superseded by ADR-NNNN');
-      expect(text, `${path} discovery`).toMatch(/list(?:ing)?|enumerate|列出/i);
+      expect(text, `${path} supersedes field`).toContain('Supersedes');
+      expect(text, `${path} superseded-by field`).toContain('Superseded-by');
+      expect(text, `${path} supersession value`).toContain('superseded-by ADR-NNNN');
+      expect(text, `${path} superseded-by derivation`).toContain('derived from `Status`');
+      expect(text, `${path} index path`).toContain('.ai-workflow/adr/INDEX.md');
+      expect(text, `${path} index command`).toContain(INDEX_COMMAND);
+      expect(text, `${path} index verify`).toContain('--verify');
       for (const [label, pattern] of ADR_TRIGGERS) {
         expect(text, `${path} trigger ${label}`).toMatch(pattern);
       }
       expect(text, `${path} first number`).toContain('0001');
       expect(text, `${path} next number`).toMatch(/max(?:imum)?\b.{0,40}(?:plus one|\+ ?1|加一)/i);
+      expect(text, `${path} immutability`).toMatch(/immutab|不可变|must not (?:modify|edit)/i);
+      expect(text, `${path} generated index is not hand-edited`).toMatch(/never edit|do not edit|不得编辑|never accept a hand-edited/i);
     }
   });
 
@@ -86,10 +95,10 @@ describe('local ADR contract content', () => {
     for (const path of COMPACT_CONTRACT) {
       const text = await read(path);
       expect(text, `${path} location`).toContain('.ai-workflow/adr/');
+      expect(text, `${path} index path`).toContain('.ai-workflow/adr/INDEX.md');
+      expect(text, `${path} index command`).toContain(INDEX_COMMAND);
       expect(text, `${path} numbering`).toContain('NNNN');
       expect(text, `${path} no number reuse`).toMatch(/never reuse|永不复用/i);
-      expect(text, `${path} discovery`).toMatch(/list(?:ing)?|enumerate|列出/i);
-      expect(text, `${path} supersession line`).toContain('superseded by ADR-NNNN');
       expect(text, `${path} architecture trigger`).toMatch(/architecture/i);
       expect(text, `${path} full contract pointer`).toContain('Documentation Maintainer');
       expect(text, `${path} must not enumerate Status values`).not.toContain('superseded-by');
@@ -120,17 +129,21 @@ describe('local ADR contract content', () => {
     expect(text).toMatch(/step|步骤/i);
   });
 
-  it('requires Standards Review to enforce ADR immutability and MEMORY alignment', async () => {
+  it('requires Standards Review to enforce ADR integrity, MEMORY alignment and index verification', async () => {
     const text = await read('templates/agents/standards-review.md');
     expect(text).toMatch(/ADR/);
     expect(text).toMatch(/MEMORY\.md/);
     expect(text).toMatch(/immutab|不可变|must not (?:modify|edit)|error/i);
+    expect(text).toContain('.ai-workflow/adr/INDEX.md');
+    expect(text).toContain(INDEX_COMMAND);
+    expect(text).toContain('--verify');
   });
 
-  it('gives Documentation Maintainer ADR authoring ownership and max-plus-one numbering', async () => {
+  it('gives Documentation Maintainer ADR authoring ownership, index generation and max-plus-one numbering', async () => {
     const text = await read('templates/agents/documentation-maintainer.md');
     expect(text).toMatch(/ADR/);
     expect(text).toMatch(/0001/);
+    expect(text).toContain(INDEX_COMMAND);
     expect(text).toMatch(/max(?:imum)?\b.{0,40}(?:plus one|\+ ?1|加一)/i);
   });
 
@@ -141,6 +154,15 @@ describe('local ADR contract content', () => {
       expect(text, path).toMatch(/architecture/i);
       expect(text, path).toMatch(/MEMORY\.md/);
     }
+  });
+
+  it('references the generated ADR index from MEMORY.md instead of individual ADR numbers', async () => {
+    for (const path of ['templates/project/MEMORY.md', 'MEMORY.md']) {
+      const text = await read(path);
+      expect(text, `${path} index path`).toContain('.ai-workflow/adr/INDEX.md');
+      expect(text, `${path} index command`).toContain(INDEX_COMMAND);
+    }
+    expect(await read('MEMORY.md')).not.toMatch(/ADR-\d{4}/);
   });
 
   it('separates current standards (MEMORY.md) from decision history (ADR)', async () => {

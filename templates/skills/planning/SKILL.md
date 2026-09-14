@@ -102,11 +102,12 @@ Planning schedules the ADR step; the change that lands the architecture decision
 
 When a change touches architecture, module boundaries or ownership, public protocols or schemas, cross-cutting standards, workflow or agent rules, or a hard-to-reverse technology choice, the `plan.md` must contain an explicit step that produces an ADR, and the plan must align `MEMORY.md` with that ADR in the same change. Routine bug fixes, local refactors and formatting changes do not need an ADR.
 
-ADRs are local, uncommitted artifacts under `.ai-workflow/adr/`, discovered by listing that directory and reading each file's self-describing fields.
+ADRs are local, uncommitted artifacts under `.ai-workflow/adr/`; read `.ai-workflow/adr/INDEX.md`, which lists status and topics, instead of scanning the directory.
 
 - Name each file `NNNN-kebab-title.md` with a 4-digit zero-padded number (`0001`); never reuse a number and use the maximum existing number plus one.
-- An `accepted` ADR is immutable; replace one by appending only `superseded by ADR-NNNN` to the old file and recording the new decision in a new ADR.
-- `MEMORY.md` holds the current standards (how) while ADRs hold the decision history (why); an inconsistency is a defect, so update both in the same change and cite the ADR number.
+- An `accepted` ADR is immutable; replace one by cross-linking it with its replacement through the header fields and recording the new decision in a new ADR.
+- The index is generated: run `ai-workflow adr index --project <root>` and never edit `.ai-workflow/adr/INDEX.md` by hand.
+- `MEMORY.md` holds the current standards (how) while ADRs hold the decision history (why); an inconsistency is a defect, so update both in the same change and reference `.ai-workflow/adr/INDEX.md`.
 - The full contract lives in the `Documentation Maintainer` and `Standards Review` role files.
 
 ## Frozen-plan digest protocol

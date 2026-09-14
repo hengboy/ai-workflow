@@ -30,11 +30,14 @@ ai-workflow context locate [--project .] --feature <id> --verify
 ai-workflow context candidate --project . --output <candidate.json> --task-target <id> --root <module-root> --path <changed-file>
 ai-workflow context refresh --project . --candidate <candidate.json> --write
 ai-workflow context discover --project . --packet <fallback.json>
+ai-workflow adr index [--project .] [--verify]
 ```
 
 `--project` is always a project root directory path. From that directory use `--project .` (project root directory path); from elsewhere pass an absolute path such as `--project /path/to/project`. Internal orchestration uses absolute project-root paths, and a relative `--candidate` is resolved from that project root.
 
 Navigation is JSON-authoritative. `context locate` resolves a feature by exact ID then exact alias; task queries match exact feature, alias, task, requirement, or acceptance-criterion IDs; symbols match an exact export name or qualified `file#symbol` name. A hit returns exact indexed paths; `missing_index`, `miss`, `stale`, and `invalid` return a fallback packet that must be validated before bounded discovery. `context candidate` emits the structured input for refresh, while `context refresh` atomically replaces `navigation.json` and its generated Markdown view only after candidate validation succeeds.
+
+`ai-workflow adr index` renders `.ai-workflow/adr/INDEX.md` from the header fields of the `NNNN-*.md` files under `.ai-workflow/adr/`; `--verify` regenerates it in memory and exits non-zero when the stored index is missing or drifted, except that a project with no ADRs and no stored index is treated as consistent. The index is generated, never hand-edited: ADRs are the authority and `INDEX.md` is a projection used for status and topic triage.
 
 Frozen `spec.md` and `plan.md` files use a shared digest protocol: each file hashes its exact UTF-8 bytes with only its own frontmatter `digest` line replaced by `digest: ""`; the workflow input digest combines the two resulting digests as stable JSON. Use `ai-workflow plan validate --plan <directory>` after planning and before task splitting or coding.
 

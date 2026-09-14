@@ -12,6 +12,7 @@
 - `src/workflow`: frozen-plan parsing and digest validation.
 - `src/context`: navigation lifecycle — capability-dispatched validation, verified locate and authorized refresh.
 - `src/context/discovery`: deterministic bounded repository scanning, optional user-owned `.ai-workflow/project.yml`, TypeScript/JavaScript semantic `exported-symbol` adapters via the TypeScript compiler, Java structural `file` adapters, and canonical navigation building.
+- `src/adr`: generated ADR index — parses `NNNN-*.md` header fields and deterministically renders or verifies `.ai-workflow/adr/INDEX.md` for `ai-workflow adr index` and `--verify`.
 - `schemas`: authoritative public protocol contracts.
 - `templates`: single-source human-readable skills, roles and project documents.
 
@@ -29,16 +30,16 @@
 - `update` unconditionally skips both navigation files, never replacing generated navigation with empty templates or recreating missing navigation; other managed templates keep their ownership rules.
 - After Documentation Maintainer's documentation checks pass, the primary orchestrator directly dispatches Git Operator for that local commit, with exact changed paths and evidence.
 - The `task-worker` role is removed; the primary orchestrator directly dispatches every specialist and Git Operator, and legacy profiles referencing `task-worker` are rejected before any mutation.
-- Coding must create one project-local temporary worktree under `<project>/.worktrees/<name>` before implementation, with Git Operator creating it and `.gitignore` containing `.worktrees/`; all implementation, validation and per-step commits happen inside that single worktree. Planning, TDD and review depth remain proportional to change risk. This mandatory worktree policy is recorded in `ADR-0002` (`.ai-workflow/adr/0002-project-local-worktree-policy.md`).
+- Coding must create one project-local temporary worktree under `<project>/.worktrees/<name>` before implementation, with Git Operator creating it and `.gitignore` containing `.worktrees/`; all implementation, validation and per-step commits happen inside that single worktree. Planning, TDD and review depth remain proportional to change risk. This mandatory worktree policy is recorded in an ADR; see `.ai-workflow/adr/INDEX.md`.
 - Coding may implement a frozen plan directly when no task split exists; a
   missing or empty navigation index is valid initial-project state and does not
   block implementation when the plan provides the scope.
 - Agent results use Markdown with `Status`, `Summary`, `Evidence` and `Support
   Requests`; File Explorer uses `Found Paths`. JSON envelopes are prohibited. v2 manifest JSON is unchanged.
-- Architecture Decision Records (ADRs) are local, uncommitted artifacts under `<project>/.ai-workflow/adr/`, discovered by listing that directory and reading each file's self-describing fields; there is no index or template file.
+- Architecture Decision Records (ADRs) are local, uncommitted artifacts under `<project>/.ai-workflow/adr/`; read `<project>/.ai-workflow/adr/INDEX.md`, which lists status and topics, instead of scanning the directory.
 - Planning schedules the ADR step; the change that lands the architecture decision writes the ADR file. A decision approved before implementation may be recorded as proposed and becomes accepted in the same change that lands it.
 - Name each file `NNNN-kebab-title.md` with a 4-digit zero-padded number (`0001`); never reuse a number and use the maximum existing number plus one.
 - Architecture, module boundaries, cross-cutting standards and hard-to-reverse choices require an ADR.
-- An `accepted` ADR is immutable; replace one only by appending `superseded by ADR-NNNN` to the old file and recording the new decision in a new ADR.
-- `MEMORY.md` records current standards (how) while ADRs record decision history (why); an inconsistency is a defect, so update both in the same change and cite the ADR number. The full contract lives in the `Documentation Maintainer` and `Standards Review` role files.
-- This mechanism is itself recorded in `ADR-0003` (`.ai-workflow/adr/0003-adr-phase-and-concision.md`).
+- An `accepted` ADR is immutable; replace one only by cross-linking it with its replacement through the header fields and recording the new decision in a new ADR.
+- `MEMORY.md` records current standards (how) while ADRs record decision history (why); an inconsistency is a defect, so update both in the same change and reference `<project>/.ai-workflow/adr/INDEX.md`. The full contract lives in the `Documentation Maintainer` and `Standards Review` role files.
+- The ADR index is generated: run `ai-workflow adr index --project <root>` and never edit `INDEX.md` by hand; verify it with `--verify` whenever an ADR changes.
