@@ -16,6 +16,8 @@ const enMarker = 'Output language: English';
 const zhMarker = 'Output language: Simplified Chinese (zh-CN)';
 const directiveHeading = '## Output language';
 const languageSkills = new Set(['planning/SKILL.md', 'plan-to-tasks/SKILL.md', 'coding/SKILL.md']);
+const languageAgents = new Set(['documentation-maintainer']);
+const structuralAdrClauses = ['Architecture Decision Record', 'field names', 'Status', 'Supersedes', 'NNNN-kebab-title.md', 'superseded-by ADR-NNNN'];
 
 function agentsRelative(host: Host): string {
   if (host === 'codex') return '.codex/agents';
@@ -65,6 +67,16 @@ describe('installed skill output language', () => {
       expect(contents, `${skill} defaults to English`).toContain(enMarker);
       expect(contents).not.toContain(zhMarker);
     }
+
+    for (const host of hosts) {
+      const contents = await readFile(join(home, agentsRelative(host), `documentation-maintainer${host === 'codex' ? '.toml' : '.md'}`), 'utf8');
+      expect(contents, `${host} documentation-maintainer defaults to English`).toContain(directiveHeading);
+      expect(contents, `${host} documentation-maintainer defaults to English`).toContain(enMarker);
+      expect(contents).not.toContain(zhMarker);
+      for (const clause of structuralAdrClauses) {
+        expect(contents, `${host} documentation-maintainer keeps ${clause} English`).toContain(clause);
+      }
+    }
   });
 
   it('installs the Simplified Chinese directive when output_language is zh-CN', async () => {
@@ -77,9 +89,16 @@ describe('installed skill output language', () => {
       expect(contents, `${skill} uses Simplified Chinese`).toContain(zhMarker);
       expect(contents).not.toContain(enMarker);
     }
+
+    for (const host of hosts) {
+      const contents = await readFile(join(home, agentsRelative(host), `documentation-maintainer${host === 'codex' ? '.toml' : '.md'}`), 'utf8');
+      expect(contents, `${host} documentation-maintainer uses Simplified Chinese`).toContain(directiveHeading);
+      expect(contents, `${host} documentation-maintainer uses Simplified Chinese`).toContain(zhMarker);
+      expect(contents).not.toContain(enMarker);
+    }
   });
 
-  it('injects the directive only into the three language skills and no agent file', async () => {
+  it('injects the directive only into the three language skills and Documentation Maintainer', async () => {
     const home = await temporary('ai-workflow-language-scope-');
     await seedConfig(home, 'output_language: zh-CN\n');
     await install(hosts, { home });
@@ -100,11 +119,21 @@ describe('installed skill output language', () => {
     }
 
     for (const host of hosts) {
-      const rendered = await renderHost(host);
-      for (const file of rendered) {
+      const baseline = await renderHost(host);
+      for (const file of baseline) {
         const installed = await readFile(join(home, agentsRelative(host), file.relativePath), 'utf8');
-        expect(installed, `${host}/${file.relativePath} matches the unchanged rendering`).toBe(file.contents);
-        expect(installed, `${host}/${file.relativePath} has no directive`).not.toContain(directiveHeading);
+        const agentName = file.relativePath.replace(/\.(?:toml|md)$/, '');
+        if (languageAgents.has(agentName)) {
+          expect(installed, `${host}/${file.relativePath} receives the directive`).not.toBe(file.contents);
+          expect(installed.startsWith(file.contents), `${host}/${file.relativePath} preserves its rendering`).toBe(true);
+          expect(installed, `${host}/${file.relativePath} names the language`).toContain(zhMarker);
+          for (const clause of structuralAdrClauses) {
+            expect(installed, `${host}/${file.relativePath} keeps ${clause} English`).toContain(clause);
+          }
+        } else {
+          expect(installed, `${host}/${file.relativePath} matches the unchanged rendering`).toBe(file.contents);
+          expect(installed, `${host}/${file.relativePath} has no directive`).not.toContain(directiveHeading);
+        }
       }
     }
   });
@@ -144,6 +173,11 @@ describe('installed skill output language', () => {
       expect(contents).toContain(zhMarker);
       expect(contents).not.toContain(enMarker);
     }
+    for (const host of hosts) {
+      const contents = await readFile(join(home, agentsRelative(host), `documentation-maintainer${host === 'codex' ? '.toml' : '.md'}`), 'utf8');
+      expect(contents).toContain(zhMarker);
+      expect(contents).not.toContain(enMarker);
+    }
 
     await seedConfig(home, 'output_language: en\n');
     await install(hosts, { home });
@@ -168,6 +202,11 @@ describe('installed skill output language', () => {
     for (const skill of languageSkills) {
       const contents = await languageSkillContents(home, skill);
       expect(contents, `${skill} uses the new language after activateProfile`).toContain(zhMarker);
+      expect(contents).not.toContain(enMarker);
+    }
+    for (const host of hosts) {
+      const contents = await readFile(join(home, agentsRelative(host), `documentation-maintainer${host === 'codex' ? '.toml' : '.md'}`), 'utf8');
+      expect(contents, `${host} documentation-maintainer uses the new language after activateProfile`).toContain(zhMarker);
       expect(contents).not.toContain(enMarker);
     }
   });
