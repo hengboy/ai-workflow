@@ -17,7 +17,6 @@ import type { Host } from '../workflow/types.js';
 interface ManifestFile { path: string; digest: string; kind: 'file' | 'directory' }
 export interface ContractRecord { path: string; digest: string; created: boolean }
 interface InstallManifest { version: string; installed_at: string; skills?: ManifestFile[]; hosts: Partial<Record<Host, ManifestFile[]>>; contracts?: Partial<Record<Host, ContractRecord>>; skipped?: string[] }
-interface ProjectManifest { version: 1; files: Record<string, string> }
 export interface AgentInstallation {
   name: string;
   path: string;
@@ -36,7 +35,6 @@ export interface ProfileActivationReport {
 }
 const manifestRelative = '.config/ai-workflow/install-manifest.json';
 const settingsRelative = '.config/ai-workflow/config.yaml';
-const projectManifestRelative = '.ai-workflow/project-manifest.json';
 const adrRelative = '.ai-workflow/adr';
 const navigationJsonRelative = '.ai-workflow/index/navigation.json';
 const navigationMarkdownRelative = '.ai-workflow/index/navigation.md';
@@ -308,7 +306,6 @@ export async function initializeProject(project: string): Promise<string[]> {
   const indexDirectoryExisted = await exists(indexDirectory);
   const aiWorkflowDirectoryExisted = await exists(aiWorkflowDirectory);
   const adrDirectoryExisted = await exists(adrDirectory);
-  const manifestPath = join(root, projectManifestRelative);
   const created: string[] = [];
   const writtenFiles: string[] = [];
   try {
@@ -325,13 +322,8 @@ export async function initializeProject(project: string): Promise<string[]> {
     if (!lines.includes('*.log')) additions.push('*.log');
     if (!lines.includes('MEMORY.md')) additions.push('MEMORY.md');
     if (additions.length) { await atomicWrite(ignorePath, `${ignoreOriginal.trimEnd()}${ignoreOriginal ? '\n' : ''}${additions.join('\n')}\n`); created.push('.gitignore'); }
-    const files: Record<string, string> = {};
-    for (const item of published) files[item.target] = sha256(item.contents);
-    await writeJson(manifestPath, { version: 1, files } satisfies ProjectManifest);
-    created.push(projectManifestRelative);
   } catch (error) {
     for (const path of writtenFiles) await rm(path, { force: true });
-    await rm(manifestPath, { force: true });
     if (ignoreExisted) await writeFile(ignorePath, ignoreOriginal);
     else await rm(ignorePath, { force: true });
     if (!indexDirectoryExisted) await removeEmptyDirectory(indexDirectory);
@@ -340,22 +332,4 @@ export async function initializeProject(project: string): Promise<string[]> {
     throw error;
   }
   return created;
-}
-
-export async function updateProject(project: string): Promise<{ updated: string[]; skipped: string[]; unchanged: string[] }> {
-  const root = resolve(project); const manifestPath = join(root, projectManifestRelative);
-  if (!(await exists(manifestPath))) throw new Error(`Project update requires ${projectManifestRelative}; initialize a new project or merge the current templates manually.`);
-  const manifest = await readJson<ProjectManifest>(manifestPath);
-  if (manifest.version !== 1) throw new Error(`Unsupported project manifest version: ${String(manifest.version)}`);
-  const updated: string[] = []; const skipped: string[] = [navigationJsonRelative, navigationMarkdownRelative, 'MEMORY.md']; const unchanged: string[] = [];
-  for (const template of await projectTemplateContents()) {
-    if (template.target === navigationJsonRelative || template.target === navigationMarkdownRelative || template.target === 'MEMORY.md') continue;
-    const path = join(root, template.target); const expected = manifest.files[template.target];
-    if (!expected || !(await exists(path)) || sha256(await readFile(path)) !== expected) { skipped.push(template.target); continue; }
-    const digest = sha256(template.contents);
-    if (expected === digest) { unchanged.push(template.target); continue; }
-    await atomicWrite(path, template.contents); manifest.files[template.target] = digest; updated.push(template.target);
-  }
-  await writeJson(manifestPath, manifest);
-  return { updated, skipped, unchanged };
 }

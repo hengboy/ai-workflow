@@ -3,7 +3,7 @@ import { Command } from 'commander';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import type { Host } from './workflow/types.js';
-import { activateProfile, install, uninstall, initializeProject, updateProject } from './install/index.js';
+import { activateProfile, install, uninstall, initializeProject } from './install/index.js';
 import { createNavigationCandidate, refreshContext, validateContext, verifyNavigation } from './context/validate.js';
 import { locateContext } from './context/locate.js';
 import { discoverFallback, type FallbackPacket } from './context/fallback.js';
@@ -20,7 +20,6 @@ const program = new Command().name('ai-workflow').description('Native-host plann
 program.command('install').requiredOption('--host <host>').option('--home <path>').action(async ({ host, home }: { host: string; home?: string }) => print(await install(hostList(host), { ...(home ? { home } : {}) })));
 program.command('uninstall').requiredOption('--host <host>').option('--home <path>').action(async ({ host, home }: { host: string; home?: string }) => print(await uninstall(hostList(host), { ...(home ? { home } : {}) })));
 program.command('init').argument('[project]').action(async (project?: string) => print({ created: await initializeProject(project ?? process.cwd()) }));
-program.command('update').argument('[project]').action(async (project?: string) => print(await updateProject(project ?? process.cwd())));
 const profile = program.command('profile');
 profile.command('activate').argument('<name>').option('--home <path>').action(async (name: string, { home }: { home?: string }) => print(await activateProfile(name, { ...(home ? { home } : {}) })));
 
