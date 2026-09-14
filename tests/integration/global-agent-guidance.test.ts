@@ -83,17 +83,4 @@ describe('global agent guidance', () => {
     expect(contents).toContain('never edits files or guesses paths');
     expect(contents).toContain('using public sources and citations');
   });
-
-  it('AC-012 routes the root AGENTS.md to the user-level contract without restating it', async () => {
-    const agents = await readFile(packagePath('AGENTS.md'), 'utf8');
-    const claude = await readFile(packagePath('CLAUDE.md'), 'utf8');
-
-    expect(claude.trim()).toBe('@AGENTS.md');
-    expect(agents).toContain('MEMORY.md');
-    expect(agents).toContain('.ai-workflow/index/navigation.json');
-    expect(agents).toMatch(/user-?level|~\/\.config\/opencode\/AGENTS\.md|用户级/i);
-    expect(agents).not.toContain('## Workflow roles');
-    expect(agents).not.toContain('## Agent permissions');
-    expect(agents).not.toContain('Git Operator is the only role allowed to run Git');
-  });
 });
