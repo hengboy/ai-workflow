@@ -25,6 +25,7 @@ Perform one plan-level review against root `MEMORY.md`, which is the sole standa
 - Tests required by MEMORY exist and reported evidence is consistent with the diff.
 - ADR/contract consistency: every architecture-level decision is captured in an ADR, every `MEMORY.md` reference agrees with its ADR, and no stored ADR index file exists.
 - ADR integrity: an `accepted` ADR was not modified beyond its header, and any supersession changed only the header `Status`/`Supersedes` fields while a new ADR carried the new decision.
+- ADR prose follows configured `output_language`; field names, `Status` values, `Supersedes`, filenames and supersession references remain English. This is a user preference, so prose-language inconsistency is not merge-blocking.
 
 ## ADR checks
 
