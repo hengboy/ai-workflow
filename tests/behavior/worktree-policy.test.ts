@@ -11,12 +11,18 @@ describe('mandatory project-local temporary worktree policy', () => {
     expect(memory).toContain('project-local temporary worktree');
     expect(memory).toContain('.worktrees');
     expect(memory).toContain('ADR-0002');
+    expect(memory).toContain('<project>/.worktrees/<name>');
+    expect(memory).toMatch(/before implementation/i);
+    expect(memory).not.toMatch(/consider\b[^.]*worktree|worktree[^.]*optional/i);
   });
 
   it('states the mandatory project-local temporary worktree policy in AGENTS.md and CLAUDE.md', async () => {
     for (const path of ['AGENTS.md', 'CLAUDE.md']) {
       const text = normalize(await readFile(packagePath(path), 'utf8'));
       expect(text).toMatch(/project-local temporary worktree/i);
+      expect(text).toContain('<project>/.worktrees/<name>');
+      expect(text).toMatch(/before implementation/i);
+      expect(text).not.toMatch(/consider\b[^.]*worktree|worktree[^.]*optional/i);
     }
   });
 });

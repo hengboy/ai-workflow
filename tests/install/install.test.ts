@@ -149,6 +149,9 @@ agents:
     expect(skill).not.toContain('workflow.json');
     expect(skill).toContain('create one project-local temporary worktree');
     expect(skill).toContain('.worktrees');
+    expect(skill).toContain('<project>/.worktrees/<name>');
+    expect(skill).toMatch(/before implementation/i);
+    expect(skill).not.toMatch(/consider\b[^.]*worktree|worktree[^.]*optional/i);
   });
   it('installs agents without a product prefix and emits valid host frontmatter', async () => {
     const home = await temporary('ai-workflow-agent-format-');
