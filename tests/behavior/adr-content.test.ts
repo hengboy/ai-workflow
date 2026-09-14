@@ -89,7 +89,7 @@ describe('local ADR contract content', () => {
         expect(text, `${path} locale contract: ${clause}`).toContain(clause);
       }
       expect(text, `${path} ADR prose follows the configured language`).toMatch(/ADR.*natural-language prose.*(?:follow|accord).*output_language/is);
-      expect(text, `${path} ADR structure remains English`).toMatch(/structure(?:al)? elements?.*(?:remain|stay|keep).*English/is);
+      expect(text, `${path} ADR structure remains English`).toMatch(/structur(?:al|e)? elements?.*(?:remain|stay|keep).*English/is);
     }
 
     const standardsReview = await read('templates/agents/standards-review.md');
