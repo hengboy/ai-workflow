@@ -133,7 +133,7 @@ describe('project navigation contract', () => {
     expect(JSON.parse(stdout)).toEqual({ valid: true, errors: [] });
 
     const report = await updateProject(project);
-    expect(report.skipped).toEqual(['.ai-workflow/index/navigation.json', '.ai-workflow/index/navigation.md']);
+    expect(report.skipped).toEqual(['.ai-workflow/index/navigation.json', '.ai-workflow/index/navigation.md', 'MEMORY.md']);
     expect(await readFile(configPath, 'utf8')).toBe(configBytes);
   });
 });

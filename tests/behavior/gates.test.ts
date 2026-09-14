@@ -25,25 +25,43 @@ describe('write gates', () => {
     expect(report.skipped).toEqual([
       '.ai-workflow/index/navigation.json',
       '.ai-workflow/index/navigation.md',
+      'MEMORY.md',
     ]);
-    expect(report.unchanged).toEqual(['AGENTS.md', 'CLAUDE.md', 'MEMORY.md']);
+    expect(report.unchanged).toEqual(['AGENTS.md', 'CLAUDE.md']);
   });
-  it('skips a managed file that the project user changed', async () => {
+  it('skips a managed template that the project user changed', async () => {
     const root = await temporary();
     await initializeProject(root);
-    await (await import('node:fs/promises')).writeFile(join(root, 'MEMORY.md'), 'project notes');
+    await (await import('node:fs/promises')).writeFile(join(root, 'AGENTS.md'), 'project-specific agents\n');
 
     const report = await updateProject(root);
 
     expect(report.updated).toEqual([]);
-    expect(report.skipped).toHaveLength(3);
+    expect(report.skipped).toHaveLength(4);
     expect(report.skipped).toEqual(expect.arrayContaining([
-      'MEMORY.md',
       '.ai-workflow/index/navigation.json',
       '.ai-workflow/index/navigation.md',
+      'MEMORY.md',
+      'AGENTS.md',
     ]));
+    expect(report.unchanged).toEqual(['CLAUDE.md']);
+  });
+  it('always skips a user-modified MEMORY.md and preserves its content verbatim', async () => {
+    const root = await temporary();
+    await initializeProject(root);
+    const { readFile, writeFile } = await import('node:fs/promises');
+    await writeFile(join(root, 'MEMORY.md'), 'project notes');
+
+    const report = await updateProject(root);
+
+    expect(report.updated).toEqual([]);
+    expect(report.skipped).toEqual([
+      '.ai-workflow/index/navigation.json',
+      '.ai-workflow/index/navigation.md',
+      'MEMORY.md',
+    ]);
     expect(report.unchanged).toEqual(['AGENTS.md', 'CLAUDE.md']);
-    expect(await (await import('node:fs/promises')).readFile(join(root, 'MEMORY.md'), 'utf8')).toBe('project notes');
+    expect(await readFile(join(root, 'MEMORY.md'), 'utf8')).toBe('project notes');
   });
   it('replaces an unmodified older managed template with the current template', async () => {
     const root = await temporary();

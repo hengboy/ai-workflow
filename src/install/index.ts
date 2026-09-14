@@ -284,6 +284,7 @@ export async function initializeProject(project: string): Promise<string[]> {
     const additions: string[] = [];
     if (!lines.some((line) => line === '.ai-workflow' || line === '.ai-workflow/')) additions.push('.ai-workflow/');
     if (!lines.includes('*.log')) additions.push('*.log');
+    if (!lines.includes('MEMORY.md')) additions.push('MEMORY.md');
     if (additions.length) { await atomicWrite(ignorePath, `${ignoreOriginal.trimEnd()}${ignoreOriginal ? '\n' : ''}${additions.join('\n')}\n`); created.push('.gitignore'); }
     const files: Record<string, string> = {};
     for (const item of published) files[item.target] = sha256(item.contents);
@@ -307,9 +308,9 @@ export async function updateProject(project: string): Promise<{ updated: string[
   if (!(await exists(manifestPath))) throw new Error(`Project update requires ${projectManifestRelative}; initialize a new project or merge the current templates manually.`);
   const manifest = await readJson<ProjectManifest>(manifestPath);
   if (manifest.version !== 1) throw new Error(`Unsupported project manifest version: ${String(manifest.version)}`);
-  const updated: string[] = []; const skipped: string[] = [navigationJsonRelative, navigationMarkdownRelative]; const unchanged: string[] = [];
+  const updated: string[] = []; const skipped: string[] = [navigationJsonRelative, navigationMarkdownRelative, 'MEMORY.md']; const unchanged: string[] = [];
   for (const template of await projectTemplateContents()) {
-    if (template.target === navigationJsonRelative || template.target === navigationMarkdownRelative) continue;
+    if (template.target === navigationJsonRelative || template.target === navigationMarkdownRelative || template.target === 'MEMORY.md') continue;
     const path = join(root, template.target); const expected = manifest.files[template.target];
     if (!expected || !(await exists(path)) || sha256(await readFile(path)) !== expected) { skipped.push(template.target); continue; }
     const digest = sha256(template.contents);
