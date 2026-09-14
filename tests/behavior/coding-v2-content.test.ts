@@ -31,6 +31,14 @@ describe('v2 coding guidance', () => {
     expect(testAgent).toContain('public interface plus observable boundary');
   });
 
+  it('requires a mandatory project-local temporary worktree before implementation', async () => {
+    const coding = (await readFile(packagePath('templates', 'skills', 'coding', 'SKILL.md'), 'utf8')).replace(/\s+/g, ' ');
+
+    expect(coding).toMatch(/create one project-local temporary worktree/i);
+    expect(coding).toContain('.worktrees');
+    expect(coding).not.toMatch(/consider a temporary worktree/i);
+  });
+
   it('requires the primary orchestrator to directly dispatch Git Operator and never Task Worker', async () => {
     const coding = await readFile(packagePath('templates', 'skills', 'coding', 'SKILL.md'), 'utf8');
     // AC-003 / REQ-002: the primary orchestrator directly dispatches Git Operator, not through a coordinator.

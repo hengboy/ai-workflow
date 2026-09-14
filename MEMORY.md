@@ -29,7 +29,7 @@
 - `update` unconditionally skips both navigation files, never replacing generated navigation with empty templates or recreating missing navigation; other managed templates keep their ownership rules.
 - After Documentation Maintainer's documentation checks pass, the primary orchestrator directly dispatches Git Operator for that local commit, with exact changed paths and evidence.
 - The `task-worker` role is removed; the primary orchestrator directly dispatches every specialist and Git Operator, and legacy profiles referencing `task-worker` are rejected before any mutation.
-- Coding guidance is proportional: small changes may be implemented directly with focused verification; larger or high-risk changes may use planning, TDD, review, worktrees and multiple roles when useful or requested.
+- Coding must create one project-local temporary worktree under `<project>/.worktrees/<name>` before implementation, with Git Operator creating it and `.gitignore` containing `.worktrees/`; all implementation, validation and per-step commits happen inside that single worktree. Planning, TDD and review depth remain proportional to change risk. This mandatory worktree policy is recorded in `ADR-0002` (`.ai-workflow/adr/0002-project-local-worktree-policy.md`).
 - Coding may implement a frozen plan directly when no task split exists; a
   missing or empty navigation index is valid initial-project state and does not
   block implementation when the plan provides the scope.

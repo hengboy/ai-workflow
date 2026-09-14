@@ -15,7 +15,7 @@ These instructions are authoritative for every sub-agent. Installed role files c
 
 - Planning asks one business-impact question at a time, obtains approval, and creates frozen `spec.md` and `plan.md`.
 - Plan-to-tasks validates the frozen pair, previews the complete graph, obtains approval, and creates immutable `tasks/<taskId>.md` files. It never edits frozen plans.
-- Coding depth is proportional: small changes may be implemented directly with focused verification; larger or high-risk changes may use planning, TDD, worktrees, commits and specialist roles when useful or requested. It never creates workflow manifests or run records.
+- Coding creates one project-local temporary worktree under `<project>/.worktrees/<name>` before implementation and performs all implementation, validation and per-step commits inside that single worktree; planning, TDD and review depth remain proportional to risk. It never creates workflow manifests or run records.
 - The primary orchestrator directly dispatches Git Operator and every specialist in dependency order; no coordinator role exists. For split and unsplit coding it directly dispatches Git Operator, File Explorer, the implementation role, Test, both reviews, an optional repair, and finalization.
 - Spec Review and Standards Review are available for larger or high-risk changes; they are collaboration guidance, not mandatory runtime gates.
 

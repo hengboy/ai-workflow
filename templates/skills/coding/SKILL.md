@@ -54,7 +54,13 @@ An empty or unknown `surface` fails before execution.
   symbols. For an unsplit plan, do not invoke File Explorer merely because the
   feature is absent from the index; use the frozen plan's scope directly.
   Request File Explorer only when the implementation boundary remains unclear.
- - For larger or high-risk changes, consider a temporary worktree before implementation.
+- Before implementation, Git Operator must create one project-local temporary worktree
+  under `<project>/.worktrees/<name>` (ensure `.gitignore` contains
+  `.worktrees/`). This is a mandatory step of every coding execution unit, not
+  an option reserved for high-risk work: all implementation, validation and
+  per-step commits happen inside that single worktree, and only the owned
+  worktree and branch are merged and removed at the end. Planning, TDD and
+  review depth remain proportional to change risk.
 - Create a Todo list before editing and keep it current. Each step must state its
   scope, acceptance evidence and commit point.
 - Before writing a test, state the public interface and observable boundary it

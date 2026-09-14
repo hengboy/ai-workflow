@@ -16,7 +16,7 @@ Agent results are Markdown under `## Output checklist` using `### Status`, `### 
 
 - Planning clarifies one business-impact issue per turn, gets explicit approval, and freezes `spec.md` and `plan.md`.
 - Plan-to-tasks previews and validates the task graph before creating immutable task files.
-- Coding depth is proportional: small changes may be direct with focused verification; larger or high-risk work can use planning, TDD, worktrees, commits and specialist roles.
+- Coding creates one project-local temporary worktree under `<project>/.worktrees/<name>` before implementation and performs all implementation, validation and per-step commits inside that single worktree; planning, TDD and review depth remain proportional to risk.
 - Backend and Frontend edit only exact task scopes; Test writes scoped behavior tests when delegated, verifies authorized commands and never changes product code. Test authoring precedes implementation when a test is required.
 - File Explorer is read-only bounded discovery. Researcher performs cited public research and is read-only.
 - Documentation Maintainer updates only authorized `MEMORY.md`, navigation and documentation paths; `navigation.json` is authoritative. After checks, it returns exact changed paths and validation evidence to the primary orchestrator, which directly dispatches Git Operator for the local commit; it must not invoke Git itself.
