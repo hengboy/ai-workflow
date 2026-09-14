@@ -98,9 +98,16 @@ Before drafting, read [the specification template](references/spec.md) and [the 
 
 ## Architecture decision records
 
+Planning schedules the ADR step; the change that lands the architecture decision writes the ADR file. A decision approved before implementation may be recorded as proposed and becomes accepted in the same change that lands it.
+
 When a change touches architecture, module boundaries or ownership, public protocols or schemas, cross-cutting standards, workflow or agent rules, or a hard-to-reverse technology choice, the `plan.md` must contain an explicit step that produces an ADR, and the plan must align `MEMORY.md` with that ADR in the same change. Routine bug fixes, local refactors and formatting changes do not need an ADR.
 
-ADRs are local, uncommitted artifacts under `.ai-workflow/adr/`, discovered by listing that directory and reading each file's self-describing fields; ignore entries that do not match `NNNN-*.md` (for example `notes.md`). There is no index or template file. Each ADR is named `NNNN-kebab-title.md` with a 4-digit zero-padded number (`0001`) that is monotonically increasing and never reuses a number: start at `0001` when no ADR exists, otherwise use the maximum existing number plus one. Every ADR states the required fields `Title`, `Status`, `Date`, `Context`, `Decision` and `Consequences`, plus optional `Alternatives`; `Status` is one of `proposed`, `accepted`, `deprecated`, `superseded-by` or `rejected`. An `accepted` ADR is immutable: never edit its `Context`, `Decision` or `Consequences`; to replace one, append only the line `superseded by ADR-NNNN` to the old file and record the new decision in a new ADR. `MEMORY.md` holds the current standards (how); ADRs hold the decision history (why); an inconsistency is a defect, so update both in the same change and cite the ADR number from the `MEMORY.md` entry.
+ADRs are local, uncommitted artifacts under `.ai-workflow/adr/`, discovered by listing that directory and reading each file's self-describing fields.
+
+- Name each file `NNNN-kebab-title.md` with a 4-digit zero-padded number (`0001`); never reuse a number and use the maximum existing number plus one.
+- An `accepted` ADR is immutable; replace one by appending only `superseded by ADR-NNNN` to the old file and recording the new decision in a new ADR.
+- `MEMORY.md` holds the current standards (how) while ADRs hold the decision history (why); an inconsistency is a defect, so update both in the same change and cite the ADR number.
+- The full contract lives in the `Documentation Maintainer` role file.
 
 ## Frozen-plan digest protocol
 

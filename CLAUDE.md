@@ -8,9 +8,19 @@ This file and `AGENTS.md` are the complete shared sub-agent contract. Role files
 2. Use `ai-workflow context locate` for known features before any discovery.
 3. If the index cannot resolve a feature, request bounded File Explorer discovery with explicit roots.
 4. Update `MEMORY.md` and `navigation.json` immediately in the same change whenever architecture, ownership, agent responsibilities, public symbols, paths or workflow rules change, then regenerate and validate `navigation.md`.
-5. Record an Architecture Decision Record (ADR) whenever architecture, module boundaries or ownership, public protocols or schemas, cross-cutting standards, workflow or agent rules, or a hard-to-reverse technology choice changes. ADRs are local, uncommitted artifacts under `.ai-workflow/adr/`, discovered by listing that directory and reading each file's self-describing fields while ignoring entries that do not match `NNNN-*.md`; there is no index or template file. An `accepted` ADR is immutable and is replaced only by appending `superseded by ADR-NNNN` to the old file and recording the new decision in a new ADR. `MEMORY.md` holds the current standards while ADRs hold the decision history; update both in the same change and cite the ADR number from the `MEMORY.md` entry.
 
 Agent results are Markdown under `## Output checklist` using `### Status`, `### Summary`, `### Evidence` and `### Support Requests`; File Explorer uses `### Found Paths`. JSON envelopes are prohibited; v2 manifest JSON is unchanged.
+
+## Architecture decision records
+
+Planning schedules the ADR step; the change that lands the architecture decision writes the ADR file. A decision approved before implementation may be recorded as proposed and becomes accepted in the same change that lands it.
+
+- ADRs are local, uncommitted artifacts under `.ai-workflow/adr/`; discover them by listing that directory and reading each file's self-describing fields.
+- Name each file `NNNN-kebab-title.md` with a 4-digit zero-padded number (`0001`); never reuse a number and use the maximum existing number plus one.
+- Architecture, module boundaries, cross-cutting standards and hard-to-reverse technology choices require an ADR.
+- An `accepted` ADR is immutable; to replace one append `superseded by ADR-NNNN` to the old file and record the new decision in a new ADR.
+- `MEMORY.md` holds current standards (how) while ADRs hold decision history (why); update both in the same change and cite the ADR number.
+- The full contract lives in the `Documentation Maintainer` role file.
 
 ## Role guidance
 

@@ -8,8 +8,18 @@ These instructions are authoritative for every sub-agent. Installed role files c
 - For indexed known features, use `ai-workflow context locate --project <absolute-project-root> --feature <id> --verify`; do not search first.
 - A missing or empty index is normal for a new project. `missing_index` and a feature `miss` do not by themselves block implementation when the frozen plan supplies an explicit boundary; for an unsplit plan, do not invoke File Explorer merely because the feature is absent from the index. Request bounded File Explorer discovery only when that boundary is unclear. `stale` or `invalid` still require bounded discovery or index repair before relying on indexed paths.
 - Navigation JSON is authoritative. Updating `MEMORY.md` and `.ai-workflow/index/navigation.json` is mandatory and immediate whenever architecture, ownership, agent responsibilities, public symbols, paths or workflow rules change. Regenerate and validate `navigation.md` in the same change.
-- Architecture Decision Records (ADRs) are local, uncommitted artifacts under `<project>/.ai-workflow/adr/`; there is no index or template file. Discover them by listing that directory and reading each file's self-describing fields, ignoring entries that do not match `NNNN-*.md`. Record an ADR whenever architecture, module boundaries or ownership, public protocols or schemas, cross-cutting standards, workflow or agent rules, or a hard-to-reverse technology choice changes. `MEMORY.md` holds the current standards (how the project works) while ADRs hold the decision history (why); an inconsistency is a defect, so both must be updated together in the same change and the `MEMORY.md` entry must cite the ADR number.
 - Agent results are Markdown with `## Output checklist`, followed by `### Status`, `### Summary`, `### Evidence` and `### Support Requests`; File Explorer uses `### Found Paths`. JSON envelopes are prohibited; v2 manifest JSON is unchanged.
+
+## Architecture decision records
+
+Planning schedules the ADR step; the change that lands the architecture decision writes the ADR file. A decision approved before implementation may be recorded as proposed and becomes accepted in the same change that lands it.
+
+- ADRs are local, uncommitted artifacts under `.ai-workflow/adr/`; there is no index or template file, so discover them by listing that directory and reading each file's self-describing fields.
+- Name each file `NNNN-kebab-title.md` with a 4-digit zero-padded number (`0001`); never reuse a number and use the maximum existing number plus one.
+- Architecture, module boundaries, cross-cutting standards and hard-to-reverse technology choices require an ADR.
+- An `accepted` ADR is immutable; to replace one append `superseded by ADR-NNNN` to the old file and record the new decision in a new ADR.
+- `MEMORY.md` holds current standards (how) while ADRs hold decision history (why); update both in the same change and cite the ADR number.
+- The full contract lives in the `Documentation Maintainer` role file.
 
 ## Workflow roles
 
