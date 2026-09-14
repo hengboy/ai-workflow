@@ -122,7 +122,7 @@ async function installUnsafe(hosts: Host[], options: { home?: string; version?: 
   for (const file of skills) { const path = join(skillsRoot(home), file.relativePath); if (await writeOwnedFile(home, file, manifest.skills, skillsRoot(home))) ownedSkills.push({ path: relative(home, path), digest: sha256(file.contents), kind: 'file' }); else { const prior = manifest.skills?.find((item) => item.path === relative(home, path)); if (prior) { ownedSkills.push(prior); skipped.push(prior.path); } } }
   await removeStaleOwnedFiles(home, manifest.skills ?? [], ownedSkills);
   manifest.skills = ownedSkills;
-  const renderedHosts = new Map<Host, RenderedFile[]>(); for (const host of hosts) renderedHosts.set(host, await renderHost(host, profile));
+  const renderedHosts = new Map<Host, RenderedFile[]>(); for (const host of hosts) renderedHosts.set(host, await renderHost(host, profile, settings.output_language));
   for (const host of hosts) {
     const rendered = renderedHosts.get(host); if (!rendered) throw new Error(`Missing rendered host: ${host}`);
     const target = agentsRoot(home, host);
@@ -179,7 +179,7 @@ export async function activateProfile(name: string, options: { home?: string; ve
   // Validate the existing configuration before any mutation so an illegal active_profile aborts pre-write.
   await loadSettings(home);
   const manifest = await readManifest(home);
-  const hosts = (Object.keys(manifest.hosts) as Host[]).filter((host) => ['codex', 'claude', 'opencode'].includes(host));
+  const hosts = ['codex', 'claude', 'opencode'] as Host[];
   for (const host of hosts) for (const file of manifest.hosts[host] ?? []) {
     const path = resolve(home, file.path);
     if (file.kind === 'file' && await exists(path) && sha256(await readFile(path)) !== file.digest) throw new Error(`Cannot activate profile because managed file was modified: ${file.path}`);

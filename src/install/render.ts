@@ -19,7 +19,7 @@ function languageSection(language: OutputLanguage): string {
     '',
     `Write the agent's interactive and session natural-language prose in ${name}, including clarification questions, confirmation previews, progress narration and final summary.`,
     '',
-    `In generated planning artifacts, only natural-language prose may be translated; headings, table headers, YAML frontmatter keys and their order, \`REQ-###\`/\`AC-###\` identifiers, file paths, code and enumerated values such as \`surface\` remain English.`,
+    `In generated planning artifacts, only natural-language prose may be translated; headings, table headers, YAML frontmatter keys and their order, field names, \`REQ-###\`/\`AC-###\` identifiers, file paths, code and enumerated values such as \`surface\` remain English.`,
     ''
   ].join('\n');
 }
@@ -87,12 +87,14 @@ export async function renderSkills(language: OutputLanguage): Promise<RenderedFi
   return files;
 }
 
-export async function renderHost(host: Host, profile?: Profile): Promise<RenderedFile[]> {
+export async function renderHost(host: Host, profile?: Profile, language?: OutputLanguage): Promise<RenderedFile[]> {
   const agentRoot = packagePath('templates', 'agents');
   const agents: RenderedFile[] = [];
   for (const path of await markdownFiles(agentRoot)) {
     const name = basename(path, '.md'); const extension = host === 'codex' ? '.toml' : '.md';
-    agents.push({ relativePath: `${name}${extension}`, contents: agentFrontmatterFor(host, await readFile(path, 'utf8'), profile?.agents[name]?.[host]) });
+    const source = await readFile(path, 'utf8');
+    const rendered = agentFrontmatterFor(host, source, profile?.agents[name]?.[host]);
+    agents.push({ relativePath: `${name}${extension}`, contents: language && name === 'documentation-maintainer' ? `${rendered}\n${languageSection(language)}` : rendered });
   }
   return agents;
 }
