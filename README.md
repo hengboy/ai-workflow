@@ -22,7 +22,6 @@ ai-workflow install --host codex|claude|opencode|all
 ai-workflow uninstall --host codex|claude|opencode|all
 ai-workflow profile activate <name>
 ai-workflow init /path/to/project
-ai-workflow update [/path/to/project]
 ai-workflow plan validate --plan .ai-workflow/plans/<planId>
 ai-workflow context validate [--project .] --all
 ai-workflow context validate [--project .] --feature <id>
@@ -43,7 +42,17 @@ Frozen `spec.md` and `plan.md` files use a shared digest protocol: each file has
 
 ## Project initialization and navigation
 
-`ai-workflow init /path/to/project` preflights the managed targets (`AGENTS.md`, `CLAUDE.md`, `MEMORY.md`, `.ai-workflow/index/navigation.json`, `.ai-workflow/index/navigation.md`) and fails before writing when any already exists. It then discovers repository files, optionally reads user configuration, builds and validates navigation, and publishes the documents plus `.ai-workflow/project-manifest.json`. The manifest records the actual written bytes; an ordinary filesystem failure removes only files/directories created by that invocation, restores the original `.gitignore` bytes and leaves no partial manifest.
+`ai-workflow init /path/to/project` writes only local gitignored artifacts: `MEMORY.md`, the generated `.ai-workflow/index/navigation.json` and `.ai-workflow/index/navigation.md`, and the required entries in `.gitignore`. It does not write, preflight or conflict on project-level `AGENTS.md`/`CLAUDE.md`. It discovers repository files, optionally reads user configuration, and builds and validates navigation. An ordinary filesystem failure removes only files/directories created by that invocation and restores the original `.gitignore` bytes.
+
+### User-level agent contract
+
+`ai-workflow install` writes the shared agent contract once per host as a marker block between `<!-- ai-workflow:begin -->` and `<!-- ai-workflow:end -->` in that host's global instruction file:
+
+- opencode `~/.config/opencode/AGENTS.md`
+- claude `~/.claude/CLAUDE.md`
+- codex `~/.codex/AGENTS.md`
+
+The block text is single-sourced from `templates/contract/AGENTS.md` and applies only in a project whose root contains `.ai-workflow/`. A missing file is created; an existing file is preserved byte-for-byte outside the block. Re-running `install` refreshes an unmodified block in place, reports `skipped` and leaves the file untouched when a block was hand-edited, adopts a valid unowned block, and refuses malformed or duplicate markers without modifying the file. `uninstall --host <host>` removes only the marker block and deletes the file only when it created it and no other substantial content remains.
 
 ### Repository discovery
 
@@ -51,7 +60,7 @@ Discovery performs a deterministic, bounded scan of the project. It excludes `.g
 
 ### Optional project configuration
 
-An optional, user-owned `.ai-workflow/project.yml` (version 1) declares modules and features. The tool never generates, overwrites or records this file in the ownership manifest, and an existing configuration is not an init conflict.
+An optional, user-owned `.ai-workflow/project.yml` (version 1) declares modules and features. The tool never generates or overwrites this file, and an existing configuration is not an init conflict.
 
 ```yaml
 version: 1
@@ -81,10 +90,6 @@ features:
 ### Navigation lifecycle
 
 Navigation is JSON-authoritative version-1 output produced by a single builder, and `.ai-workflow/index/navigation.md` is rendered exclusively from that JSON. Validation dispatches by capability: structural roots are checked for file existence and coverage, while semantic roots are checked for exported symbols and import relations. `context validate`, `context locate --feature <id> --verify` and the authorized `context refresh` (which reuses the same adapters and preserves structural coverage) all operate on the generated navigation. A language that claims the semantic `exported-symbol` capability without a supported parser is rejected.
-
-### Update
-
-`ai-workflow update` unconditionally skips `.ai-workflow/index/navigation.json` and `.ai-workflow/index/navigation.md`: it never replaces generated navigation with empty templates and never recreates missing navigation. Other managed templates keep their existing ownership rules, and a missing project manifest still errors. Navigation maintenance uses `context refresh`.
 
 ## Profiles
 
