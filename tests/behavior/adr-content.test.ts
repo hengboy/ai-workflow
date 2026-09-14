@@ -2,13 +2,39 @@ import { describe, expect, it } from 'vitest';
 import { readFile } from 'node:fs/promises';
 import { packagePath } from '../../src/utils/schema.js';
 
-const FILES = [
+const FULL_CONTRACT = [
+  'templates/agents/documentation-maintainer.md',
+  'templates/agents/standards-review.md',
+];
+
+const COMPACT_CONTRACT = [
   'templates/project/AGENTS.md',
   'templates/project/CLAUDE.md',
   'templates/project/MEMORY.md',
-  'templates/agents/documentation-maintainer.md',
-  'templates/agents/standards-review.md',
   'templates/skills/planning/SKILL.md',
+  'AGENTS.md',
+  'CLAUDE.md',
+  'MEMORY.md',
+];
+
+const ALL_CONTRACT_FILES = [...FULL_CONTRACT, ...COMPACT_CONTRACT];
+
+const PHASE_STATEMENTS = [
+  'Planning schedules the ADR step',
+  'the change that lands the architecture decision writes the ADR file',
+];
+
+const PROPOSED_STATEMENTS = ['may be recorded as proposed', 'becomes accepted'];
+
+const REQUIRED_FIELDS = ['Title', 'Status', 'Date', 'Context', 'Decision', 'Consequences', 'Alternatives'];
+
+const STATUS_VALUES = ['proposed', 'accepted', 'deprecated', 'superseded-by', 'rejected'];
+
+const ADR_TRIGGERS: Array<[string, RegExp]> = [
+  ['architecture', /architecture/i],
+  ['module boundary', /module boundar/i],
+  ['cross-cutting', /cross-cutting/i],
+  ['hard-to-reverse technology choice', /hard[- ]to[- ]reverse|difficult to reverse|难回退/i],
 ];
 
 async function read(path: string): Promise<string> {
@@ -16,30 +42,77 @@ async function read(path: string): Promise<string> {
 }
 
 describe('local ADR contract content', () => {
-  it('exposes the same ADR location, numbering, fields, statuses and discovery rules in every shipped contract', async () => {
-    for (const path of FILES) {
+  it('states the ADR phase boundary and proposed semantics in every shipped contract', async () => {
+    for (const path of ALL_CONTRACT_FILES) {
       const text = await read(path);
-      expect(text, path).toContain('.ai-workflow/adr/');
-      expect(text, path).toContain('NNNN-kebab-title.md');
-      expect(text, path).toMatch(/4[- ]digit|4 位|zero-?padd?ed/i);
-      expect(text, path).toMatch(/never reuse|永不复用/i);
-      for (const field of ['Title', 'Status', 'Date', 'Context', 'Decision', 'Consequences', 'Alternatives']) {
-        expect(text, `${path} field ${field}`).toContain(field);
+      for (const statement of PHASE_STATEMENTS) {
+        expect(text, `${path} phase: ${statement}`).toContain(statement);
       }
-      for (const status of ['proposed', 'accepted', 'deprecated', 'superseded-by', 'rejected']) {
-        expect(text, `${path} status ${status}`).toContain(status);
+      for (const statement of PROPOSED_STATEMENTS) {
+        expect(text, `${path} proposed: ${statement}`).toContain(statement);
       }
-      expect(text, path).toContain('superseded by ADR-NNNN');
-      expect(text, path).toMatch(/list(?:ing)?|enumerate|列出/i);
     }
   });
 
-  it('requires the planning skill to produce an ADR step for architecture-triggering plans', async () => {
+  it('keeps the complete ADR contract in the Documentation Maintainer and Standards Review role files', async () => {
+    for (const path of FULL_CONTRACT) {
+      const text = await read(path);
+      expect(text, `${path} filename pattern`).toContain('NNNN-kebab-title.md');
+      expect(text, `${path} zero padding`).toMatch(/4[- ]digit|4 位|zero-?padd?ed/i);
+      expect(text, `${path} no number reuse`).toMatch(/never reuse|永不复用/i);
+      for (const field of REQUIRED_FIELDS) {
+        expect(text, `${path} field ${field}`).toContain(field);
+      }
+      for (const status of STATUS_VALUES) {
+        expect(text, `${path} status ${status}`).toContain(status);
+      }
+      expect(text, `${path} supersession line`).toContain('superseded by ADR-NNNN');
+      expect(text, `${path} discovery`).toMatch(/list(?:ing)?|enumerate|列出/i);
+      for (const [label, pattern] of ADR_TRIGGERS) {
+        expect(text, `${path} trigger ${label}`).toMatch(pattern);
+      }
+      expect(text, `${path} first number`).toContain('0001');
+      expect(text, `${path} next number`).toMatch(/max(?:imum)?\b.{0,40}(?:plus one|\+ ?1|加一)/i);
+    }
+  });
+
+  it('requires the Documentation Maintainer to keep each ADR concise and read only relevant ADRs', async () => {
+    const text = await read('templates/agents/documentation-maintainer.md');
+    expect(text).toContain('Keep each ADR concise');
+    expect(text).toContain('Read only the ADRs relevant to the change');
+  });
+
+  it('keeps the compact session-facing contracts layered with a Documentation Maintainer pointer', async () => {
+    for (const path of COMPACT_CONTRACT) {
+      const text = await read(path);
+      expect(text, `${path} location`).toContain('.ai-workflow/adr/');
+      expect(text, `${path} numbering`).toContain('NNNN');
+      expect(text, `${path} no number reuse`).toMatch(/never reuse|永不复用/i);
+      expect(text, `${path} discovery`).toMatch(/list(?:ing)?|enumerate|列出/i);
+      expect(text, `${path} supersession line`).toContain('superseded by ADR-NNNN');
+      expect(text, `${path} architecture trigger`).toMatch(/architecture/i);
+      expect(text, `${path} full contract pointer`).toContain('Documentation Maintainer');
+      expect(text, `${path} must not enumerate Status values`).not.toContain('superseded-by');
+    }
+  });
+
+  it('limits every .ai-workflow/adr/ line in session-facing contracts to 600 characters', async () => {
+    for (const path of COMPACT_CONTRACT) {
+      const lines = (await read(path)).split('\n');
+      lines.forEach((line, index) => {
+        if (line.includes('.ai-workflow/adr/')) {
+          expect(line.length, `${path}:${index + 1}`).toBeLessThanOrEqual(600);
+        }
+      });
+    }
+  });
+
+  it('requires the planning skill to schedule an ADR step for architecture-triggering plans', async () => {
     const text = await read('templates/skills/planning/SKILL.md');
     expect(text).toMatch(/architecture/i);
-    expect(text).toMatch(/module boundar/i);
-    expect(text).toMatch(/cross-cutting/i);
-    expect(text).toMatch(/hard[- ]to[- ]reverse|difficult to reverse|难回退/i);
+    for (const [label, pattern] of ADR_TRIGGERS) {
+      expect(text, `trigger ${label}`).toMatch(pattern);
+    }
     expect(text).toMatch(/MEMORY\.md/);
     // A plan for an architecture-triggering change must contain a step that produces an ADR.
     expect(text).toMatch(/ADR/);
@@ -71,7 +144,7 @@ describe('local ADR contract content', () => {
   });
 
   it('separates current standards (MEMORY.md) from decision history (ADR)', async () => {
-    const combined = (await Promise.all(FILES.map((path) => read(path)))).join('\n');
+    const combined = (await Promise.all(ALL_CONTRACT_FILES.map((path) => read(path)))).join('\n');
     expect(combined).toMatch(/ADR/);
     expect(combined).toMatch(/MEMORY\.md/);
     expect(combined).toMatch(/why|decision history|决策|理由/i);
