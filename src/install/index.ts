@@ -244,14 +244,14 @@ async function uninstallContracts(home: string, host: Host, manifest: InstallMan
   const path = resolve(home, record.path);
   if (!path.startsWith(`${home}/`)) throw new Error(`Unsafe manifest path: ${record.path}`);
   const disk = (await exists(path)) ? await readFile(path, 'utf8') : undefined;
-  if (disk === undefined) { delete contracts[host]; return; }
+  if (disk === undefined) { Reflect.deleteProperty(contracts, host); return; }
   const block = locateContractBlock(disk);
-  if (!block) { delete contracts[host]; return; }
+  if (!block) { Reflect.deleteProperty(contracts, host); return; }
   if (sha256(block.blockText) !== record.digest) { skipped.push(record.path); return; }
   const remaining = disk.slice(0, block.begin) + disk.slice(block.end + contractEnd.length);
   if (record.created && remaining.trim() === '') await rm(path, { force: true });
   else await atomicWrite(path, remaining);
-  delete contracts[host];
+  Reflect.deleteProperty(contracts, host);
 }
 
 export async function uninstall(hosts: Host[], options: { home?: string } = {}): Promise<InstallManifest> {
