@@ -238,6 +238,22 @@ export async function activateProfile(name: string, options: { home?: string; ve
   }
 }
 
+async function uninstallContracts(home: string, host: Host, manifest: InstallManifest, skipped: string[]): Promise<void> {
+  const contracts = manifest.contracts; const record = contracts?.[host];
+  if (!contracts || !record) return;
+  const path = resolve(home, record.path);
+  if (!path.startsWith(`${home}/`)) throw new Error(`Unsafe manifest path: ${record.path}`);
+  const disk = (await exists(path)) ? await readFile(path, 'utf8') : undefined;
+  if (disk === undefined) { delete contracts[host]; return; }
+  const block = locateContractBlock(disk);
+  if (!block) { delete contracts[host]; return; }
+  if (sha256(block.blockText) !== record.digest) { skipped.push(record.path); return; }
+  const remaining = disk.slice(0, block.begin) + disk.slice(block.end + contractEnd.length);
+  if (record.created && remaining.trim() === '') await rm(path, { force: true });
+  else await atomicWrite(path, remaining);
+  delete contracts[host];
+}
+
 export async function uninstall(hosts: Host[], options: { home?: string } = {}): Promise<InstallManifest> {
   const home = resolve(options.home ?? homedir()); const manifest = await readManifest(home);
   const skipped: string[] = [];
@@ -248,11 +264,13 @@ export async function uninstall(hosts: Host[], options: { home?: string } = {}):
       if (file.kind === 'file' && (await exists(path)) && sha256(await readFile(path)) !== file.digest) { skipped.push(file.path); continue; }
       await rm(path, { recursive: file.kind === 'directory', force: true });
     }
+    await uninstallContracts(home, host, manifest, skipped);
     if (host === 'codex') await removeMarketplaceEntry(home);
     const retained = (manifest.hosts[host] ?? []).filter((file) => skipped.includes(file.path));
     manifest.hosts = Object.fromEntries(Object.entries(manifest.hosts).filter(([key]) => key !== host)) as InstallManifest['hosts'];
     if (retained.length) manifest.hosts[host] = retained;
   }
+  if (manifest.contracts && Object.keys(manifest.contracts).length === 0) delete manifest.contracts;
   if (Object.keys(manifest.hosts).length === 0) {
     for (const file of manifest.skills ?? []) {
       const path = resolve(home, file.path); if (!path.startsWith(`${home}/`)) throw new Error(`Unsafe manifest path: ${file.path}`);
