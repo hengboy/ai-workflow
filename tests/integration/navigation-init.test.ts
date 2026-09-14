@@ -1,10 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { initializeProject, updateProject } from '../../src/install/index.js';
+import { initializeProject } from '../../src/install/index.js';
 import { validateContext } from '../../src/context/validate.js';
 import { renderNavigation, type NavigationIndex } from '../../src/context/navigation.js';
-import { sha256 } from '../../src/utils/hash.js';
 import { exists } from '../../src/utils/fs.js';
 import { temporary } from '../helpers.js';
 
@@ -20,10 +19,6 @@ vi.mock('../../src/utils/fs.js', async (importOriginal) => {
     atomicWrite: async (path: string, contents: string | Buffer): Promise<void> => {
       if (fails(path)) throw new Error(`injected write failure: ${path}`);
       await actual.atomicWrite(path, contents);
-    },
-    writeJson: async (path: string, value: unknown): Promise<void> => {
-      if (fails(path)) throw new Error(`injected write failure: ${path}`);
-      await actual.writeJson(path, value);
     }
   };
 });
@@ -32,14 +27,10 @@ const navigationJson = '.ai-workflow/index/navigation.json';
 const navigationMarkdown = '.ai-workflow/index/navigation.md';
 const projectManifest = '.ai-workflow/project-manifest.json';
 const projectConfig = '.ai-workflow/project.yml';
-const managedTargets = ['AGENTS.md', 'CLAUDE.md', 'MEMORY.md', navigationJson, navigationMarkdown];
+const managedTargets = ['MEMORY.md', navigationJson, navigationMarkdown];
 
 function readText(root: string, relative: string): Promise<string> {
   return readFile(join(root, relative), 'utf8');
-}
-
-async function readManifest(root: string): Promise<{ version: number; files: Record<string, string> }> {
-  return JSON.parse(await readText(root, projectManifest)) as { version: number; files: Record<string, string> };
 }
 
 afterEach(() => {
@@ -47,7 +38,7 @@ afterEach(() => {
 });
 
 describe('generated project initialization', () => {
-  it('builds navigation from TypeScript facts and records actual-byte digests', async () => {
+  it('builds navigation from TypeScript facts', async () => {
     const root = await temporary();
     await mkdir(join(root, 'src'), { recursive: true });
     await writeFile(join(root, 'src/a.ts'), 'export function a(): void {}\n');
@@ -66,16 +57,9 @@ describe('generated project initialization', () => {
     expect(jsonBytes).toBe(`${JSON.stringify(index, null, 2)}\n`);
     expect(await readText(root, navigationMarkdown)).toBe(renderNavigation(index));
 
-    const manifest = await readManifest(root);
-    expect(manifest.version).toBe(1);
-    for (const target of managedTargets) expect(manifest.files[target]).toBeDefined();
-    for (const [target, digest] of Object.entries(manifest.files)) {
-      expect(digest).toBe(sha256(await readFile(join(root, target))));
-    }
     expect(await exists(join(root, 'MEMORY.md'))).toBe(true);
     const ignoreLines = (await readText(root, '.gitignore')).split(/\r?\n/).map((line) => line.trim());
     expect(ignoreLines).toContain('MEMORY.md');
-    expect(manifest.files[projectConfig]).toBeUndefined();
   });
 
   it('initializes an empty project with an empty index and matching markdown', async () => {
@@ -121,13 +105,14 @@ describe('generated project initialization', () => {
     await expect(initializeProject(root)).rejects.toThrow();
 
     expect(await readText(root, projectConfig)).toBe(configBytes);
-    for (const target of [...managedTargets, projectManifest]) {
+    for (const target of managedTargets) {
       expect(await exists(join(root, target))).toBe(false);
     }
+    expect(await exists(join(root, projectManifest))).toBe(false);
     expect(await exists(join(root, '.gitignore'))).toBe(false);
   });
 
-  it('keeps a pre-existing project.yml as valid non-conflicting configuration and never records it', async () => {
+  it('keeps a pre-existing project.yml as valid non-conflicting configuration', async () => {
     const root = await temporary();
     await mkdir(join(root, '.ai-workflow'), { recursive: true });
     const configBytes = 'version: 1\nmodules: []\nfeatures: []\n';
@@ -136,8 +121,7 @@ describe('generated project initialization', () => {
     await initializeProject(root);
 
     expect(await readText(root, projectConfig)).toBe(configBytes);
-    const manifest = await readManifest(root);
-    expect(manifest.files[projectConfig]).toBeUndefined();
+    expect(await exists(join(root, projectManifest))).toBe(false);
   });
 
   it('rejects an existing managed target before writing', async () => {
@@ -149,6 +133,7 @@ describe('generated project initialization', () => {
 
     expect(await readText(root, 'MEMORY.md')).toBe(memoryBytes);
     expect(await exists(join(root, 'AGENTS.md'))).toBe(false);
+    expect(await exists(join(root, 'CLAUDE.md'))).toBe(false);
     expect(await exists(join(root, navigationJson))).toBe(false);
     expect(await exists(join(root, navigationMarkdown))).toBe(false);
     expect(await exists(join(root, '.gitignore'))).toBe(false);
@@ -156,17 +141,20 @@ describe('generated project initialization', () => {
 });
 
 describe('publication rollback', () => {
-  it('removes created files and restores .gitignore when the manifest write fails', async () => {
+  it('removes created files and restores .gitignore when a late write fails', async () => {
     const root = await temporary();
     const ignoreBytes = 'node_modules/\n';
     await writeFile(join(root, '.gitignore'), ignoreBytes);
-    fsControl.failPath = projectManifest;
+    fsControl.failPath = '.gitignore';
 
     await expect(initializeProject(root)).rejects.toThrow(/injected write failure/);
 
-    for (const target of [...managedTargets, projectManifest]) {
+    for (const target of managedTargets) {
       expect(await exists(join(root, target))).toBe(false);
     }
+    expect(await exists(join(root, 'AGENTS.md'))).toBe(false);
+    expect(await exists(join(root, 'CLAUDE.md'))).toBe(false);
+    expect(await exists(join(root, projectManifest))).toBe(false);
     expect(await readText(root, '.gitignore')).toBe(ignoreBytes);
   });
 
@@ -180,7 +168,7 @@ describe('publication rollback', () => {
 
     await expect(initializeProject(root)).rejects.toThrow(/injected write failure/);
 
-    for (const target of [...managedTargets, projectManifest]) {
+    for (const target of managedTargets) {
       expect(await exists(join(root, target))).toBe(false);
     }
     expect(await readText(root, '.gitignore')).toBe(ignoreBytes);
@@ -356,81 +344,35 @@ features: []
   });
 });
 
-describe('update navigation protection', () => {
-  it('always skips navigation files and leaves generated bytes unchanged', async () => {
+describe('navigation protection', () => {
+  it('never writes AGENTS.md, CLAUDE.md or a project manifest', async () => {
+    const root = await temporary();
+
+    const created = await initializeProject(root);
+
+    expect(created).not.toContain('AGENTS.md');
+    expect(created).not.toContain('CLAUDE.md');
+    expect(await exists(join(root, 'AGENTS.md'))).toBe(false);
+    expect(await exists(join(root, 'CLAUDE.md'))).toBe(false);
+    expect(await exists(join(root, projectManifest))).toBe(false);
+    expect(await exists(join(root, navigationJson))).toBe(true);
+    expect(await exists(join(root, navigationMarkdown))).toBe(true);
+  });
+
+  it('refuses to overwrite existing navigation and MEMORY.md on re-init and leaves bytes unchanged', async () => {
     const root = await temporary();
     await mkdir(join(root, 'src'), { recursive: true });
     await writeFile(join(root, 'src/a.ts'), 'export function a(): void {}\n');
     await initializeProject(root);
     const jsonBytes = await readText(root, navigationJson);
     const markdownBytes = await readText(root, navigationMarkdown);
+    const memoryBytes = await readText(root, 'MEMORY.md');
 
-    const report = await updateProject(root);
+    await expect(initializeProject(root)).rejects.toThrow(/no files written/);
 
-    expect(report.updated).toEqual([]);
-    expect(report.skipped).toEqual([navigationJson, navigationMarkdown, 'MEMORY.md']);
-    expect(report.unchanged).toEqual(['AGENTS.md', 'CLAUDE.md']);
     expect(await readText(root, navigationJson)).toBe(jsonBytes);
     expect(await readText(root, navigationMarkdown)).toBe(markdownBytes);
-  });
-
-  it('skips navigation files even when manifest digests differ from current bytes', async () => {
-    const root = await temporary();
-    await initializeProject(root);
-    const jsonBytes = await readText(root, navigationJson);
-    const markdownBytes = await readText(root, navigationMarkdown);
-    const manifestPath = join(root, projectManifest);
-    const manifest = await readManifest(root);
-    manifest.files[navigationJson] = `sha256:${'0'.repeat(64)}`;
-    manifest.files[navigationMarkdown] = `sha256:${'1'.repeat(64)}`;
-    await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
-
-    const report = await updateProject(root);
-
-    expect(report.skipped).toEqual([navigationJson, navigationMarkdown, 'MEMORY.md']);
-    expect(await readText(root, navigationJson)).toBe(jsonBytes);
-    expect(await readText(root, navigationMarkdown)).toBe(markdownBytes);
-  });
-
-  it('skips navigation files missing from the manifest and does not recreate deleted files', async () => {
-    const root = await temporary();
-    await initializeProject(root);
-    const manifestPath = join(root, projectManifest);
-    const manifest = await readManifest(root);
-    delete manifest.files[navigationJson];
-    delete manifest.files[navigationMarkdown];
-    await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
-
-    const firstReport = await updateProject(root);
-    expect(firstReport.skipped).toEqual([navigationJson, navigationMarkdown, 'MEMORY.md']);
-
-    await rm(join(root, navigationJson));
-    await rm(join(root, navigationMarkdown));
-
-    const secondReport = await updateProject(root);
-    expect(secondReport.skipped).toEqual([navigationJson, navigationMarkdown, 'MEMORY.md']);
-    expect(await exists(join(root, navigationJson))).toBe(false);
-    expect(await exists(join(root, navigationMarkdown))).toBe(false);
-  });
-
-  it('skips navigation files and preserves a user-edited project.yml across update', async () => {
-    const root = await temporary();
-    await mkdir(join(root, 'src'), { recursive: true });
-    await writeFile(join(root, 'src/a.ts'), 'export function a(): void {}\n');
-    await initializeProject(root);
-    const jsonBytes = await readText(root, navigationJson);
-    const markdownBytes = await readText(root, navigationMarkdown);
-    const configBytes = 'version: 1\nmodules: []\nfeatures: []\n# user note\n';
-    await writeFile(join(root, projectConfig), configBytes);
-
-    const report = await updateProject(root);
-
-    expect(report.skipped).toEqual([navigationJson, navigationMarkdown, 'MEMORY.md']);
-    expect(report.unchanged).toEqual(['AGENTS.md', 'CLAUDE.md']);
-    expect(await readText(root, navigationJson)).toBe(jsonBytes);
-    expect(await readText(root, navigationMarkdown)).toBe(markdownBytes);
-    expect(await readText(root, projectConfig)).toBe(configBytes);
-    const manifest = await readManifest(root);
-    expect(manifest.files[projectConfig]).toBeUndefined();
+    expect(await readText(root, 'MEMORY.md')).toBe(memoryBytes);
+    expect(await exists(join(root, projectManifest))).toBe(false);
   });
 });

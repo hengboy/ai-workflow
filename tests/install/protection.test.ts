@@ -76,4 +76,25 @@ describe('installation ownership and rollback', () => {
     expect(await getActiveProfile(root)).toBeUndefined();
     expect(await readFile(join(root, '.codex/agents/backend.toml'), 'utf8')).toBe('user changes');
   });
+
+  it.each([false, true])('AC-015 rolls back every global instruction file, manifest and agent/skill when a global write fails (after write: %s)', async (after) => {
+    const root = await home();
+    const codexPath = join(root, '.codex/AGENTS.md');
+    const codexBytes = 'codex user content\n';
+    await mkdir(join(root, '.codex'), { recursive: true });
+    await writeFile(codexPath, codexBytes);
+    fault.suffix = '/.codex/AGENTS.md';
+    fault.after = after;
+
+    await expect(install(['codex', 'claude', 'opencode'], { home: root })).rejects.toThrow('injected publication failure');
+
+    expect(await readFile(codexPath, 'utf8')).toBe(codexBytes);
+    expect(await exists(join(root, '.claude/CLAUDE.md'))).toBe(false);
+    expect(await exists(join(root, '.config/opencode/AGENTS.md'))).toBe(false);
+    expect(await exists(join(root, '.config/ai-workflow/install-manifest.json'))).toBe(false);
+    expect(await exists(join(root, '.agents/skills/planning/SKILL.md'))).toBe(false);
+    expect(await exists(join(root, '.codex/agents/backend.toml'))).toBe(false);
+    expect(await exists(join(root, '.claude/agents/backend.md'))).toBe(false);
+    expect(await exists(join(root, '.config/opencode/agents/backend.md'))).toBe(false);
+  });
 });

@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { locateContext } from '../../src/context/locate.js';
 import { renderNavigation, type NavigationIndex } from '../../src/context/navigation.js';
 import { createNavigationCandidate } from '../../src/context/validate.js';
-import { initializeProject, updateProject } from '../../src/install/index.js';
+import { initializeProject } from '../../src/install/index.js';
 import { temporary } from '../helpers.js';
 
 const exec = promisify(execFile);
@@ -132,8 +132,7 @@ describe('project navigation contract', () => {
     const { stdout } = await exec('pnpm', ['exec', 'tsx', 'src/cli.ts', 'context', 'validate', '--project', project, '--all']);
     expect(JSON.parse(stdout)).toEqual({ valid: true, errors: [] });
 
-    const report = await updateProject(project);
-    expect(report.skipped).toEqual(['.ai-workflow/index/navigation.json', '.ai-workflow/index/navigation.md', 'MEMORY.md']);
     expect(await readFile(configPath, 'utf8')).toBe(configBytes);
+    expect(await readFile(join(project, '.ai-workflow/index/navigation.json'), 'utf8')).toBeDefined();
   });
 });

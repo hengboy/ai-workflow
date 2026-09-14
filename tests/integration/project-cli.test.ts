@@ -8,26 +8,32 @@ import { temporary } from '../helpers.js';
 const exec = promisify(execFile);
 
 describe('project CLI', () => {
-  it('initializes the current directory when no project is provided', async () => {
+  it('initializes the current directory without project-level contracts or manifest', async () => {
     const project = await temporary('ai-workflow-project-cli-current-');
 
     await exec(process.execPath, [join(process.cwd(), 'node_modules/tsx/dist/cli.mjs'), join(process.cwd(), 'src/cli.ts'), 'init'], { cwd: project });
 
-    expect(await exists(join(project, '.ai-workflow/project-manifest.json'))).toBe(true);
+    expect(await exists(join(project, '.ai-workflow/project-manifest.json'))).toBe(false);
+    expect(await exists(join(project, 'AGENTS.md'))).toBe(false);
+    expect(await exists(join(project, 'CLAUDE.md'))).toBe(false);
+    expect(await exists(join(project, '.ai-workflow/index/navigation.json'))).toBe(true);
+    expect(await exists(join(project, 'MEMORY.md'))).toBe(true);
   });
 
-  it('initializes a project with managed history and reports an unchanged update', async () => {
-    const project = await temporary('ai-workflow-project-cli-');
-
+  it('rejects the removed update command as unknown (AC-011)', async () => {
+    const project = await temporary('ai-workflow-project-cli-update-');
     await exec('pnpm', ['exec', 'tsx', 'src/cli.ts', 'init', project]);
-    const { stdout } = await exec('pnpm', ['exec', 'tsx', 'src/cli.ts', 'update', project]);
 
-    expect(await exists(join(project, '.ai-workflow/project-manifest.json'))).toBe(true);
-    expect(JSON.parse(stdout)).toMatchObject({
-      updated: [],
-      skipped: ['.ai-workflow/index/navigation.json', '.ai-workflow/index/navigation.md', 'MEMORY.md'],
-      unchanged: ['AGENTS.md', 'CLAUDE.md']
-    });
+    const failure = await exec('pnpm', ['exec', 'tsx', 'src/cli.ts', 'update', project]).then(
+      () => undefined,
+      (error: unknown) => error as { code?: number; stderr?: string; stdout?: string; message?: string },
+    );
+
+    expect(failure).toBeDefined();
+    expect(failure?.code).not.toBe(0);
+    const output = `${failure?.stderr ?? ''}${failure?.stdout ?? ''}${failure?.message ?? ''}`;
+    expect(output).toMatch(/unknown command/i);
+    expect(output).toMatch(/update/i);
   });
 
   it('adds .ai-workflow/ to .gitignore on init', async () => {

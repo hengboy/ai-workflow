@@ -8,12 +8,9 @@ const FULL_CONTRACT = [
 ];
 
 const COMPACT_CONTRACT = [
-  'templates/project/AGENTS.md',
-  'templates/project/CLAUDE.md',
+  'templates/contract/AGENTS.md',
   'templates/project/MEMORY.md',
   'templates/skills/planning/SKILL.md',
-  'AGENTS.md',
-  'CLAUDE.md',
 ];
 
 const ALL_CONTRACT_FILES = [...FULL_CONTRACT, ...COMPACT_CONTRACT];
@@ -158,13 +155,11 @@ describe('local ADR contract content', () => {
     expect(text).toMatch(/max(?:imum)?\b.{0,40}(?:plus one|\+ ?1|加一)/i);
   });
 
-  it('exposes ADR rules in the installable project AGENTS.md and CLAUDE.md', async () => {
-    for (const path of ['templates/project/AGENTS.md', 'templates/project/CLAUDE.md']) {
-      const text = await read(path);
-      expect(text, path).toMatch(/ADR/);
-      expect(text, path).toMatch(/architecture/i);
-      expect(text, path).toMatch(/MEMORY\.md/);
-    }
+  it('exposes ADR rules in the installable project contract', async () => {
+    const text = await read('templates/contract/AGENTS.md');
+    expect(text).toMatch(/ADR/);
+    expect(text).toMatch(/architecture/i);
+    expect(text).toMatch(/MEMORY\.md/);
   });
 
   it('references the adr list command from MEMORY.md instead of a stored index or ADR numbers', async () => {

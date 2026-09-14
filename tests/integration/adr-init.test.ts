@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { initializeProject, updateProject } from '../../src/install/index.js';
+import { initializeProject } from '../../src/install/index.js';
 import { temporary } from '../helpers.js';
 import { exists } from '../../src/utils/fs.js';
 
@@ -34,7 +34,7 @@ describe('ADR lifecycle during project init and update', () => {
     expect(failure?.message).toMatch(/ADR/);
     expect(failure?.message).toMatch(/conflict|merge/i);
     expect(await exists(join(root, 'AGENTS.md'))).toBe(false);
-    expect(await exists(join(root, '.ai-workflow/project-manifest.json'))).toBe(false);
+    expect(await exists(join(root, 'CLAUDE.md'))).toBe(false);
   });
 
   it('AC-002 counterexample: an empty ADR directory is not a conflict', async () => {
@@ -69,21 +69,5 @@ describe('ADR lifecycle during project init and update', () => {
     await expect(initializeProject(root)).rejects.toThrow();
     expect(await exists(join(root, '.ai-workflow/adr'))).toBe(false);
     expect(await exists(join(root, 'AGENTS.md'))).toBe(false);
-  });
-
-  it('REQ-009 update never touches the ADR directory and still skips navigation files', async () => {
-    const root = await temporary();
-    await initializeProject(root);
-    await mkdir(join(root, '.ai-workflow/adr'), { recursive: true });
-    await writeFile(join(root, '.ai-workflow/adr/0001-keep.md'), 'KEEP');
-
-    const report = await updateProject(root);
-
-    expect(await readFile(join(root, '.ai-workflow/adr/0001-keep.md'), 'utf8')).toBe('KEEP');
-    expect(report.updated).not.toContain('.ai-workflow/adr');
-    expect(report.skipped).toEqual(expect.arrayContaining([
-      '.ai-workflow/index/navigation.json',
-      '.ai-workflow/index/navigation.md',
-    ]));
   });
 });

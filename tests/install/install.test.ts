@@ -5,6 +5,9 @@ import { activateProfile, getActiveProfile, install, uninstall } from '../../src
 import { exists } from '../../src/utils/fs.js';
 import { temporary } from '../helpers.js';
 
+const BEGIN = '<!-- ai-workflow:begin -->';
+const END = '<!-- ai-workflow:end -->';
+
 function configPath(home: string): string {
   return join(home, '.config/ai-workflow/config.yaml');
 }
@@ -332,5 +335,67 @@ agents:
     await uninstall(['codex'], { home });
 
     expect(await readFile(configPath(home))).toEqual(before);
+  });
+  it('AC-009 uninstall removes only the managed block and preserves outside text', async () => {
+    const home = await temporary('ai-workflow-uninstall-block-');
+    const path = join(home, '.config/opencode/AGENTS.md');
+    const original = 'user header\n';
+    await mkdir(join(home, '.config/opencode'), { recursive: true });
+    await writeFile(path, original);
+    await install(['opencode'], { home });
+
+    const installed = await readFile(path, 'utf8');
+    const begin = installed.indexOf(BEGIN);
+    const end = installed.indexOf(END);
+    expect(begin).toBeGreaterThanOrEqual(0);
+    expect(end).toBeGreaterThan(begin);
+
+    await uninstall(['opencode'], { home });
+
+    const expected = installed.slice(0, begin) + installed.slice(end + END.length);
+    const after = await readFile(path, 'utf8');
+    expect(after).toBe(expected);
+    expect(after.startsWith(original)).toBe(true);
+    expect(after).not.toContain(BEGIN);
+    expect(await exists(path)).toBe(true);
+  });
+  it('AC-009 uninstall skips a hand-edited block and keeps the file', async () => {
+    const home = await temporary('ai-workflow-uninstall-edited-');
+    const path = join(home, '.config/opencode/AGENTS.md');
+    await install(['opencode'], { home });
+    const installed = await readFile(path, 'utf8');
+    const edited = installed.replace(`${BEGIN}\n`, `${BEGIN}\nuser edit `);
+    await writeFile(path, edited);
+
+    const report = await uninstall(['opencode'], { home });
+
+    expect(report.skipped ?? []).toContain('.config/opencode/AGENTS.md');
+    expect(await readFile(path, 'utf8')).toBe(edited);
+    expect(await exists(path)).toBe(true);
+  });
+  it('AC-009 uninstall deletes the file when it created it and no other content remains', async () => {
+    const home = await temporary('ai-workflow-uninstall-created-');
+    const path = join(home, '.config/opencode/AGENTS.md');
+    await install(['opencode'], { home });
+    expect(await exists(path)).toBe(true);
+
+    await uninstall(['opencode'], { home });
+
+    expect(await exists(path)).toBe(false);
+  });
+  it('AC-009 uninstall keeps an empty pre-existing file it did not create', async () => {
+    const home = await temporary('ai-workflow-uninstall-preexisting-');
+    const path = join(home, '.config/opencode/AGENTS.md');
+    await mkdir(join(home, '.config/opencode'), { recursive: true });
+    await writeFile(path, '');
+    await install(['opencode'], { home });
+    expect(await readFile(path, 'utf8')).toContain(BEGIN);
+
+    await uninstall(['opencode'], { home });
+
+    const after = await readFile(path, 'utf8');
+    expect(await exists(path)).toBe(true);
+    expect(after).not.toContain(BEGIN);
+    expect(after.trim()).toBe('');
   });
 });

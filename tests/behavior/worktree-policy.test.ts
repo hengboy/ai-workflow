@@ -16,8 +16,8 @@ describe('mandatory project-local temporary worktree policy', () => {
     expect(memory).not.toMatch(/consider\b[^.]*worktree|worktree[^.]*optional/i);
   });
 
-  it('states the mandatory project-local temporary worktree policy in AGENTS.md and CLAUDE.md', async () => {
-    for (const path of ['AGENTS.md', 'CLAUDE.md']) {
+  it('states the mandatory project-local temporary worktree policy in the user-level contract', async () => {
+    for (const path of ['templates/contract/AGENTS.md']) {
       const text = normalize(await readFile(packagePath(path), 'utf8'));
       expect(text).toMatch(/project-local temporary worktree/i);
       expect(text).toContain('<project>/.worktrees/<name>');
@@ -37,7 +37,7 @@ describe('mandatory project-local temporary worktree policy', () => {
     expect(coding).toMatch(/materialize the project's entire gitignored state/i);
     expect(coding).toContain('.worktrees/');
 
-    for (const path of ['MEMORY.md', 'AGENTS.md', 'CLAUDE.md', 'templates/project/AGENTS.md', 'templates/project/CLAUDE.md', 'templates/project/MEMORY.md']) {
+    for (const path of ['MEMORY.md', 'templates/contract/AGENTS.md', 'templates/project/MEMORY.md']) {
       const text = normalize(await readFile(packagePath(path), 'utf8'));
       expect(text, `${path} shares ignored state`).toMatch(/gitignored state/i);
       expect(text, `${path} excludes the worktree container`).toContain('.worktrees/');

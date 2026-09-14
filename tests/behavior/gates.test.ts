@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { initializeProject, updateProject } from '../../src/install/index.js';
+import { initializeProject } from '../../src/install/index.js';
 import { temporary } from '../helpers.js';
 import { exists } from '../../src/utils/fs.js';
+import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { createHash } from 'node:crypto';
 
 describe('write gates', () => {
   it('initializes both JSON-authoritative navigation files', async () => {
@@ -15,77 +15,45 @@ describe('write gates', () => {
     expect(await exists(join(root, '.ai-workflow/index/navigation.json'))).toBe(true);
     expect(await exists(join(root, '.ai-workflow/index/navigation.md'))).toBe(true);
   });
-  it('updates an initialized project without changing current managed templates', async () => {
+  it('AC-001 initializes without writing or creating project-level contract files', async () => {
     const root = await temporary();
-    await initializeProject(root);
 
-    const report = await updateProject(root);
+    const created = await initializeProject(root);
 
-    expect(report.updated).toEqual([]);
-    expect(report.skipped).toEqual([
-      '.ai-workflow/index/navigation.json',
-      '.ai-workflow/index/navigation.md',
-      'MEMORY.md',
-    ]);
-    expect(report.unchanged).toEqual(['AGENTS.md', 'CLAUDE.md']);
+    expect(created).not.toContain('AGENTS.md');
+    expect(created).not.toContain('CLAUDE.md');
+    expect(await exists(join(root, 'AGENTS.md'))).toBe(false);
+    expect(await exists(join(root, 'CLAUDE.md'))).toBe(false);
+    expect(created).toContain('MEMORY.md');
+    expect(created).toContain('.ai-workflow/index/navigation.json');
+    expect(created).toContain('.ai-workflow/index/navigation.md');
+    expect(await exists(join(root, 'MEMORY.md'))).toBe(true);
   });
-  it('skips a managed template that the project user changed', async () => {
+  it('AC-002 initializes a project that already has a hand-written AGENTS.md and preserves it', async () => {
     const root = await temporary();
-    await initializeProject(root);
-    await (await import('node:fs/promises')).writeFile(join(root, 'AGENTS.md'), 'project-specific agents\n');
+    const agentsBytes = '# Project agents\n\nHand-written constraints.\n';
+    await writeFile(join(root, 'AGENTS.md'), agentsBytes);
 
-    const report = await updateProject(root);
+    const created = await initializeProject(root);
 
-    expect(report.updated).toEqual([]);
-    expect(report.skipped).toHaveLength(4);
-    expect(report.skipped).toEqual(expect.arrayContaining([
-      '.ai-workflow/index/navigation.json',
-      '.ai-workflow/index/navigation.md',
-      'MEMORY.md',
-      'AGENTS.md',
-    ]));
-    expect(report.unchanged).toEqual(['CLAUDE.md']);
+    expect(created).not.toContain('AGENTS.md');
+    expect(created).not.toContain('CLAUDE.md');
+    expect(await readFile(join(root, 'AGENTS.md'), 'utf8')).toBe(agentsBytes);
+    expect(await exists(join(root, 'MEMORY.md'))).toBe(true);
+    const ignoreLines = (await readFile(join(root, '.gitignore'), 'utf8')).split(/\r?\n/).map((line) => line.trim());
+    expect(ignoreLines).toContain('.ai-workflow/');
+    expect(ignoreLines).toContain('MEMORY.md');
+    expect(ignoreLines).toContain('*.log');
   });
-  it('always skips a user-modified MEMORY.md and preserves its content verbatim', async () => {
+  it('init preflights conflicts without partial writes', async () => {
     const root = await temporary();
-    await initializeProject(root);
-    const { readFile, writeFile } = await import('node:fs/promises');
-    await writeFile(join(root, 'MEMORY.md'), 'project notes');
-
-    const report = await updateProject(root);
-
-    expect(report.updated).toEqual([]);
-    expect(report.skipped).toEqual([
-      '.ai-workflow/index/navigation.json',
-      '.ai-workflow/index/navigation.md',
-      'MEMORY.md',
-    ]);
-    expect(report.unchanged).toEqual(['AGENTS.md', 'CLAUDE.md']);
-    expect(await readFile(join(root, 'MEMORY.md'), 'utf8')).toBe('project notes');
+    await writeFile(join(root, 'MEMORY.md'), 'existing');
+    await expect(initializeProject(root)).rejects.toThrow(/no files written/);
+    expect(await exists(join(root, 'AGENTS.md'))).toBe(false);
   });
-  it('replaces an unmodified older managed template with the current template', async () => {
+  it('init reports merge content for every conflict', async () => {
     const root = await temporary();
-    const oldContents = 'old agents template\n';
-    const currentContents = await (await import('node:fs/promises')).readFile(join(process.cwd(), 'templates/project/AGENTS.md'), 'utf8');
-    await (await import('node:fs/promises')).mkdir(join(root, '.ai-workflow'), { recursive: true });
-    await (await import('node:fs/promises')).writeFile(join(root, 'AGENTS.md'), oldContents);
-    await (await import('node:fs/promises')).writeFile(join(root, '.ai-workflow/project-manifest.json'), JSON.stringify({
-      version: 1,
-      files: { 'AGENTS.md': `sha256:${createHash('sha256').update(oldContents).digest('hex')}` }
-    }));
-
-    const report = await updateProject(root);
-
-    expect(report.updated).toEqual(['AGENTS.md']);
-    expect(await (await import('node:fs/promises')).readFile(join(root, 'AGENTS.md'), 'utf8')).toBe(currentContents);
+    await writeFile(join(root, 'MEMORY.md'), 'existing');
+    await expect(initializeProject(root)).rejects.toThrow(/MEMORY\.md.*---/s);
   });
-  it('rejects updates to a project without managed file history', async () => {
-    const root = await temporary();
-    await (await import('node:fs/promises')).writeFile(join(root, 'MEMORY.md'), 'existing project notes');
-
-    await expect(updateProject(root)).rejects.toThrow(/Project update requires .ai-workflow\/project-manifest\.json/);
-    expect(await exists(join(root, '.ai-workflow/project-manifest.json'))).toBe(false);
-  });
-  it('init preflights conflicts without partial writes', async () => { const root = await temporary(); const { writeFile } = await import('node:fs/promises'); await writeFile(join(root, 'MEMORY.md'), 'existing'); await expect(initializeProject(root)).rejects.toThrow(/no files written/); expect(await exists(join(root, 'AGENTS.md'))).toBe(false); });
-  it('init reports merge content for every conflict', async () => { const root = await temporary(); const { writeFile } = await import('node:fs/promises'); await writeFile(join(root, 'MEMORY.md'), 'existing'); await expect(initializeProject(root)).rejects.toThrow(/MEMORY\.md.*---/s); });
 });
