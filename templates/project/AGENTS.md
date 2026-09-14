@@ -33,7 +33,11 @@ Planning schedules the ADR step; the change that lands the architecture decision
 - Plan-to-tasks validates the frozen pair, previews the complete graph, obtains approval, and creates immutable `tasks/<taskId>.md` files. It never edits frozen plans.
 - Coding implements either one approved task or an approved frozen plan with
   TDD: Todo list, one project-local temporary worktree, failing behavior test,
-  minimal implementation, scoped checks, per-step commit and cleanup. It never
+  minimal implementation, scoped checks, per-step commit and cleanup. Git
+  Operator creates the worktree under `<project>/.worktrees/<name>` and
+  materializes the project's entire gitignored state into it, excluding the
+  `.worktrees/` container, so the frozen plan, `MEMORY.md`, navigation, ADRs and
+  dependencies stay visible and single-source at the project root. It never
   creates workflow manifests or run records. Coding work must be delegated:
   unsplit plans delegate one sub-agent per step, split plans delegate one
   sub-agent per task in dependency order, and small bugs or requests delegate

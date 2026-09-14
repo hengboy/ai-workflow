@@ -29,7 +29,10 @@ Planning schedules the ADR step; the change that lands the architecture decision
 - Plan-to-tasks previews and validates the task graph before creating immutable task files.
 - Coding uses delegated TDD for one approved task: Todo list, temporary
   project-local worktree, red-green loop, scoped verification and per-step
-  commit. Unsplit plans delegate one sub-agent per step, split plans one per
+  commit. Git Operator creates the worktree under `<project>/.worktrees/<name>`
+  and materializes the project's entire gitignored state into it, excluding the
+  `.worktrees/` container; ignored state stays single-source at the project
+  root. Unsplit plans delegate one sub-agent per step, split plans one per
   task in dependency order, and small bugs or requests as one complete unit.
   The orchestrator continues automatically unless blocked.
 - Backend and Frontend edit only exact task scopes; Test writes scoped behavior

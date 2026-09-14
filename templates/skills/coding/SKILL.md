@@ -66,11 +66,14 @@ installed role, fail before execution and request clarification.
   Request File Explorer only when the implementation boundary remains unclear.
 - Before implementation, Git Operator must create one project-local temporary worktree
   under `<project>/.worktrees/<name>` (ensure `.gitignore` contains
-  `.worktrees/`). This is a mandatory step of every coding execution unit, not
-  an option reserved for high-risk work: all implementation, validation and
-  per-step commits happen inside that single worktree, and only the owned
-  worktree and branch are merged and removed at the end. Planning, TDD and
-  review depth remain proportional to change risk.
+  `.worktrees/`). Git Operator must then materialize the project's entire
+  gitignored state into the worktree, excluding only the `.worktrees/` container,
+  so the frozen plan, `MEMORY.md`, navigation, ADRs and dependencies stay
+  visible and single-source at the project root. This is a mandatory step of
+  every coding execution unit, not an option reserved for high-risk work: all
+  implementation, validation and per-step commits happen inside that single
+  worktree, and only the owned worktree and branch are merged and removed at the
+  end. Planning, TDD and review depth remain proportional to change risk.
 - Create a Todo list before editing and keep it current. Each step must state its
   scope, acceptance evidence and commit point.
 - Before writing a test, state the public interface and observable boundary it

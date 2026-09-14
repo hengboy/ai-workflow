@@ -25,4 +25,22 @@ describe('mandatory project-local temporary worktree policy', () => {
       expect(text).not.toMatch(/consider\b[^.]*worktree|worktree[^.]*optional/i);
     }
   });
+
+  it('materializes the entire project gitignored state into the coding worktree', async () => {
+    const operator = normalize(await readFile(packagePath('templates', 'agents', 'git-operator.md'), 'utf8'));
+    expect(operator).toContain('git ls-files --others --ignored --exclude-standard --directory');
+    expect(operator).toMatch(/symlink/i);
+    expect(operator).toMatch(/real directory/i);
+    expect(operator).toContain('.worktrees/');
+
+    const coding = normalize(await readFile(packagePath('templates', 'skills', 'coding', 'SKILL.md'), 'utf8'));
+    expect(coding).toMatch(/materialize the project's entire gitignored state/i);
+    expect(coding).toContain('.worktrees/');
+
+    for (const path of ['MEMORY.md', 'AGENTS.md', 'CLAUDE.md', 'templates/project/AGENTS.md', 'templates/project/CLAUDE.md', 'templates/project/MEMORY.md']) {
+      const text = normalize(await readFile(packagePath(path), 'utf8'));
+      expect(text, `${path} shares ignored state`).toMatch(/gitignored state/i);
+      expect(text, `${path} excludes the worktree container`).toContain('.worktrees/');
+    }
+  });
 });

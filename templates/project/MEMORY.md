@@ -4,13 +4,13 @@ Describe architecture, module responsibilities, coding standards and invariants 
 
 Planning produces frozen `spec.md` and `plan.md`; plan-to-tasks produces immutable task documents. Coding implements split tasks or an approved unsplit frozen plan with TDD and never creates a workflow runtime artifact.
 
-- Coding must create one project-local temporary worktree under `<project>/.worktrees/<name>` before implementation; all implementation and validation happen inside that single worktree.
+- Coding must create one project-local temporary worktree under `<project>/.worktrees/<name>` before implementation; all implementation and validation happen inside that single worktree. Git Operator materializes the project's entire gitignored state into the worktree, excluding the `.worktrees/` container, so frozen plan artifacts, navigation and `MEMORY.md` stay visible and single-source at the project root.
 
 ## Architecture decision records
 
 Planning schedules the ADR step; the change that lands the architecture decision writes the ADR file. A decision approved before implementation may be recorded as proposed and becomes accepted in the same change that lands it.
 
-Before implementation, Git Operator creates the project-local temporary worktree under `<project>/.worktrees/<name>`.
+Before implementation, Git Operator creates the project-local temporary worktree under `<project>/.worktrees/<name>` and materializes the project's gitignored state into it, excluding the `.worktrees/` container.
 
 - ADRs are local, uncommitted artifacts under `.ai-workflow/adr/`; run `ai-workflow adr list --project <root>` to list status and topics instead of scanning the directory.
 - The change that lands the architecture decision writes the ADR file before implementation when the decision is approved in advance.
