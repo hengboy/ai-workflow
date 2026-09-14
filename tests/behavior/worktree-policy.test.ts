@@ -10,7 +10,7 @@ describe('mandatory project-local temporary worktree policy', () => {
 
     expect(memory).toContain('project-local temporary worktree');
     expect(memory).toContain('.worktrees');
-    expect(memory).toContain('.ai-workflow/adr/INDEX.md');
+    expect(memory).toContain('ai-workflow adr list');
     expect(memory).toContain('<project>/.worktrees/<name>');
     expect(memory).toMatch(/before implementation/i);
     expect(memory).not.toMatch(/consider\b[^.]*worktree|worktree[^.]*optional/i);

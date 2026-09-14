@@ -30,14 +30,14 @@ ai-workflow context locate [--project .] --feature <id> --verify
 ai-workflow context candidate --project . --output <candidate.json> --task-target <id> --root <module-root> --path <changed-file>
 ai-workflow context refresh --project . --candidate <candidate.json> --write
 ai-workflow context discover --project . --packet <fallback.json>
-ai-workflow adr index [--project .] [--verify]
+ai-workflow adr list [--project .]
 ```
 
 `--project` is always a project root directory path. From that directory use `--project .` (project root directory path); from elsewhere pass an absolute path such as `--project /path/to/project`. Internal orchestration uses absolute project-root paths, and a relative `--candidate` is resolved from that project root.
 
 Navigation is JSON-authoritative. `context locate` resolves a feature by exact ID then exact alias; task queries match exact feature, alias, task, requirement, or acceptance-criterion IDs; symbols match an exact export name or qualified `file#symbol` name. A hit returns exact indexed paths; `missing_index`, `miss`, `stale`, and `invalid` return a fallback packet that must be validated before bounded discovery. `context candidate` emits the structured input for refresh, while `context refresh` atomically replaces `navigation.json` and its generated Markdown view only after candidate validation succeeds.
 
-`ai-workflow adr index` renders `.ai-workflow/adr/INDEX.md` from the header fields of the `NNNN-*.md` files under `.ai-workflow/adr/`; `--verify` regenerates it in memory and exits non-zero when the stored index is missing or drifted, except that a project with no ADRs and no stored index is treated as consistent. The index is generated, never hand-edited: ADRs are the authority and `INDEX.md` is a projection used for status and topic triage.
+`ai-workflow adr list` reads the header fields of the `NNNN-*.md` files under `.ai-workflow/adr/` and prints a deterministic, ascending status and topic table. There is no stored index file: ADRs are the authority and the list is derived on every read, so it cannot drift.
 
 Frozen `spec.md` and `plan.md` files use a shared digest protocol: each file hashes its exact UTF-8 bytes with only its own frontmatter `digest` line replaced by `digest: ""`; the workflow input digest combines the two resulting digests as stable JSON. Use `ai-workflow plan validate --plan <directory>` after planning and before task splitting or coding.
 
@@ -47,7 +47,7 @@ Frozen `spec.md` and `plan.md` files use a shared digest protocol: each file has
 
 ### Repository discovery
 
-Discovery performs a deterministic, bounded scan of the project. It excludes `.git`, `.ai-workflow`, `node_modules`, `vendor`, `target`, `build`, `dist`, `coverage`, `.next` and `.cache`, does not traverse symlinks that leave the project, and supports empty projects. Paths are project-relative, slash-separated and ordered by locale-independent comparison; the scan reports no silent truncation. Even though `.ai-workflow` is excluded from traversal, `.ai-workflow/project.yml` is read explicitly.
+Discovery performs a deterministic, bounded scan of the project. It excludes `.git`, `.ai-workflow`, `.worktrees`, `node_modules`, `vendor`, `target`, `build`, `dist`, `coverage`, `.next` and `.cache`, does not traverse symlinks that leave the project, and supports empty projects. Paths are project-relative, slash-separated and ordered by locale-independent comparison; the scan reports no silent truncation. Even though `.ai-workflow` is excluded from traversal, `.ai-workflow/project.yml` is read explicitly.
 
 ### Optional project configuration
 

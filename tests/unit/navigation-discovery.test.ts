@@ -7,6 +7,7 @@ import { temporary } from '../helpers.js';
 const EXCLUDED_DIRECTORIES = [
   '.git',
   '.ai-workflow',
+  '.worktrees',
   'node_modules',
   'vendor',
   'target',

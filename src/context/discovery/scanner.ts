@@ -15,6 +15,7 @@ export interface DiscoveryFacts {
 const EXCLUDED_DIRECTORIES = new Set([
   '.git',
   '.ai-workflow',
+  '.worktrees',
   'node_modules',
   'vendor',
   'target',
