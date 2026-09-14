@@ -3,6 +3,7 @@ import { basename, dirname, extname, join, relative, resolve } from 'node:path';
 import { mkdir, readdir, readFile, rm, rmdir, writeFile } from 'node:fs/promises';
 import { atomicWrite, exists, readJson, writeJson } from '../utils/fs.js';
 import { sha256 } from '../utils/hash.js';
+import { packagePath } from '../utils/schema.js';
 import { renderHost, renderSkills, type RenderedFile } from './render.js';
 import { loadProfile, type Profile } from '../profile/index.js';
 import { loadSettings, writeActiveProfile } from '../settings/index.js';
@@ -14,7 +15,8 @@ import { validateNavigationModel } from '../context/validate.js';
 import type { Host } from '../workflow/types.js';
 
 interface ManifestFile { path: string; digest: string; kind: 'file' | 'directory' }
-interface InstallManifest { version: string; installed_at: string; skills?: ManifestFile[]; hosts: Partial<Record<Host, ManifestFile[]>>; skipped?: string[] }
+export interface ContractRecord { path: string; digest: string; created: boolean }
+interface InstallManifest { version: string; installed_at: string; skills?: ManifestFile[]; hosts: Partial<Record<Host, ManifestFile[]>>; contracts?: Partial<Record<Host, ContractRecord>>; skipped?: string[] }
 interface ProjectManifest { version: 1; files: Record<string, string> }
 export interface AgentInstallation {
   name: string;
@@ -40,7 +42,10 @@ const navigationJsonRelative = '.ai-workflow/index/navigation.json';
 const navigationMarkdownRelative = '.ai-workflow/index/navigation.md';
 const marketplaceRelative = '.agents/plugins/marketplace.json';
 const skillsRelative = '.agents/skills';
-const projectTemplates = ['AGENTS.md', 'CLAUDE.md', 'MEMORY.md', 'navigation.json', 'navigation.md'] as const;
+const projectTemplates = ['MEMORY.md', 'navigation.json', 'navigation.md'] as const;
+const contractBegin = '<!-- ai-workflow:begin -->';
+const contractEnd = '<!-- ai-workflow:end -->';
+const globalInstructionRelative: Record<Host, string> = { opencode: '.config/opencode/AGENTS.md', claude: '.claude/CLAUDE.md', codex: '.codex/AGENTS.md' };
 function projectTargets(): Array<{ source: string; target: string }> {
   return projectTemplates.map((name) => ({ source: join('templates/project', name), target: name === 'navigation.json' || name === 'navigation.md' ? `.ai-workflow/index/${name}` : name }));
 }
@@ -101,6 +106,51 @@ async function removeStaleOwnedFiles(home: string, previous: ManifestFile[], cur
   }
 }
 
+function globalInstructionPath(home: string, host: Host): string { return join(home, globalInstructionRelative[host]); }
+
+function countOccurrences(haystack: string, needle: string): number {
+  let count = 0; let index = haystack.indexOf(needle);
+  while (index !== -1) { count += 1; index = haystack.indexOf(needle, index + needle.length); }
+  return count;
+}
+
+interface ContractBlock { begin: number; end: number; blockText: string }
+function locateContractBlock(contents: string): ContractBlock | undefined {
+  if (countOccurrences(contents, contractBegin) !== 1 || countOccurrences(contents, contractEnd) !== 1) return undefined;
+  const begin = contents.indexOf(contractBegin); const end = contents.indexOf(contractEnd);
+  if (begin > end) return undefined;
+  return { begin, end, blockText: contents.slice(begin, end + contractEnd.length) };
+}
+function hasAnyContractMarker(contents: string): boolean { return contents.includes(contractBegin) || contents.includes(contractEnd); }
+function contractBlockText(template: string): string { return `${contractBegin}\n${template}${contractEnd}`; }
+
+async function installContracts(home: string, hosts: Host[], manifest: InstallManifest, skipped: string[]): Promise<void> {
+  const template = await readFile(packagePath('templates', 'contract', 'AGENTS.md'), 'utf8');
+  const current = contractBlockText(template); const currentDigest = sha256(current);
+  const contracts: Partial<Record<Host, ContractRecord>> = manifest.contracts ?? {};
+  for (const host of hosts) {
+    const path = globalInstructionPath(home, host); const relativePath = relative(home, path); const prior = contracts[host];
+    const disk = (await exists(path)) ? await readFile(path, 'utf8') : undefined;
+    if (disk === undefined) {
+      await atomicWrite(path, `${current}\n`);
+      contracts[host] = { path: relativePath, digest: currentDigest, created: true };
+      continue;
+    }
+    const block = locateContractBlock(disk);
+    if (block) {
+      if (prior && prior.digest !== sha256(block.blockText)) { skipped.push(relativePath); continue; }
+      await atomicWrite(path, disk.slice(0, block.begin) + current + disk.slice(block.end + contractEnd.length));
+      contracts[host] = { path: relativePath, digest: currentDigest, created: false };
+      continue;
+    }
+    if (hasAnyContractMarker(disk)) { skipped.push(relativePath); continue; }
+    const separator = disk === '' || disk.endsWith('\n') ? '' : '\n';
+    await atomicWrite(path, `${disk}${separator}${current}\n`);
+    contracts[host] = { path: relativePath, digest: currentDigest, created: false };
+  }
+  if (Object.keys(contracts).length) manifest.contracts = contracts; else delete manifest.contracts;
+}
+
 async function installUnsafe(hosts: Host[], options: { home?: string; version?: string; profile?: Profile } = {}): Promise<InstallManifest> {
   const home = resolve(options.home ?? homedir()); const version = options.version ?? '0.1.0'; const manifest = await readManifest(home);
   // Resolve settings once before any render or write so an invalid active_profile aborts pre-write.
@@ -123,6 +173,7 @@ async function installUnsafe(hosts: Host[], options: { home?: string; version?: 
     await removeStaleOwnedFiles(home, manifest.hosts[host] ?? [], owned);
     manifest.hosts[host] = owned;
   }
+  await installContracts(home, hosts, manifest, skipped);
   manifest.version = version; manifest.installed_at = new Date().toISOString(); if (skipped.length) manifest.skipped = skipped; else delete manifest.skipped; await writeJson(join(home, manifestRelative), manifest);
   return manifest;
 }
@@ -130,10 +181,13 @@ async function installUnsafe(hosts: Host[], options: { home?: string; version?: 
 export async function install(hosts: Host[], options: { home?: string; version?: string; profile?: Profile } = {}): Promise<InstallManifest> {
   const home = resolve(options.home ?? homedir()); const manifestPath = join(home, manifestRelative); const hadManifest = await exists(manifestPath); const previous = hadManifest ? await readFile(manifestPath) : undefined;
   const configPath = settingsConfigPath(home); const hadConfig = await exists(configPath); const previousConfig = hadConfig ? await readFile(configPath) : undefined;
+  const globalSnapshots = new Map<string, Buffer | undefined>();
+  for (const host of hosts) { const path = globalInstructionPath(home, host); globalSnapshots.set(path, await readIfExists(path)); }
   try { return await installUnsafe(hosts, options); } catch (error) {
+    for (const [path, contents] of globalSnapshots) await restoreIfChanged(path, contents);
     await restoreIfChanged(configPath, previousConfig);
     if (previous) await atomicWrite(manifestPath, previous); else await rm(manifestPath, { force: true });
-    if (!hadManifest) { await rm(skillsRoot(home), { recursive: true, force: true }); for (const host of hosts) await rm(agentsRoot(home, host), { recursive: true, force: true }); await removeEmptyDirectory(join(home, '.agents')); await removeEmptyDirectory(join(home, '.codex')); await removeEmptyDirectory(join(home, '.config')); }
+    if (!hadManifest) { await rm(skillsRoot(home), { recursive: true, force: true }); for (const host of hosts) await rm(agentsRoot(home, host), { recursive: true, force: true }); await removeEmptyDirectory(join(home, '.agents')); await removeEmptyDirectory(join(home, '.codex')); await removeEmptyDirectory(join(home, '.claude')); await removeEmptyDirectory(join(home, '.config/opencode')); await removeEmptyDirectory(join(home, '.config')); }
     throw error;
   }
 }

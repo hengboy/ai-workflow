@@ -103,6 +103,7 @@ describe('user-level contract installation', () => {
     await mkdir(join(home, '.config/opencode'), { recursive: true });
     const composed = `before\n${outdated}\nafter\n`;
     await writeFile(join(home, filePath), composed);
+    await mkdir(join(home, '.config/ai-workflow'), { recursive: true });
     await writeFile(join(home, manifestRelative), `${JSON.stringify({
       version: '0.1.0',
       installed_at: new Date(0).toISOString(),
