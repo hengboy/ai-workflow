@@ -22,7 +22,7 @@ Replace every placeholder and illustrative entry below. Remove this instruction 
 
 ### Step 1: Short outcome name
 
-- Responsible role: `backend`, `frontend`, `test`, or another installed native role.
+- Responsible role: `backend`, `frontend`, `test`, or another installed native role. Do not add a `surface` field to a plan step; surface routing belongs to generated task files.
 - Read scope: exact files or bounded directories needed for context.
 - Write scope: exact files the step may change.
 - Changes: describe the intended behavior and important constraints.

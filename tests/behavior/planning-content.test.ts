@@ -94,6 +94,14 @@ describe('native prompt contracts', () => {
       expect(await readFile(join(skillRoot, skill, 'SKILL.md'), 'utf8')).toContain(`references/${file}`);
     }
   });
+  it('requires plan steps to name a Responsible role without task surface routing', async () => {
+    const planTemplate = await readFile(packagePath('templates', 'skills', 'planning', 'references', 'plan.md'), 'utf8');
+    const step = planTemplate.match(/### Step 1[\s\S]*?(?=\n## |$)/i)?.[0] ?? '';
+
+    expect(step).toMatch(/^- Responsible role:\s*`?[^\n`]+`?/im);
+    expect(step).not.toMatch(/^- surface:/im);
+    expect(planTemplate).not.toMatch(/^surface:/im);
+  });
   it('documents the shared frozen-plan digest protocol in all lifecycle skills', async () => {
     const skillRoot = packagePath('templates', 'skills');
     const digest = await readFile(join(skillRoot, 'planning', 'references', 'digest.md'), 'utf8');

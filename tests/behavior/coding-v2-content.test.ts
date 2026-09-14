@@ -31,6 +31,14 @@ describe('v2 coding guidance', () => {
     expect(testAgent).toContain('public interface plus observable boundary');
   });
 
+  it('routes an unsplit plan by each step\'s Responsible role when no task files exist', async () => {
+    const coding = (await readFile(packagePath('templates', 'skills', 'coding', 'SKILL.md'), 'utf8')).replace(/\s+/g, ' ');
+
+    expect(coding).toMatch(/unsplit plan.{0,180}(?:Responsible role|responsible role).{0,180}(?:delegate|route|dispatch)/i);
+    expect(coding).toMatch(/when no task files exist.{0,220}(?:Responsible role|responsible role)/i);
+    expect(coding).not.toMatch(/unsplit plan.{0,180}surface/i);
+  });
+
   it('requires a mandatory project-local temporary worktree before implementation', async () => {
     const coding = (await readFile(packagePath('templates', 'skills', 'coding', 'SKILL.md'), 'utf8')).replace(/\s+/g, ' ');
 

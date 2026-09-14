@@ -29,6 +29,7 @@ Directly read `MEMORY.md`, `.ai-workflow/index/navigation.json` and `.ai-workflo
 - Map every REQ and AC to at least one task; explain intentional shared coverage.
 - Declare dependencies only for data, contract, ordering or overlapping-write constraints.
 - Use `surface: backend|frontend|cross-stack|test|docs|research|documentation` to route implementation; `research` delegates every technology, project, concept, topic or keyword research request to Researcher, whether or not links are supplied, and `documentation` to Documentation Maintainer for non-code documentation and index maintenance.
+- Every generated task must include a non-empty, supported `surface`; a plan's `Responsible role` is converted to that task surface during decomposition.
 - Make read scopes bounded and write scopes exact enough for filesystem enforcement.
 - Ask File Explorer for exact paths when an entry, call chain or dependency is unknown.
 - Never use `.`, project root, `**`, an unresolved placeholder or a broad directory with unclear ownership as write scope.

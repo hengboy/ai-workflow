@@ -94,6 +94,9 @@ Write to `.ai-workflow/plans/<YYYYMMDD-english-slug>/`:
 - `spec.md`: goal, non-goals, scenarios, continuous REQ/AC, Given/When/Then evidence, RED criteria, boundary counterexamples and validation layers.
 - `plan.md`: every REQ/AC mapping, implementation order, exact or bounded read/write paths, checks, compatibility, rollback and responsible native role.
 
+Plan steps use `Responsible role`; `plan.md` itself does not require a
+`surface` attribute. Surface routing is added only to generated task files.
+
 Before drafting, read [the specification template](references/spec.md) and [the implementation plan template](references/plan.md). Preserve their contracts while replacing the illustrative example content with the approved requirements and repository-specific evidence.
 
 ## Architecture decision records
