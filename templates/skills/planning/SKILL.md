@@ -107,7 +107,7 @@ ADRs are local, uncommitted artifacts under `.ai-workflow/adr/`, discovered by l
 - Name each file `NNNN-kebab-title.md` with a 4-digit zero-padded number (`0001`); never reuse a number and use the maximum existing number plus one.
 - An `accepted` ADR is immutable; replace one by appending only `superseded by ADR-NNNN` to the old file and recording the new decision in a new ADR.
 - `MEMORY.md` holds the current standards (how) while ADRs hold the decision history (why); an inconsistency is a defect, so update both in the same change and cite the ADR number.
-- The full contract lives in the `Documentation Maintainer` role file.
+- The full contract lives in the `Documentation Maintainer` and `Standards Review` role files.
 
 ## Frozen-plan digest protocol
 

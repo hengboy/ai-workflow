@@ -20,7 +20,7 @@ Planning schedules the ADR step; the change that lands the architecture decision
 - Architecture, module boundaries, cross-cutting standards and hard-to-reverse technology choices require an ADR.
 - An `accepted` ADR is immutable; to replace one append `superseded by ADR-NNNN` to the old file and record the new decision in a new ADR.
 - `MEMORY.md` holds current standards (how) while ADRs hold decision history (why); update both in the same change and cite the ADR number.
-- The full contract lives in the `Documentation Maintainer` role file.
+- The full contract lives in the `Documentation Maintainer` and `Standards Review` role files.
 
 ## Role guidance
 

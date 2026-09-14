@@ -40,5 +40,5 @@
 - Name each file `NNNN-kebab-title.md` with a 4-digit zero-padded number (`0001`); never reuse a number and use the maximum existing number plus one.
 - Architecture, module boundaries, cross-cutting standards and hard-to-reverse choices require an ADR.
 - An `accepted` ADR is immutable; replace one only by appending `superseded by ADR-NNNN` to the old file and recording the new decision in a new ADR.
-- `MEMORY.md` records current standards (how) while ADRs record decision history (why); an inconsistency is a defect, so update both in the same change and cite the ADR number. The full contract lives in the `Documentation Maintainer` role file.
+- `MEMORY.md` records current standards (how) while ADRs record decision history (why); an inconsistency is a defect, so update both in the same change and cite the ADR number. The full contract lives in the `Documentation Maintainer` and `Standards Review` role files.
 - This mechanism is itself recorded in `ADR-0003` (`.ai-workflow/adr/0003-adr-phase-and-concision.md`).
