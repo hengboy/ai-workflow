@@ -214,6 +214,8 @@ describe('localized planning artifacts', () => {
     expect(readme).toContain('`planning`');
     expect(readme).toContain('`plan-to-tasks`');
     expect(readme).toContain('`coding`');
+    expect(readme).toContain('`documentation-maintainer`');
+    expect(readme).toMatch(/ADR.*(?:prose|natural-language).*output_language/i);
     for (const category of ['clarification questions', 'confirmation previews', 'progress narration', 'final summary']) {
       expect(readme, `README documents the ${category} session-prose category`).toContain(category);
     }

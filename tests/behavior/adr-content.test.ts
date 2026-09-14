@@ -14,7 +14,6 @@ const COMPACT_CONTRACT = [
   'templates/skills/planning/SKILL.md',
   'AGENTS.md',
   'CLAUDE.md',
-  'MEMORY.md',
 ];
 
 const ALL_CONTRACT_FILES = [...FULL_CONTRACT, ...COMPACT_CONTRACT];
@@ -81,6 +80,21 @@ describe('local ADR contract content', () => {
       expect(text, `${path} next number`).toMatch(/max(?:imum)?\b.{0,40}(?:plus one|\+ ?1|加一)/i);
       expect(text, `${path} immutability`).toMatch(/immutab|不可变|must not (?:modify|edit)/i);
     }
+  });
+
+  it('states the configured ADR prose language and English structural elements in both full contracts', async () => {
+    for (const path of FULL_CONTRACT) {
+      const text = await read(path);
+      for (const clause of ['output_language', 'field names', 'Status', 'Supersedes', 'superseded-by ADR-NNNN']) {
+        expect(text, `${path} locale contract: ${clause}`).toContain(clause);
+      }
+      expect(text, `${path} ADR prose follows the configured language`).toMatch(/ADR.*natural-language prose.*(?:follow|accord).*output_language/is);
+      expect(text, `${path} ADR structure remains English`).toMatch(/structure(?:al)? elements?.*(?:remain|stay|keep).*English/is);
+    }
+
+    const standardsReview = await read('templates/agents/standards-review.md');
+    expect(standardsReview).toMatch(/language.*(?:user preference|preference)/i);
+    expect(standardsReview).toMatch(/not.*merge-blocking|merge-blocking.*not/i);
   });
 
   it('requires the Documentation Maintainer to keep each ADR concise and read only relevant ADRs', async () => {
@@ -154,12 +168,20 @@ describe('local ADR contract content', () => {
   });
 
   it('references the adr list command from MEMORY.md instead of a stored index or ADR numbers', async () => {
-    for (const path of ['templates/project/MEMORY.md', 'MEMORY.md']) {
+    for (const path of ['MEMORY.md']) {
       const text = await read(path);
       expect(text, `${path} list command`).toContain(ADR_LIST_COMMAND);
       expect(text, `${path} no stored index`).not.toContain('INDEX.md');
       expect(text, `${path} no ADR number citations`).not.toMatch(/ADR-\d{4}/);
     }
+  });
+
+  it('documents the ADR output-language rule in the root MEMORY.md', async () => {
+    const text = await read('MEMORY.md');
+    expect(text).toContain('documentation-maintainer');
+    expect(text).toContain('output_language');
+    expect(text).toMatch(/ADR.*(?:natural-language prose|prose).*language/i);
+    expect(text).not.toMatch(/ADR-\d{4}/);
   });
 
   it('separates current standards (MEMORY.md) from decision history (ADR)', async () => {

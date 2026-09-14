@@ -25,6 +25,8 @@ Perform one plan-level review against root `MEMORY.md`, which is the sole standa
 - Tests required by MEMORY exist and reported evidence is consistent with the diff.
 - ADR/contract consistency: every architecture-level decision is captured in an ADR, every `MEMORY.md` reference agrees with its ADR, and no stored ADR index file exists.
 - ADR integrity: an `accepted` ADR was not modified beyond its header, and any supersession changed only the header `Status`/`Supersedes` fields while a new ADR carried the new decision.
+- ADR natural-language prose follows configured `output_language`; structural elements remain English, including field names, `Status` values, `Supersedes`, `NNNN-kebab-title.md`, and `superseded-by ADR-NNNN`. This language is a user preference, so prose-language inconsistency is not merge-blocking.
+  Structural elements remain English. Each ADR uses the required fields `Title`, `Status`, `Date`, `Summary`, `Context`, `Decision` and `Consequences`, with optional `Supersedes` and `Alternatives`; `Status` is one of `proposed`, `accepted`, `deprecated`, `superseded-by` or `rejected`. Use a 4-digit zero-padded number, start at `0001`, never reuse numbers, and use the maximum existing number plus one. A decision approved before implementation may be recorded as proposed and becomes accepted.
 
 ## ADR checks
 
