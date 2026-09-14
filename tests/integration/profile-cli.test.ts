@@ -4,16 +4,12 @@ import { promisify } from 'node:util';
 import { join } from 'node:path';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import YAML from 'yaml';
-import { exists } from '../../src/utils/fs.js';
 import { temporary } from '../helpers.js';
 
 const exec = promisify(execFile);
 
 function configPath(home: string): string {
   return join(home, '.config/ai-workflow/config.yaml');
-}
-function markerPath(home: string): string {
-  return join(home, '.config/ai-workflow/active-profile');
 }
 async function readConfig(home: string): Promise<Record<string, unknown>> {
   return YAML.parse(await readFile(configPath(home), 'utf8')) as Record<string, unknown>;
@@ -27,13 +23,9 @@ async function writeConfig(home: string, contents: string): Promise<void> {
   await mkdir(join(home, '.config/ai-workflow'), { recursive: true });
   await writeFile(configPath(home), contents);
 }
-async function writeMarker(home: string, contents: string): Promise<void> {
-  await mkdir(join(home, '.config/ai-workflow'), { recursive: true });
-  await writeFile(markerPath(home), contents);
-}
 
 describe('profile CLI', () => {
-  it('activates an existing profile into config.yaml without creating the legacy marker (AC-001)', async () => {
+  it('activates an existing profile into config.yaml (AC-001)', async () => {
     const home = await temporary('ai-workflow-profile-cli-');
     await writeProfile(home, 'local');
     await exec('pnpm', ['exec', 'tsx', 'src/cli.ts', 'install', '--host', 'codex', '--home', home]);
@@ -62,7 +54,6 @@ describe('profile CLI', () => {
     });
     const config = await readConfig(home);
     expect(config.active_profile).toBe('local');
-    expect(await exists(markerPath(home))).toBe(false);
   });
 
   it('preserves output_language while adding the new active_profile (AC-002)', async () => {
@@ -76,39 +67,5 @@ describe('profile CLI', () => {
     const config = await readConfig(home);
     expect(config.output_language).toBe('zh-CN');
     expect(config.active_profile).toBe('team');
-    expect(await exists(markerPath(home))).toBe(false);
-  });
-
-  it('activates the explicit profile even when the legacy marker holds an invalid value (AC-013)', async () => {
-    const home = await temporary('ai-workflow-profile-cli-invalid-marker-');
-    await writeProfile(home, 'beta');
-    await exec('pnpm', ['exec', 'tsx', 'src/cli.ts', 'install', '--host', 'codex', '--home', home]);
-    await writeMarker(home, 'deleted\n');
-
-    const { stdout } = await exec('pnpm', ['exec', 'tsx', 'src/cli.ts', 'profile', 'activate', 'beta', '--home', home]);
-
-    const report = JSON.parse(stdout) as { active_profile: string };
-    expect(report.active_profile).toBe('beta');
-    const config = await readConfig(home);
-    expect(config.active_profile).toBe('beta');
-    expect(await exists(markerPath(home))).toBe(false);
-  });
-
-  it('keeps config.yaml active_profile over the legacy marker during activation (AC-007)', async () => {
-    const home = await temporary('ai-workflow-profile-cli-marker-conflict-');
-    await writeProfile(home, 'alpha', 'alpha-model');
-    await exec('pnpm', ['exec', 'tsx', 'src/cli.ts', 'install', '--host', 'codex', '--home', home]);
-    await writeConfig(home, 'active_profile: alpha\n');
-    await writeMarker(home, 'beta\n');
-
-    const { stdout } = await exec('pnpm', ['exec', 'tsx', 'src/cli.ts', 'profile', 'activate', 'alpha', '--home', home]);
-
-    const report = JSON.parse(stdout) as { active_profile: string };
-    expect(report.active_profile).toBe('alpha');
-    const config = await readConfig(home);
-    expect(config.active_profile).toBe('alpha');
-    expect(await exists(markerPath(home))).toBe(false);
-    const agent = await readFile(join(home, '.codex/agents/test.toml'), 'utf8');
-    expect(agent).toContain('model = "alpha-model"');
   });
 });
