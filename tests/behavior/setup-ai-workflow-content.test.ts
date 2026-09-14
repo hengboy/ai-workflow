@@ -19,7 +19,7 @@ describe('setup ai-workflow skill', () => {
     expect(text).toMatch(/created/i);
     expect(text).toMatch(/Do not edit/i);
     expect(metadata.interface?.display_name).toBe('Setup AI Workflow');
-    expect(metadata.interface?.short_description).toBe('Initialize or safely update an ai-workflow project.');
+    expect(metadata.interface?.short_description).toBe('Initialize ai-workflow in a project.');
     expect(metadata.interface?.default_prompt).toContain('$setup-ai-workflow');
   });
 });

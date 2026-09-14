@@ -27,10 +27,12 @@ Planning schedules the ADR step; the change that lands the architecture decision
 - Planning asks one business-impact question at a time, obtains approval, and creates frozen `spec.md` and `plan.md`.
 - Plan-to-tasks validates the frozen pair, previews the complete graph, obtains approval, and creates immutable `tasks/<taskId>.md` files. It never edits frozen plans.
 - Coding creates one project-local temporary worktree under `<project>/.worktrees/<name>` before implementation and performs all implementation, validation and per-step commits inside that single worktree; planning, TDD and review depth remain proportional to risk. Git Operator materializes the project's entire gitignored state into the worktree, excluding the `.worktrees/` container, so frozen artifacts, `MEMORY.md` and navigation stay visible and single-source at the project root. It never creates workflow manifests or run records.
-- Backend and Frontend implement their assigned surface within the exact task write scope; Test authors or updates behavior tests only within the explicit delegated test scope.
-- File Explorer performs read-only bounded discovery. Researcher performs cited public research and is read-only.
+- Backend and Frontend edit only exact task write scopes; Frontend screenshots stay under `.ai-workflow/plans/<planId>/screenshot/`.
+- Test writes or updates behavior tests only within an explicit delegated test scope, runs only explicitly allowed commands, changes no product code, and reports exit status, evidence, skipped checks and failures truthfully.
+- File Explorer is read-only and may search only authorized roots. It never edits files or guesses paths.
+- Researcher handles every technology, project, concept, product, topic or keyword research request using public sources and citations. It never edits files.
 - Documentation Maintainer owns explicitly scoped `MEMORY.md`, navigation indexes and non-code documentation, returns exact changed paths and validation evidence to the primary orchestrator, and must not invoke Git itself.
-- Spec Review and Standards Review are read-only gates.
+- Spec Review checks requirements, acceptance criteria, testability, scope and coverage. Standards Review checks changes against `MEMORY.md`. Both are read-only.
 - Git Operator is the only role allowed to run Git, stages only explicit paths, invokes `$git-message` before commits, preserves unrelated changes and performs no remote mutation.
 
 ## Orchestration

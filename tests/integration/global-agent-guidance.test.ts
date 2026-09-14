@@ -73,6 +73,15 @@ describe('global agent guidance', () => {
     expect(contents).not.toMatch(/Task\s+Worker\s+(?:coordinates|delegates)|delegates\s+(?:implementation|work)\s+and\s+Git/i);
     expect(contents).toMatch(/ADR/);
     expect(contents).toMatch(/MEMORY\.md/);
+
+    expect(contents).toContain('changes no product code');
+    expect(contents).toContain('reports exit status, evidence, skipped checks and failures truthfully');
+    expect(contents).toContain('checks requirements, acceptance criteria, testability, scope and coverage');
+    expect(contents).toContain('Standards Review checks changes against `MEMORY.md`');
+    expect(contents).toContain('.ai-workflow/plans/<planId>/screenshot/');
+    expect(contents).toContain('may search only authorized roots');
+    expect(contents).toContain('never edits files or guesses paths');
+    expect(contents).toContain('using public sources and citations');
   });
 
   it('AC-012 routes the root AGENTS.md to the user-level contract without restating it', async () => {

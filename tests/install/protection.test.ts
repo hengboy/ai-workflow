@@ -83,11 +83,13 @@ describe('installation ownership and rollback', () => {
     const codexBytes = 'codex user content\n';
     await mkdir(join(root, '.codex'), { recursive: true });
     await writeFile(codexPath, codexBytes);
-    fault.suffix = '/.codex/AGENTS.md';
+    fault.suffix = '/.config/opencode/AGENTS.md';
     fault.after = after;
 
     await expect(install(['codex', 'claude', 'opencode'], { home: root })).rejects.toThrow('injected publication failure');
 
+    // codex is processed before the failing opencode write, so its pre-existing
+    // bytes prove rollback of an already-written host, not just the failing path.
     expect(await readFile(codexPath, 'utf8')).toBe(codexBytes);
     expect(await exists(join(root, '.claude/CLAUDE.md'))).toBe(false);
     expect(await exists(join(root, '.config/opencode/AGENTS.md'))).toBe(false);
