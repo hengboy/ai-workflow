@@ -72,6 +72,9 @@ describe('generated project initialization', () => {
     for (const [target, digest] of Object.entries(manifest.files)) {
       expect(digest).toBe(sha256(await readFile(join(root, target))));
     }
+    expect(await exists(join(root, 'MEMORY.md'))).toBe(true);
+    const ignoreLines = (await readText(root, '.gitignore')).split(/\r?\n/).map((line) => line.trim());
+    expect(ignoreLines).toContain('MEMORY.md');
     expect(manifest.files[projectConfig]).toBeUndefined();
   });
 
@@ -365,8 +368,8 @@ describe('update navigation protection', () => {
     const report = await updateProject(root);
 
     expect(report.updated).toEqual([]);
-    expect(report.skipped).toEqual([navigationJson, navigationMarkdown]);
-    expect(report.unchanged).toEqual(['AGENTS.md', 'CLAUDE.md', 'MEMORY.md']);
+    expect(report.skipped).toEqual([navigationJson, navigationMarkdown, 'MEMORY.md']);
+    expect(report.unchanged).toEqual(['AGENTS.md', 'CLAUDE.md']);
     expect(await readText(root, navigationJson)).toBe(jsonBytes);
     expect(await readText(root, navigationMarkdown)).toBe(markdownBytes);
   });
@@ -384,7 +387,7 @@ describe('update navigation protection', () => {
 
     const report = await updateProject(root);
 
-    expect(report.skipped).toEqual([navigationJson, navigationMarkdown]);
+    expect(report.skipped).toEqual([navigationJson, navigationMarkdown, 'MEMORY.md']);
     expect(await readText(root, navigationJson)).toBe(jsonBytes);
     expect(await readText(root, navigationMarkdown)).toBe(markdownBytes);
   });
@@ -399,13 +402,13 @@ describe('update navigation protection', () => {
     await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
 
     const firstReport = await updateProject(root);
-    expect(firstReport.skipped).toEqual([navigationJson, navigationMarkdown]);
+    expect(firstReport.skipped).toEqual([navigationJson, navigationMarkdown, 'MEMORY.md']);
 
     await rm(join(root, navigationJson));
     await rm(join(root, navigationMarkdown));
 
     const secondReport = await updateProject(root);
-    expect(secondReport.skipped).toEqual([navigationJson, navigationMarkdown]);
+    expect(secondReport.skipped).toEqual([navigationJson, navigationMarkdown, 'MEMORY.md']);
     expect(await exists(join(root, navigationJson))).toBe(false);
     expect(await exists(join(root, navigationMarkdown))).toBe(false);
   });
@@ -422,8 +425,8 @@ describe('update navigation protection', () => {
 
     const report = await updateProject(root);
 
-    expect(report.skipped).toEqual([navigationJson, navigationMarkdown]);
-    expect(report.unchanged).toEqual(['AGENTS.md', 'CLAUDE.md', 'MEMORY.md']);
+    expect(report.skipped).toEqual([navigationJson, navigationMarkdown, 'MEMORY.md']);
+    expect(report.unchanged).toEqual(['AGENTS.md', 'CLAUDE.md']);
     expect(await readText(root, navigationJson)).toBe(jsonBytes);
     expect(await readText(root, navigationMarkdown)).toBe(markdownBytes);
     expect(await readText(root, projectConfig)).toBe(configBytes);
