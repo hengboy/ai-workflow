@@ -2,5 +2,6 @@ node_modules/
 dist/
 coverage/
 .ai-workflow/
+.worktrees/
 *.log
 /.idea/
