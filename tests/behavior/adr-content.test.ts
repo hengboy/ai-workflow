@@ -168,7 +168,7 @@ describe('local ADR contract content', () => {
   });
 
   it('references the adr list command from MEMORY.md instead of a stored index or ADR numbers', async () => {
-    for (const path of ['templates/project/MEMORY.md']) {
+    for (const path of ['MEMORY.md']) {
       const text = await read(path);
       expect(text, `${path} list command`).toContain(ADR_LIST_COMMAND);
       expect(text, `${path} no stored index`).not.toContain('INDEX.md');
@@ -176,8 +176,8 @@ describe('local ADR contract content', () => {
     }
   });
 
-  it('documents the ADR output-language rule in the project MEMORY.md template', async () => {
-    const text = await read('templates/project/MEMORY.md');
+  it('documents the ADR output-language rule in the root MEMORY.md', async () => {
+    const text = await read('MEMORY.md');
     expect(text).toContain('documentation-maintainer');
     expect(text).toContain('output_language');
     expect(text).toMatch(/ADR.*(?:natural-language prose|prose).*language/i);

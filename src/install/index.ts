@@ -178,8 +178,9 @@ export async function activateProfile(name: string, options: { home?: string; ve
   const home = resolve(options.home ?? homedir()); const profile = await loadProfile(home, name);
   // Validate the existing configuration before any mutation so an illegal active_profile aborts pre-write.
   await loadSettings(home);
-  const manifest = await readManifest(home);
-  const hosts = ['codex', 'claude', 'opencode'] as Host[];
+   const manifest = await readManifest(home);
+   const hosts = ['codex', 'claude', 'opencode'] as Host[];
+   const reportedHosts = hosts.filter((host) => (manifest.hosts[host] ?? []).length > 0);
   for (const host of hosts) for (const file of manifest.hosts[host] ?? []) {
     const path = resolve(home, file.path);
     if (file.kind === 'file' && await exists(path) && sha256(await readFile(path)) !== file.digest) throw new Error(`Cannot activate profile because managed file was modified: ${file.path}`);
@@ -191,7 +192,7 @@ export async function activateProfile(name: string, options: { home?: string; ve
     const installed = hosts.length ? await install(hosts, { home, version: options.version ?? manifest.version, profile }) : manifest;
     await writeActiveProfile(home, name);
     await rm(marker, { force: true });
-    return { active_profile: name, hosts, installations: profileInstallations(home, hosts, installed, profile) };
+     return { active_profile: name, hosts: reportedHosts, installations: profileInstallations(home, reportedHosts, installed, profile) };
   } catch (error) {
     for (const snapshot of snapshots) await atomicWrite(snapshot.path, snapshot.contents);
     await restoreIfChanged(configPath, configBefore);

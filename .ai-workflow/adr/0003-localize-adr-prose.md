@@ -2,11 +2,11 @@
 
 Status: accepted
 Date: 2026-09-14
-Summary: Inject the configured output-language directive into Documentation Maintainer
+Summary: Inject the configured `output_language` directive into Documentation Maintainer
 
 ## Context
 
-ADR prose is authored by Documentation Maintainer, while output-language previously covered planning skills only.
+ADR prose is authored by Documentation Maintainer, while `output_language` previously covered planning skills only. The ADR contract requires field names, `Status`, `Supersedes`, `NNNN-kebab-title.md`, and `superseded-by ADR-NNNN` to remain English.
 
 ## Decision
 
