@@ -363,7 +363,9 @@ async function validateModuleCoverage(project: string, index: NavigationIndex, e
       if (hasFileCapability) {
         const javaRelated = moduleRoot.language === 'java' || hasSymbolCapability;
         if (javaRelated) {
-          const files = (await regularFiles(project, path)).sort(compareStrings).filter((file) => file.endsWith('.java'));
+          const files = (await regularFiles(project, path))
+            .sort(compareStrings)
+            .filter((file) => file.endsWith('.java') && rootFor(index, file)?.id === moduleRoot.id);
           const covered = new Set(index.features.filter((feature) => feature.module_root === moduleRoot.id).flatMap((feature) => [...feature.entries, ...feature.related_files, ...feature.tests, ...feature.symbols.map((symbol) => symbol.file)]));
           for (const file of files) if (!covered.has(file)) errors.push(`Navigation index is stale: unclassified module file ${file}`);
         }

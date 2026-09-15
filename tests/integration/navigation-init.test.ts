@@ -376,3 +376,54 @@ describe('navigation protection', () => {
     expect(await exists(join(root, projectManifest))).toBe(false);
   });
 });
+
+describe('Maven aggregator multi-module discovery', () => {
+  it('initializes a Maven aggregator where each module owns its sources and no root feature exists', async () => {
+    const root = await temporary();
+    await mkdir(join(root, 'module-a/src/main/java/com/example/a'), { recursive: true });
+    await mkdir(join(root, 'module-b/src/main/java/com/example/b'), { recursive: true });
+    await writeFile(join(root, 'pom.xml'), '<project><modules><module>module-a</module><module>module-b</module></modules></project>\n');
+    await writeFile(join(root, 'module-a/pom.xml'), '<project></project>\n');
+    await writeFile(join(root, 'module-b/pom.xml'), '<project></project>\n');
+    await writeFile(join(root, 'module-a/src/main/java/com/example/a/AService.java'), 'package com.example.a;\n\n@Service\npublic class AService {}\n');
+    await writeFile(join(root, 'module-b/src/main/java/com/example/b/BService.java'), 'package com.example.b;\n\n@Service\npublic class BService {}\n');
+
+    await initializeProject(root);
+
+    const index = JSON.parse(await readText(root, navigationJson)) as NavigationIndex;
+    for (const moduleRoot of index.module_roots) {
+      expect(index.features.some((feature) => feature.module_root === moduleRoot.id)).toBe(true);
+    }
+    const ownerOf = (path: string): string | undefined =>
+      index.features.find((feature) =>
+        [...feature.entries, ...feature.related_files, ...feature.tests].includes(path)
+      )?.module_root;
+    expect(ownerOf('module-a/src/main/java/com/example/a/AService.java')).toBe('module-a');
+    expect(ownerOf('module-b/src/main/java/com/example/b/BService.java')).toBe('module-b');
+    expect(index.features.some((feature) => feature.module_root === 'root')).toBe(false);
+
+    expect(await validateContext(root)).toEqual({ valid: true, errors: [] });
+  });
+
+  it('keeps a parent module with its own sources from owning nested module sources', async () => {
+    const root = await temporary();
+    await mkdir(join(root, 'src/main/java/com/example/root'), { recursive: true });
+    await mkdir(join(root, 'child/src/main/java/com/example/child'), { recursive: true });
+    await writeFile(join(root, 'pom.xml'), '<project></project>\n');
+    await writeFile(join(root, 'child/pom.xml'), '<project></project>\n');
+    await writeFile(join(root, 'src/main/java/com/example/root/RootApp.java'), 'package com.example.root;\n\n@SpringBootApplication\npublic class RootApp {}\n');
+    await writeFile(join(root, 'child/src/main/java/com/example/child/ChildService.java'), 'package com.example.child;\n\n@Service\npublic class ChildService {}\n');
+
+    await initializeProject(root);
+
+    const index = JSON.parse(await readText(root, navigationJson)) as NavigationIndex;
+    const rootFeature = index.features.find((feature) => feature.entries.includes('src/main/java/com/example/root/RootApp.java'));
+    const childFeature = index.features.find((feature) => feature.entries.includes('child/src/main/java/com/example/child/ChildService.java'));
+    expect(rootFeature?.module_root).toBe('root');
+    expect(childFeature?.module_root).toBe('child');
+    expect(rootFeature?.entries).not.toContain('child/src/main/java/com/example/child/ChildService.java');
+    expect(rootFeature?.read_scope).not.toContain('child/src/main/java/com/example/child/ChildService.java');
+
+    expect(await validateContext(root)).toEqual({ valid: true, errors: [] });
+  });
+});

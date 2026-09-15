@@ -183,6 +183,20 @@ function discoveredPlan(module: CandidateModuleRoot, facts: DiscoveryFacts): Mod
   };
 }
 
+function factsForModule(modulePath: string, facts: DiscoveryFacts, modulePaths: string[]): DiscoveryFacts {
+  const path = normalizePath(modulePath);
+  const descendants = modulePaths.filter(
+    (candidate) => candidate !== path && isWithinPath(candidate, path)
+  );
+  return {
+    files: facts.files.filter(
+      (file) =>
+        isWithinPath(file.path, path) &&
+        !descendants.some((descendant) => isWithinPath(file.path, descendant))
+    )
+  };
+}
+
 async function analyzePlan(root: string, plan: ModulePlan): Promise<AdapterResult[]> {
   if (plan.languages.length <= 1) {
     return [
@@ -388,12 +402,23 @@ export async function buildNavigation(
     for (const path of [...feature.entries, ...feature.related_files, ...feature.tests]) owned.add(path);
   }
 
-  const configuredPlans = (config?.modules ?? []).map((module) => configuredPlan(module, dedupedFacts));
-  const configuredPaths = configuredPlans.map((plan) => plan.candidate.path);
+  const configuredModules = config?.modules ?? [];
+  const configuredPaths = configuredModules.map((module) => normalizePath(module.path));
   const detected = await detectModules(root, dedupedFacts);
-  const discoveredPlans = detected
-    .filter((module) => !configuredPaths.some((configured) => isWithinPath(normalizePath(module.path), configured)))
-    .map((module) => discoveredPlan(module, dedupedFacts));
+  const discoveredModules = detected.filter(
+    (module) => !configuredPaths.some((configured) => isWithinPath(normalizePath(module.path), configured))
+  );
+  const modulePaths = sortedUnique([
+    ...configuredPaths,
+    ...discoveredModules.map((module) => normalizePath(module.path))
+  ]);
+
+  const configuredPlans = configuredModules.map((module) =>
+    configuredPlan(module, factsForModule(module.path, dedupedFacts, modulePaths))
+  );
+  const discoveredPlans = discoveredModules.map((module) =>
+    discoveredPlan(module, factsForModule(module.path, dedupedFacts, modulePaths))
+  );
 
   const orderedPlans = [
     ...[...configuredPlans].sort((left, right) => compareStrings(left.candidate.id, right.candidate.id)),
@@ -414,7 +439,9 @@ export async function buildNavigation(
   }
 
   const moduleRoots = new Map<string, NavigationModuleRoot>();
+  const usedRootIds = new Set(features.map((feature) => feature.module_root));
   for (const plan of [...configuredPlans, ...discoveredPlans]) {
+    if (!usedRootIds.has(plan.candidate.id)) continue;
     if (!moduleRoots.has(plan.candidate.id)) moduleRoots.set(plan.candidate.id, toNavigationRoot(plan.candidate));
   }
 

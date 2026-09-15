@@ -3,6 +3,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { scanProject } from '../../src/context/discovery/scanner.js';
 import { loadProjectConfig } from '../../src/context/discovery/project-config.js';
+import { buildNavigation } from '../../src/context/discovery/builder.js';
 import type { CandidateModuleRoot } from '../../src/context/discovery/types.js';
 import type { DiscoveryFacts } from '../../src/context/discovery/scanner.js';
 import {
@@ -617,5 +618,28 @@ describe('detectModules', () => {
     expect(roots.find((entry) => entry.path === 'backend')?.language).toBe('java');
     expect(roots.find((entry) => entry.path === 'frontend')?.language).toBe('typescript');
     expect(roots.find((entry) => entry.path === '.')?.language).toBe('typescript');
+  });
+});
+
+describe('nested module root ownership', () => {
+  it('does not let a parent module plan own files inside a nested module root', async () => {
+    const root = await temporary('ai-workflow-adapters-nested-');
+    await writeFixture(root, 'pom.xml', '');
+    await writeFixture(root, 'src/main/java/com/example/root/RootApp.java', 'package com.example.root;\n\n@SpringBootApplication\npublic class RootApp {}\n');
+    await writeFixture(root, 'child/pom.xml', '');
+    await writeFixture(root, 'child/src/main/java/com/example/child/ChildService.java', 'package com.example.child;\n\n@Service\npublic class ChildService {}\n');
+    const facts = await scanProject(root);
+
+    const { index } = await buildNavigation(root, facts);
+
+    const owners = new Map<string, string>();
+    for (const feature of index.features) {
+      for (const path of [...feature.entries, ...feature.related_files, ...feature.tests]) owners.set(path, feature.module_root);
+    }
+    expect(owners.get('src/main/java/com/example/root/RootApp.java')).toBe('root');
+    expect(owners.get('child/src/main/java/com/example/child/ChildService.java')).toBe('child');
+    for (const moduleRoot of index.module_roots) {
+      expect(index.features.some((feature) => feature.module_root === moduleRoot.id)).toBe(true);
+    }
   });
 });
