@@ -8,7 +8,7 @@ import { temporary } from '../helpers.js';
 const exec = promisify(execFile);
 
 describe('project CLI', () => {
-  it('initializes the current directory without project-level contracts or manifest', async () => {
+  it('initializes the current directory with the .ai-workflow project contract and no root contract or manifest', async () => {
     const project = await temporary('ai-workflow-project-cli-current-');
 
     await exec(process.execPath, [join(process.cwd(), 'node_modules/tsx/dist/cli.mjs'), join(process.cwd(), 'src/cli.ts'), 'init'], { cwd: project });
@@ -16,6 +16,7 @@ describe('project CLI', () => {
     expect(await exists(join(project, '.ai-workflow/project-manifest.json'))).toBe(false);
     expect(await exists(join(project, 'AGENTS.md'))).toBe(false);
     expect(await exists(join(project, 'CLAUDE.md'))).toBe(false);
+    expect(await exists(join(project, '.ai-workflow/AGENTS.md'))).toBe(true);
     expect(await exists(join(project, '.ai-workflow/index/navigation.json'))).toBe(true);
     expect(await exists(join(project, 'MEMORY.md'))).toBe(true);
   });

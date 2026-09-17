@@ -1,6 +1,6 @@
 import { homedir } from 'node:os';
 import { basename, dirname, extname, join, relative, resolve } from 'node:path';
-import { mkdir, readFile, rm, rmdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, rmdir, stat, writeFile } from 'node:fs/promises';
 import { atomicWrite, exists, readJson, writeJson } from '../utils/fs.js';
 import { sha256 } from '../utils/hash.js';
 import { packagePath } from '../utils/schema.js';
@@ -293,6 +293,21 @@ export async function initializeProject(project: string): Promise<string[]> {
   const conflicts: Array<{ target: string; contents: string }> = [];
   for (const item of templates) if (await exists(join(root, item.target))) conflicts.push(item);
   if (conflicts.length) throw new Error(`Initialization conflicts; no files written. Merge these templates manually:\n${conflicts.map((item) => `${item.target}\n--- proposed ---\n${item.contents}`).join('\n')}`);
+
+  const requiredDirectories = ['.ai-workflow', '.ai-workflow/index', '.ai-workflow/notes'];
+  for (const lifecycle of ['proposed', 'implemented', 'rejected', 'archived']) {
+    requiredDirectories.push(`.ai-workflow/notes/${lifecycle}`);
+    for (const noteClass of ['architecture', 'bug-fix', 'feature', 'process', 'simplification', 'testing']) requiredDirectories.push(`.ai-workflow/notes/${lifecycle}/${noteClass}`);
+  }
+  const directoryConflicts: string[] = [];
+  for (const target of requiredDirectories) {
+    try {
+      if (!(await stat(join(root, target))).isDirectory()) directoryConflicts.push(target);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    }
+  }
+  if (directoryConflicts.length) throw new Error(`Initialization conflicts; no files written. Required directories are occupied by non-directories:\n${directoryConflicts.join('\n')}`);
 
   const facts = await scanProject(root);
   const configResult = await loadProjectConfig(root, facts.files);

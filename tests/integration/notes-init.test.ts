@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { readdir, readFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { initializeProject } from '../../src/install/index.js';
 import { exists } from '../../src/utils/fs.js';
@@ -40,5 +40,49 @@ describe('notes initialization', () => {
       const noteFiles = entries.filter((entry) => entry.endsWith('.md') && entry !== 'AGENTS.md');
       expect(noteFiles).toEqual([]);
     }
+  });
+
+  it('AC-012 preserves historical ADR files without treating them as current notes', async () => {
+    const root = await temporary('ai-workflow-notes-historical-adr-');
+    const historyPath = join(root, '.ai-workflow/adr/0001-history.md');
+    const historyBytes = 'Status: accepted\n\nHistorical user data.\n';
+    await mkdir(join(root, '.ai-workflow/adr'), { recursive: true });
+    await writeFile(historyPath, historyBytes);
+
+    await initializeProject(root);
+
+    expect(await readFile(historyPath, 'utf8')).toBe(historyBytes);
+    expect(await exists(join(root, '.ai-workflow/notes'))).toBe(true);
+  });
+
+  it('AC-014 removes this call\'s generated files and notes directories after a navigation write failure', async () => {
+    const root = await temporary('ai-workflow-notes-init-recovery-');
+    const blockerPath = join(root, '.ai-workflow/index');
+    const blockerBytes = 'user file blocking navigation output\n';
+    await mkdir(join(root, '.ai-workflow'), { recursive: true });
+    await writeFile(blockerPath, blockerBytes);
+
+    await expect(initializeProject(root)).rejects.toThrow();
+
+    expect(await readFile(blockerPath, 'utf8')).toBe(blockerBytes);
+    expect(await readdir(join(root, '.ai-workflow'))).toEqual(['index']);
+    expect(await exists(join(root, 'MEMORY.md'))).toBe(false);
+    expect(await exists(join(root, '.gitignore'))).toBe(false);
+    expect(await exists(join(root, '.ai-workflow/AGENTS.md'))).toBe(false);
+    expect(await exists(join(root, '.ai-workflow/notes'))).toBe(false);
+  });
+
+  it('AC-014 rejects a category path occupied by a user file before writing managed outputs', async () => {
+    const root = await temporary('ai-workflow-notes-init-conflict-');
+    const conflictPath = join(root, '.ai-workflow/notes/proposed/architecture');
+    const conflictBytes = 'user file\n';
+    await mkdir(join(root, '.ai-workflow/notes/proposed'), { recursive: true });
+    await writeFile(conflictPath, conflictBytes);
+
+    await expect(initializeProject(root)).rejects.toThrow(/conflict|no files written/i);
+
+    expect(await readFile(conflictPath, 'utf8')).toBe(conflictBytes);
+    expect(await exists(join(root, 'MEMORY.md'))).toBe(false);
+    expect(await exists(join(root, '.ai-workflow/AGENTS.md'))).toBe(false);
   });
 });
