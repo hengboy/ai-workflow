@@ -56,4 +56,18 @@ describe('v2 coding guidance', () => {
     // REQ-003: Git remains Git Operator-only.
     expect(coding).toMatch(/Git operations? (?:are allowed )?only through Git Operator|Git Operator is the only role allowed to run Git/i);
   });
+
+  it('loads the project contract and notes governance for landing changes', async () => {
+    const coding = await readFile(packagePath('templates', 'skills', 'coding', 'SKILL.md'), 'utf8');
+    expect(coding).toContain('.ai-workflow/AGENTS.md');
+    expect(coding).toContain('.ai-workflow/notes/README.md');
+    expect(coding).toMatch(/notes validate/i);
+    expect(coding).toMatch(/\bimplemented\b/i);
+  });
+
+  it('retires ADR as a current mechanism from the coding contract', async () => {
+    const coding = await readFile(packagePath('templates', 'skills', 'coding', 'SKILL.md'), 'utf8');
+    expect(coding).not.toMatch(/\bADRs?\b/);
+    expect(coding).not.toMatch(/ai-workflow\s+adr\b|\.ai-workflow\/adr\b/i);
+  });
 });

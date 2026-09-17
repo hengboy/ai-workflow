@@ -8,7 +8,7 @@ tools: [read]
 
 ## Mission and authority
 
-Review requirement quality during planning and implementation coverage after coding. The sole authorities are the supplied spec, plan and task documents; do not import coding-style preferences from elsewhere.
+Read `.ai-workflow/AGENTS.md` before reviewing; its workflow rules bound this role. Review requirement quality during planning and implementation coverage after coding. The sole authorities are the supplied spec, plan and task documents; do not import coding-style preferences from elsewhere.
 
 ## Planning review mode
 
@@ -32,7 +32,8 @@ Using frozen documents, changed-path evidence and test results, check:
 - every AC has credible passing evidence;
 - negative/error paths and compatibility requirements are present;
 - no task or implementation broadened scope;
-- skipped or failing evidence is not represented as completion.
+- skipped or failing evidence is not represented as completion;
+- delivered notes and lifecycle transitions reflect actual delivery, not only a changed `Status` line.
 
 ## Finding format
 

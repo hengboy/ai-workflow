@@ -53,7 +53,7 @@ installed role, fail before execution and request clarification.
 
 ## Preconditions
 
-- Read `MEMORY.md`, both navigation index files, and the frozen `spec.md` and `plan.md`.
+- Read `.ai-workflow/AGENTS.md`, `MEMORY.md`, both navigation index files, and the frozen `spec.md` and `plan.md`. The project contract applies to the whole project and to every participating agent.
 - A plan may be implemented either as a whole or through its split tasks. When a
   `tasks/<taskId>.md` is assigned, use only that task's exact read and write
   scopes and declared commands. When no task files exist, use the frozen plan's
@@ -68,7 +68,7 @@ installed role, fail before execution and request clarification.
   under `<project>/.worktrees/<name>` (ensure `.gitignore` contains
   `.worktrees/`). Git Operator must then materialize the project's entire
   gitignored state into the worktree, excluding only the `.worktrees/` container,
-  so the frozen plan, `MEMORY.md`, navigation, ADRs and dependencies stay
+  so the frozen plan, `MEMORY.md`, navigation, notes and dependencies stay
   visible and single-source at the project root. This is a mandatory step of
   every coding execution unit, not an option reserved for high-risk work: all
   implementation, validation and per-step commits happen inside that single
@@ -112,6 +112,13 @@ review repair does not trigger a second Spec Review or Standards Review. Only
 after this single dual-axis review gate is resolved may Git Operator merge the
 temporary branch back, rerun affected checks, and remove only the owned
 worktree and branch. Never stage unrelated user changes.
+
+## Note Maintenance
+
+- Before landing a change, load the project contract and note governance: `.ai-workflow/AGENTS.md`, `.ai-workflow/notes/AGENTS.md` and `.ai-workflow/notes/README.md`. The README is the single source for note format, lifecycle, supersession and archive governance; do not restate those rules here.
+- Every non-mechanical change adds or updates at least one relevant note in the same change, including behavior, architecture, cross-file contracts, processes, testing strategy, configuration or persistent formats. Purely mechanical or local edits that change none of these may be exempt.
+- When a decision lands, move its record to `implemented` and rewrite the body as delivered facts instead of changing only its status. Record a changed decision or rationale in a new note, and assess supersession of related active notes within the authorized scope.
+- After landing the note, run `ai-workflow notes validate --project <absolute-project-root>` and report the result. Add relevant notes and governance files to explicit bounded read/write scopes; never load the entire notes history.
 
 ## Test Boundaries
 
@@ -166,4 +173,5 @@ Do not generate workflow manifests or run records. Do not expand scope, search o
   slice began; commits contain only that slice's scoped changes.
 - Negative cases and failure output are reported truthfully.
 - Screenshots remain under the plan's `screenshot/` directory.
+- Every non-mechanical change updated its relevant note and `ai-workflow notes validate` passed.
 - Return `done` only when all scoped checks pass; otherwise return `blocked` or `failed` with support requests.

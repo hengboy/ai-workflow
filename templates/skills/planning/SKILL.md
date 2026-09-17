@@ -20,7 +20,7 @@ If the project root or goal is missing, ask for that information before drafting
 
 ## Navigation-first context
 
-Before repository context work, directly read `MEMORY.md`, `.ai-workflow/index/navigation.json` and `.ai-workflow/index/navigation.md`. Treat absent `MEMORY.md` as a recorded legal state. For a known feature run `ai-workflow context locate --project <absolute-project-root> --feature <id> --verify`, then read only its exact `read_order`. `<absolute-project-root>` is the normalized project directory path, never its directory name. Do not search the repository. If locate returns `missing_index`, `miss`, `stale` or `invalid`, request File Explorer with the original goal, status/reason and authorized module roots. Keep each task `read_scope` to fixed context plus exact locator paths; it must not contain `src/`, `tests/` or the project root.
+Before repository context work, directly read `.ai-workflow/AGENTS.md`, `MEMORY.md`, `.ai-workflow/index/navigation.json` and `.ai-workflow/index/navigation.md`. The project contract applies to the whole project and to every participating agent. Treat absent `MEMORY.md` as a recorded legal state. For a known feature run `ai-workflow context locate --project <absolute-project-root> --feature <id> --verify`, then read only its exact `read_order`. `<absolute-project-root>` is the normalized project directory path, never its directory name. Do not search the repository. If locate returns `missing_index`, `miss`, `stale` or `invalid`, request File Explorer with the original goal, status/reason and authorized module roots. Keep each task `read_scope` to the fixed context (`.ai-workflow/AGENTS.md`, `MEMORY.md`, both navigation files) plus exact locator paths; it must not contain `src/`, `tests/` or the project root. Add relevant notes and governance files only as exact bounded paths.
 
 ## Clarification loop
 
@@ -99,19 +99,13 @@ Plan steps use `Responsible role`; `plan.md` itself does not require a
 
 Before drafting, read [the specification template](references/spec.md) and [the implementation plan template](references/plan.md). Preserve their contracts while replacing the illustrative example content with the approved requirements and repository-specific evidence.
 
-## Architecture decision records
+## Agent Notes
 
-Planning schedules the ADR step; the change that lands the architecture decision writes the ADR file. A decision approved before implementation may be recorded as proposed and becomes accepted in the same change that lands it.
+Planning schedules note work; the change that lands a decision owns its record and lifecycle transition. Read `.ai-workflow/notes/AGENTS.md` for the entry points and `.ai-workflow/notes/README.md`; that README is the single source for note format, lifecycle, supersession and archive governance. Do not restate those governance rules here.
 
-When a change touches architecture, module boundaries or ownership, public protocols or schemas, cross-cutting standards, workflow or agent rules, or a hard-to-reverse technology choice, the `plan.md` must contain an explicit step that produces an ADR, and the plan must align `MEMORY.md` with that ADR in the same change. Routine bug fixes, local refactors and formatting changes do not need an ADR.
+`MEMORY.md` records the current standards (how) while notes record why; keep them consistent in the same change.
 
-ADRs are local, uncommitted artifacts under `.ai-workflow/adr/`; run `ai-workflow adr list --project <root>` to list status and topics instead of scanning the directory.
-
-- Name each file `NNNN-kebab-title.md` with a 4-digit zero-padded number (`0001`); never reuse a number and use the maximum existing number plus one.
-- An `accepted` ADR is immutable; replace one by cross-linking it with its replacement through the header fields and recording the new decision in a new ADR.
-- There is no stored ADR index file; `adr list` derives the rows from the ADR headers on read, so there is nothing to drift.
-- `MEMORY.md` holds the current standards (how) while ADRs hold the decision history (why); an inconsistency is a defect, so update both in the same change and reference the `ai-workflow adr list` command.
-- The full contract lives in the `Documentation Maintainer` and `Standards Review` role files.
+When a change affects architecture, module boundaries or ownership, public protocols or schemas, cross-cutting standards, workflow or agent rules, behavior, testing strategy, configuration or a persistent format, the `plan.md` must contain an explicit step that adds or updates the relevant note, and the plan must align `MEMORY.md` with that note in the same change. Major unimplemented work is scheduled as `proposed`; a change that lands a decision moves its note to `implemented` and rewrites the body to delivered facts. Purely mechanical or local edits that change none of the above may be exempt.
 
 ## Frozen-plan digest protocol
 
@@ -122,7 +116,7 @@ Both frontmatters contain `plan_id`, `status: frozen`, `created_at`, nullable `s
 ## Completion checklist
 
 - The user approved the final full inventory.
-- An architecture-triggering plan contains an explicit step that produces an ADR and aligns `MEMORY.md`; routine fixes require no ADR.
+- Every non-mechanical plan schedules its note maintenance and aligns `MEMORY.md`; purely mechanical changes are exempt.
 - Spec Review ran exactly once; it either passed or all of its findings were repaired and included in the user's final approval.
 - Both files share the same plan ID and counts.
 - Digests match the frozen content.

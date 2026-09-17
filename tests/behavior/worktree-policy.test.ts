@@ -10,14 +10,16 @@ describe('mandatory project-local temporary worktree policy', () => {
 
     expect(memory).toContain('project-local temporary worktree');
     expect(memory).toContain('.worktrees');
-    expect(memory).toContain('ai-workflow adr list');
     expect(memory).toContain('<project>/.worktrees/<name>');
     expect(memory).toMatch(/before implementation/i);
     expect(memory).not.toMatch(/consider\b[^.]*worktree|worktree[^.]*optional/i);
+    // REQ-004 / REQ-008: current standards point at notes governance, not the retired ADR command.
+    expect(memory).toMatch(/\.ai-workflow\/notes\//);
+    expect(memory).not.toMatch(/ai-workflow\s+adr\b/i);
   });
 
-  it('states the mandatory project-local temporary worktree policy in the user-level contract', async () => {
-    for (const path of ['templates/contract/AGENTS.md']) {
+  it('states the mandatory project-local temporary worktree policy in the project contract', async () => {
+    for (const path of ['templates/project/AGENTS.md']) {
       const text = normalize(await readFile(packagePath(path), 'utf8'));
       expect(text).toMatch(/project-local temporary worktree/i);
       expect(text).toContain('<project>/.worktrees/<name>');
@@ -37,7 +39,7 @@ describe('mandatory project-local temporary worktree policy', () => {
     expect(coding).toMatch(/materialize the project's entire gitignored state/i);
     expect(coding).toContain('.worktrees/');
 
-    for (const path of ['MEMORY.md', 'templates/contract/AGENTS.md', 'templates/project/MEMORY.md']) {
+    for (const path of ['MEMORY.md', 'templates/project/AGENTS.md', 'templates/project/MEMORY.md']) {
       const text = normalize(await readFile(packagePath(path), 'utf8'));
       expect(text, `${path} shares ignored state`).toMatch(/gitignored state/i);
       expect(text, `${path} excludes the worktree container`).toContain('.worktrees/');

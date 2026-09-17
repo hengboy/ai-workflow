@@ -216,4 +216,22 @@ describe('native prompt contracts', () => {
     // REQ-003: the specialist never runs Git.
     expect(maintainer).toMatch(/may not run Git/i);
   });
+  it('adds the project contract to the task template fixed context', async () => {
+    const taskTemplate = await readFile(packagePath('templates', 'skills', 'plan-to-tasks', 'references', 'task.md'), 'utf8');
+    const readScopes = [...taskTemplate.matchAll(/^read_scope:\s*(\[.*\])$/gm)].map((match) => match[1]);
+    expect(readScopes.length).toBeGreaterThanOrEqual(2);
+    for (const scope of readScopes) {
+      for (const fixed of ['MEMORY.md', '.ai-workflow/index/navigation.json', '.ai-workflow/index/navigation.md', '.ai-workflow/AGENTS.md']) {
+        expect(scope, `task template read_scope includes ${fixed}`).toContain(fixed);
+      }
+    }
+  });
+  it('routes planning and plan-to-tasks note work through the notes governance single source', async () => {
+    for (const skill of ['planning', 'plan-to-tasks']) {
+      const text = await readFile(packagePath('templates', 'skills', skill, 'SKILL.md'), 'utf8');
+      expect(text, `${skill} loads the project contract`).toContain('.ai-workflow/AGENTS.md');
+      expect(text, `${skill} points at the notes README`).toContain('.ai-workflow/notes/README.md');
+      expect(text, `${skill} retires the ADR current mechanism`).not.toMatch(/\bADRs?\b|ai-workflow\s+adr\b|\.ai-workflow\/adr\b/i);
+    }
+  });
 });

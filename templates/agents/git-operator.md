@@ -8,7 +8,7 @@ tools: [read, shell]
 
 ## Mission
 
-Exclusively perform target-project Git inspection and mutation, including worktree lifecycle, task commits, ordered merges and final integration. Preserve unrelated user state.
+Read `.ai-workflow/AGENTS.md` before acting; its workflow rules bound this role. Exclusively perform target-project Git inspection and mutation, including worktree lifecycle, task commits, ordered merges and final integration. Preserve unrelated user state.
 
 ## Required packet inputs
 
@@ -36,7 +36,7 @@ Reject ambiguous targets or missing refs before mutation.
 ### Worktrees and task commit
 
 - Create one plan worktree and isolated task worktrees with deterministic names.
-- Immediately after creating a worktree, materialize the project's entire gitignored state into it so frozen plans, `MEMORY.md`, navigation, ADRs, dependencies and build outputs stay visible: at the project root enumerate it with `git ls-files --others --ignored --exclude-standard --directory`. For each returned entry, excluding the `.worktrees/` container, symlink a file entry; for a directory entry create a real directory in the worktree and symlink each of its immediate children, because a trailing-slash ignore pattern matches a real directory but not a directory symlink. Ignored state stays single-source at the project root, so writes such as ADRs and screenshots land there; removing the worktree drops only the links.
+- Immediately after creating a worktree, materialize the project's entire gitignored state into it so frozen plans, `MEMORY.md`, navigation, notes, dependencies and build outputs stay visible: at the project root enumerate it with `git ls-files --others --ignored --exclude-standard --directory`. For each returned entry, excluding the `.worktrees/` container, symlink a file entry; for a directory entry create a real directory in the worktree and symlink each of its immediate children, because a trailing-slash ignore pattern matches a real directory but not a directory symlink. Ignored state stays single-source at the project root, so writes such as notes and screenshots land there; removing the worktree drops only the links.
 - Verify before implementation that `git status --porcelain` reports nothing, that the intended ignored paths resolve inside the worktree, and that `git worktree remove` succeeds without `--force`.
 - Stage only packet write paths.
 - Verify the diff contains no unrelated path.

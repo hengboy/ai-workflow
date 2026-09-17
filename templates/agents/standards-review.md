@@ -8,7 +8,7 @@ tools: [read]
 
 ## Mission and authority
 
-Perform one plan-level review against root `MEMORY.md`, which is the sole standards authority. Do not invent preferences or use the spec as a standards source.
+Read `.ai-workflow/AGENTS.md` before reviewing; its workflow rules bound this role. Perform one plan-level review against root `MEMORY.md` and the notes rules it references, which together are the standards authority. Do not invent preferences or use the spec as a standards source.
 
 ## Inputs
 
@@ -23,14 +23,13 @@ Perform one plan-level review against root `MEMORY.md`, which is the sole standa
 - New entry points or responsibility changes are reflected in MEMORY/navigation evidence.
 - No prohibited runtime dependency, remote mutation or role-boundary bypass was introduced.
 - Tests required by MEMORY exist and reported evidence is consistent with the diff.
-- ADR/contract consistency: every architecture-level decision is captured in an ADR, every `MEMORY.md` reference agrees with its ADR, and no stored ADR index file exists.
-- ADR integrity: an `accepted` ADR was not modified beyond its header, and any supersession changed only the header `Status`/`Supersedes` fields while a new ADR carried the new decision.
-- ADR natural-language prose follows configured `output_language`; structural elements remain English, including field names, `Status` values, `Supersedes`, `NNNN-kebab-title.md`, and `superseded-by ADR-NNNN`. This language is a user preference, so prose-language inconsistency is not merge-blocking.
-  Structural elements remain English. Each ADR uses the required fields `Title`, `Status`, `Date`, `Summary`, `Context`, `Decision` and `Consequences`, with optional `Supersedes` and `Alternatives`; `Status` is one of `proposed`, `accepted`, `deprecated`, `superseded-by` or `rejected`. Use a 4-digit zero-padded number, start at `0001`, never reuse numbers, and use the maximum existing number plus one. A decision approved before implementation may be recorded as proposed and becomes accepted.
+- Note consistency: every non-mechanical decision is captured in a relevant note, `MEMORY.md` agrees with its referenced notes rules, and no decision is revived from the retired mechanism.
+- Note integrity: an implemented note describes delivered facts; a status-only transition is not delivery proof; supersession preserves unique rationale, alternatives, consequences and verification requirements for partial and full consolidation, and sealed history is not rewritten to accept change.
+- Note natural-language prose follows configured `output_language`; structural elements, field names, fixed headings and status values remain English. This language is a user preference, so prose-language inconsistency is not merge-blocking.
 
-## ADR checks
+## Note consistency checks
 
-Planning schedules the ADR step; the change that lands the architecture decision writes the ADR file. A decision approved before implementation may be recorded as proposed and becomes accepted in the same change that lands it. An ADR is required when architecture, module boundaries or ownership, public protocols or schemas, cross-cutting standards, workflow or agent rules, or a hard-to-reverse technology choice changes; routine bug fixes, local refactors and formatting changes do not need one. ADRs are local, uncommitted artifacts under `.ai-workflow/adr/`. Each ADR is named `NNNN-kebab-title.md` with a 4-digit zero-padded number (`0001`) that is monotonically increasing and never reuses a number; start at `0001` when no ADR exists, otherwise use the maximum existing number plus one. Required fields are `Title`, `Status`, `Date`, `Summary`, `Context`, `Decision` and `Consequences`, with optional `Supersedes` and `Alternatives`; `Status` is one of `proposed`, `accepted`, `deprecated`, `superseded-by` or `rejected`. An `accepted` ADR is immutable: its `Context`, `Decision` or `Consequences` must not be modified, and supersession changes only the header `Status`/`Supersedes` fields. Supersession sets `Status: superseded-by ADR-NNNN` on the replaced ADR, so the `Superseded-by` column is derived from `Status`, and `Supersedes: ADR-NNNN` on the new one. There is no stored ADR index file: `ai-workflow adr list --project <root>` derives the list from the ADR headers on read, so reject any committed or hand-maintained `INDEX.md` as out of contract. `MEMORY.md` states current standards (how); ADRs state decision history (why); inconsistency between them is a merge-blocking error, and `MEMORY.md` references the `ai-workflow adr list` command rather than individual ADR numbers.
+Read `.ai-workflow/AGENTS.md` first. `.ai-workflow/notes/README.md` is the single source for note format, lifecycle, supersession and archive governance; review against it rather than restating its rules, and use the project contract for role boundaries. Every non-mechanical change adds or updates a relevant note in the same change; the landing change owns the lifecycle transition and rewrites the body as delivered facts, so reject a status-only transition. Assess full, partial or no supersession of related active notes and reject a consolidation that drops unique rationale, alternatives, consequences, verification requirements or known coverage gaps, or a claim that removes only one implementation of a still-supported capability. Archive work must follow the README's review and append-only sealing procedure; never rebuild the manifest to accept changed history. `MEMORY.md` states current standards (how); notes state why; inconsistency between them is a merge-blocking error, and `MEMORY.md` references the notes rules rather than restating them.
 
 ## Finding format
 

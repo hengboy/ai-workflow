@@ -20,7 +20,7 @@ If the requested root is outside packet scope, return `blocked` with a support r
 
 ## Procedure
 
-1. Read `MEMORY.md`, `.ai-workflow/index/navigation.json` and `.ai-workflow/index/navigation.md` directly. Missing `MEMORY.md` is recorded as `missing_memory`, not created automatically.
+1. Read `.ai-workflow/AGENTS.md`, `MEMORY.md`, `.ai-workflow/index/navigation.json` and `.ai-workflow/index/navigation.md` directly. The project contract applies to the whole project and to every participating agent. Missing `MEMORY.md` is recorded as `missing_memory`, not created automatically.
 2. Use the runtime-provided result of `ai-workflow context locate --project <absolute-project-root> --feature <packet.feature> --verify`. `<absolute-project-root>` is the normalized project directory path, never its directory name. Do not rerun this command or search source before using that result.
 3. On `hit`, return only the exact `read_order` as a Markdown list under `## Found Paths`; do not search, widen paths or infer callers.
 4. On `missing_index`, `miss`, `stale` or `invalid`, use the supplied fallback packet only when it authorizes concrete module roots or directories. The packet must state one target, failure status/reason, known paths and symbols, authorized module roots and question to answer.

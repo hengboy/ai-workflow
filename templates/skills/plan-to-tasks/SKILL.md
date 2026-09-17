@@ -20,7 +20,9 @@ Stop and report the exact defect if any precondition fails. Never repair or rewr
 
 ## Navigation-first context
 
-Directly read `MEMORY.md`, `.ai-workflow/index/navigation.json` and `.ai-workflow/index/navigation.md`, then resolve known affected features through `ai-workflow context locate --project <absolute-project-root> --feature <id> --verify`. `<absolute-project-root>` is the normalized project directory path, never its directory name. Use that locator's exact `read_order` paths directly to build each task's `read_scope`: fixed context plus exactly those exact paths. Do not search; `read_scope` must not use `src/`, `tests/` or the project root. When the locator returns `missing_index`, `miss`, `stale` or `invalid`, request File Explorer with authorized module roots and use only its returned exact paths.
+Directly read `.ai-workflow/AGENTS.md`, `MEMORY.md`, `.ai-workflow/index/navigation.json` and `.ai-workflow/index/navigation.md`, then resolve known affected features through `ai-workflow context locate --project <absolute-project-root> --feature <id> --verify`. The project contract applies to the whole project and to every participating agent. `<absolute-project-root>` is the normalized project directory path, never its directory name. Use that locator's exact `read_order` paths directly to build each task's `read_scope`: fixed context plus exactly those exact paths. Do not search; `read_scope` must not use `src/`, `tests/` or the project root. When the locator returns `missing_index`, `miss`, `stale` or `invalid`, request File Explorer with authorized module roots and use only its returned exact paths.
+
+Route note format, lifecycle, supersession and archive governance through `.ai-workflow/notes/README.md`, reached via `.ai-workflow/notes/AGENTS.md`; do not copy those rules into task files. Add only the relevant notes and governance files to a task's bounded read/write scope, as exact paths, and never require a task to read the entire notes history.
 
 ## Decomposition rules
 
@@ -33,7 +35,9 @@ Directly read `MEMORY.md`, `.ai-workflow/index/navigation.json` and `.ai-workflo
 - Make read scopes bounded and write scopes exact enough for filesystem enforcement.
 - Ask File Explorer for exact paths when an entry, call chain or dependency is unknown.
 - Never use `.`, project root, `**`, an unresolved placeholder or a broad directory with unclear ownership as write scope.
-- Never use `src/`, `tests/` or the project root as read scope; read scope is fixed context plus exact locator paths.
+- Never use `src/`, `tests/` or the project root as read scope; read scope is the fixed context (`.ai-workflow/AGENTS.md`, `MEMORY.md`, both navigation files) plus exact locator paths.
+- Add only the relevant notes and note-governance files to a task's bounded read/write scope as exact paths; do not include the entire notes history.
+- A task landing a non-mechanical decision includes its note update, lifecycle transition and the `ai-workflow notes validate` check; purely mechanical tasks are exempt.
 - Force tasks with overlapping write scopes into dependency order.
 - Put frontend and backend validation commands on their responsible tasks; add an integration task only when cross-stack behavior requires it.
 
