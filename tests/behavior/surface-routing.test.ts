@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { readFile, readdir, writeFile } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { readTasks } from '../../src/workflow/parse.js';
 import { renderMarkdown } from '../../src/utils/frontmatter.js';
 import { packagePath } from '../../src/utils/schema.js';
-import { frozenPlan, temporary } from '../helpers.js';
+import { frozenPlan, temporary, writePlanTriplet } from '../helpers.js';
 
 const exec = promisify(execFile);
 const supportedSurfaces = ['backend', 'frontend', 'cross-stack', 'test', 'docs', 'research', 'documentation'];
@@ -30,7 +30,7 @@ function taskAttributes(overrides: Record<string, unknown> = {}): Record<string,
 }
 
 async function writeTaskFile(plan: string, attributes: Record<string, unknown>): Promise<void> {
-  await writeFile(join(plan, 'tasks', 'task-001-example.md'), renderMarkdown(attributes, '# Task'));
+  await writePlanTriplet(join(plan, 'tasks'), 'task-001-example.md', '# Task', '# Task', (body) => renderMarkdown(attributes, body));
 }
 
 describe('task surface routing', () => {

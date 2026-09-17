@@ -9,6 +9,7 @@ import { locateContext } from './context/locate.js';
 import { discoverFallback, type FallbackPacket } from './context/fallback.js';
 import { resolveCandidatePath, resolveProjectRoot } from './context/paths.js';
 import { readPlan, readTasks } from './workflow/parse.js';
+import { listPlanPairs, recordPlanPairs, verifyPlanPairs } from './workflow/pairing.js';
 import { listNotes } from './notes/index.js';
 import { validateNotes } from './notes/validate.js';
 import { sealArchive } from './notes/archive.js';
@@ -32,6 +33,30 @@ plan.command('validate').requiredOption('--plan <directory>').action(async ({ pl
   await readTasks(resolve(directory));
   print({ valid: true, plan_id: document.planId, digests: { spec: document.specDigest, plan: document.planDigest, combined: document.digest } });
 });
+plan.command('pairing')
+  .requiredOption('--plan <directory>')
+  .option('--list', 'report the pairing state of every plan document without failing')
+  .option('--write', 'record the current English and Chinese bytes as the confirmed pair')
+  .option('--all', 'with --write, re-record every complete pair')
+  .argument('[documents...]', 'plan documents naming the pairs to check or record')
+  .action(async (documents: string[], { plan: directory, list, write, all }: { plan: string; list?: boolean; write?: boolean; all?: boolean }) => {
+    const target = resolve(directory);
+    if (list && (write || all || documents.length > 0)) throw new Error('--list takes no other flags or documents');
+    if (all && !write) throw new Error('--all only applies to --write');
+    if (write) {
+      if (documents.length > 0 && all) throw new Error('--write takes either plan documents or --all, not both');
+      if (documents.length === 0 && !all) throw new Error('--write requires the plan documents you confirmed, or --all');
+      print(await recordPlanPairs(target, documents, Boolean(all)));
+      return;
+    }
+    if (list) {
+      print(await listPlanPairs(target));
+      return;
+    }
+    const result = await verifyPlanPairs(target, documents);
+    print(result);
+    if (!result.valid) process.exitCode = 1;
+  });
 
 const projectOption = 'project root directory path; use . or an absolute path';
 const notes = program.command('notes');

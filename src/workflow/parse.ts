@@ -1,7 +1,9 @@
 import { readdir, readFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
 import { parseMarkdown } from '../utils/frontmatter.js';
+import { metaPathOf, zhPathOf } from '../notes/pairing.js';
 import { frozenDocumentDigest, frozenPlanDigest } from './digest.js';
+import { enumeratePlanDocuments, validatePlanPair, type PlanDocumentAnchor } from './pairing.js';
 import { normalizeProjectPaths } from './read-scope.js';
 import type { PlanDocument, TaskDocument } from './types.js';
 
@@ -9,6 +11,8 @@ function listStrings(value: unknown): string[] { return Array.isArray(value) ? v
 function stringValue(value: unknown, fallback = ''): string { return typeof value === 'string' ? value : fallback; }
 const allowedSurfaces: string[] = ['backend', 'frontend', 'cross-stack', 'test', 'docs', 'research', 'documentation'];
 export { fixedTaskContext } from './read-scope.js';
+
+function planAnchor(directory: string, basename: string): PlanDocumentAnchor { const path = join(directory, basename); return { path, zhPath: zhPathOf(path), metaPath: metaPathOf(path) }; }
 
 export async function readPlan(directory: string): Promise<PlanDocument> {
   const [spec, plan] = await Promise.all([readFile(join(directory, 'spec.md'), 'utf8'), readFile(join(directory, 'plan.md'), 'utf8')]);
@@ -23,6 +27,10 @@ export async function readPlan(directory: string): Promise<PlanDocument> {
   const declaredSpecDigest = stringValue(specDoc.attributes.digest); const declaredPlanDigest = stringValue(planDoc.attributes.digest);
   if (!/^sha256:[0-9a-f]{64}$/.test(declaredSpecDigest) || declaredSpecDigest !== specDigest) throw new Error(`spec.md digest mismatch: declared ${declaredSpecDigest || '<missing>'}, computed ${specDigest}`);
   if (!/^sha256:[0-9a-f]{64}$/.test(declaredPlanDigest) || declaredPlanDigest !== planDigest) throw new Error(`plan.md digest mismatch: declared ${declaredPlanDigest || '<missing>'}, computed ${planDigest}`);
+  const pairErrors: string[] = [];
+  await validatePlanPair(planAnchor(directory, 'spec.md'), pairErrors);
+  await validatePlanPair(planAnchor(directory, 'plan.md'), pairErrors);
+  if (pairErrors.length) throw new Error(pairErrors.join('\n'));
   return { planId, status: 'frozen', requirements, acceptanceCriteria, specDigest, planDigest, digest: frozenPlanDigest(spec, plan), directory };
 }
 
@@ -38,7 +46,7 @@ export async function readTasks(directory: string): Promise<TaskDocument[]> {
   const tasks: TaskDocument[] = [];
   const plan = await readPlan(directory);
   const seen = new Set<string>();
-  for (const name of names.filter((item) => item.endsWith('.md')).sort()) {
+  for (const name of names.filter((item) => item.endsWith('.md') && !item.endsWith('.zh.md')).sort()) {
     const path = join(taskDir, name); const doc = parseMarkdown(await readFile(path, 'utf8')); const a = doc.attributes;
     const id = stringValue(a.id); const rawSurface = a.surface; const rawReadScope = listStrings(a.read_scope); const rawWriteScope = listStrings(a.write_scope);
     const expectedId = name.replace(/\.md$/, '');
@@ -67,5 +75,11 @@ export async function readTasks(directory: string): Promise<TaskDocument[]> {
   const visiting = new Set<string>(); const visited = new Set<string>();
   const visit = (id: string): void => { if (visiting.has(id)) throw new Error(`Task dependency cycle: ${id}`); if (visited.has(id)) return; visiting.add(id); for (const dep of tasks.find((task) => task.id === id)?.dependsOn ?? []) visit(dep); visiting.delete(id); visited.add(id); };
   for (const task of tasks) visit(task.id);
+  const pairErrors: string[] = [];
+  for (const anchor of await enumeratePlanDocuments(directory, pairErrors)) {
+    if (!anchor.path.startsWith(`${taskDir}${sep}`)) continue;
+    await validatePlanPair(anchor, pairErrors);
+  }
+  if (pairErrors.length) throw new Error(pairErrors.join('\n'));
   return tasks;
 }
