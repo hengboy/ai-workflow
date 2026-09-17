@@ -10,6 +10,7 @@ import { discoverFallback, type FallbackPacket } from './context/fallback.js';
 import { readAdrEntries, renderAdrList } from './adr/index.js';
 import { resolveCandidatePath, resolveProjectRoot } from './context/paths.js';
 import { readPlan, readTasks } from './workflow/parse.js';
+import { listNotes } from './notes/index.js';
 import { validateNotes } from './notes/validate.js';
 
 const hosts = ['codex', 'claude', 'opencode'] as const;
@@ -37,6 +38,9 @@ notes.command('validate').option('--project <project>', projectOption, process.c
   const result = await validateNotes(project);
   print(result);
   if (!result.valid) process.exitCode = 1;
+});
+notes.command('list').option('--project <project>', projectOption, process.cwd()).option('--archived').action(async ({ project, archived }: { project: string; archived?: boolean }) => {
+  print({ entries: await listNotes(project, { archived: Boolean(archived) }) });
 });
 const context = program.command('context'); context.command('validate').option('--project <project>', projectOption, process.cwd()).option('--feature <id>').option('--all').action(async ({ project, feature, all }: { project: string; feature?: string; all?: boolean }) => { if (feature && all) throw new Error('Use either --feature or --all'); const root = resolveProjectRoot(project); const result = feature ? await verifyNavigation(root, feature) : await validateContext(root); print(result); if (!result.valid) process.exitCode = 1; });
 context.command('refresh').option('--project <project>', projectOption, process.cwd()).requiredOption('--candidate <path>').requiredOption('--write').action(async ({ project, candidate }: { project: string; candidate: string }) => print(await refreshContext(resolveProjectRoot(project), candidate)));
