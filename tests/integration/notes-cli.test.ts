@@ -198,3 +198,33 @@ describe('notes CLI', () => {
     expect(await aiWorkflowBytes(project)).toEqual(before);
   });
 });
+
+async function runCli(args: string[]): Promise<{ code: number; stdout: string; stderr: string }> {
+  try {
+    const { stdout, stderr } = await exec('pnpm', [...cli, ...args]);
+    return { code: 0, stdout, stderr };
+  } catch (error) {
+    const failure = error as { code?: number; stdout?: string; stderr?: string };
+    return { code: typeof failure.code === 'number' ? failure.code : 1, stdout: failure.stdout ?? '', stderr: failure.stderr ?? '' };
+  }
+}
+
+describe('adr command removal', () => {
+  it('AC-011 does not offer the adr command in the published help', async () => {
+    const result = await runCli(['--help']);
+
+    expect(result.code).toBe(0);
+    expect(result.stdout).not.toMatch(/^\s*adr\b/m);
+    expect(result.stdout).not.toContain('adr list');
+  });
+
+  it('AC-011 rejects adr list as an unknown command with a non-zero exit', async () => {
+    const project = await temporary('ai-workflow-adr-removed-');
+
+    const result = await runCli(['adr', 'list', '--project', project]);
+
+    expect(result.code).not.toBe(0);
+    expect(result.stdout).not.toContain('# ADR list');
+    expect(result.stderr.toLowerCase()).toContain('unknown command');
+  });
+});
