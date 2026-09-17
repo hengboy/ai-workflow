@@ -201,27 +201,6 @@ describe('localized planning artifacts', () => {
     });
   });
 
-  it('documents the output-language configuration, values, default and reinstall requirement (AC-010)', async () => {
-    const readme = (await readFile(packagePath('README.md'), 'utf8')).replace(/\s+/g, ' ');
-
-    expect(readme).toContain('~/.config/ai-workflow/config.yaml');
-    expect(readme).toContain('output_language');
-    expect(readme).toContain('`en`');
-    expect(readme).toContain('`zh-CN`');
-    expect(readme).toMatch(/default is `en`/);
-    expect(readme).toMatch(/re-running `ai-workflow install`/);
-    expect(readme).toMatch(/\$switch-profile/);
-    expect(readme).toContain('`planning`');
-    expect(readme).toContain('`plan-to-tasks`');
-    expect(readme).toContain('`coding`');
-    expect(readme).toContain('`documentation-maintainer`');
-    expect(readme).toMatch(/ADR.*(?:prose|natural-language).*output_language/i);
-    for (const category of ['clarification questions', 'confirmation previews', 'progress narration', 'final summary']) {
-      expect(readme, `README documents the ${category} session-prose category`).toContain(category);
-    }
-    expect(readme).not.toContain('Only the installed `planning` and `plan-to-tasks` skills receive the directive');
-  });
-
   it('rejects a Chinese-prose frozen pair whose digest does not match (negative)', async () => {
     const directory = await writeFrozenPair(await temporary(), chineseSpecBody(), chinesePlanBody());
     const specPath = join(directory, 'spec.md');
@@ -260,5 +239,79 @@ describe('localized planning artifacts', () => {
 
     await expect(readPlan(directory)).rejects.toThrow(/count mismatch/i);
     await expect(validateCommand(directory)).rejects.toThrow(/count mismatch/i);
+  });
+});
+
+// REQ-006, REQ-008 / AC-016: the README must describe the delivered project
+// contract and notes workflow and stay consistent with the implemented CLI
+// surface instead of presenting the retired ADR mechanism as current. These
+// assertions cover non-omittable entry points and retired-description removal
+// only; they do not prove the quality of the prose and do not replace semantic
+// review. The grep is bounded to the documented command surface, so a truthful
+// historical note about retired ADR files is not treated as a current feature.
+async function registeredCliCommands(): Promise<Set<string>> {
+  const source = await readFile(packagePath('src/cli.ts'), 'utf8');
+  return new Set([...source.matchAll(/\.command\('([^']+)'\)/g)].map((match) => match[1] as string));
+}
+
+function documentedCommands(readme: string): string[] {
+  return [...readme.matchAll(/^[ \t]*ai-workflow[ \t]+([a-z][a-z-]*)/gm)].map((match) => match[1] as string);
+}
+
+describe('current workflow documentation', () => {
+  it('documents the implemented CLI surface and explicit project contract loading (REQ-001, REQ-007 / AC-013, AC-016)', async () => {
+    const readme = await readFile(packagePath('README.md'), 'utf8');
+    const normalized = readme.replace(/\s+/g, ' ');
+    const registered = await registeredCliCommands();
+
+    for (const command of documentedCommands(readme)) {
+      expect(registered.has(command), `README documents ai-workflow ${command}, which the implemented CLI registers`).toBe(true);
+    }
+
+    expect(normalized).toContain('ai-workflow init');
+    expect(normalized).toMatch(/ai-workflow init[^.]{0,160}--upgrade|--upgrade[^.]{0,160}ai-workflow init/);
+    expect(normalized).toContain('ai-workflow notes validate');
+    expect(normalized).toContain('ai-workflow notes list');
+    expect(normalized).toContain('ai-workflow notes archive');
+    expect(normalized).toContain('ai-workflow context');
+
+    expect(normalized).toContain('.ai-workflow/AGENTS.md');
+    expect(normalized).toMatch(/explicit\w*[^.]{0,160}\.ai-workflow\/AGENTS\.md|\.ai-workflow\/AGENTS\.md[^.]{0,160}explicit/i);
+  });
+
+  it('retires ADR from the documented CLI surface and decision-record rules (REQ-006 / AC-016)', async () => {
+    const readme = await readFile(packagePath('README.md'), 'utf8');
+    const normalized = readme.replace(/\s+/g, ' ');
+
+    expect(documentedCommands(readme), 'the retired adr command is not documented').not.toContain('adr');
+    expect(normalized, 'the retired adr command is not referenced').not.toMatch(/ai-workflow\s+adr\b/i);
+    expect(normalized, 'notes are the documented decision-record store').toMatch(/ai-workflow notes (?:validate|list|archive)/);
+    expect(normalized).not.toContain('NNNN-kebab-title.md');
+    expect(normalized).not.toContain('superseded-by ADR-NNNN');
+    expect(normalized).not.toMatch(/ADR natural-language prose[^.]{0,160}output_language/i);
+  });
+
+  it('keeps the output-language configuration source, values and consumers (REQ-008)', async () => {
+    const readme = (await readFile(packagePath('README.md'), 'utf8')).replace(/\s+/g, ' ');
+
+    expect(readme).toContain('~/.config/ai-workflow/config.yaml');
+    expect(readme).toContain('output_language');
+    expect(readme).toContain('`en`');
+    expect(readme).toContain('`zh-CN`');
+    expect(readme).toMatch(/default is `en`/);
+    expect(readme).toMatch(/re-running `ai-workflow install`/);
+    expect(readme).toMatch(/\$switch-profile/);
+    for (const consumer of ['`planning`', '`plan-to-tasks`', '`coding`', '`documentation-maintainer`']) {
+      expect(readme, `README documents the ${consumer} language consumer`).toContain(consumer);
+    }
+    for (const category of ['clarification questions', 'confirmation previews', 'progress narration', 'final summary']) {
+      expect(readme, `README documents the ${category} session-prose category`).toContain(category);
+    }
+  });
+
+  it('applies the language preference to single-language notes (REQ-008 / AC-016)', async () => {
+    const readme = (await readFile(packagePath('README.md'), 'utf8')).replace(/\s+/g, ' ');
+
+    expect(readme, 'notes prose follows the existing output_language preference').toMatch(/notes.{0,400}output_language|output_language.{0,400}notes/i);
   });
 });
