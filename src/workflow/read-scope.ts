@@ -1,6 +1,6 @@
 import { posix } from 'node:path';
 
-export const fixedTaskContext = ['MEMORY.md', '.ai-workflow/index/navigation.json', '.ai-workflow/index/navigation.md'];
+export const fixedTaskContext = ['MEMORY.md', '.ai-workflow/index/navigation.json', '.ai-workflow/index/navigation.md', '.ai-workflow/AGENTS.md'];
 
 export interface TaskReadAuthorization {
   task_id: string;
