@@ -17,7 +17,11 @@ const zhMarker = 'Output language: Simplified Chinese (zh-CN)';
 const directiveHeading = '## Output language';
 const languageSkills = new Set(['planning/SKILL.md', 'plan-to-tasks/SKILL.md', 'coding/SKILL.md']);
 const languageAgents = new Set(['documentation-maintainer']);
-const structuralAdrClauses = ['Architecture Decision Record', 'field names', 'Status', 'Supersedes', 'NNNN-kebab-title.md', 'superseded-by ADR-NNNN'];
+// REQ-008 / AC-016: the injected language section must describe notes structural
+// requirements instead of the retired ADR-only fields, and keep a single prose
+// language without sidecars or added configuration.
+const notesStructuralClauses = ['field names', 'headings'];
+const retiredAdrClauses = ['Architecture Decision Record', 'Supersedes', 'NNNN-kebab-title.md', 'superseded-by ADR-NNNN'];
 
 function agentsRelative(host: Host): string {
   if (host === 'codex') return '.codex/agents';
@@ -46,6 +50,39 @@ async function languageSkillContents(home: string, skill: string): Promise<strin
   return readFile(join(home, skillsRelative, skill), 'utf8');
 }
 
+function installedDirective(contents: string): string {
+  const index = contents.indexOf(directiveHeading);
+  return index === -1 ? '' : contents.slice(index);
+}
+
+// Assert the injected section states notes structural requirements as English
+// while keeping exactly one directive section (no duplicated language pair).
+function expectNotesLanguageDirective(contents: string, label: string): string {
+  const directive = installedDirective(contents);
+  expect(directive, `${label} appends the output language directive`).not.toBe('');
+  expect(directive.split(directiveHeading).length - 1, `${label} appends exactly one directive section`).toBe(1);
+  expect(directive, `${label} names notes as the current decision record`).toMatch(/notes/i);
+  expect(directive, `${label} keeps notes status values English`).toMatch(/status/i);
+  for (const clause of notesStructuralClauses) {
+    expect(directive, `${label} keeps ${clause} English`).toContain(clause);
+  }
+  return directive;
+}
+
+// Assert the retired ADR-only language fields are gone and no translation
+// artifacts are requested by the injected section.
+function expectRetiredAdrFieldsDropped(contents: string, label: string): string {
+  const directive = installedDirective(contents);
+  expect(directive, `${label} appends the output language directive`).not.toBe('');
+  for (const clause of retiredAdrClauses) {
+    expect(directive, `${label} drops the retired ADR clause ${clause}`).not.toContain(clause);
+  }
+  expect(directive, `${label} drops the retired adr command`).not.toMatch(/ai-workflow\s+adr\b/i);
+  expect(directive, `${label} drops the retired adr path`).not.toMatch(/\.ai-workflow\/adr\b/);
+  expect(directive, `${label} does not request sidecars, bilingual pairs or translation pairs`).not.toMatch(/sidecar|translation pair|bilingual/i);
+  return directive;
+}
+
 // Snapshot of every managed file plus the install manifest, excluding the user-owned configuration.
 async function managedTree(home: string): Promise<Map<string, string>> {
   const paths = await filesUnder(join(home, skillsRelative));
@@ -66,6 +103,9 @@ describe('installed skill output language', () => {
       const contents = await languageSkillContents(home, skill);
       expect(contents, `${skill} defaults to English`).toContain(enMarker);
       expect(contents).not.toContain(zhMarker);
+      const directive = expectNotesLanguageDirective(contents, skill);
+      expect(directive).toContain(enMarker);
+      expect(directive).not.toContain(zhMarker);
     }
 
     for (const host of hosts) {
@@ -73,8 +113,12 @@ describe('installed skill output language', () => {
       expect(contents, `${host} documentation-maintainer defaults to English`).toContain(directiveHeading);
       expect(contents, `${host} documentation-maintainer defaults to English`).toContain(enMarker);
       expect(contents).not.toContain(zhMarker);
-      for (const clause of structuralAdrClauses) {
-        expect(contents, `${host} documentation-maintainer keeps ${clause} English`).toContain(clause);
+      const directive = expectNotesLanguageDirective(contents, `${host} documentation-maintainer`);
+      expect(directive).toContain(enMarker);
+      expect(directive).not.toContain(zhMarker);
+      expect(contents, `${host} documentation-maintainer reads the notes governance source`).toContain('.ai-workflow/notes/README.md');
+      for (const clause of retiredAdrClauses) {
+        expect(contents, `${host} documentation-maintainer drops ${clause}`).not.toContain(clause);
       }
     }
   });
@@ -88,6 +132,13 @@ describe('installed skill output language', () => {
       const contents = await languageSkillContents(home, skill);
       expect(contents, `${skill} uses Simplified Chinese`).toContain(zhMarker);
       expect(contents).not.toContain(enMarker);
+      const directive = expectNotesLanguageDirective(contents, skill);
+      expect(directive).toContain(zhMarker);
+      // The notes structural requirements stay English under zh-CN.
+      for (const clause of notesStructuralClauses) {
+        expect(directive, `${skill} keeps ${clause} English`).toContain(clause);
+      }
+      expect(directive, `${skill} keeps the notes status marker English`).toMatch(/status/i);
     }
 
     for (const host of hosts) {
@@ -95,6 +146,9 @@ describe('installed skill output language', () => {
       expect(contents, `${host} documentation-maintainer uses Simplified Chinese`).toContain(directiveHeading);
       expect(contents, `${host} documentation-maintainer uses Simplified Chinese`).toContain(zhMarker);
       expect(contents).not.toContain(enMarker);
+      const directive = expectNotesLanguageDirective(contents, `${host} documentation-maintainer`);
+      expect(directive).toContain(zhMarker);
+      expect(directive).not.toContain(enMarker);
     }
   });
 
@@ -112,6 +166,9 @@ describe('installed skill output language', () => {
         expect(installed, `${relativePath} receives the directive`).not.toBe(template);
         expect(installed.startsWith(template), `${relativePath} preserves its template`).toBe(true);
         expect(installed, `${relativePath} names the language`).toContain(zhMarker);
+        const directive = expectNotesLanguageDirective(installed, relativePath);
+        expect(directive).toContain(zhMarker);
+        expect(directive).not.toContain(enMarker);
       } else {
         expect(installed, `${relativePath} matches its template`).toBe(template);
         expect(installed, `${relativePath} has no directive`).not.toContain(directiveHeading);
@@ -127,8 +184,11 @@ describe('installed skill output language', () => {
           expect(installed, `${host}/${file.relativePath} receives the directive`).not.toBe(file.contents);
           expect(installed.startsWith(file.contents), `${host}/${file.relativePath} preserves its rendering`).toBe(true);
           expect(installed, `${host}/${file.relativePath} names the language`).toContain(zhMarker);
-          for (const clause of structuralAdrClauses) {
-            expect(installed, `${host}/${file.relativePath} keeps ${clause} English`).toContain(clause);
+          const directive = expectNotesLanguageDirective(installed, `${host}/${file.relativePath}`);
+          expect(directive).toContain(zhMarker);
+          expect(directive).not.toContain(enMarker);
+          for (const clause of retiredAdrClauses) {
+            expect(installed, `${host}/${file.relativePath} drops ${clause}`).not.toContain(clause);
           }
         } else {
           expect(installed, `${host}/${file.relativePath} matches the unchanged rendering`).toBe(file.contents);
@@ -208,6 +268,64 @@ describe('installed skill output language', () => {
       const contents = await readFile(join(home, agentsRelative(host), `documentation-maintainer${host === 'codex' ? '.toml' : '.md'}`), 'utf8');
       expect(contents, `${host} documentation-maintainer uses the new language after activateProfile`).toContain(zhMarker);
       expect(contents).not.toContain(enMarker);
+    }
+  });
+
+  it('drops retired ADR-only language fields and requests no translation artifacts', async () => {
+    const home = await temporary('ai-workflow-language-adr-drop-');
+    await seedConfig(home, 'output_language: zh-CN\n');
+    await install(hosts, { home });
+
+    for (const skill of languageSkills) {
+      expectRetiredAdrFieldsDropped(await languageSkillContents(home, skill), skill);
+    }
+    for (const host of hosts) {
+      const contents = await readFile(join(home, agentsRelative(host), `documentation-maintainer${host === 'codex' ? '.toml' : '.md'}`), 'utf8');
+      expectRetiredAdrFieldsDropped(contents, `${host} documentation-maintainer`);
+      expect(contents, `${host} documentation-maintainer has no retired ADR file naming`).not.toMatch(/NNNN-kebab-title|superseded-by ADR-NNNN/);
+    }
+  });
+
+  it('injects the notes structural requirements in both en and zh-CN', async () => {
+    for (const { language, marker, other } of [
+      { language: 'en', marker: enMarker, other: zhMarker },
+      { language: 'zh-CN', marker: zhMarker, other: enMarker }
+    ]) {
+      const home = await temporary(`ai-workflow-language-notes-${language}-`);
+      await seedConfig(home, `output_language: ${language}\n`);
+      await install(hosts, { home });
+
+      for (const skill of languageSkills) {
+        const directive = expectNotesLanguageDirective(await languageSkillContents(home, skill), skill);
+        expect(directive).toContain(marker);
+        expect(directive).not.toContain(other);
+      }
+
+      for (const host of hosts) {
+        const contents = await readFile(join(home, agentsRelative(host), `documentation-maintainer${host === 'codex' ? '.toml' : '.md'}`), 'utf8');
+        const directive = expectNotesLanguageDirective(contents, `${host} documentation-maintainer`);
+        expect(directive).toContain(marker);
+        expect(directive).not.toContain(other);
+      }
+    }
+  });
+
+  it('derives the notes language section from output_language alone without new configuration or sidecars', async () => {
+    const home = await temporary('ai-workflow-language-notes-config-');
+    await seedConfig(home, 'output_language: zh-CN\n');
+    await install(hosts, { home });
+
+    expect(await readFile(join(home, configRelative), 'utf8')).toBe('output_language: zh-CN\n');
+
+    const schema = JSON.parse(await readFile(packagePath('schemas', 'settings.schema.json'), 'utf8')) as {
+      additionalProperties?: boolean;
+      properties?: Record<string, unknown>;
+    };
+    expect(Object.keys(schema.properties ?? {}).filter((key) => /language/i.test(key)), 'no new language configuration item').toEqual(['output_language']);
+    expect(schema.additionalProperties, 'unknown configuration keys are rejected').toBe(false);
+
+    for (const path of (await managedTree(home)).keys()) {
+      expect(path, `${path} is not a sidecar or translation pair`).not.toMatch(/sidecar|bilingual|translation|\.(?:en|zh-CN)\./i);
     }
   });
 

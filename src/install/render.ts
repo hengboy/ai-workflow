@@ -19,7 +19,9 @@ function languageSection(language: OutputLanguage): string {
     '',
     `Write the agent's interactive and session natural-language prose in ${name}, including clarification questions, confirmation previews, progress narration and final summary.`,
     '',
-    `In generated planning artifacts, only natural-language prose may be translated; headings, table headers, YAML frontmatter keys and their order, field names, \`REQ-###\`/\`AC-###\` identifiers, file paths, code and enumerated values such as \`surface\` remain English.`,
+    `Agent notes are the current decision records and follow the existing output language preference: write each note's natural-language body in ${name} as one prose language, with no parallel translated copies and no new configuration items.`,
+    '',
+    `Structural elements remain English in generated planning artifacts and notes alike: the \`# Agent Note:\` title, section headings, table headers, YAML frontmatter keys and their order, \`Status\` and its values, field names, \`REQ-###\`/\`AC-###\` identifiers, file paths, code, dates and enumerated values such as \`surface\`.`,
     ''
   ].join('\n');
 }
