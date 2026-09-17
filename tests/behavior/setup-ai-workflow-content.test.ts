@@ -45,7 +45,9 @@ describe('setup ai-workflow skill', () => {
     expect(text).toMatch(/Do not edit/i);
 
     expect(metadata.interface?.display_name).toBe('Setup AI Workflow');
-    expect(metadata.interface?.short_description).toMatch(/ai-workflow/i);
+    // The description must name the authorized upgrade path, not only first-time initialization.
+    expect(metadata.interface?.short_description).toMatch(/upgrade/i);
+    expect(metadata.interface?.short_description).toMatch(/explicit|authoriz/i);
     expect(metadata.interface?.default_prompt).toContain('$setup-ai-workflow');
   });
 });

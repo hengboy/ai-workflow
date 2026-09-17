@@ -264,6 +264,23 @@ describe('project upgrade', () => {
     expect(JSON.parse(validated.stdout)).toEqual({ valid: true, errors: [] });
   });
 
+  it.each([
+    'Do not create ADRs; decisions are recorded as notes.',
+    'Existing ADR history files are preserved but never read.',
+  ])('REQ-007 treats descriptive or negated ADR text as a guideline, not a retired instruction: %s', async (line) => {
+    const root = await temporary('ai-workflow-upgrade-adr-descriptive-');
+    await writeExistingProject(root);
+    const memory = `# Project memory\n\n## Standards\n\n- ${line}\n`;
+    await writeFile(join(root, 'MEMORY.md'), memory);
+
+    // The upgrade must proceed: text that forbids ADRs or describes preserved history is not a
+    // rule that still requires them. Only an imperative rule to create/read ADRs blocks writing.
+    const result = await upgrade(root);
+
+    expect(normalized(result.created)).toEqual(expect.arrayContaining([...managementFiles]));
+    expect(await readFile(join(root, 'MEMORY.md'), 'utf8')).toBe(memory);
+  });
+
   it('REQ-007 keeps the removed update command unavailable', async () => {
     const root = await temporary('ai-workflow-upgrade-update-');
     await writeExistingProject(root);
@@ -400,6 +417,23 @@ describe('project upgrade failure boundaries', () => {
     expect(await readFile(join(root, '.ai-workflow/AGENTS.md'), 'utf8')).toBe(contractBytes);
   });
 
+  it('AC-014 still stops before writing for an imperative rule that requires creating ADRs', async () => {
+    const root = await temporary('ai-workflow-upgrade-adr-imperative-');
+    await writeExistingProject(root);
+    const memory = '# Project memory\n\n## Standards\n\n- Create an ADR for every architecture decision\n';
+    await writeFile(join(root, 'MEMORY.md'), memory);
+    const before = await snapshotTree(root);
+
+    const result = await runCli(['init', root, '--upgrade']);
+    const output = `${result.stderr}${result.stdout}`;
+
+    expect(result.code).not.toBe(0);
+    expect(output).toMatch(/still require ADRs/i);
+    expect(output).toMatch(/merge them explicitly/i);
+    await expectTreeUnchanged(root, before);
+    expect(await readFile(join(root, 'MEMORY.md'), 'utf8')).toBe(memory);
+  });
+
   it('AC-014 never scans ADR history files when checking for retired ADR instructions', async () => {
     const root = await temporary('ai-workflow-upgrade-adr-history-');
     await writeExistingProject(root);
@@ -454,5 +488,26 @@ describe('project upgrade failure boundaries', () => {
     expect(await exists(join(root, '.ai-workflow/notes/README.md'))).toBe(false);
     expect(await exists(join(root, '.ai-workflow/notes/implemented'))).toBe(false);
     expect(await exists(join(root, '.ai-workflow/notes/archived'))).toBe(false);
+  });
+
+  it('AC-014 reclaims a management file whose atomic write committed at rename and then failed', async () => {
+    const root = await temporary('ai-workflow-upgrade-atomic-after-');
+    await writeExistingProject(root);
+    const historyPath = join(root, '.ai-workflow/adr/0001-history.md');
+    const historyBytes = '# ADR-0001: Legacy decision\n\nStatus: accepted\n\nHistorical user data.\n';
+    await mkdir(join(root, '.ai-workflow/adr'), { recursive: true });
+    await writeFile(historyPath, historyBytes);
+    const before = await snapshotTree(root);
+
+    // Fail after the rename of the first management file commits, so the file exists on disk even
+    // though atomicWrite never returned and the upgrade never registered it for cleanup.
+    fsControl.failPath = '.ai-workflow/AGENTS.md';
+    fsControl.after = true;
+    await expect(upgradeProject(root)).rejects.toThrow(/injected write failure/);
+
+    await expectTreeUnchanged(root, before);
+    expect(await readFile(join(root, '.gitignore'), 'utf8')).toBe('.ai-workflow/\n*.log\nMEMORY.md\n');
+    expect(await readFile(historyPath, 'utf8')).toBe(historyBytes);
+    expect(await exists(join(root, '.ai-workflow/AGENTS.md'))).toBe(false);
   });
 });

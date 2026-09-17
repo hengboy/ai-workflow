@@ -45,4 +45,12 @@ describe('mandatory project-local temporary worktree policy', () => {
       expect(text, `${path} excludes the worktree container`).toContain('.worktrees/');
     }
   });
+
+  it('materializes notes alongside the project contract as a single source in the project MEMORY standard', async () => {
+    const memory = normalize(await readFile(packagePath('templates/project/MEMORY.md'), 'utf8'));
+    const materialization = memory.split(/(?<=\.)\s/).find((sentence) => /gitignored state/i.test(sentence));
+
+    expect(materialization, 'templates/project/MEMORY.md states the worktree materialization standard').toBeDefined();
+    expect(materialization).toMatch(/notes/i);
+  });
 });

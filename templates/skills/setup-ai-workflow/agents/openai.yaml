@@ -1,4 +1,4 @@
 interface:
   display_name: "Setup AI Workflow"
-  short_description: "Initialize ai-workflow in a project."
-  default_prompt: "Use $setup-ai-workflow to initialize ai-workflow for this project."
+  short_description: "Initialize ai-workflow in a project or explicitly upgrade an existing adoption."
+  default_prompt: "Use $setup-ai-workflow to initialize ai-workflow for this project, or to upgrade an existing adoption when the user explicitly authorizes it."

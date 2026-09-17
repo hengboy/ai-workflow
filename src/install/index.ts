@@ -350,6 +350,7 @@ export async function initializeProject(project: string): Promise<string[]> {
   const newNotesDirectories: string[] = [];
   for (const directory of notesDirectories) if (!(await exists(join(root, directory)))) newNotesDirectories.push(directory);
   const created: string[] = [];
+  // Registered before each write so a failure after rename has committed still reclaims the file.
   const writtenFiles: string[] = [];
   try {
     for (const directory of newNotesDirectories) {
@@ -357,8 +358,9 @@ export async function initializeProject(project: string): Promise<string[]> {
       created.push(directory);
     }
     for (const item of published) {
-      await atomicWrite(join(root, item.target), item.contents);
-      writtenFiles.push(join(root, item.target));
+      const path = join(root, item.target);
+      writtenFiles.push(path);
+      await atomicWrite(path, item.contents);
       created.push(item.target);
     }
     const additions = missingIgnoreLines(ignoreOriginal);
@@ -381,6 +383,10 @@ export interface ProjectUpgradeReport { created: string[]; skipped: string[] }
 // still tells agents to create/read/use ADRs. Descriptive history is not scanned because ADR files are never read here.
 function retiredAdrInstruction(line: string): boolean {
   if (!/\badrs?\b/i.test(line)) return false;
+  // Only affirmative rules conflict. Text that forbids ADRs or merely describes preserved history
+  // (negation cues in either language) is a guideline, not a rule that still requires ADRs.
+  if (/\b(?:not|never|no longer|without)\b/i.test(line)) return false;
+  if (/不得|不要|不再|无需|禁止/.test(line)) return false;
   if (/\bai-workflow\s+adr\b/i.test(line) || /\.ai-workflow\/adr\b/i.test(line) || /\bADR-\d+/i.test(line)) return true;
   return /\b(create|read|write|list|maintain|record|supersede|superseded|accept|accepted|use|require|required|must|should)\b/i.test(line)
     || /创建|读取|写入|记录|维护|新增|使用|必须|应当|需要/.test(line);
@@ -445,6 +451,7 @@ export async function upgradeProject(project: string): Promise<ProjectUpgradeRep
   const ignoreExisted = await exists(ignorePath);
   const ignoreOriginal = ignoreExisted ? await readFile(ignorePath, 'utf8') : '';
   const created: string[] = [];
+  // Registered before each write so a failure after rename has committed still reclaims the file.
   const writtenFiles: string[] = [];
   const createdDirectories: string[] = [];
   try {
@@ -455,8 +462,9 @@ export async function upgradeProject(project: string): Promise<ProjectUpgradeRep
     }
     for (const item of templates) {
       if (skipped.includes(item.target)) continue;
-      await atomicWrite(join(root, item.target), item.contents);
-      writtenFiles.push(join(root, item.target));
+      const path = join(root, item.target);
+      writtenFiles.push(path);
+      await atomicWrite(path, item.contents);
       created.push(item.target);
     }
     const additions = missingIgnoreLines(ignoreOriginal);
