@@ -10,7 +10,23 @@ digest: ""
 
 # Specification
 
+English | [中文](spec.zh.md)
+
 Replace every placeholder and illustrative entry below. Remove this instruction before freezing the document.
+
+## Bilingual shape
+
+The English `spec.md` mirrors the structure of `spec.zh.md`. The Chinese side has no YAML frontmatter and starts with the same English title followed by the Chinese switcher:
+
+```markdown
+# Specification
+
+[English](spec.md) | 中文
+
+（中文正文，结构镜像英文侧；无 YAML frontmatter。）
+```
+
+Only the English `spec.md` carries the YAML frontmatter with `plan_id`, `status: frozen`, counts and `digest: ""`. The Chinese bytes never affect the digest.
 
 ## Goal
 

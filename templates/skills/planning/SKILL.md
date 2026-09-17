@@ -91,8 +91,10 @@ Planning artifacts live under `.ai-workflow/plans/<planId>/`, which is gitignore
 
 Write to `.ai-workflow/plans/<YYYYMMDD-english-slug>/`:
 
-- `spec.md`: goal, non-goals, scenarios, continuous REQ/AC, Given/When/Then evidence, RED criteria, boundary counterexamples and validation layers.
-- `plan.md`: every REQ/AC mapping, implementation order, exact or bounded read/write paths, checks, compatibility, rollback and responsible native role.
+- `spec.md` + `spec.zh.md` + `spec.i18n.yaml`: goal, non-goals, scenarios, continuous REQ/AC, Given/When/Then evidence, RED criteria, boundary counterexamples and validation layers.
+- `plan.md` + `plan.zh.md` + `plan.i18n.yaml`: every REQ/AC mapping, implementation order, exact or bounded read/write paths, checks, compatibility, rollback and responsible native role.
+
+Each of these is a complete bilingual triplet: the English main document and its `.zh.md` Chinese prose side, plus an `.i18n.yaml` consistency record for the pair. Only the English side carries the YAML frontmatter (`plan_id`, `status: frozen`, `created_at`, `supersedes`, counts and `digest`). The `.zh.md` side has no frontmatter; it starts with the same English title followed by `[English](<doc>.md) | 中文`, while the English side follows its title with `English | [中文](<doc>.zh.md)`. Both sides differ only in prose; mirror headings, structure, tables, lists and link targets, and never treat `.i18n.yaml` as a third prose side.
 
 Plan steps use `Responsible role`; `plan.md` itself does not require a
 `surface` attribute. Surface routing is added only to generated task files.
@@ -109,7 +111,7 @@ When a change affects architecture, module boundaries or ownership, public proto
 
 ## Frozen-plan digest protocol
 
-Use the normative convention in [the digest protocol](references/digest.md). Write both frontmatters with `digest: ""`, calculate each file's SHA-256 over its exact UTF-8 bytes with only that digest line blanked, replace the values, and run `ai-workflow plan validate --plan <directory>` before finishing. Do not invent or calculate a digest from the completed self-referential file.
+Use the normative convention in [the digest protocol](references/digest.md). Write both English frontmatters with `digest: ""`, calculate each file's SHA-256 over its exact UTF-8 bytes with only that digest line blanked, and replace the values; the English bytes are the only digest source and the Chinese side never affects the digest. After both language sides are final and the digests are written, record the pair with `ai-workflow plan pairing --plan <directory> --write`, then verify the complete frozen triplet with `ai-workflow plan validate --plan <directory>` before finishing. `plan validate` and `plan pairing` are the shared verification entry points for frozen planning artifacts. Do not invent or calculate a digest from the completed self-referential file.
 
 Both frontmatters contain `plan_id`, `status: frozen`, `created_at`, nullable `supersedes`, REQ count, AC count and a content digest. A changed frozen requirement creates a new plan ID; never edit a frozen plan in place.
 
@@ -118,7 +120,9 @@ Both frontmatters contain `plan_id`, `status: frozen`, `created_at`, nullable `s
 - The user approved the final full inventory.
 - Every non-mechanical plan schedules its note maintenance and aligns `MEMORY.md`; purely mechanical changes are exempt.
 - Spec Review ran exactly once; it either passed or all of its findings were repaired and included in the user's final approval.
-- Both files share the same plan ID and counts.
-- Digests match the frozen content.
+- `spec` and `plan` are frozen bilingual triplets: `spec.md`/`spec.zh.md`/`spec.i18n.yaml` and `plan.md`/`plan.zh.md`/`plan.i18n.yaml` all exist.
+- Both English documents share the same plan ID and counts, and both `.zh.md` sides mirror their English structure.
+- The pair is recorded in `spec.i18n.yaml` and `plan.i18n.yaml`, and `ai-workflow plan validate --plan <directory>` passes.
+- Digests match the frozen English bytes.
 - No Git commit was created for `spec.md` or `plan.md`; both remain gitignored local artifacts under `.ai-workflow/plans/<planId>/`.
 - No task, workflow, run or code file was created.

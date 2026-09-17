@@ -72,7 +72,9 @@ Ask for explicit approval. Before approval, do not create `tasks/` or write part
 
 ## Task file contract
 
-After approval, atomically add `tasks/task-001-short-slug.md` files. Frontmatter must contain exactly usable values for:
+After approval, atomically add each task as a complete bilingual triplet under `tasks/`: the English main document `tasks/task-NNN-slug.md`, the Chinese prose side `tasks/task-NNN-slug.zh.md`, and the `tasks/task-NNN-slug.i18n.yaml` consistency record. Only `tasks/task-NNN-slug.md` is the task used for enumeration, routing and dependency checks; `.zh.md` and `.i18n.yaml` are its companions and must never be enumerated as tasks.
+
+Frontmatter lives only on the English `task-NNN-slug.md` side and must contain exactly usable values for:
 
 - `id`;
 - `requirements`;
@@ -82,6 +84,10 @@ After approval, atomically add `tasks/task-001-short-slug.md` files. Frontmatter
 - `read_scope`;
 - `write_scope`;
 - `test_commands`.
+
+The Chinese `.zh.md` side has no frontmatter and starts with `# Task`; both sides use the switchers `English | [中文](task-NNN-slug.zh.md)` and `[English](task-NNN-slug.md) | 中文`, and mirror headings, structure, tables, lists and link targets, differing only in prose.
+
+Confirm the parent plan passes with `ai-workflow plan validate --plan <directory>` before creating tasks. Write both language sides of every task first, record each pair with `ai-workflow plan pairing --plan <directory> --write`, then verify the frozen triplet with `ai-workflow plan validate --plan <directory>`.
 
 Read [the task template](references/task.md) before drafting. Preserve its frontmatter and body contract while replacing the illustrative example with the approved task's actual scope and evidence.
 

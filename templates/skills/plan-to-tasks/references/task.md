@@ -11,6 +11,24 @@ test_commands: ["{{targeted_test_command}}"]
 
 # Task
 
+English | [中文](task-NNN-slug.zh.md)
+
+## Bilingual shape
+
+Each task is a complete bilingual triplet under `tasks/`: the English main document `tasks/task-NNN-slug.md`, the Chinese prose side `tasks/task-NNN-slug.zh.md`, and the `tasks/task-NNN-slug.i18n.yaml` consistency record. Only `tasks/task-NNN-slug.md` is the task document used for enumeration; `.zh.md` and `.i18n.yaml` are its companions and are never enumerated as tasks.
+
+The Chinese `.zh.md` side has no YAML frontmatter and starts with `# Task` followed by the Chinese switcher:
+
+```markdown
+# Task
+
+[English](task-NNN-slug.md) | 中文
+
+（中文正文，结构镜像英文侧；无 YAML frontmatter。）
+```
+
+Frontmatter (`id`, `requirements`, `acceptance_criteria`, `depends_on`, `surface`, `read_scope`, `write_scope`, `test_commands`) lives only on the English `task-NNN-slug.md` side. Both sides mirror headings, structure, tables, lists and link targets, differing only in prose.
+
 ## Objective
 
 State one coherent, independently testable outcome that can be delivered in one commit.
@@ -51,6 +69,8 @@ test_commands: ["pnpm vitest run tests/preferences/store.test.ts"]
 
 # Task
 
+English | [中文](task-001-persist-notification-preference.zh.md)
+
 ## Objective
 
 Persist the authenticated user's email notification preference across sessions.
@@ -62,4 +82,24 @@ Persist the authenticated user's email notification preference across sessions.
 ## Test evidence
 
 - The targeted Vitest suite proves persistence, the existing default, and failed-write behavior.
+```
+
+The Chinese companion `task-001-persist-notification-preference.zh.md` has no frontmatter and starts with the same title and the Chinese switcher:
+
+```markdown
+# Task
+
+[English](task-001-persist-notification-preference.md) | 中文
+
+## 目标
+
+在会话之间持久化已认证用户的邮件通知偏好。
+
+## 负向用例
+
+- 仓库写入失败时保留此前已存储的偏好。
+
+## 测试证据
+
+- 针对性 Vitest 套件证明持久化、既有默认值与写入失败行为。
 ```

@@ -234,4 +234,70 @@ describe('native prompt contracts', () => {
       expect(text, `${skill} retires the ADR current mechanism`).not.toMatch(/\bADRs?\b|ai-workflow\s+adr\b|\.ai-workflow\/adr\b/i);
     }
   });
+  // REQ-001 / AC-001 (production half): planning must require the bilingual triplet
+  // before recording and validating the pair.
+  it('requires planning to write both language sides, the English digest, the pair record, then validation', async () => {
+    const text = await readFile(packagePath('templates', 'skills', 'planning', 'SKILL.md'), 'utf8');
+    expect(text, 'planning names the Chinese side').toMatch(/\.zh\.md/);
+    expect(text, 'planning names the consistency record').toMatch(/\.i18n\.yaml/);
+    expect(text, 'planning records the pair with plan pairing --write').toMatch(/ai-workflow plan pairing --plan[^\n]*--write/);
+    expect(text, 'planning validates with plan validate --plan').toMatch(/ai-workflow plan validate --plan/);
+    expect(text, 'planning orders both sides, digest, pairing --write, then validation').toMatch(
+      /\.zh\.md[\s\S]{0,4000}?digest[\s\S]{0,4000}?plan pairing[\s\S]{0,2000}?plan validate/i
+    );
+  });
+  // REQ-002 / AC-005 (production half): plan-to-tasks must require the task triplet
+  // before recording and validating the pair.
+  it('requires plan-to-tasks to write both language sides, record the pair, then validate', async () => {
+    const text = await readFile(packagePath('templates', 'skills', 'plan-to-tasks', 'SKILL.md'), 'utf8');
+    expect(text, 'plan-to-tasks names the Chinese side').toMatch(/\.zh\.md/);
+    expect(text, 'plan-to-tasks names the consistency record').toMatch(/\.i18n\.yaml/);
+    expect(text, 'plan-to-tasks records the pair with plan pairing --write').toMatch(/ai-workflow plan pairing --plan[^\n]*--write/);
+    expect(text, 'plan-to-tasks orders both sides, pairing --write, then validation').toMatch(
+      /\.zh\.md[\s\S]{0,4000}?plan pairing[\s\S]{0,2000}?plan validate/i
+    );
+  });
+  // REQ-001 / REQ-002: the reference examples must show the exact switchers, the
+  // blank English digest and the no-frontmatter Chinese side.
+  it('shows the exact bilingual switchers and the no-frontmatter Chinese side in spec, plan and task references', async () => {
+    const references = [
+      ['planning', 'spec.md', 'Specification'],
+      ['planning', 'plan.md', 'Implementation Plan'],
+      ['plan-to-tasks', 'task.md', 'Task']
+    ] as const;
+    for (const [skill, file, title] of references) {
+      const text = await readFile(packagePath('templates', 'skills', skill, 'references', file), 'utf8');
+      expect(text, `${file} shows the English-side switcher`).toMatch(/English \| \[中文\]\([^)\n]+\.zh\.md\)/);
+      expect(text, `${file} shows the Chinese-side switcher`).toMatch(/\[English\]\([^)\n]+\.md\) \| 中文/);
+      expect(text, `${file} places a switcher immediately after the ${title} title with a blank line`).toMatch(
+        new RegExp(`# ${title}\\n\\n(?:English \\| \\[中文\\]\\([^)\\n]+\\.zh\\.md\\)|\\[English\\]\\([^)\\n]+\\.md\\) \\| 中文)\\n\\n`)
+      );
+      expect(text, `${file} states that the Chinese side has no frontmatter`).toMatch(/\b(?:no|without|lacks)\b[^.\n]{0,60}frontmatter/i);
+    }
+    for (const file of ['spec.md', 'plan.md'] as const) {
+      const text = await readFile(packagePath('templates', 'skills', 'planning', 'references', file), 'utf8');
+      expect(text, `${file} keeps the blank English digest in frontmatter`).toContain('digest: ""');
+    }
+  });
+  // REQ-006 / AC-013: the digest protocol is a shared entry point that records the
+  // pair before validation.
+  it('adds the pair-recording step to the frozen-plan digest protocol', async () => {
+    const digest = await readFile(packagePath('templates', 'skills', 'planning', 'references', 'digest.md'), 'utf8');
+    expect(digest, 'the digest protocol keeps the blank digest').toContain('digest: ""');
+    expect(digest, 'the digest protocol hashes UTF-8 bytes').toMatch(/UTF-8/);
+    expect(digest, 'the digest protocol uses SHA-256').toMatch(/sha-?256/i);
+    expect(digest, 'the digest protocol records the pair').toMatch(/ai-workflow plan pairing --plan[^\n]*--write/);
+    expect(digest, 'the digest protocol records the pair before validating').toMatch(/plan pairing[\s\S]{0,1500}?plan validate/i);
+  });
+  // REQ-006 / AC-013: both commands are shared verification entry points.
+  it('presents plan validate and plan pairing as shared verification entry points', async () => {
+    for (const skill of ['planning', 'plan-to-tasks']) {
+      const text = await readFile(packagePath('templates', 'skills', skill, 'SKILL.md'), 'utf8');
+      expect(text, `${skill} documents plan validate`).toMatch(/ai-workflow plan validate --plan/);
+      expect(text, `${skill} documents plan pairing`).toMatch(/ai-workflow plan pairing --plan/);
+    }
+    const digest = await readFile(packagePath('templates', 'skills', 'planning', 'references', 'digest.md'), 'utf8');
+    expect(digest, 'the shared digest protocol documents plan validate').toMatch(/ai-workflow plan validate --plan/);
+    expect(digest, 'the shared digest protocol documents plan pairing').toMatch(/ai-workflow plan pairing --plan/);
+  });
 });
