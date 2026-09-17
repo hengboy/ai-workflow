@@ -69,8 +69,16 @@ Adopt the approach.
 The smaller change was preferred because it meets the need.
 `;
 
+type NoteCase = {
+  name: string;
+  path: string;
+  contents: string;
+  valid: boolean;
+  expectedReason?: RegExp;
+};
+
 describe('notes format validation', () => {
-  it.each([
+  it.each<NoteCase>([
     {
       name: 'accepts an English proposed note',
       path: '.ai-workflow/notes/proposed/feature/2026-09-17-improve-validation.md',
