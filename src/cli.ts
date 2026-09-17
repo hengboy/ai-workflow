@@ -29,8 +29,8 @@ profile.command('activate').argument('<name>').option('--home <path>').action(as
 
 const plan = program.command('plan');
 plan.command('validate').requiredOption('--plan <directory>').action(async ({ plan: directory }: { plan: string }) => {
-  const document = await readPlan(resolve(directory));
-  await readTasks(resolve(directory));
+  const document = await readPlan(directory);
+  await readTasks(directory);
   print({ valid: true, plan_id: document.planId, digests: { spec: document.specDigest, plan: document.planDigest, combined: document.digest } });
 });
 plan.command('pairing')
@@ -40,7 +40,7 @@ plan.command('pairing')
   .option('--all', 'with --write, re-record every complete pair')
   .argument('[documents...]', 'plan documents naming the pairs to check or record')
   .action(async (documents: string[], { plan: directory, list, write, all }: { plan: string; list?: boolean; write?: boolean; all?: boolean }) => {
-    const target = resolve(directory);
+    const target = directory;
     if (list && (write || all || documents.length > 0)) throw new Error('--list takes no other flags or documents');
     if (all && !write) throw new Error('--all only applies to --write');
     if (write) {

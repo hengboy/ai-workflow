@@ -300,4 +300,43 @@ describe('native prompt contracts', () => {
     expect(digest, 'the shared digest protocol documents plan validate').toMatch(/ai-workflow plan validate --plan/);
     expect(digest, 'the shared digest protocol documents plan pairing').toMatch(/ai-workflow plan pairing --plan/);
   });
+  // Review finding F1 (merge-blocking): shipped instructions must not prescribe the
+  // `plan pairing --write` form the CLI rejects. Every `ai-workflow plan pairing`
+  // occurrence must name `--plan <value>`, and a `--write` immediately followed by a
+  // backtick, newline, end-of-string or `#` section comment is a violation because the
+  // CLI rejects that bare form without `--all` or explicit document arguments.
+  it('prescribes only CLI-accepted plan pairing command forms in shipped instructions', async () => {
+    const sites = [
+      'templates/skills/planning/SKILL.md',
+      'templates/skills/planning/references/digest.md',
+      'templates/skills/planning/references/spec.md',
+      'templates/skills/planning/references/plan.md',
+      'templates/skills/plan-to-tasks/SKILL.md',
+      'templates/skills/plan-to-tasks/references/task.md',
+      'src/install/render.ts',
+      'README.md',
+    ];
+    const commandLiteral = 'ai-workflow plan pairing';
+    const violations: string[] = [];
+    for (const site of sites) {
+      const contents = await readFile(packagePath(site), 'utf8');
+      for (const match of contents.matchAll(/ai-workflow plan pairing/g)) {
+        const start = match.index ?? 0;
+        const rest = contents.slice(start);
+        const terminator = rest.slice(commandLiteral.length).search(/[`\n]/);
+        const command = terminator === -1 ? rest : rest.slice(0, commandLiteral.length + terminator);
+        if (!/--plan\s+\S+/.test(command)) {
+          violations.push(`${site}: "${command}" must name --plan with a value`);
+          continue;
+        }
+        const writeIndex = command.indexOf('--write');
+        if (writeIndex === -1) continue;
+        const argument = command.slice(writeIndex + '--write'.length).replace(/^[ \t]+/, '');
+        if (argument === '' || /^[`#\r\n]/.test(argument)) {
+          violations.push(`${site}: "${command}" uses --write without --all or an explicit document argument`);
+        }
+      }
+    }
+    expect(violations, 'shipped plan pairing instructions must match the CLI contract').toEqual([]);
+  });
 });

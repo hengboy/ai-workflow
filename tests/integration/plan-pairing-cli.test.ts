@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { execFile } from 'node:child_process';
 import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 import { promisify } from 'node:util';
 import { renderFrozenMarkdown } from '../../src/workflow/digest.js';
 import { renderMarkdown } from '../../src/utils/frontmatter.js';
@@ -405,5 +405,26 @@ describe('plan pairing CLI', () => {
 
     expect(result.code).not.toBe(0);
     expect(await snapshot(directory)).toEqual(before);
+  });
+
+  // Review finding W1 (warning): REQ-004 requires project-relative paths in errors,
+  // but the CLI resolves --plan to an absolute path before reporting. A user-supplied
+  // relative --plan must be preserved verbatim in the failure output.
+  it('preserves a user-supplied relative --plan path in validate errors', async () => {
+    const root = await temporary('ai-workflow-plan-relative-');
+    const directory = await completePlan(root);
+    await rm(join(directory, 'spec.zh.md'));
+    const relativeDirectory = relative(process.cwd(), directory);
+    expect(relativeDirectory.startsWith('/'), 'the relative --plan value must not be absolute').toBe(false);
+
+    const result = await runCli(['plan', 'validate', '--plan', relativeDirectory]);
+
+    expect(result.code).not.toBe(0);
+    const output = outputOf(result);
+    expect(output, 'the error must name the relative document path').toContain(join(relativeDirectory, 'spec.zh.md'));
+    const prefix = 'ai-workflow: ';
+    const reported = output.slice(output.indexOf(prefix) + prefix.length);
+    const reportedPath = reported.slice(0, reported.indexOf(': '));
+    expect(reportedPath.startsWith('/'), 'the reported document path must not be absolute').toBe(false);
   });
 });

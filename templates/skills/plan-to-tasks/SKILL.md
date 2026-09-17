@@ -87,7 +87,7 @@ Frontmatter lives only on the English `task-NNN-slug.md` side and must contain e
 
 The Chinese `.zh.md` side has no frontmatter and starts with `# Task`; both sides use the switchers `English | [中文](task-NNN-slug.zh.md)` and `[English](task-NNN-slug.md) | 中文`, and mirror headings, structure, tables, lists and link targets, differing only in prose.
 
-Confirm the parent plan passes with `ai-workflow plan validate --plan <directory>` before creating tasks. Write both language sides of every task first, record each pair with `ai-workflow plan pairing --plan <directory> --write`, then verify the frozen triplet with `ai-workflow plan validate --plan <directory>`.
+Confirm the parent plan passes with `ai-workflow plan validate --plan <directory>` before creating tasks. Write both language sides of every task first, record each pair with `ai-workflow plan pairing --plan <directory> --write --all`, then verify the frozen triplet with `ai-workflow plan validate --plan <directory>`.
 
 Read [the task template](references/task.md) before drafting. Preserve its frontmatter and body contract while replacing the illustrative example with the approved task's actual scope and evidence.
 
