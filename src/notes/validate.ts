@@ -28,7 +28,7 @@ export function validateFormat(path: string, lifecycle: typeof noteLifecycles[nu
   const errors: string[] = [];
   const filename = /^(\d{4}-\d{2}-\d{2})-[a-z0-9]+(?:-[a-z0-9]+)*\.md$/.exec(basename(path));
   if (!filename) errors.push('file name must be YYYY-MM-DD-topic-title.md with an English kebab-case topic');
-  else if (!validDate(filename[1]!)) errors.push('file name date must be a real calendar date');
+  else if (!validDate(filename[1] ?? '')) errors.push('file name date must be a real calendar date');
 
   const lines = contents.split(/\r?\n/);
   if (!/^# Agent Note: \S.*$/.test(lines[0] ?? '') || lines[1] !== '') {
@@ -45,7 +45,7 @@ export function validateFormat(path: string, lifecycle: typeof noteLifecycles[nu
   let bodyStart = 3;
   if (lifecycle === 'archived') {
     const archived = /^Archived: (\d{4}-\d{2}-\d{2})$/.exec(lines[3] ?? '');
-    if (!archived || !validDate(archived[1]!)) errors.push('Archived must immediately follow Status with a real YYYY-MM-DD date');
+    if (!archived || !validDate(archived[1] ?? '')) errors.push('Archived must immediately follow Status with a real YYYY-MM-DD date');
     bodyStart = 4;
   }
   const body = lines.slice(bodyStart);
@@ -55,26 +55,29 @@ export function validateFormat(path: string, lifecycle: typeof noteLifecycles[nu
   let fence: string | undefined;
   for (const line of body) {
     const marker = /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(line);
+    const markerFence = marker?.[1];
+    const markerRest = marker?.[2] ?? '';
     if (fence) {
-      if (marker && marker[1]![0] === fence[0] && marker[1]!.length >= fence.length && !marker[2]!.trim()) {
+      if (markerFence && markerFence[0] === fence[0] && markerFence.length >= fence.length && !markerRest.trim()) {
         fence = undefined;
       } else {
         sections.at(-1)?.content.push(line);
       }
       continue;
     }
-    if (marker) {
-      fence = marker[1]!;
+    if (markerFence) {
+      fence = markerFence;
       continue;
     }
     const heading = /^ {0,3}(#{1,6})\s+(.+?)\s*$/.exec(line);
+    const headingMarker = heading?.[1];
     const title = heading?.[2]?.replace(/\s+#+$/, '');
     if ((lifecycle === 'implemented' || lifecycle === 'archived') && title && planningSections.includes(title)) {
       errors.push(`planning section ${title} is not allowed in ${lifecycle} notes`);
     }
-    if (heading && heading[1]!.length <= 2) {
-      if (heading[1] === '#') errors.push('body sections must use level-two headings');
-      sections.push({ title: title!, content: [] });
+    if (headingMarker && headingMarker.length <= 2) {
+      if (headingMarker === '#') errors.push('body sections must use level-two headings');
+      sections.push({ title: title ?? '', content: [] });
     } else {
       sections.at(-1)?.content.push(heading ? '' : line);
     }
@@ -87,7 +90,8 @@ export function validateFormat(path: string, lifecycle: typeof noteLifecycles[nu
     if (position === -1) continue;
     if (position <= previous) errors.push(`required section ${title} is out of order`);
     previous = position;
-    if (!sections[position]!.content.join('\n').replace(/<!--[\s\S]*?-->/g, '').trim()) {
+    const section = sections[position];
+    if (section && !section.content.join('\n').replace(/<!--[\s\S]*?-->/g, '').trim()) {
       errors.push(`required section ${title} must not be empty`);
     }
   }
@@ -99,12 +103,14 @@ function markdownLinkTargets(contents: string): string[] {
   let fence: string | undefined;
   for (const line of contents.split(/\r?\n/)) {
     const marker = /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(line);
+    const markerFence = marker?.[1];
+    const markerRest = marker?.[2] ?? '';
     if (fence) {
-      if (marker && marker[1]![0] === fence[0] && marker[1]!.length >= fence.length && !marker[2]!.trim()) fence = undefined;
+      if (markerFence && markerFence[0] === fence[0] && markerFence.length >= fence.length && !markerRest.trim()) fence = undefined;
       continue;
     }
-    if (marker) {
-      fence = marker[1]!;
+    if (markerFence) {
+      fence = markerFence;
       continue;
     }
     for (const match of line.matchAll(/(?<!!)\[[^\]]*\]\(\s*([^)\s]+)\s*\)/g)) {
@@ -119,7 +125,7 @@ async function validateLinks(root: string, path: string, lifecycle: typeof noteL
   const errors: string[] = [];
   const checked = new Set<string>();
   for (const target of markdownLinkTargets(contents)) {
-    const cleaned = target.replace(/^</, '').replace(/>$/, '').split('#')[0]!.trim();
+    const cleaned = (target.replace(/^</, '').replace(/>$/, '').split('#')[0] ?? '').trim();
     if (!cleaned.endsWith('.md') || cleaned.startsWith('/') || /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(cleaned) || checked.has(cleaned)) continue;
     checked.add(cleaned);
     const resolved = posix.normalize(posix.join(posix.dirname(path), cleaned));
