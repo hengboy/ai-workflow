@@ -28,7 +28,8 @@ describe('bilingual note pairing primitives', () => {
     const record = renderPairMeta('.ai-workflow/notes/implemented/process/2026-09-17-example.md', blobHash('en'), blobHash('zh'));
 
     expect(record).toContain('# Bilingual-pair consistency record');
-    expect(record).toContain('ai-workflow notes pairing --project <project-root> --write .ai-workflow/notes/implemented/process/2026-09-17-example.md');
+    expect(record).toContain('# ai-workflow notes pairing --project <project-root> --write .ai-workflow/notes/implemented/process/2026-09-17-example.md');
+    expect(record).not.toContain('#   ai-workflow');
     expect(parsePairMeta(record)).toEqual(new Map([
       ['2026-09-17-example.md', blobHash('en')],
       ['2026-09-17-example.zh.md', blobHash('zh')],

@@ -55,7 +55,7 @@ export function renderPairMeta(englishPath: string, englishHash: string, zhHash:
     '# Bilingual-pair consistency record (.ai-workflow/notes/README.md): the git blob hash of each',
     '# side as of the last confirmed-consistent state. Both languages carry equal authority;',
     '# after editing either side, bring the other along and re-record with:',
-    `#   ai-workflow notes pairing --project <project-root> --write ${englishPath}`,
+    `# ai-workflow notes pairing --project <project-root> --write ${englishPath}`,
     `${english}: ${englishHash}`,
     `${zh}: ${zhHash}`,
     '',
