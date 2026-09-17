@@ -31,6 +31,9 @@ const REQUIRED_ROLES = [
 async function contract(): Promise<string> {
   return readFile(packagePath('templates', 'contract', 'AGENTS.md'), 'utf8');
 }
+async function projectContract(): Promise<string> {
+  return readFile(packagePath('templates', 'project', 'AGENTS.md'), 'utf8');
+}
 function blockBody(file: string): string {
   const begin = file.indexOf(BEGIN);
   const end = file.indexOf(END);
@@ -41,7 +44,7 @@ async function read(home: string, relative: string): Promise<string> {
 }
 
 describe('global agent guidance', () => {
-  it('AC-005 / AC-010 installs the byte-identical single-source contract into every host', async () => {
+  it('AC-001 installs the byte-identical short project-contract entry into every host', async () => {
     const home = await temporary('ai-workflow-global-guidance-');
     const contents = await contract();
 
@@ -53,14 +56,18 @@ describe('global agent guidance', () => {
       expect(file.split(END)).toHaveLength(2);
       expect(blockBody(file)).toBe(contents);
     }
+
+    expect(contents).toMatch(/explicitly\s+read\s+`?\.ai-workflow\/AGENTS\.md`?/i);
+    expect(contents).toMatch(/missing[\s\S]{0,160}`?\.ai-workflow\/AGENTS\.md`?[\s\S]{0,160}init\s+.*--upgrade/i);
+    expect(contents).not.toMatch(/^## (?:Workflow roles|Agent Notes)$/m);
   });
 
   it('AC-010 keeps exactly one contract file under templates/contract', async () => {
     expect(await readdir(packagePath('templates', 'contract'))).toEqual(['AGENTS.md']);
   });
 
-  it('AC-010 declares the .ai-workflow/ activation gate and keeps the role contract', async () => {
-    const contents = await contract();
+  it('AC-001 keeps the complete role and notes rules in the project contract template', async () => {
+    const contents = await projectContract();
 
     expect(contents).toMatch(/\.ai-workflow\//);
     const flat = contents.replace(/\s+/g, ' ');
@@ -71,13 +78,13 @@ describe('global agent guidance', () => {
     expect(contents).toMatch(/Documentation Maintainer[\s\S]*?returns?\s+exact\s+changed\s+paths[\s\S]*?primary orchestrator/i);
     expect(contents).not.toMatch(/Documentation Maintainer[\s\S]*?delegates?\s+the\s+local\s+commit\s+to\s+Git\s+Operator|Documentation Maintainer[\s\S]*?call\s+Git\s+Operator/i);
     expect(contents).not.toMatch(/Task\s+Worker\s+(?:coordinates|delegates)|delegates\s+(?:implementation|work)\s+and\s+Git/i);
-    expect(contents).toMatch(/ADR/);
+    expect(contents).not.toMatch(/\bADR\b/);
     expect(contents).toMatch(/MEMORY\.md/);
 
     expect(contents).toContain('changes no product code');
     expect(contents).toContain('reports exit status, evidence, skipped checks and failures truthfully');
-    expect(contents).toContain('checks requirements, acceptance criteria, testability, scope and coverage');
-    expect(contents).toContain('Standards Review checks changes against `MEMORY.md`');
+    expect(contents).toContain('checks requirements, acceptance criteria, testability, scope, coverage and actual delivery');
+    expect(contents).toContain('Standards Review checks consistency with MEMORY and its referenced notes rules');
     expect(contents).toContain('.ai-workflow/plans/<planId>/screenshot/');
     expect(contents).toContain('may search only authorized roots');
     expect(contents).toContain('never edits files or guesses paths');

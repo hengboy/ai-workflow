@@ -15,7 +15,7 @@ describe('write gates', () => {
     expect(await exists(join(root, '.ai-workflow/index/navigation.json'))).toBe(true);
     expect(await exists(join(root, '.ai-workflow/index/navigation.md'))).toBe(true);
   });
-  it('AC-001 initializes without writing or creating project-level contract files', async () => {
+  it('AC-001 initializes without writing or creating root-level contract files', async () => {
     const root = await temporary();
 
     const created = await initializeProject(root);
