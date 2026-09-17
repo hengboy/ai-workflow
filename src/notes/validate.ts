@@ -1,8 +1,13 @@
 import { lstat, readFile } from 'node:fs/promises';
 import { basename, join, posix } from 'node:path';
 import { resolveProjectRoot } from '../context/paths.js';
-import { exists } from '../utils/fs.js';
+import { exists, readJson } from '../utils/fs.js';
+import { sha256 } from '../utils/hash.js';
 import { enumerateNotes, noteClasses, noteLifecycles } from './index.js';
+
+const notesRoot = '.ai-workflow/notes';
+const manifestPath = `${notesRoot}/archived/manifest.json`;
+type ArchiveManifest = { version: 1; files: Record<string, string> };
 
 const implementedSections = ['Problem', 'Decision', 'Alternatives considered', 'Consequences'];
 const requiredSections = {
@@ -19,7 +24,7 @@ function validDate(value: string): boolean {
   return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
 }
 
-function validateFormat(path: string, lifecycle: typeof noteLifecycles[number], contents: string): string[] {
+export function validateFormat(path: string, lifecycle: typeof noteLifecycles[number], contents: string): string[] {
   const errors: string[] = [];
   const filename = /^(\d{4}-\d{2}-\d{2})-[a-z0-9]+(?:-[a-z0-9]+)*\.md$/.exec(basename(path));
   if (!filename) errors.push('file name must be YYYY-MM-DD-topic-title.md with an English kebab-case topic');
@@ -125,9 +130,39 @@ async function validateLinks(root: string, path: string, lifecycle: typeof noteL
   return errors;
 }
 
+async function validateArchive(root: string, archived: Map<string, string>, errors: string[]): Promise<void> {
+  let manifest: ArchiveManifest;
+  try {
+    manifest = await readJson<ArchiveManifest>(join(root, manifestPath));
+  } catch (error) {
+    errors.push(`${manifestPath}: archive manifest must be readable JSON (${error instanceof Error ? error.message : String(error)})`);
+    return;
+  }
+  const files = manifest?.files;
+  if (manifest?.version !== 1 || !files || typeof files !== 'object' || Array.isArray(files)) {
+    errors.push(`${manifestPath}: archive manifest must be { version: 1, files: { <path>: sha256:<hex> } }`);
+    return;
+  }
+  for (const [key, digest] of Object.entries(files)) {
+    if (!archived.has(key)) {
+      errors.push(`${manifestPath}: entry ${key} has no archived note`);
+      continue;
+    }
+    if (typeof digest !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(digest)) {
+      errors.push(`${manifestPath}: entry ${key} must map to sha256:<hex>`);
+      continue;
+    }
+    if (sha256(await readFile(join(root, notesRoot, key))) !== digest) {
+      errors.push(`${key}: archived note bytes differ from the manifest digest`);
+    }
+  }
+  for (const [key, path] of archived) {
+    if (!(key in files)) errors.push(`${path}: archived note is not registered in ${manifestPath}`);
+  }
+}
+
 export async function validateNotes(project: string): Promise<{ valid: boolean; errors: string[] }> {
   const root = resolveProjectRoot(project);
-  const notesRoot = '.ai-workflow/notes';
   const requiredPaths = [
     '.ai-workflow/AGENTS.md',
     notesRoot,
@@ -155,10 +190,13 @@ export async function validateNotes(project: string): Promise<{ valid: boolean; 
   }
   if (errors.length) return { valid: false, errors };
 
+  const archived = new Map<string, string>();
   for await (const note of enumerateNotes(root, errors)) {
     const contents = await readFile(join(root, note.path), 'utf8');
     errors.push(...validateFormat(note.path, note.lifecycle, contents));
     errors.push(...await validateLinks(root, note.path, note.lifecycle, contents));
+    if (note.lifecycle === 'archived') archived.set(note.path.slice(notesRoot.length + 1), note.path);
   }
+  await validateArchive(root, archived, errors);
   return { valid: errors.length === 0, errors };
 }

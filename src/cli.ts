@@ -12,6 +12,7 @@ import { resolveCandidatePath, resolveProjectRoot } from './context/paths.js';
 import { readPlan, readTasks } from './workflow/parse.js';
 import { listNotes } from './notes/index.js';
 import { validateNotes } from './notes/validate.js';
+import { sealArchive } from './notes/archive.js';
 
 const hosts = ['codex', 'claude', 'opencode'] as const;
 function hostList(value: string): Host[] { if (value === 'all') return [...hosts]; if (!hosts.includes(value as Host)) throw new Error(`Invalid host: ${value}`); return [value as Host]; }
@@ -41,6 +42,9 @@ notes.command('validate').option('--project <project>', projectOption, process.c
 });
 notes.command('list').option('--project <project>', projectOption, process.cwd()).option('--archived').action(async ({ project, archived }: { project: string; archived?: boolean }) => {
   print({ entries: await listNotes(project, { archived: Boolean(archived) }) });
+});
+notes.command('archive').option('--project <project>', projectOption, process.cwd()).requiredOption('--seal').action(async ({ project }: { project: string }) => {
+  print(await sealArchive(project));
 });
 const context = program.command('context'); context.command('validate').option('--project <project>', projectOption, process.cwd()).option('--feature <id>').option('--all').action(async ({ project, feature, all }: { project: string; feature?: string; all?: boolean }) => { if (feature && all) throw new Error('Use either --feature or --all'); const root = resolveProjectRoot(project); const result = feature ? await verifyNavigation(root, feature) : await validateContext(root); print(result); if (!result.valid) process.exitCode = 1; });
 context.command('refresh').option('--project <project>', projectOption, process.cwd()).requiredOption('--candidate <path>').requiredOption('--write').action(async ({ project, candidate }: { project: string; candidate: string }) => print(await refreshContext(resolveProjectRoot(project), candidate)));
