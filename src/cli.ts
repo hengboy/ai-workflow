@@ -12,6 +12,7 @@ import { readPlan, readTasks } from './workflow/parse.js';
 import { listNotes } from './notes/index.js';
 import { validateNotes } from './notes/validate.js';
 import { sealArchive } from './notes/archive.js';
+import { listPairs, recordPairs, verifyPairs } from './notes/pair.js';
 
 const hosts = ['codex', 'claude', 'opencode'] as const;
 function hostList(value: string): Host[] { if (value === 'all') return [...hosts]; if (!hosts.includes(value as Host)) throw new Error(`Invalid host: ${value}`); return [value as Host]; }
@@ -45,6 +46,29 @@ notes.command('list').option('--project <project>', projectOption, process.cwd()
 notes.command('archive').option('--project <project>', projectOption, process.cwd()).requiredOption('--seal').action(async ({ project }: { project: string }) => {
   print(await sealArchive(project));
 });
+notes.command('pairing')
+  .option('--project <project>', projectOption, process.cwd())
+  .option('--list', 'report the pairing state of every note without failing')
+  .option('--write', 'record the current English and Chinese bytes as the confirmed pair')
+  .option('--all', 'with --write, re-record every complete pair')
+  .argument('[paths...]', 'note paths naming the pairs to check or record')
+  .action(async (paths: string[], { project, list, write, all }: { project: string; list?: boolean; write?: boolean; all?: boolean }) => {
+    if (list && (write || all || paths.length > 0)) throw new Error('--list takes no other flags or paths');
+    if (all && !write) throw new Error('--all only applies to --write');
+    if (write) {
+      if (paths.length > 0 && all) throw new Error('--write takes either pair paths or --all, not both');
+      if (paths.length === 0 && !all) throw new Error('--write requires the pair paths you confirmed, or --all');
+      print(await recordPairs(project, paths, Boolean(all)));
+      return;
+    }
+    if (list) {
+      print(await listPairs(project));
+      return;
+    }
+    const result = await verifyPairs(project, paths);
+    print(result);
+    if (!result.valid) process.exitCode = 1;
+  });
 const context = program.command('context'); context.command('validate').option('--project <project>', projectOption, process.cwd()).option('--feature <id>').option('--all').action(async ({ project, feature, all }: { project: string; feature?: string; all?: boolean }) => { if (feature && all) throw new Error('Use either --feature or --all'); const root = resolveProjectRoot(project); const result = feature ? await verifyNavigation(root, feature) : await validateContext(root); print(result); if (!result.valid) process.exitCode = 1; });
 context.command('refresh').option('--project <project>', projectOption, process.cwd()).requiredOption('--candidate <path>').requiredOption('--write').action(async ({ project, candidate }: { project: string; candidate: string }) => print(await refreshContext(resolveProjectRoot(project), candidate)));
 context.command('candidate').option('--project <project>', projectOption, process.cwd()).requiredOption('--output <path>').requiredOption('--task-target <id>').requiredOption('--root <path...>').requiredOption('--path <path...>').action(async ({ project, output, taskTarget, root, path }: { project: string; output: string; taskTarget: string; root: string[]; path: string[] }) => { const projectRoot = resolveProjectRoot(project); await createNavigationCandidate(projectRoot, taskTarget, root, path, output); print({ candidate: resolveCandidatePath(projectRoot, output) }); });

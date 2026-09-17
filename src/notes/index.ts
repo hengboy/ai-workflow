@@ -1,6 +1,7 @@
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { resolveProjectRoot } from '../context/paths.js';
+import { englishPathOf, metaPathOf, notesRoot, zhPathOf } from './pairing.js';
 
 export const noteLifecycles = ['proposed', 'implemented', 'rejected', 'archived'] as const;
 export const noteClasses = ['architecture', 'bug-fix', 'feature', 'process', 'simplification', 'testing'] as const;
@@ -12,6 +13,13 @@ export type NoteEntry = {
   class: typeof noteClasses[number];
   date: string;
   status: string;
+};
+
+export type NoteAnchor = {
+  path: string;
+  lifecycle: typeof noteLifecycles[number];
+  zhPath: string;
+  metaPath: string;
 };
 
 export async function listNotes(project: string, options: { archived?: boolean } = {}): Promise<NoteEntry[]> {
@@ -35,11 +43,12 @@ export async function listNotes(project: string, options: { archived?: boolean }
   return entries;
 }
 
-export async function* enumerateNotes(root: string, errors: string[] = []) {
+export async function* enumerateNotes(root: string, errors: string[] = []): AsyncGenerator<NoteAnchor> {
   const managementFiles = new Set(['AGENTS.md', 'README.md', 'implemented/AGENTS.md', 'archived/AGENTS.md', 'archived/manifest.json']);
-  type Note = { path: string; lifecycle: typeof noteLifecycles[number] };
-  async function* walk(parts: string[]): AsyncGenerator<Note> {
-    const directory = ['.ai-workflow/notes', ...parts].join('/');
+  const anchors: NoteAnchor[] = [];
+  const siblings: string[] = [];
+  async function walk(parts: string[]): Promise<void> {
+    const directory = [notesRoot, ...parts].join('/');
     const files = await readdir(join(root, directory), { withFileTypes: true });
     for (const file of files.sort((a, b) => a.name.localeCompare(b.name))) {
       const segments = [...parts, file.name];
@@ -50,15 +59,33 @@ export async function* enumerateNotes(root: string, errors: string[] = []) {
         if (!lifecycle || segments.length > 2 || (segments.length === 2 && !validClass)) {
           errors.push(`${path}: unsupported lifecycle, class or nested directory`);
         }
-        yield* walk(segments);
+        await walk(segments);
       } else if (file.isFile() && managementFiles.has(segments.join('/'))) {
         continue;
       } else if (file.isFile() && lifecycle && validClass && segments.length === 3) {
-        yield { path, lifecycle };
+        if (file.name.endsWith('.zh.md') || file.name.endsWith('.i18n.yaml')) {
+          siblings.push(path);
+        } else if (file.name.endsWith('.md')) {
+          anchors.push({
+            path,
+            lifecycle,
+            zhPath: zhPathOf(path),
+            metaPath: metaPathOf(path),
+          });
+        } else {
+          errors.push(`${path}: unsupported lifecycle, class or note path; expected {lifecycle}/{class}/YYYY-MM-DD-topic-title.md`);
+        }
       } else {
         errors.push(`${path}: unsupported lifecycle, class or note path; expected {lifecycle}/{class}/YYYY-MM-DD-topic-title.md`);
       }
     }
   }
-  yield* walk([]);
+  await walk([]);
+  const anchorPaths = new Set(anchors.map((anchor) => anchor.path));
+  for (const path of siblings) {
+    if (!anchorPaths.has(englishPathOf(path))) {
+      errors.push(`${path}: ${path.endsWith('.i18n.yaml') ? 'consistency record' : 'Chinese note'} has no matching English note`);
+    }
+  }
+  for (const anchor of anchors) yield anchor;
 }

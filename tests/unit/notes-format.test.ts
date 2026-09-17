@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { createHash } from 'node:crypto';
-import { lstat, mkdir, readFile, rename, symlink, writeFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { lstat, mkdir, readFile, rename, symlink } from 'node:fs/promises';
+import { join } from 'node:path';
 import { initializeProject } from '../../src/install/index.js';
+import { sealArchive } from '../../src/notes/archive.js';
 import { validateNotes } from '../../src/notes/validate.js';
-import { temporary } from '../helpers.js';
+import { temporary, writeNoteTriplet } from '../helpers.js';
 
 const proposed = `# Agent Note: improve-validation
 
@@ -170,8 +170,7 @@ describe('notes format validation', () => {
   ])('$name', async ({ path, contents, valid, expectedReason }) => {
     const project = await temporary('ai-workflow-notes-format-');
     await initializeProject(project);
-    await mkdir(dirname(join(project, path)), { recursive: true });
-    await writeFile(join(project, path), contents);
+    const files = await writeNoteTriplet(project, path, contents);
 
     const result = await validateNotes(project);
 
@@ -184,7 +183,7 @@ describe('notes format validation', () => {
         expect.stringMatching(new RegExp(`${escapedPath}.*${expectedReason!.source}`, 'i')),
       ]));
     }
-    expect(await readFile(join(project, path), 'utf8')).toBe(contents);
+    expect(await readFile(join(project, path), 'utf8')).toBe(files.english);
   });
 });
 
@@ -206,21 +205,19 @@ describe('notes relative Markdown link validation', () => {
   it('accepts an active note linking to an existing note', async () => {
     const project = await temporary('ai-workflow-notes-link-');
     await initializeProject(project);
-    await writeFile(join(project, existingNotePath), implemented);
-    const contents = proposedLinkingTo('../../implemented/process/2026-09-17-validation-delivered.md');
-    await writeFile(join(project, activePath), contents);
+    await writeNoteTriplet(project, existingNotePath, implemented);
+    const files = await writeNoteTriplet(project, activePath, proposedLinkingTo('../../implemented/process/2026-09-17-validation-delivered.md'));
 
     const result = await validateNotes(project);
 
     expect(result).toEqual({ valid: true, errors: [] });
-    expect(await readFile(join(project, activePath), 'utf8')).toBe(contents);
+    expect(await readFile(join(project, activePath), 'utf8')).toBe(files.english);
   });
 
   it('rejects an active note whose relative Markdown link points to a missing note', async () => {
     const project = await temporary('ai-workflow-notes-link-');
     await initializeProject(project);
-    const contents = proposedLinkingTo('../../implemented/process/2026-09-17-does-not-exist.md');
-    await writeFile(join(project, activePath), contents);
+    const files = await writeNoteTriplet(project, activePath, proposedLinkingTo('../../implemented/process/2026-09-17-does-not-exist.md'));
 
     const result = await validateNotes(project);
 
@@ -228,7 +225,7 @@ describe('notes relative Markdown link validation', () => {
     expect(result.errors).toEqual(expect.arrayContaining([
       expect.stringMatching(new RegExp(`${escapeForRegex(activePath)}.*(link|missing|exist)`, 'i')),
     ]));
-    expect(await readFile(join(project, activePath), 'utf8')).toBe(contents);
+    expect(await readFile(join(project, activePath), 'utf8')).toBe(files.english);
   });
 
   it('does not gate outbound links from an archived note', async () => {
@@ -256,12 +253,8 @@ Deleting the record was declined because it still explains ownership.
 
 The historical outbound link stays stale.
 `;
-    await writeFile(join(project, archivedPath), archivedNote);
-    const digest = createHash('sha256').update(archivedNote).digest('hex');
-    await writeFile(join(project, '.ai-workflow/notes/archived/manifest.json'), `${JSON.stringify({
-      version: 1,
-      files: { 'archived/process/2026-09-17-archived-decision.md': `sha256:${digest}` },
-    }, null, 2)}\n`);
+    await writeNoteTriplet(project, archivedPath, archivedNote);
+    await sealArchive(project);
 
     const result = await validateNotes(project);
 

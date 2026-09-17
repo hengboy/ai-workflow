@@ -6,8 +6,32 @@ import { promisify } from 'node:util';
 import { renderMarkdown } from '../src/utils/frontmatter.js';
 import { renderFrozenMarkdown } from '../src/workflow/digest.js';
 import { renderNavigation, type NavigationIndex } from '../src/context/navigation.js';
+import { blobHash, chineseSwitcher, englishSwitcher, metaPathOf, renderPairMeta, zhPathOf } from '../src/notes/pairing.js';
 const exec = promisify(execFile);
 export async function temporary(prefix = 'ai-workflow-'): Promise<string> { return mkdtemp(join(tmpdir(), prefix)); }
+
+export function insertSwitcher(note: string, switcher: string): string {
+  const lines = note.split('\n');
+  const status = lines.findIndex((line) => line.startsWith('Status:'));
+  let cursor = status === -1 ? 1 : status + 1;
+  if (lines[cursor]?.startsWith('Archived:')) cursor += 1;
+  return [...lines.slice(0, cursor + 1), switcher, '', ...lines.slice(cursor + 1)].join('\n');
+}
+
+export function notePair(englishPath: string, englishBody: string): { english: string; chinese: string; meta: string } {
+  const english = insertSwitcher(englishBody, englishSwitcher(englishPath));
+  const chinese = insertSwitcher(englishBody, chineseSwitcher(englishPath));
+  return { english, chinese, meta: renderPairMeta(englishPath, blobHash(english), blobHash(chinese)) };
+}
+
+export async function writeNoteTriplet(root: string, englishPath: string, englishBody: string): Promise<{ english: string; chinese: string; meta: string }> {
+  const files = notePair(englishPath, englishBody);
+  await mkdir(join(root, englishPath).replace(/\/[^/]+$/, ''), { recursive: true });
+  await writeFile(join(root, englishPath), files.english);
+  await writeFile(join(root, zhPathOf(englishPath)), files.chinese);
+  await writeFile(join(root, metaPathOf(englishPath)), files.meta);
+  return files;
+}
 export async function frozenPlan(root: string, withTasks = true): Promise<string> {
   const directory = join(root, '.ai-workflow/plans/20260831-example'); await mkdir(join(directory, 'tasks'), { recursive: true }); const attributes = { plan_id: '20260831-example', status: 'frozen', created_at: '2026-08-31T00:00:00.000Z', supersedes: null, requirement_count: 1, acceptance_criteria_count: 1, digest: 'sha256:placeholder' };
   await writeFile(join(directory, 'spec.md'), renderFrozenMarkdown(attributes, '# Spec\n\n## REQ-001 Works\n\n## AC-001 Observable')); await writeFile(join(directory, 'plan.md'), renderFrozenMarkdown(attributes, '# Plan\n\nImplement REQ-001 and verify AC-001.'));

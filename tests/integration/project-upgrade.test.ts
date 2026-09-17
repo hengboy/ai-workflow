@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { upgradeProject } from '../../src/install/index.js';
 import { exists } from '../../src/utils/fs.js';
-import { temporary } from '../helpers.js';
+import { notePair, temporary } from '../helpers.js';
 
 // A mutable hook reuses the repository's existing injectable atomic-write pattern
 // (tests/integration/navigation-init.test.ts) to simulate one ordinary filesystem failure.
@@ -246,10 +246,19 @@ describe('project upgrade', () => {
     await writeFile(join(root, '.ai-workflow/index/navigation.json'), navigationJson);
     await writeFile(join(root, '.ai-workflow/index/navigation.md'), navigationMarkdown);
     await writeFile(join(root, '.gitignore'), '.ai-workflow/\n*.log\nMEMORY.md\n');
-    await writeFile(join(root, archivedNotePath), archivedNote);
+    const files = notePair(archivedNotePath, archivedNote);
+    const zhKey = archivedNoteKey.replace(/\.md$/, '.zh.md');
+    const metaKey = archivedNoteKey.replace(/\.md$/, '.i18n.yaml');
+    await writeFile(join(root, archivedNotePath), files.english);
+    await writeFile(join(root, archivedNotePath.replace(/\.md$/, '.zh.md')), files.chinese);
+    await writeFile(join(root, archivedNotePath.replace(/\.md$/, '.i18n.yaml')), files.meta);
     const manifest = `${JSON.stringify({
       version: 1,
-      files: { [archivedNoteKey]: `sha256:${createHash('sha256').update(archivedNote).digest('hex')}` },
+      files: {
+        [archivedNoteKey]: `sha256:${createHash('sha256').update(files.english).digest('hex')}`,
+        [zhKey]: `sha256:${createHash('sha256').update(files.chinese).digest('hex')}`,
+        [metaKey]: `sha256:${createHash('sha256').update(files.meta).digest('hex')}`,
+      },
     }, null, 2)}\n`;
     await writeFile(join(root, '.ai-workflow/notes/archived/manifest.json'), manifest);
 
@@ -257,7 +266,7 @@ describe('project upgrade', () => {
 
     expect(normalized(result.created)).not.toContain('.ai-workflow/notes/archived/manifest.json');
     expect(await readFile(join(root, '.ai-workflow/notes/archived/manifest.json'), 'utf8')).toBe(manifest);
-    expect(await readFile(join(root, archivedNotePath), 'utf8')).toBe(archivedNote);
+    expect(await readFile(join(root, archivedNotePath), 'utf8')).toBe(files.english);
 
     const validated = await runCli(['notes', 'validate', '--project', root]);
     expect(validated.code).toBe(0);

@@ -5,13 +5,15 @@ import { readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { initializeProject } from '../../src/install/index.js';
-import { temporary } from '../helpers.js';
+import { temporary, writeNoteTriplet } from '../helpers.js';
 
 const exec = promisify(execFile);
 const cli = ['exec', 'tsx', 'src/cli.ts'] as const;
 const manifestPath = '.ai-workflow/notes/archived/manifest.json';
 const archivedNotePath = '.ai-workflow/notes/archived/testing/2026-04-01-historical-decision.md';
 const archivedNoteKey = 'archived/testing/2026-04-01-historical-decision.md';
+const archivedZhKey = 'archived/testing/2026-04-01-historical-decision.zh.md';
+const archivedMetaKey = 'archived/testing/2026-04-01-historical-decision.i18n.yaml';
 
 const archivedNote = `# Agent Note: historical-decision
 
@@ -58,17 +60,21 @@ async function archiveCli(project: string): Promise<string> {
 }
 
 describe('notes archive CLI', () => {
-  it('AC-009 seals a moved archived note through the CLI, registers its independent sha256, and passes notes validate', async () => {
+  it('AC-009 seals a moved archived triplet through the CLI, registers every artifact, and passes notes validate', async () => {
     const project = await temporary('ai-workflow-notes-seal-cli-');
     await initializeProject(project);
-    await writeFile(join(project, archivedNotePath), archivedNote);
+    const files = await writeNoteTriplet(project, archivedNotePath, archivedNote);
 
     expect(JSON.parse(await archiveCli(project))).toEqual({ sealed: [archivedNoteKey] });
     expect(JSON.parse(await readFile(join(project, manifestPath), 'utf8'))).toEqual({
       version: 1,
-      files: { [archivedNoteKey]: independentDigest(archivedNote) },
+      files: {
+        [archivedNoteKey]: independentDigest(files.english),
+        [archivedZhKey]: independentDigest(files.chinese),
+        [archivedMetaKey]: independentDigest(files.meta),
+      },
     });
-    expect(await readFile(join(project, archivedNotePath), 'utf8')).toBe(archivedNote);
+    expect(await readFile(join(project, archivedNotePath), 'utf8')).toBe(files.english);
 
     const validated = (await exec('pnpm', [...cli, 'notes', 'validate', '--project', project])).stdout;
 
@@ -78,7 +84,7 @@ describe('notes archive CLI', () => {
   it('AC-009 leaves every byte unchanged when the CLI seals again with no new records', async () => {
     const project = await temporary('ai-workflow-notes-seal-cli-idempotent-');
     await initializeProject(project);
-    await writeFile(join(project, archivedNotePath), archivedNote);
+    await writeNoteTriplet(project, archivedNotePath, archivedNote);
     await archiveCli(project);
     const before = await snapshot(project);
 
@@ -131,10 +137,10 @@ Keep the delivered record as frozen history.
   it('AC-009 fails notes validate through the CLI with a file-level reason after a sealed body is tampered', async () => {
     const project = await temporary('ai-workflow-notes-seal-cli-tamper-');
     await initializeProject(project);
-    await writeFile(join(project, archivedNotePath), archivedNote);
+    const files = await writeNoteTriplet(project, archivedNotePath, archivedNote);
     await archiveCli(project);
     const manifestBefore = await readFile(join(project, manifestPath), 'utf8');
-    const tampered = archivedNote.replace('A delivered decision stopped guiding future work.', 'A silently rewritten problem statement.');
+    const tampered = files.english.replace('A delivered decision stopped guiding future work.', 'A silently rewritten problem statement.');
     await writeFile(join(project, archivedNotePath), tampered);
 
     const result = await runCli(project, ['notes', 'validate', '--project', project]);
@@ -142,7 +148,7 @@ Keep the delivered record as frozen history.
     expect(result.code).toBe(1);
     const parsed = JSON.parse(result.stdout) as { valid: boolean; errors: string[] };
     expect(parsed.valid).toBe(false);
-    expect(parsed.errors).toContain(`${archivedNoteKey}: archived note bytes differ from the manifest digest`);
+    expect(parsed.errors).toContain(`${archivedNoteKey}: archived artifact bytes differ from the manifest digest`);
     expect(await readFile(join(project, manifestPath), 'utf8')).toBe(manifestBefore);
     expect(await readFile(join(project, archivedNotePath), 'utf8')).toBe(tampered);
   });
@@ -150,7 +156,7 @@ Keep the delivered record as frozen history.
   it('AC-009 fails notes validate through the CLI when a sealed note is deleted', async () => {
     const project = await temporary('ai-workflow-notes-seal-cli-delete-');
     await initializeProject(project);
-    await writeFile(join(project, archivedNotePath), archivedNote);
+    await writeNoteTriplet(project, archivedNotePath, archivedNote);
     await archiveCli(project);
     const manifestBefore = await readFile(join(project, manifestPath), 'utf8');
     await rm(join(project, archivedNotePath));
@@ -160,14 +166,14 @@ Keep the delivered record as frozen history.
     expect(result.code).toBe(1);
     const parsed = JSON.parse(result.stdout) as { valid: boolean; errors: string[] };
     expect(parsed.valid).toBe(false);
-    expect(parsed.errors).toContain(`${manifestPath}: entry ${archivedNoteKey} has no archived note`);
+    expect(parsed.errors).toContain(`${manifestPath}: entry ${archivedNoteKey} has no archived artifact`);
     expect(await readFile(join(project, manifestPath), 'utf8')).toBe(manifestBefore);
   });
 
   it('AC-009 fails notes validate through the CLI after a sealed note is moved into another class', async () => {
     const project = await temporary('ai-workflow-notes-seal-cli-move-');
     await initializeProject(project);
-    await writeFile(join(project, archivedNotePath), archivedNote);
+    await writeNoteTriplet(project, archivedNotePath, archivedNote);
     await archiveCli(project);
     const movedPath = '.ai-workflow/notes/archived/feature/2026-04-01-historical-decision.md';
     await rename(join(project, archivedNotePath), join(project, movedPath));
@@ -177,17 +183,16 @@ Keep the delivered record as frozen history.
     expect(result.code).toBe(1);
     const parsed = JSON.parse(result.stdout) as { valid: boolean; errors: string[] };
     expect(parsed.valid).toBe(false);
-    expect(parsed.errors).toContain(`${manifestPath}: entry ${archivedNoteKey} has no archived note`);
-    expect(parsed.errors).toContain(`${movedPath}: archived note is not registered in ${manifestPath}`);
+    expect(parsed.errors).toContain(`${manifestPath}: entry ${archivedNoteKey} has no archived artifact`);
+    expect(parsed.errors).toContain(`${movedPath}: archived artifact is not registered in ${manifestPath}`);
   });
 
   it('AC-009 fails notes validate through the CLI for an archived note with no manifest entry', async () => {
     const project = await temporary('ai-workflow-notes-seal-cli-extra-');
     await initializeProject(project);
-    await writeFile(join(project, archivedNotePath), archivedNote);
+    await writeNoteTriplet(project, archivedNotePath, archivedNote);
     await archiveCli(project);
-    const unregistered = archivedDecision('unregistered-decision', '2026-04-02');
-    await writeFile(join(project, unregisteredNotePath), unregistered);
+    const unregistered = await writeNoteTriplet(project, unregisteredNotePath, archivedDecision('unregistered-decision', '2026-04-02'));
     const manifestBefore = await readFile(join(project, manifestPath), 'utf8');
 
     const result = await runCli(project, ['notes', 'validate', '--project', project]);
@@ -195,17 +200,17 @@ Keep the delivered record as frozen history.
     expect(result.code).toBe(1);
     const parsed = JSON.parse(result.stdout) as { valid: boolean; errors: string[] };
     expect(parsed.valid).toBe(false);
-    expect(parsed.errors).toContain(`${unregisteredNotePath}: archived note is not registered in ${manifestPath}`);
-    expect(await readFile(join(project, unregisteredNotePath), 'utf8')).toBe(unregistered);
+    expect(parsed.errors).toContain(`${unregisteredNotePath}: archived artifact is not registered in ${manifestPath}`);
+    expect(await readFile(join(project, unregisteredNotePath), 'utf8')).toBe(unregistered.english);
     expect(await readFile(join(project, manifestPath), 'utf8')).toBe(manifestBefore);
   });
 
   it('AC-009 fails notes validate through the CLI for a sealed archived note with a wrong status or archived date', async () => {
     const statusProject = await temporary('ai-workflow-notes-seal-cli-status-');
     await initializeProject(statusProject);
-    await writeFile(join(statusProject, archivedNotePath), archivedNote);
+    const statusFiles = await writeNoteTriplet(statusProject, archivedNotePath, archivedNote);
     await archiveCli(statusProject);
-    await writeFile(join(statusProject, archivedNotePath), archivedNote.replace('Status: implemented', 'Status: archived'));
+    await writeFile(join(statusProject, archivedNotePath), statusFiles.english.replace('Status: implemented', 'Status: archived'));
 
     const statusResult = await runCli(statusProject, ['notes', 'validate', '--project', statusProject]);
 
@@ -216,9 +221,9 @@ Keep the delivered record as frozen history.
 
     const dateProject = await temporary('ai-workflow-notes-seal-cli-date-');
     await initializeProject(dateProject);
-    await writeFile(join(dateProject, archivedNotePath), archivedNote);
+    const dateFiles = await writeNoteTriplet(dateProject, archivedNotePath, archivedNote);
     await archiveCli(dateProject);
-    await writeFile(join(dateProject, archivedNotePath), archivedNote.replace('Archived: 2026-05-01', 'Archived: 2026-02-31'));
+    await writeFile(join(dateProject, archivedNotePath), dateFiles.english.replace('Archived: 2026-05-01', 'Archived: 2026-02-31'));
 
     const dateResult = await runCli(dateProject, ['notes', 'validate', '--project', dateProject]);
 
@@ -231,29 +236,28 @@ Keep the delivered record as frozen history.
   it('AC-009 refuses to seal a changed old note through the CLI and leaves the manifest and both files byte-identical', async () => {
     const project = await temporary('ai-workflow-notes-seal-cli-refuse-');
     await initializeProject(project);
-    await writeFile(join(project, archivedNotePath), archivedNote);
+    const files = await writeNoteTriplet(project, archivedNotePath, archivedNote);
     await archiveCli(project);
     const manifestBefore = await readFile(join(project, manifestPath), 'utf8');
-    const tampered = archivedNote.replace('A delivered decision stopped guiding future work.', 'A silently rewritten problem statement.');
+    const tampered = files.english.replace('A delivered decision stopped guiding future work.', 'A silently rewritten problem statement.');
     await writeFile(join(project, archivedNotePath), tampered);
-    const unregistered = archivedDecision('unregistered-decision', '2026-04-02');
-    await writeFile(join(project, unregisteredNotePath), unregistered);
+    const unregistered = await writeNoteTriplet(project, unregisteredNotePath, archivedDecision('unregistered-decision', '2026-04-02'));
 
     const result = await runCli(project, ['notes', 'archive', '--project', project, '--seal']);
 
     expect(result.code).toBe(1);
-    expect(result.stderr).toContain('sealed archived note bytes changed');
+    expect(result.stderr).toContain('sealed archived artifact bytes changed');
     expect(result.stderr).toContain(archivedNoteKey);
     expect(await readFile(join(project, manifestPath), 'utf8')).toBe(manifestBefore);
     expect(await readFile(join(project, archivedNotePath), 'utf8')).toBe(tampered);
-    expect(await readFile(join(project, unregisteredNotePath), 'utf8')).toBe(unregistered);
+    expect(await readFile(join(project, unregisteredNotePath), 'utf8')).toBe(unregistered.english);
 
     const validated = await runCli(project, ['notes', 'validate', '--project', project]);
 
     expect(validated.code).toBe(1);
     const parsed = JSON.parse(validated.stdout) as { valid: boolean; errors: string[] };
     expect(parsed.valid).toBe(false);
-    expect(parsed.errors).toContain(`${archivedNoteKey}: archived note bytes differ from the manifest digest`);
-    expect(parsed.errors).toContain(`${unregisteredNotePath}: archived note is not registered in ${manifestPath}`);
+    expect(parsed.errors).toContain(`${archivedNoteKey}: archived artifact bytes differ from the manifest digest`);
+    expect(parsed.errors).toContain(`${unregisteredNotePath}: archived artifact is not registered in ${manifestPath}`);
   });
 });

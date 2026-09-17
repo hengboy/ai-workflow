@@ -19,9 +19,9 @@ function languageSection(language: OutputLanguage): string {
     '',
     `Write the agent's interactive and session natural-language prose in ${name}, including clarification questions, confirmation previews, progress narration and final summary.`,
     '',
-    `Agent notes are the current decision records and follow the existing output language preference: write each note's natural-language body in ${name} as one prose language, with no parallel translated copies and no new configuration items.`,
+    'Agent notes are the current decision records and are always maintained as a complete bilingual triplet, independent of this preference: the English `<note>.md`, the Chinese `<note>.zh.md`, and the `<note>.i18n.yaml` consistency record that stores each side\'s git blob hash. Both languages carry equal authority. After both sides say the same thing, record the pair with `ai-workflow notes pairing --project <project-root> --write <note>`.',
     '',
-    `Structural elements remain English in generated planning artifacts and notes alike: the \`# Agent Note:\` title, section headings, table headers, YAML frontmatter keys and their order, \`Status\` and its values, field names, \`REQ-###\`/\`AC-###\` identifiers, file paths, code, dates and enumerated values such as \`surface\`.`,
+    `Structural elements remain English in generated planning artifacts and notes alike: the \`# Agent Note:\` title, section headings, table headers, YAML frontmatter keys and their order, \`Status\` and its values, field names, \`REQ-###\`/\`AC-###\` identifiers, file paths, code, dates and enumerated values such as \`surface\`. Only natural-language prose is translated.`,
     ''
   ].join('\n');
 }

@@ -60,6 +60,19 @@ describe('agent notes workflow content', () => {
     }
   });
 
+  it('documents the bilingual note triplet in the governance source and its consumers', async () => {
+    const governance = await read('templates/project/notes/README.md');
+    expect(governance, 'the governance source describes the Chinese body').toContain('.zh.md');
+    expect(governance, 'the governance source describes the consistency record').toContain('.i18n.yaml');
+    expect(governance, 'the consistency record stores git blob hashes').toMatch(/git blob hash/i);
+    expect(governance, 'language switchers are required').toMatch(/language switcher/i);
+    expect(governance, 'the pairing command records pairs').toMatch(/notes pairing/);
+
+    const maintainer = await read('templates/agents/documentation-maintainer.md');
+    expect(maintainer, 'the maintainer maintains bilingual triplets').toMatch(/bilingual triplet/i);
+    expect(maintainer, 'the maintainer records confirmed pairs').toMatch(/notes pairing/);
+  });
+
   it('no longer treats ADR as the current decision mechanism in shipped skills, roles and contracts', async () => {
     const artifacts = [
       ...WORKFLOW_ARTIFACTS,

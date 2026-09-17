@@ -4,7 +4,7 @@ import { mkdir, readFile, readdir, rename, rm, symlink, writeFile } from 'node:f
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { initializeProject } from '../../src/install/index.js';
-import { temporary } from '../helpers.js';
+import { temporary, writeNoteTriplet } from '../helpers.js';
 
 const exec = promisify(execFile);
 const cli = ['exec', 'tsx', 'src/cli.ts'] as const;
@@ -110,7 +110,7 @@ async function populateNotes(root: string): Promise<void> {
     ['.ai-workflow/notes/archived/testing/2026-04-01-historical-decision.md', agentNote('Historical decision', 'implemented', archivedSections, '2026-05-01')],
     ['.ai-workflow/notes/proposed/architecture/2026-01-02-second-proposal.md', agentNote('Second proposal', 'proposed', proposedSections)],
   ];
-  for (const [path, contents] of notes) await writeFile(join(root, path), contents);
+  for (const [path, contents] of notes) await writeNoteTriplet(root, path, contents);
 }
 
 async function listFixture(prefix: string): Promise<string> {

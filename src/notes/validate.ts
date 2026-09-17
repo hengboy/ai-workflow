@@ -3,9 +3,17 @@ import { basename, join, posix } from 'node:path';
 import { resolveProjectRoot } from '../context/paths.js';
 import { exists, readJson } from '../utils/fs.js';
 import { sha256 } from '../utils/hash.js';
-import { enumerateNotes, noteClasses, noteLifecycles } from './index.js';
+import { enumerateNotes, noteClasses, noteLifecycles, type NoteAnchor } from './index.js';
+import {
+  blobHash,
+  chineseSwitcher,
+  englishSwitcher,
+  notesRoot,
+  parsePairMeta,
+  structureDiff,
+  noteStructureSignature,
+} from './pairing.js';
 
-const notesRoot = '.ai-workflow/notes';
 const manifestPath = `${notesRoot}/archived/manifest.json`;
 type ArchiveManifest = { version: 1; files: Record<string, string> };
 
@@ -17,6 +25,7 @@ const requiredSections = {
   archived: implementedSections,
 };
 const planningSections = ['Proposal', 'Plan', 'Migration plan', 'Acceptance criteria'];
+const englishName = /^(\d{4}-\d{2}-\d{2})-[a-z0-9]+(?:-[a-z0-9]+)*\.md$/;
 
 function validDate(value: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || value.startsWith('0000-')) return false;
@@ -24,12 +33,21 @@ function validDate(value: string): boolean {
   return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
 }
 
-export function validateFormat(path: string, lifecycle: typeof noteLifecycles[number], contents: string): string[] {
+export function validateEnglishName(path: string): string[] {
   const errors: string[] = [];
-  const filename = /^(\d{4}-\d{2}-\d{2})-[a-z0-9]+(?:-[a-z0-9]+)*\.md$/.exec(basename(path));
+  const filename = englishName.exec(basename(path));
   if (!filename) errors.push('file name must be YYYY-MM-DD-topic-title.md with an English kebab-case topic');
   else if (!validDate(filename[1] ?? '')) errors.push('file name date must be a real calendar date');
+  return errors.map((error) => `${path}: ${error}`);
+}
 
+export function validateFormat(
+  path: string,
+  lifecycle: typeof noteLifecycles[number],
+  contents: string,
+  switcher: string,
+): string[] {
+  const errors: string[] = [];
   const lines = contents.split(/\r?\n/);
   if (!/^# Agent Note: \S.*$/.test(lines[0] ?? '') || lines[1] !== '') {
     errors.push('fixed title header must be # Agent Note: <title> followed by a blank line');
@@ -42,13 +60,16 @@ export function validateFormat(path: string, lifecycle: typeof noteLifecycles[nu
     const expected = expectedStatus === 'rejected' ? 'rejected — <one-line reason>' : expectedStatus;
     errors.push(`Status must be ${expected} for lifecycle ${lifecycle}`);
   }
-  let bodyStart = 3;
+  let cursor = 3;
   if (lifecycle === 'archived') {
     const archived = /^Archived: (\d{4}-\d{2}-\d{2})$/.exec(lines[3] ?? '');
     if (!archived || !validDate(archived[1] ?? '')) errors.push('Archived must immediately follow Status with a real YYYY-MM-DD date');
-    bodyStart = 4;
+    cursor = 4;
   }
-  const body = lines.slice(bodyStart);
+  if (lines[cursor] !== '') errors.push('the header block must be followed by a blank line');
+  else if (lines[cursor + 1] !== switcher) errors.push(`language switcher must be exactly "${switcher}"`);
+  else if (lines[cursor + 2] !== '') errors.push('the language switcher must be followed by a blank line');
+  const body = lines.slice(cursor + 3);
   if (body.find((line) => line.trim()) !== '## Problem') errors.push('body must start with ## Problem');
 
   const sections: { title: string; content: string[] }[] = [];
@@ -136,7 +157,55 @@ async function validateLinks(root: string, path: string, lifecycle: typeof noteL
   return errors;
 }
 
-async function validateArchive(root: string, archived: Map<string, string>, errors: string[]): Promise<void> {
+export async function validateNotePair(root: string, note: NoteAnchor, errors: string[]): Promise<void> {
+  const english = await readFile(join(root, note.path), 'utf8');
+  const switcher = englishSwitcher(note.path);
+  errors.push(...validateEnglishName(note.path));
+  errors.push(...validateFormat(note.path, note.lifecycle, english, switcher));
+  errors.push(...await validateLinks(root, note.path, note.lifecycle, english));
+
+  if (!(await exists(join(root, note.zhPath)))) {
+    errors.push(`${note.zhPath}: missing Chinese counterpart (.zh.md) for the note`);
+  } else {
+    const chinese = await readFile(join(root, note.zhPath), 'utf8');
+    errors.push(...validateFormat(note.zhPath, note.lifecycle, chinese, chineseSwitcher(note.path)));
+    errors.push(...await validateLinks(root, note.zhPath, note.lifecycle, chinese));
+    const counterpart = basename(note.path);
+    for (const difference of structureDiff(
+      noteStructureSignature(english, basename(note.zhPath)),
+      noteStructureSignature(chinese, counterpart),
+    )) {
+      errors.push(`${note.path}: ${difference}`);
+    }
+  }
+
+  if (!(await exists(join(root, note.metaPath)))) {
+    errors.push(`${note.metaPath}: missing consistency record (.i18n.yaml) for the note`);
+    return;
+  }
+  const meta = await readFile(join(root, note.metaPath), 'utf8');
+  const entries = parsePairMeta(meta);
+  if (!entries) {
+    errors.push(`${note.metaPath}: consistency record must contain only <note>.md: <40-hex git blob hash> lines`);
+    return;
+  }
+  const englishKey = basename(note.path);
+  const zhKey = basename(note.zhPath);
+  if (entries.size !== 2 || !entries.has(englishKey) || !entries.has(zhKey)) {
+    errors.push(`${note.metaPath}: consistency record must record exactly ${englishKey} and ${zhKey}`);
+  }
+  if (entries.get(englishKey) !== blobHash(english)) {
+    errors.push(`${note.metaPath}: recorded hash for ${englishKey} does not match the current English bytes; re-record with ai-workflow notes pairing --write`);
+  }
+  if (await exists(join(root, note.zhPath))) {
+    const chinese = await readFile(join(root, note.zhPath), 'utf8');
+    if (entries.get(zhKey) !== blobHash(chinese)) {
+      errors.push(`${note.metaPath}: recorded hash for ${zhKey} does not match the current Chinese bytes; re-record with ai-workflow notes pairing --write`);
+    }
+  }
+}
+
+async function validateArchive(root: string, archived: Map<string, NoteAnchor>, errors: string[]): Promise<void> {
   let manifest: ArchiveManifest;
   try {
     manifest = await readJson<ArchiveManifest>(join(root, manifestPath));
@@ -150,8 +219,8 @@ async function validateArchive(root: string, archived: Map<string, string>, erro
     return;
   }
   for (const [key, digest] of Object.entries(files)) {
-    if (!archived.has(key)) {
-      errors.push(`${manifestPath}: entry ${key} has no archived note`);
+    if (!(await exists(join(root, notesRoot, key)))) {
+      errors.push(`${manifestPath}: entry ${key} has no archived artifact`);
       continue;
     }
     if (typeof digest !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(digest)) {
@@ -159,11 +228,14 @@ async function validateArchive(root: string, archived: Map<string, string>, erro
       continue;
     }
     if (sha256(await readFile(join(root, notesRoot, key))) !== digest) {
-      errors.push(`${key}: archived note bytes differ from the manifest digest`);
+      errors.push(`${key}: archived artifact bytes differ from the manifest digest`);
     }
   }
-  for (const [key, path] of archived) {
-    if (!(key in files)) errors.push(`${path}: archived note is not registered in ${manifestPath}`);
+  for (const note of archived.values()) {
+    for (const artifact of [note.path, note.zhPath, note.metaPath]) {
+      const key = artifact.slice(notesRoot.length + 1);
+      if (!(key in files)) errors.push(`${artifact}: archived artifact is not registered in ${manifestPath}`);
+    }
   }
 }
 
@@ -196,12 +268,10 @@ export async function validateNotes(project: string): Promise<{ valid: boolean; 
   }
   if (errors.length) return { valid: false, errors };
 
-  const archived = new Map<string, string>();
+  const archived = new Map<string, NoteAnchor>();
   for await (const note of enumerateNotes(root, errors)) {
-    const contents = await readFile(join(root, note.path), 'utf8');
-    errors.push(...validateFormat(note.path, note.lifecycle, contents));
-    errors.push(...await validateLinks(root, note.path, note.lifecycle, contents));
-    if (note.lifecycle === 'archived') archived.set(note.path.slice(notesRoot.length + 1), note.path);
+    await validateNotePair(root, note, errors);
+    if (note.lifecycle === 'archived') archived.set(note.path, note);
   }
   await validateArchive(root, archived, errors);
   return { valid: errors.length === 0, errors };

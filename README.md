@@ -32,6 +32,9 @@ ai-workflow context refresh --project . --candidate <candidate.json> --write
 ai-workflow context discover --project . --packet <fallback.json>
 ai-workflow notes validate [--project .]
 ai-workflow notes list [--project .] [--archived]
+ai-workflow notes pairing [--project .] [<note>...]
+ai-workflow notes pairing --project . --list
+ai-workflow notes pairing --project . --write <note> | --write --all
 ai-workflow notes archive [--project .] --seal
 ```
 
@@ -53,7 +56,7 @@ Frozen `spec.md` and `plan.md` files use a shared digest protocol: each file has
 
 `.ai-workflow/notes/` is the only current proposal and decision-record mechanism. `init` creates the governance files (`.ai-workflow/notes/AGENTS.md`, `.ai-workflow/notes/README.md`, the `implemented/` and `archived/` instructions and an empty `archived/manifest.json`) together with the `proposed`, `implemented`, `rejected` and `archived` lifecycle directories for the `architecture`, `bug-fix`, `feature`, `process`, `simplification` and `testing` classes. No placeholder records are generated.
 
-`.ai-workflow/notes/README.md` is the single source for note format, lifecycle, supersession and archive governance, and `.ai-workflow/AGENTS.md` points to it. Each note is one Markdown file named `{lifecycle}/{class}/YYYY-MM-DD-topic-title.md` and uses one prose language; the `# Agent Note:` title, section headings, field names, status values, paths and dates remain English. `ai-workflow notes list --project <root>` derives the current records on every read, `ai-workflow notes validate --project <root>` checks the tree, formats, active links and archive integrity, and `ai-workflow notes archive --project <root> --seal` verifies every existing manifest entry and every new record before it appends.
+`.ai-workflow/notes/README.md` is the single source for note format, lifecycle, supersession and archive governance, and `.ai-workflow/AGENTS.md` points to it. Every note is a three-file sibling pair named `{lifecycle}/{class}/YYYY-MM-DD-topic-title.md`, `.zh.md` and `.i18n.yaml`: the English body, the Chinese body and a consistency record holding each side's git blob hash. Both languages carry equal authority and must mirror each other's structure; the fixed `# Agent Note:` prefix, section headings, field names, status values, paths and dates remain English while the prose is translated. `ai-workflow notes list --project <root>` derives the current English records on every read, `ai-workflow notes validate --project <root>` checks the tree, triplet completeness, language switchers, mirrored structure, recorded hashes, active links and archive integrity, `ai-workflow notes pairing --project <root>` verifies or (`--write`) re-records pairs, and `ai-workflow notes archive --project <root> --seal` verifies every existing manifest entry and every new triplet before it appends.
 
 ### User-level agent contract
 
@@ -146,7 +149,7 @@ output_language: zh-CN
 - `output_language` accepts `en` (English) or `zh-CN` (Simplified Chinese). The default is `en` when the file or the field is absent.
 - The language is resolved when `ai-workflow install` runs, so changing it requires re-running `ai-workflow install` or the installed `$switch-profile` skill, which reinstalls through the same path.
 - The directive is injected into exactly the installed `planning`, `plan-to-tasks` and `coding` skills and the installed `documentation-maintainer` role. Both the agent's interactive/session natural-language prose (clarification questions, confirmation previews, progress narration and final summary) and the natural-language prose of generated planning artifacts follow the configured language.
-- Agent Notes written by `documentation-maintainer` follow `output_language` in the same way: each note uses one prose language and has no parallel translated copies. Structural elements remain English, including the `# Agent Note:` title, section headings, field names, `Status` and its values, file paths and dates. Changing the preference requires re-running `ai-workflow install` or `$switch-profile`. This is a user preference and prose-language inconsistency is not merge-blocking.
+- Agent Notes are always bilingual triplets and do not follow `output_language`: `documentation-maintainer` writes the English and Chinese bodies plus the `.i18n.yaml` consistency record for every note, independent of the configured language. `output_language` governs only the planning artifacts and the agent's interactive/session prose above. Structural elements remain English in both bodies, including the `# Agent Note:` prefix, section headings, field names, `Status` and its values, file paths and dates; only the prose is translated. Record a confirmed pair with `ai-workflow notes pairing --write`.
 - Only natural-language prose is translated: headings, table headers, YAML frontmatter keys and their order, `REQ-###`/`AC-###` identifiers, file paths, code and enumerated values such as `surface` remain English.
 - An unsupported value or malformed configuration fails installation before any managed file is written. The file remains user-owned: ai-workflow reads `output_language` and writes only `active_profile`, preserving existing keys, and never records the file in the install manifest.
 

@@ -69,8 +69,8 @@ function expectNotesLanguageDirective(contents: string, label: string): string {
   return directive;
 }
 
-// Assert the retired ADR-only language fields are gone and no translation
-// artifacts are requested by the injected section.
+// Assert the retired ADR-only language fields are gone; notes are described as
+// complete bilingual triplets rather than single-language or translated pairs.
 function expectRetiredAdrFieldsDropped(contents: string, label: string): string {
   const directive = installedDirective(contents);
   expect(directive, `${label} appends the output language directive`).not.toBe('');
@@ -79,7 +79,9 @@ function expectRetiredAdrFieldsDropped(contents: string, label: string): string 
   }
   expect(directive, `${label} drops the retired adr command`).not.toMatch(/ai-workflow\s+adr\b/i);
   expect(directive, `${label} drops the retired adr path`).not.toMatch(/\.ai-workflow\/adr\b/);
-  expect(directive, `${label} does not request sidecars, bilingual pairs or translation pairs`).not.toMatch(/sidecar|translation pair|bilingual/i);
+  expect(directive, `${label} does not request sidecars or translated pairs`).not.toMatch(/sidecar|translation pair/i);
+  expect(directive, `${label} describes the note triplet`).toMatch(/\.zh\.md/);
+  expect(directive, `${label} describes the consistency record`).toMatch(/\.i18n\.yaml/);
   return directive;
 }
 

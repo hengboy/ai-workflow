@@ -309,9 +309,12 @@ describe('current workflow documentation', () => {
     }
   });
 
-  it('applies the language preference to single-language notes (REQ-008 / AC-016)', async () => {
+  it('keeps notes bilingual and independent of the language preference (REQ-008 / AC-016)', async () => {
     const readme = (await readFile(packagePath('README.md'), 'utf8')).replace(/\s+/g, ' ');
 
-    expect(readme, 'notes prose follows the existing output_language preference').toMatch(/notes.{0,400}output_language|output_language.{0,400}notes/i);
+    expect(readme, 'notes are always bilingual').toMatch(/notes.{0,200}bilingual/i);
+    expect(readme, 'the Chinese body is documented').toMatch(/\.zh\.md/);
+    expect(readme, 'the consistency record is documented').toMatch(/\.i18n\.yaml/);
+    expect(readme, 'output_language still governs planning artifacts and session prose').toMatch(/output_language/i);
   });
 });

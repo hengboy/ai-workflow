@@ -5,11 +5,13 @@ import { join } from 'node:path';
 import { initializeProject } from '../../src/install/index.js';
 import { sealArchive } from '../../src/notes/archive.js';
 import { validateNotes } from '../../src/notes/validate.js';
-import { temporary } from '../helpers.js';
+import { temporary, writeNoteTriplet } from '../helpers.js';
 
 const manifestPath = '.ai-workflow/notes/archived/manifest.json';
 const archivedNotePath = '.ai-workflow/notes/archived/process/2026-09-17-archived-decision.md';
 const archivedNoteKey = 'archived/process/2026-09-17-archived-decision.md';
+const archivedZhKey = 'archived/process/2026-09-17-archived-decision.zh.md';
+const archivedMetaKey = 'archived/process/2026-09-17-archived-decision.i18n.yaml';
 
 // A note already moved to archived/ with the required Archived date. Sealing
 // must register these exact bytes, not rewrite them.
@@ -53,30 +55,34 @@ async function snapshot(root: string): Promise<Record<string, string>> {
   return contents;
 }
 
-async function sealedFixture(prefix: string): Promise<string> {
+async function sealedFixture(prefix: string): Promise<{ root: string; files: { english: string; chinese: string; meta: string } }> {
   const root = await temporary(prefix);
   await initializeProject(root);
-  await writeFile(join(root, archivedNotePath), archivedNote);
-  return root;
+  const files = await writeNoteTriplet(root, archivedNotePath, archivedNote);
+  return { root, files };
 }
 
 describe('notes archive sealing', () => {
-  it('AC-009 registers a moved archived note by notes-root-relative path with its independent sha256 and then validates', async () => {
-    const root = await sealedFixture('ai-workflow-notes-seal-');
+  it('AC-009 registers every moved archived artifact by notes-root-relative path with its independent sha256 and then validates', async () => {
+    const { root, files } = await sealedFixture('ai-workflow-notes-seal-');
 
     const result = await sealArchive(root);
 
     expect(result).toEqual({ sealed: [archivedNoteKey] });
     expect(JSON.parse(await readFile(join(root, manifestPath), 'utf8'))).toEqual({
       version: 1,
-      files: { [archivedNoteKey]: independentDigest(archivedNote) },
+      files: {
+        [archivedNoteKey]: independentDigest(files.english),
+        [archivedZhKey]: independentDigest(files.chinese),
+        [archivedMetaKey]: independentDigest(files.meta),
+      },
     });
-    expect(await readFile(join(root, archivedNotePath), 'utf8')).toBe(archivedNote);
+    expect(await readFile(join(root, archivedNotePath), 'utf8')).toBe(files.english);
     expect(await validateNotes(root)).toEqual({ valid: true, errors: [] });
   });
 
   it('AC-009 makes repeated sealing with no new records byte-identical', async () => {
-    const root = await sealedFixture('ai-workflow-notes-seal-idempotent-');
+    const { root } = await sealedFixture('ai-workflow-notes-seal-idempotent-');
     await sealArchive(root);
     const before = await snapshot(root);
 
@@ -92,6 +98,7 @@ describe('notes archive sealing', () => {
   // behavior was implemented before this test slice was added.
 
   const unregisteredNotePath = '.ai-workflow/notes/archived/architecture/2026-09-18-unsealed-decision.md';
+  const unregisteredNoteKey = 'archived/architecture/2026-09-18-unsealed-decision.md';
 
   function archivedDecision(title: string, archived: string): string {
     return `# Agent Note: ${title}
@@ -118,20 +125,20 @@ Archive the delivered record without rewriting it.
   }
 
   it('AC-009 fails validation with a file-level reason after a sealed body is tampered and leaves the file as written', async () => {
-    const root = await sealedFixture('ai-workflow-notes-seal-tamper-');
+    const { root, files } = await sealedFixture('ai-workflow-notes-seal-tamper-');
     await sealArchive(root);
-    const tampered = archivedNote.replace('Sealed bytes are protected by the archive manifest.', 'Sealed bytes were silently rewritten.');
+    const tampered = files.english.replace('Sealed bytes are protected by the archive manifest.', 'Sealed bytes were silently rewritten.');
     await writeFile(join(root, archivedNotePath), tampered);
 
     const result = await validateNotes(root);
 
     expect(result.valid).toBe(false);
-    expect(result.errors).toContain(`${archivedNoteKey}: archived note bytes differ from the manifest digest`);
+    expect(result.errors).toContain(`${archivedNoteKey}: archived artifact bytes differ from the manifest digest`);
     expect(await readFile(join(root, archivedNotePath), 'utf8')).toBe(tampered);
   });
 
   it('AC-009 fails validation with a manifest-level reason after a sealed note is deleted', async () => {
-    const root = await sealedFixture('ai-workflow-notes-seal-delete-');
+    const { root } = await sealedFixture('ai-workflow-notes-seal-delete-');
     await sealArchive(root);
     const manifestBefore = await readFile(join(root, manifestPath), 'utf8');
     await rm(join(root, archivedNotePath));
@@ -139,78 +146,79 @@ Archive the delivered record without rewriting it.
     const result = await validateNotes(root);
 
     expect(result.valid).toBe(false);
-    expect(result.errors).toContain(`${manifestPath}: entry ${archivedNoteKey} has no archived note`);
+    expect(result.errors).toContain(`${manifestPath}: entry ${archivedNoteKey} has no archived artifact`);
     expect(await readFile(join(root, manifestPath), 'utf8')).toBe(manifestBefore);
   });
 
   it('AC-009 fails validation after a sealed note is moved or renamed into another class', async () => {
-    const root = await sealedFixture('ai-workflow-notes-seal-move-');
+    const { root } = await sealedFixture('ai-workflow-notes-seal-move-');
     await sealArchive(root);
     const movedPath = '.ai-workflow/notes/archived/testing/2026-09-17-archived-decision.md';
+    const movedKey = 'archived/testing/2026-09-17-archived-decision.md';
     await rename(join(root, archivedNotePath), join(root, movedPath));
 
     const result = await validateNotes(root);
 
     expect(result.valid).toBe(false);
-    expect(result.errors).toContain(`${manifestPath}: entry ${archivedNoteKey} has no archived note`);
-    expect(result.errors).toContain(`${movedPath}: archived note is not registered in ${manifestPath}`);
+    expect(result.errors).toContain(`${manifestPath}: entry ${archivedNoteKey} has no archived artifact`);
+    expect(result.errors).toContain(`${movedPath}: archived artifact is not registered in ${manifestPath}`);
+    expect(movedKey).toBe('archived/testing/2026-09-17-archived-decision.md');
   });
 
   it('AC-009 fails validation for an archived note that has no manifest entry', async () => {
-    const root = await sealedFixture('ai-workflow-notes-seal-extra-');
+    const { root } = await sealedFixture('ai-workflow-notes-seal-extra-');
     await sealArchive(root);
-    const unsealed = archivedDecision('unsealed-decision', '2026-09-18');
-    await writeFile(join(root, unregisteredNotePath), unsealed);
+    const unsealed = await writeNoteTriplet(root, unregisteredNotePath, archivedDecision('unsealed-decision', '2026-09-18'));
     const manifestBefore = await readFile(join(root, manifestPath), 'utf8');
 
     const result = await validateNotes(root);
 
     expect(result.valid).toBe(false);
-    expect(result.errors).toContain(`${unregisteredNotePath}: archived note is not registered in ${manifestPath}`);
-    expect(await readFile(join(root, unregisteredNotePath), 'utf8')).toBe(unsealed);
+    expect(result.errors).toContain(`${unregisteredNotePath}: archived artifact is not registered in ${manifestPath}`);
+    expect(await readFile(join(root, unregisteredNotePath), 'utf8')).toBe(unsealed.english);
     expect(await readFile(join(root, manifestPath), 'utf8')).toBe(manifestBefore);
+    expect(unregisteredNoteKey).toBe('archived/architecture/2026-09-18-unsealed-decision.md');
   });
 
   it('AC-009 fails validation for a sealed archived note with a wrong status or archived date', async () => {
-    const statusRoot = await sealedFixture('ai-workflow-notes-seal-status-');
-    await sealArchive(statusRoot);
-    await writeFile(join(statusRoot, archivedNotePath), archivedNote.replace('Status: implemented', 'Status: archived'));
+    const statusFixture = await sealedFixture('ai-workflow-notes-seal-status-');
+    await sealArchive(statusFixture.root);
+    await writeFile(join(statusFixture.root, archivedNotePath), statusFixture.files.english.replace('Status: implemented', 'Status: archived'));
 
-    const statusResult = await validateNotes(statusRoot);
+    const statusResult = await validateNotes(statusFixture.root);
 
     expect(statusResult.valid).toBe(false);
     expect(statusResult.errors).toContain(`${archivedNotePath}: Status must be implemented for lifecycle archived`);
 
-    const dateRoot = await sealedFixture('ai-workflow-notes-seal-date-');
-    await sealArchive(dateRoot);
-    await writeFile(join(dateRoot, archivedNotePath), archivedNote.replace('Archived: 2026-09-17', 'Archived: 2026-02-31'));
+    const dateFixture = await sealedFixture('ai-workflow-notes-seal-date-');
+    await sealArchive(dateFixture.root);
+    await writeFile(join(dateFixture.root, archivedNotePath), dateFixture.files.english.replace('Archived: 2026-09-17', 'Archived: 2026-02-31'));
 
-    const dateResult = await validateNotes(dateRoot);
+    const dateResult = await validateNotes(dateFixture.root);
 
     expect(dateResult.valid).toBe(false);
     expect(dateResult.errors).toContain(`${archivedNotePath}: Archived must immediately follow Status with a real YYYY-MM-DD date`);
   });
 
   it('AC-009 rejects sealing a changed old note without touching the old entry or accepting the change', async () => {
-    const root = await sealedFixture('ai-workflow-notes-seal-refuse-');
+    const { root, files } = await sealedFixture('ai-workflow-notes-seal-refuse-');
     await sealArchive(root);
     const manifestBefore = await readFile(join(root, manifestPath), 'utf8');
-    const tampered = archivedNote.replace('Sealed bytes are protected by the archive manifest.', 'Sealed bytes were silently rewritten.');
+    const tampered = files.english.replace('Sealed bytes are protected by the archive manifest.', 'Sealed bytes were silently rewritten.');
     await writeFile(join(root, archivedNotePath), tampered);
-    const unsealed = archivedDecision('unsealed-decision', '2026-09-18');
-    await writeFile(join(root, unregisteredNotePath), unsealed);
+    const unsealed = await writeNoteTriplet(root, unregisteredNotePath, archivedDecision('unsealed-decision', '2026-09-18'));
 
-    await expect(sealArchive(root)).rejects.toThrow(/sealed archived note bytes changed/);
+    await expect(sealArchive(root)).rejects.toThrow(/sealed archived artifact bytes changed/);
 
     expect(await readFile(join(root, manifestPath), 'utf8')).toBe(manifestBefore);
-    expect(JSON.parse(manifestBefore).files[archivedNoteKey]).toBe(independentDigest(archivedNote));
+    expect(JSON.parse(manifestBefore).files[archivedNoteKey]).toBe(independentDigest(files.english));
     expect(await readFile(join(root, archivedNotePath), 'utf8')).toBe(tampered);
-    expect(await readFile(join(root, unregisteredNotePath), 'utf8')).toBe(unsealed);
+    expect(await readFile(join(root, unregisteredNotePath), 'utf8')).toBe(unsealed.english);
 
     const result = await validateNotes(root);
 
     expect(result.valid).toBe(false);
-    expect(result.errors).toContain(`${archivedNoteKey}: archived note bytes differ from the manifest digest`);
-    expect(result.errors).toContain(`${unregisteredNotePath}: archived note is not registered in ${manifestPath}`);
+    expect(result.errors).toContain(`${archivedNoteKey}: archived artifact bytes differ from the manifest digest`);
+    expect(result.errors).toContain(`${unregisteredNotePath}: archived artifact is not registered in ${manifestPath}`);
   });
 });
