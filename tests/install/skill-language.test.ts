@@ -331,6 +331,56 @@ describe('installed skill output language', () => {
     }
   });
 
+  // REQ-005 / AC-012: the injected directive must make planning artifacts
+  // preference-independent bilingual triplets in both supported languages, while
+  // the preference only selects interactive/session prose.
+  it('states that planning artifacts are preference-independent bilingual triplets in every directive language', async () => {
+    for (const { language, marker } of [
+      { language: 'en', marker: enMarker },
+      { language: 'zh-CN', marker: zhMarker }
+    ]) {
+      const home = await temporary(`ai-workflow-language-planning-${language}-`);
+      await seedConfig(home, `output_language: ${language}\n`);
+      await install(hosts, { home });
+
+      for (const skill of languageSkills) {
+        const directive = installedDirective(await languageSkillContents(home, skill));
+        expect(directive, `${skill} appends the output language directive`).not.toBe('');
+        expect(directive, `${skill} names the configured language`).toContain(marker);
+        for (const doc of ['spec', 'plan', 'tasks']) {
+          expect(directive, `${skill} names the planning artifact ${doc}`).toMatch(new RegExp(`\\b${doc}\\b`));
+        }
+        expect(directive, `${skill} names the Chinese planning side`).toMatch(/\.zh\.md/);
+        expect(directive, `${skill} names the planning consistency record`).toMatch(/\.i18n\.yaml/);
+        expect(directive, `${skill} calls the planning artifacts complete bilingual triplets`).toMatch(/complete bilingual triplet/i);
+        expect(directive, `${skill} states the triplets are independent of the preference`).toMatch(
+          /independent of (?:this|the) preference|preference-independent|regardless of (?:this|the) preference|not governed by (?:this|the) preference/i
+        );
+        expect(directive, `${skill} limits the preference to interactive and session prose`).toMatch(/interactive and session/i);
+        expect(directive, `${skill} still avoids sidecars and translated pairs`).not.toMatch(/sidecar|translation pair/i);
+      }
+    }
+  });
+
+  // REQ-005 / AC-012: the installed standards-review role must drop the retired
+  // claim that note prose follows output_language.
+  it('keeps the shipped standards-review role aligned with preference-independent bilingual triplets', async () => {
+    const standards = await readFile(packagePath('templates', 'agents', 'standards-review.md'), 'utf8');
+    expect(
+      standards,
+      'standards-review no longer claims note prose follows output_language'
+    ).not.toMatch(/note[s]?[^.]{0,120}prose follows[^.]{0,80}output_language/i);
+    expect(standards, 'standards-review keeps the notes-rules authority reference').toMatch(/referenced notes|notes rules/i);
+    expect(standards, 'standards-review describes bilingual triplets').toMatch(/bilingual triplet/i);
+    expect(standards, 'standards-review covers planning artifacts').toMatch(/planning artifacts?/i);
+    expect(standards, 'standards-review states the triplets are preference-independent').toMatch(
+      /independent of (?:this|the) preference|preference-independent|not governed by (?:this|the) preference/i
+    );
+    expect(standards, 'standards-review limits the preference to interactive and session prose').toMatch(
+      /interactive and session|session prose/i
+    );
+  });
+
   it('preserves the user configuration and keeps it out of the install manifest', async () => {
     const home = await temporary('ai-workflow-language-invariants-');
     const configuration = 'output_language: zh-CN\n';

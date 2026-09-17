@@ -1,6 +1,6 @@
 # ai-workflow
 
-A self-contained macOS/Node.js 22 CLI for installing planning/context skills and native role agents for Codex, Claude Code and OpenCode. Planning produces frozen `spec.md`, `plan.md` and task documents; agents choose an appropriate level of planning and verification for each change.
+A self-contained macOS/Node.js 22 CLI for installing planning/context skills and native role agents for Codex, Claude Code and OpenCode. Planning produces frozen `spec.md`, `plan.md` and `tasks/*.md` documents, each a complete bilingual triplet; agents choose an appropriate level of planning and verification for each change.
 
 The product does not execute, depend on or provide compatibility for external workflow frameworks or provider APIs.
 
@@ -24,6 +24,10 @@ ai-workflow profile activate <name>
 ai-workflow init /path/to/project
 ai-workflow init /path/to/project --upgrade
 ai-workflow plan validate --plan .ai-workflow/plans/<planId>
+ai-workflow plan pairing --plan .ai-workflow/plans/<planId>
+ai-workflow plan pairing --plan .ai-workflow/plans/<planId> --list
+ai-workflow plan pairing --plan .ai-workflow/plans/<planId> --write spec plan
+ai-workflow plan pairing --plan .ai-workflow/plans/<planId> --write --all
 ai-workflow context validate [--project .] --all
 ai-workflow context validate [--project .] --feature <id>
 ai-workflow context locate [--project .] --feature <id> --verify
@@ -44,7 +48,17 @@ Navigation is JSON-authoritative. `context locate` resolves a feature by exact I
 
 `ai-workflow notes` works on the Agent Notes under `.ai-workflow/notes/`, which are the project's proposal and decision records. The retired ADR mechanism has no command, alias, migration path or fallback: existing local ADR history files are left untouched but are never read, listed or validated by the workflow.
 
-Frozen `spec.md` and `plan.md` files use a shared digest protocol: each file hashes its exact UTF-8 bytes with only its own frontmatter `digest` line replaced by `digest: ""`; the workflow input digest combines the two resulting digests as stable JSON. Use `ai-workflow plan validate --plan <directory>` after planning and before task splitting or coding.
+Every planning artifact under `.ai-workflow/plans/<planId>/` is a complete bilingual triplet, the same contract as Agent Notes: planning writes `spec.md` and `plan.md` as `<doc>.md` (English) plus `<doc>.zh.md` (Chinese) and `<doc>.i18n.yaml` (consistency record), and plan-to-tasks writes each `tasks/task-NNN-slug.md` the same way. The English side alone carries the YAML frontmatter, the `REQ-###`/`AC-###` identifiers and counts and the `digest`; the Chinese side has no frontmatter and starts with the same English title, then `[English](<doc>.md) | 中文`, while the English side carries `English | [中文](<doc>.zh.md)`. Both sides mirror each other's heading, code, table, list and link structure. Task enumeration treats only `task-NNN-slug.md` as a main document and reports a `.zh.md` or `.i18n.yaml` without a matching main document as an orphan error, and the `.i18n.yaml` record is never treated as a third body.
+
+Frozen `spec.md` and `plan.md` files use a shared digest protocol: each file hashes its exact UTF-8 bytes with only its own frontmatter `digest` line replaced by `digest: ""`; the workflow input digest combines the two resulting digests as stable JSON. Digest semantics are unchanged: only the English bytes participate, and a Chinese-side edit never changes the `digest`. Use `ai-workflow plan validate --plan <directory>` after planning and before task splitting or coding. Beyond the existing `plan_id`, `status`, count and digest checks, it now enforces the triplet — the `.zh.md` and `.i18n.yaml` siblings, the exact language switchers, the mirrored structure and recorded hashes equal to the current bytes — and still returns the unchanged success shape `{ "valid": true, "plan_id": ..., "digests": ... }`.
+
+`ai-workflow plan pairing --plan <directory>` verifies and records the pair hashes, mirroring `ai-workflow notes pairing`:
+
+- `ai-workflow plan pairing --plan <directory>` with no flags is a read-only check. It writes nothing, reports `{ "valid": true, "errors": [] }` on success and exits nonzero when a spec, plan or task document is missing a sidecar, diverges structurally or has a stale or absent record.
+- `ai-workflow plan pairing --plan <directory> --list` reports `missing`, `out-of-sync` or `ok` per document and always exits 0.
+- `ai-workflow plan pairing --plan <directory> --write <document>` records the current English and Chinese blob hashes, where a document may be given as `<doc>.md`, `<doc>.zh.md`, `<doc>.i18n.yaml` or a bare `spec`, `plan` or `task-NNN-slug` slug. Every explicitly selected document is pre-checked first, and an incomplete selection writes no record at all. `--write --all` records only complete pairs and skips incomplete ones without failing.
+
+A recorded pair is an explicit, reviewable state rather than a silent refresh: the default and `--list` modes never write, and `--write` requires either explicit documents or `--all`. Existing single-language plans under `.ai-workflow/plans/` are not migrated, converted or exempted; they fail the new validation by design and their bytes are left untouched.
 
 ## Project initialization and navigation
 
@@ -140,7 +154,7 @@ Supported reasoning values are `low`, `medium`, `high`, `xhigh`, `max` and `ultr
 
 ## Output language
 
-Natural-language prose in generated planning artifacts (`spec.md`, `plan.md` and `tasks/*.md`) and in the agent's own interactive/session output is localized through `~/.config/ai-workflow/config.yaml`, the single user-owned configuration source that also carries the optional `active_profile` field described under Profiles.
+`output_language` selects the natural-language prose of the agent's own interactive/session output. It is read from `~/.config/ai-workflow/config.yaml`, the single user-owned configuration source that also carries the optional `active_profile` field described under Profiles. It does not select the language of planning artifacts or Agent Notes.
 
 ```yaml
 output_language: zh-CN
@@ -148,9 +162,9 @@ output_language: zh-CN
 
 - `output_language` accepts `en` (English) or `zh-CN` (Simplified Chinese). The default is `en` when the file or the field is absent.
 - The language is resolved when `ai-workflow install` runs, so changing it requires re-running `ai-workflow install` or the installed `$switch-profile` skill, which reinstalls through the same path.
-- The directive is injected into exactly the installed `planning`, `plan-to-tasks` and `coding` skills and the installed `documentation-maintainer` role. Both the agent's interactive/session natural-language prose (clarification questions, confirmation previews, progress narration and final summary) and the natural-language prose of generated planning artifacts follow the configured language.
-- Agent Notes are always bilingual triplets and do not follow `output_language`: `documentation-maintainer` writes the English and Chinese bodies plus the `.i18n.yaml` consistency record for every note, independent of the configured language. `output_language` governs only the planning artifacts and the agent's interactive/session prose above. Structural elements remain English in both bodies, including the `# Agent Note:` prefix, section headings, field names, `Status` and its values, file paths and dates; only the prose is translated. Record a confirmed pair with `ai-workflow notes pairing --write`.
-- Only natural-language prose is translated: headings, table headers, YAML frontmatter keys and their order, `REQ-###`/`AC-###` identifiers, file paths, code and enumerated values such as `surface` remain English.
+- The directive is injected into exactly the installed `planning`, `plan-to-tasks` and `coding` skills and the installed `documentation-maintainer` role. It governs only the agent's interactive/session natural-language prose: clarification questions, confirmation previews, progress narration and final summary.
+- Planning artifacts and Agent Notes are always complete bilingual triplets and do not follow `output_language`. `planning` and `plan-to-tasks` write the English side, the Chinese side and the `.i18n.yaml` record for `spec.md`, `plan.md` and `tasks/*.md`, and record the pair with `ai-workflow plan pairing --plan <directory> --write --all`; `documentation-maintainer` writes the English and Chinese bodies plus the `.i18n.yaml` consistency record for every note, independent of the configured language. There is no new configuration item.
+- Structural elements remain English in both sides regardless of the preference, including the `# Agent Note:` prefix, section headings, table headers, YAML frontmatter keys and their order, field names, `Status` and its values, `REQ-###`/`AC-###` identifiers, file paths, code, dates and enumerated values such as `surface`; only the prose is translated. Record a confirmed note pair with `ai-workflow notes pairing --write`.
 - An unsupported value or malformed configuration fails installation before any managed file is written. The file remains user-owned: ai-workflow reads `output_language` and writes only `active_profile`, preserving existing keys, and never records the file in the install manifest.
 
 ## Optional real-host smoke

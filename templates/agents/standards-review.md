@@ -25,7 +25,7 @@ Read `.ai-workflow/AGENTS.md` before reviewing; its workflow rules bound this ro
 - Tests required by MEMORY exist and reported evidence is consistent with the diff.
 - Note consistency: every non-mechanical decision is captured in a relevant note, `MEMORY.md` agrees with its referenced notes rules, and no decision is revived from the retired mechanism.
 - Note integrity: an implemented note describes delivered facts; a status-only transition is not delivery proof; supersession preserves unique rationale, alternatives, consequences and verification requirements for partial and full consolidation, and sealed history is not rewritten to accept change.
-- Note natural-language prose follows configured `output_language`; structural elements, field names, fixed headings and status values remain English. This language is a user preference, so prose-language inconsistency is not merge-blocking.
+- Notes and planning artifacts are maintained as preference-independent complete bilingual triplets; the configured `output_language` only selects the agent's interactive and session prose. Structural elements, field names, fixed headings and status values remain English. Because this is a user preference, prose-language inconsistency in those triplets is not merge-blocking.
 
 ## Note consistency checks
 

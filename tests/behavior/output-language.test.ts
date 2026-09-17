@@ -4,10 +4,10 @@ import { join } from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { readPlan, readTasks } from '../../src/workflow/parse.js';
-import { renderFrozenMarkdown } from '../../src/workflow/digest.js';
+import { frozenDocumentDigest, renderFrozenMarkdown } from '../../src/workflow/digest.js';
 import { renderMarkdown } from '../../src/utils/frontmatter.js';
 import { packagePath } from '../../src/utils/schema.js';
-import { temporary } from '../helpers.js';
+import { temporary, writePlanTriplet } from '../helpers.js';
 
 const exec = promisify(execFile);
 const PLAN_ID = '20260913-localized-plan';
@@ -123,11 +123,18 @@ function englishTaskBody(): string {
   ].join('\n');
 }
 
-async function writeFrozenPair(root: string, specBody: string, planBody: string): Promise<string> {
+interface BodyPair { en: string; zh: string }
+
+async function writeFrozenPair(
+  root: string,
+  spec: BodyPair = { en: englishSpecBody(), zh: chineseSpecBody() },
+  plan: BodyPair = { en: englishPlanBody(), zh: chinesePlanBody() },
+): Promise<string> {
   const directory = join(root, '.ai-workflow', 'plans', PLAN_ID);
   await mkdir(directory, { recursive: true });
-  await writeFile(join(directory, 'spec.md'), renderFrozenMarkdown(frozenAttributes(), specBody));
-  await writeFile(join(directory, 'plan.md'), renderFrozenMarkdown(frozenAttributes(), planBody));
+  const render = (body: string): string => renderFrozenMarkdown(frozenAttributes(), body);
+  await writePlanTriplet(directory, 'spec.md', spec.en, spec.zh, render);
+  await writePlanTriplet(directory, 'plan.md', plan.en, plan.zh, render);
   return directory;
 }
 
@@ -144,10 +151,10 @@ function taskAttributes(): Record<string, unknown> {
   };
 }
 
-async function writeTaskPlan(root: string, specBody: string, planBody: string, taskBody: string): Promise<string> {
-  const directory = await writeFrozenPair(root, specBody, planBody);
+async function writeTaskPlan(root: string): Promise<string> {
+  const directory = await writeFrozenPair(root);
   await mkdir(join(directory, 'tasks'), { recursive: true });
-  await writeFile(join(directory, 'tasks', 'task-001-example.md'), renderMarkdown(taskAttributes(), taskBody));
+  await writePlanTriplet(join(directory, 'tasks'), 'task-001-example.md', englishTaskBody(), chineseTaskBody(), (body) => renderMarkdown(taskAttributes(), body));
   return directory;
 }
 
@@ -156,53 +163,50 @@ function validateCommand(directory: string): Promise<{ stdout: string; stderr: s
 }
 
 describe('localized planning artifacts', () => {
-  it('validates a frozen plan whose body prose is Simplified Chinese (AC-008)', async () => {
-    const chinese = await writeFrozenPair(await temporary(), chineseSpecBody(), chinesePlanBody());
-    const english = await writeFrozenPair(await temporary(), englishSpecBody(), englishPlanBody());
+  it('validates a complete bilingual frozen plan and takes REQ/AC and digests from the English side (AC-008)', async () => {
+    const directory = await writeFrozenPair(await temporary());
 
-    const chinesePlan = await readPlan(chinese);
-    const englishPlan = await readPlan(english);
+    const plan = await readPlan(directory);
 
-    expect(chinesePlan.requirements).toEqual(['REQ-001']);
-    expect(chinesePlan.acceptanceCriteria).toEqual(['AC-001']);
-    expect(chinesePlan.requirements).toEqual(englishPlan.requirements);
-    expect(chinesePlan.acceptanceCriteria).toEqual(englishPlan.acceptanceCriteria);
+    expect(plan.requirements).toEqual(['REQ-001']);
+    expect(plan.acceptanceCriteria).toEqual(['AC-001']);
+    expect(plan.specDigest).toBe(frozenDocumentDigest(await readFile(join(directory, 'spec.md'), 'utf8')));
+    expect(plan.planDigest).toBe(frozenDocumentDigest(await readFile(join(directory, 'plan.md'), 'utf8')));
 
-    const { stdout } = await validateCommand(chinese);
+    const { stdout } = await validateCommand(directory);
 
     expect(stdout).toContain('"valid": true');
   });
 
-  it('parses Chinese-prose and English-prose tasks identically (AC-009)', async () => {
-    const chinese = await writeTaskPlan(await temporary(), chineseSpecBody(), chinesePlanBody(), chineseTaskBody());
-    const english = await writeTaskPlan(await temporary(), englishSpecBody(), englishPlanBody(), englishTaskBody());
+  it('parses a complete task triplet identically from the English side (AC-009)', async () => {
+    const directory = await writeTaskPlan(await temporary());
 
-    const chineseTasks = await readTasks(chinese);
-    const englishTasks = await readTasks(english);
+    const tasks = await readTasks(directory);
 
-    expect(chineseTasks).toHaveLength(1);
-    expect(englishTasks).toHaveLength(1);
-    const chineseTask = chineseTasks[0];
-    const englishTask = englishTasks[0];
-    if (!chineseTask || !englishTask) throw new Error('Expected exactly one parsed task per plan');
+    expect(tasks).toHaveLength(1);
+    const task = tasks[0];
+    if (!task) throw new Error('Expected exactly one parsed task per plan');
 
     expect({
-      surface: chineseTask.surface,
-      requirements: chineseTask.requirements,
-      acceptanceCriteria: chineseTask.acceptanceCriteria,
-      readScope: chineseTask.readScope,
-      writeScope: chineseTask.writeScope,
+      surface: task.surface,
+      requirements: task.requirements,
+      acceptanceCriteria: task.acceptanceCriteria,
+      readScope: task.readScope,
+      writeScope: task.writeScope,
     }).toEqual({
-      surface: englishTask.surface,
-      requirements: englishTask.requirements,
-      acceptanceCriteria: englishTask.acceptanceCriteria,
-      readScope: englishTask.readScope,
-      writeScope: englishTask.writeScope,
+      surface: 'backend',
+      requirements: ['REQ-001'],
+      acceptanceCriteria: ['AC-001'],
+      readScope: ['MEMORY.md', 'src/input.ts'],
+      writeScope: ['src/output.ts'],
     });
+    const chineseTask = await readFile(join(directory, 'tasks', 'task-001-example.zh.md'), 'utf8');
+    expect(chineseTask.startsWith('# Task\n\n[English](task-001-example.md) | 中文\n')).toBe(true);
+    expect(chineseTask).not.toContain('---');
   });
 
-  it('rejects a Chinese-prose frozen pair whose digest does not match (negative)', async () => {
-    const directory = await writeFrozenPair(await temporary(), chineseSpecBody(), chinesePlanBody());
+  it('rejects a frozen pair whose English digest does not match (negative)', async () => {
+    const directory = await writeFrozenPair(await temporary());
     const specPath = join(directory, 'spec.md');
     const original = await readFile(specPath, 'utf8');
     const tampered = original.replace(/^digest:.*$/m, `digest: sha256:${'0'.repeat(64)}`);
@@ -214,10 +218,7 @@ describe('localized planning artifacts', () => {
     await expect(validateCommand(directory)).rejects.toThrow(/digest mismatch/i);
   });
 
-  it('rejects translated REQ/AC heading identifiers that no longer match the declared counts (negative)', async () => {
-    const root = await temporary();
-    const directory = join(root, '.ai-workflow', 'plans', PLAN_ID);
-    await mkdir(directory, { recursive: true });
+  it('rejects translated REQ/AC heading identifiers on the English side with a count mismatch (negative)', async () => {
     const translatedSpec = [
       '# Specification',
       '',
@@ -234,8 +235,7 @@ describe('localized planning artifacts', () => {
       '正文。',
       '',
     ].join('\n');
-    await writeFile(join(directory, 'spec.md'), renderFrozenMarkdown(frozenAttributes(), translatedSpec));
-    await writeFile(join(directory, 'plan.md'), renderFrozenMarkdown(frozenAttributes(), '# Implementation Plan\n\n正文。\n'));
+    const directory = await writeFrozenPair(await temporary(), { en: translatedSpec, zh: translatedSpec });
 
     await expect(readPlan(directory)).rejects.toThrow(/count mismatch/i);
     await expect(validateCommand(directory)).rejects.toThrow(/count mismatch/i);
@@ -315,6 +315,6 @@ describe('current workflow documentation', () => {
     expect(readme, 'notes are always bilingual').toMatch(/notes.{0,200}bilingual/i);
     expect(readme, 'the Chinese body is documented').toMatch(/\.zh\.md/);
     expect(readme, 'the consistency record is documented').toMatch(/\.i18n\.yaml/);
-    expect(readme, 'output_language still governs planning artifacts and session prose').toMatch(/output_language/i);
+    expect(readme, 'output_language remains a documented configuration source').toMatch(/output_language/i);
   });
 });
