@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { initializeProject } from '../../src/install/index.js';
@@ -176,5 +177,86 @@ describe('notes format validation', () => {
       ]));
     }
     expect(await readFile(join(project, path), 'utf8')).toBe(contents);
+  });
+});
+
+const activePath = '.ai-workflow/notes/proposed/feature/2026-09-17-improve-validation.md';
+const existingNotePath = '.ai-workflow/notes/implemented/process/2026-09-17-validation-delivered.md';
+
+function proposedLinkingTo(target: string): string {
+  return proposed.replace(
+    'The validation gap is recorded.',
+    `The validation gap is recorded in [the delivered note](${target}).`,
+  );
+}
+
+function escapeForRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+describe('notes relative Markdown link validation', () => {
+  it('accepts an active note linking to an existing note', async () => {
+    const project = await temporary('ai-workflow-notes-link-');
+    await initializeProject(project);
+    await writeFile(join(project, existingNotePath), implemented);
+    const contents = proposedLinkingTo('../../implemented/process/2026-09-17-validation-delivered.md');
+    await writeFile(join(project, activePath), contents);
+
+    const result = await validateNotes(project);
+
+    expect(result).toEqual({ valid: true, errors: [] });
+    expect(await readFile(join(project, activePath), 'utf8')).toBe(contents);
+  });
+
+  it('rejects an active note whose relative Markdown link points to a missing note', async () => {
+    const project = await temporary('ai-workflow-notes-link-');
+    await initializeProject(project);
+    const contents = proposedLinkingTo('../../implemented/process/2026-09-17-does-not-exist.md');
+    await writeFile(join(project, activePath), contents);
+
+    const result = await validateNotes(project);
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toEqual(expect.arrayContaining([
+      expect.stringMatching(new RegExp(`${escapeForRegex(activePath)}.*(link|missing|exist)`, 'i')),
+    ]));
+    expect(await readFile(join(project, activePath), 'utf8')).toBe(contents);
+  });
+
+  it('does not gate outbound links from an archived note', async () => {
+    const project = await temporary('ai-workflow-notes-link-');
+    await initializeProject(project);
+    const archivedPath = '.ai-workflow/notes/archived/process/2026-09-17-archived-decision.md';
+    const archivedNote = `# Agent Note: archived-decision
+
+Status: implemented
+Archived: 2026-09-17
+
+## Problem
+
+The delivered decision links to [a note removed after sealing](../../implemented/process/2026-09-17-now-removed.md).
+
+## Decision
+
+Keep the sealed decision as entered.
+
+## Alternatives considered
+
+Deleting the record was declined because it still explains ownership.
+
+## Consequences
+
+The historical outbound link stays stale.
+`;
+    await writeFile(join(project, archivedPath), archivedNote);
+    const digest = createHash('sha256').update(archivedNote).digest('hex');
+    await writeFile(join(project, '.ai-workflow/notes/archived/manifest.json'), `${JSON.stringify({
+      version: 1,
+      files: { 'archived/process/2026-09-17-archived-decision.md': `sha256:${digest}` },
+    }, null, 2)}\n`);
+
+    const result = await validateNotes(project);
+
+    expect(result).toEqual({ valid: true, errors: [] });
   });
 });
