@@ -1,6 +1,6 @@
 import { homedir } from 'node:os';
 import { basename, dirname, extname, join, relative, resolve } from 'node:path';
-import { mkdir, readdir, readFile, rm, rmdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, rmdir, writeFile } from 'node:fs/promises';
 import { atomicWrite, exists, readJson, writeJson } from '../utils/fs.js';
 import { sha256 } from '../utils/hash.js';
 import { packagePath } from '../utils/schema.js';
@@ -35,17 +35,16 @@ export interface ProfileActivationReport {
 }
 const manifestRelative = '.config/ai-workflow/install-manifest.json';
 const settingsRelative = '.config/ai-workflow/config.yaml';
-const adrRelative = '.ai-workflow/adr';
 const navigationJsonRelative = '.ai-workflow/index/navigation.json';
 const navigationMarkdownRelative = '.ai-workflow/index/navigation.md';
 const marketplaceRelative = '.agents/plugins/marketplace.json';
 const skillsRelative = '.agents/skills';
-const projectTemplates = ['MEMORY.md', 'navigation.json', 'navigation.md'] as const;
+const projectTemplates = ['MEMORY.md', 'navigation.json', 'navigation.md', 'AGENTS.md', 'notes/AGENTS.md', 'notes/README.md', 'notes/implemented/AGENTS.md', 'notes/archived/AGENTS.md', 'notes/archived/manifest.json'] as const;
 const contractBegin = '<!-- ai-workflow:begin -->';
 const contractEnd = '<!-- ai-workflow:end -->';
 const globalInstructionRelative: Record<Host, string> = { opencode: '.config/opencode/AGENTS.md', claude: '.claude/CLAUDE.md', codex: '.codex/AGENTS.md' };
 function projectTargets(): Array<{ source: string; target: string }> {
-  return projectTemplates.map((name) => ({ source: join('templates/project', name), target: name === 'navigation.json' || name === 'navigation.md' ? `.ai-workflow/index/${name}` : name }));
+  return projectTemplates.map((name) => ({ source: join('templates/project', name), target: name === 'MEMORY.md' ? name : name === 'navigation.json' || name === 'navigation.md' ? `.ai-workflow/index/${name}` : `.ai-workflow/${name}` }));
 }
 async function projectTemplateContents(): Promise<Array<{ target: string; contents: string }>> {
   return Promise.all(projectTargets().map(async ({ source, target }) => ({ target, contents: await readFile(new URL(`../../${source}`, import.meta.url), 'utf8') })));
@@ -288,20 +287,12 @@ async function removeEmptyDirectory(path: string): Promise<void> {
   try { await rmdir(path); } catch { /* missing or not empty */ }
 }
 
-async function existingAdrFiles(root: string): Promise<string[]> {
-  const directory = join(root, adrRelative); if (!(await exists(directory))) return [];
-  return (await readdir(directory)).filter((name) => /^\d{4}-.*\.md$/.test(name)).map((name) => join(adrRelative, name));
-}
-
 export async function initializeProject(project: string): Promise<string[]> {
   const root = resolve(project);
   const templates = await projectTemplateContents();
   const conflicts: Array<{ target: string; contents: string }> = [];
   for (const item of templates) if (await exists(join(root, item.target))) conflicts.push(item);
   if (conflicts.length) throw new Error(`Initialization conflicts; no files written. Merge these templates manually:\n${conflicts.map((item) => `${item.target}\n--- proposed ---\n${item.contents}`).join('\n')}`);
-
-  const adrConflicts = await existingAdrFiles(root);
-  if (adrConflicts.length) throw new Error(`Initialization conflicts with existing ADRs; no files written. Merge or remove these ADRs manually:\n${adrConflicts.join('\n')}`);
 
   const facts = await scanProject(root);
   const configResult = await loadProjectConfig(root, facts.files);
@@ -320,15 +311,22 @@ export async function initializeProject(project: string): Promise<string[]> {
   const ignoreOriginal = ignoreExisted ? await readFile(ignorePath, 'utf8') : '';
   const indexDirectory = join(root, '.ai-workflow/index');
   const aiWorkflowDirectory = join(root, '.ai-workflow');
-  const adrDirectory = join(root, adrRelative);
   const indexDirectoryExisted = await exists(indexDirectory);
   const aiWorkflowDirectoryExisted = await exists(aiWorkflowDirectory);
-  const adrDirectoryExisted = await exists(adrDirectory);
+  const notesDirectories = ['.ai-workflow/notes'];
+  for (const lifecycle of ['proposed', 'implemented', 'rejected', 'archived']) {
+    notesDirectories.push(`.ai-workflow/notes/${lifecycle}`);
+    for (const noteClass of ['architecture', 'bug-fix', 'feature', 'process', 'simplification', 'testing']) notesDirectories.push(`.ai-workflow/notes/${lifecycle}/${noteClass}`);
+  }
+  const newNotesDirectories: string[] = [];
+  for (const directory of notesDirectories) if (!(await exists(join(root, directory)))) newNotesDirectories.push(directory);
   const created: string[] = [];
   const writtenFiles: string[] = [];
   try {
-    await mkdir(adrDirectory, { recursive: true });
-    created.push(adrRelative);
+    for (const directory of newNotesDirectories) {
+      await mkdir(join(root, directory), { recursive: true });
+      created.push(directory);
+    }
     for (const item of published) {
       await atomicWrite(join(root, item.target), item.contents);
       writtenFiles.push(join(root, item.target));
@@ -345,7 +343,7 @@ export async function initializeProject(project: string): Promise<string[]> {
     if (ignoreExisted) await writeFile(ignorePath, ignoreOriginal);
     else await rm(ignorePath, { force: true });
     if (!indexDirectoryExisted) await removeEmptyDirectory(indexDirectory);
-    if (!adrDirectoryExisted) await removeEmptyDirectory(adrDirectory);
+    for (const directory of [...newNotesDirectories].reverse()) await removeEmptyDirectory(join(root, directory));
     if (!aiWorkflowDirectoryExisted) await removeEmptyDirectory(aiWorkflowDirectory);
     throw error;
   }
