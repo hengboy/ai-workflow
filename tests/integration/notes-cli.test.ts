@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { execFile } from 'node:child_process';
-import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, rename, rm, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { initializeProject } from '../../src/install/index.js';
@@ -226,5 +226,63 @@ describe('adr command removal', () => {
     expect(result.code).not.toBe(0);
     expect(result.stdout).not.toContain('# ADR list');
     expect(result.stderr.toLowerCase()).toContain('unknown command');
+  });
+});
+
+// Git Operator materializes gitignored state into a worktree by pointing
+// `.ai-workflow/AGENTS.md` and `.ai-workflow/notes` at the same project-root content.
+async function materializeSingleSource(root: string): Promise<void> {
+  const source = await temporary('ai-workflow-notes-source-');
+  await mkdir(join(source, '.ai-workflow'), { recursive: true });
+  await rename(join(root, '.ai-workflow/AGENTS.md'), join(source, '.ai-workflow/AGENTS.md'));
+  await rename(join(root, '.ai-workflow/notes'), join(source, '.ai-workflow/notes'));
+  await symlink(join(source, '.ai-workflow/AGENTS.md'), join(root, '.ai-workflow/AGENTS.md'));
+  await symlink(join(source, '.ai-workflow/notes'), join(root, '.ai-workflow/notes'));
+}
+
+describe('notes CLI under single-source worktree materialization', () => {
+  it('AC-004 lists an empty notes tree materialized as single-source symlinks', async () => {
+    const project = await temporary('ai-workflow-notes-symlink-');
+    await initializeProject(project);
+    await materializeSingleSource(project);
+
+    const result = await runCli(['notes', 'list', '--project', project]);
+
+    expect(result.code).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual({ entries: [] });
+  });
+});
+
+describe('notes CLI missing-structure guards', () => {
+  const removals: Array<[name: string, path: string]> = [
+    ['a class directory', '.ai-workflow/notes/proposed/feature'],
+    ['the notes README', '.ai-workflow/notes/README.md'],
+    ['the whole notes tree', '.ai-workflow/notes'],
+  ];
+
+  it.each(removals)('AC-004 rejects validation after removing %s and names the missing path', async (_name, removed) => {
+    const project = await temporary('ai-workflow-notes-missing-');
+    await initializeProject(project);
+    await rm(join(project, removed), { recursive: true, force: true });
+    const before = await aiWorkflowBytes(project);
+
+    const result = await runCli(['notes', 'validate', '--project', project]);
+
+    expect(result.code).not.toBe(0);
+    expect(result.stdout).toContain(removed);
+    expect(result.stdout).toContain('missing');
+    expect(await aiWorkflowBytes(project)).toEqual(before);
+  });
+
+  it('AC-004 fails notes list with a non-zero exit when the notes tree is missing', async () => {
+    const project = await temporary('ai-workflow-notes-missing-tree-');
+    await initializeProject(project);
+    await rm(join(project, '.ai-workflow/notes'), { recursive: true, force: true });
+    const before = await aiWorkflowBytes(project);
+
+    const result = await runCli(['notes', 'list', '--project', project]);
+
+    expect(result.code).not.toBe(0);
+    expect(await aiWorkflowBytes(project)).toEqual(before);
   });
 });

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, readFile, rename, symlink, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { initializeProject } from '../../src/install/index.js';
 import { validateNotes } from '../../src/notes/validate.js';
@@ -262,6 +262,26 @@ The historical outbound link stays stale.
       version: 1,
       files: { 'archived/process/2026-09-17-archived-decision.md': `sha256:${digest}` },
     }, null, 2)}\n`);
+
+    const result = await validateNotes(project);
+
+    expect(result).toEqual({ valid: true, errors: [] });
+  });
+});
+
+describe('notes validation under single-source worktree materialization', () => {
+  it('accepts a project whose contract and notes tree are symlinks to the same source content', async () => {
+    const project = await temporary('ai-workflow-notes-symlink-');
+    const source = await temporary('ai-workflow-notes-source-');
+    await initializeProject(project);
+    await mkdir(join(source, '.ai-workflow'), { recursive: true });
+    await rename(join(project, '.ai-workflow/AGENTS.md'), join(source, '.ai-workflow/AGENTS.md'));
+    await rename(join(project, '.ai-workflow/notes'), join(source, '.ai-workflow/notes'));
+    await symlink(join(source, '.ai-workflow/AGENTS.md'), join(project, '.ai-workflow/AGENTS.md'));
+    await symlink(join(source, '.ai-workflow/notes'), join(project, '.ai-workflow/notes'));
+
+    expect((await lstat(join(project, '.ai-workflow/AGENTS.md'))).isSymbolicLink()).toBe(true);
+    expect((await lstat(join(project, '.ai-workflow/notes'))).isSymbolicLink()).toBe(true);
 
     const result = await validateNotes(project);
 

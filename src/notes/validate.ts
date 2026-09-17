@@ -1,4 +1,4 @@
-import { lstat, readFile } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import { basename, join, posix } from 'node:path';
 import { resolveProjectRoot } from '../context/paths.js';
 import { exists, readJson } from '../utils/fs.js';
@@ -188,7 +188,7 @@ export async function validateNotes(project: string): Promise<{ valid: boolean; 
       errors.push(`${path}: required notes structure is missing`);
       continue;
     }
-    const stats = await lstat(join(root, path));
+    const stats = await stat(join(root, path));
     const isFile = path.endsWith('.md') || path.endsWith('.json');
     if (isFile ? !stats.isFile() : !stats.isDirectory()) {
       errors.push(`${path}: required notes structure must be a ${isFile ? 'file' : 'directory'}`);
