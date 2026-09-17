@@ -163,6 +163,30 @@ async function rustProject(): Promise<string> {
   return project;
 }
 
+function mixedNavigation(): NavigationIndex {
+  return {
+    version: 1,
+    module_roots: [{ id: 'backend', path: 'src-tauri/src', owner_role: 'backend', responsibility: 'mixed backend', language: 'mixed', entry_kinds: ['command', 'module'] }],
+    features: [{
+      id: 'backend-gateway', name: 'backend gateway', aliases: [], module_root: 'backend',
+      entries: ['src-tauri/src/gateway.rs'],
+      symbols: [{ file: 'src-tauri/src/gateway.rs', name: 'Relay', kind: 'enum', visibility: 'public' }],
+      related_files: [], tests: [], depends_on: [], relations: [],
+      owner_role: 'backend', responsibility: 'rust relay', read_scope: ['src-tauri/src/gateway.rs'], shared_entry: false
+    }]
+  };
+}
+
+async function mixedProject(index = mixedNavigation()): Promise<string> {
+  const project = await temporary('ai-workflow-navigation-semantic-mixed-');
+  await mkdir(join(project, 'src-tauri/src'), { recursive: true });
+  await mkdir(join(project, '.ai-workflow/index'), { recursive: true });
+  await writeFile(join(project, 'src-tauri/src/gateway.rs'), 'pub enum Relay {}\n');
+  await writeFile(join(project, '.ai-workflow/index/navigation.json'), `${JSON.stringify(index)}\n`);
+  await writeFile(join(project, '.ai-workflow/index/navigation.md'), renderNavigation(index));
+  return project;
+}
+
 describe('navigation structural compatibility', () => {
   it('accepts a structural Java file-only root with empty symbols and relations', async () => {
     const project = await javaProject();
@@ -174,6 +198,13 @@ describe('navigation structural compatibility', () => {
     const project = await javaProject();
 
     await expect(verifyNavigation(project, 'com.example.app')).resolves.toMatchObject({ valid: true, errors: [] });
+  });
+
+  it('verifies a selected feature whose mixed-language root declares symbols without a parser', async () => {
+    const project = await mixedProject();
+
+    await expect(validateContext(project)).resolves.toMatchObject({ valid: true, errors: [] });
+    await expect(verifyNavigation(project, 'backend-gateway')).resolves.toMatchObject({ valid: true, errors: [] });
   });
 
   it('marks a structural Java root stale when an unclassified module file appears', async () => {

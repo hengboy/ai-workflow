@@ -276,6 +276,16 @@ async function validateTypeScriptSymbol(project: string, file: string, name: str
   if (!exists) errors.push(`Navigation index is stale: ${file} no longer contains ${name}`);
 }
 
+/**
+ * A module root can be checked with the TypeScript symbol validator only when it
+ * declares `exported-symbol` capability and its language has a parser. Mixed and
+ * structural roots (for example a Rust backend) are covered structurally, so a
+ * per-feature verification must not report their symbols as stale.
+ */
+function supportsSemanticSymbols(root: NavigationModuleRoot): boolean {
+  return root.entry_kinds.includes('exported-symbol') && Boolean(languageParsers[root.language]);
+}
+
 async function validateSemantics(project: string, index: NavigationIndex, features: NavigationIndex['features'], errors: string[]): Promise<void> {
   const usedRoots = new Set(features.map((feature) => feature.module_root));
   for (const root of index.module_roots) {
@@ -289,6 +299,7 @@ async function validateSemantics(project: string, index: NavigationIndex, featur
     for (const symbol of feature.symbols) {
       const root = rootFor(index, symbol.file);
       if (!root) { errors.push(`Navigation index is invalid: ${symbol.file} is outside a module root`); continue; }
+      if (!supportsSemanticSymbols(root)) continue;
       await validateTypeScriptSymbol(project, symbol.file, symbol.name, symbol.kind, symbol.visibility, errors);
     }
     for (const relation of feature.relations) for (const endpoint of [relation.from, relation.to]) {
@@ -299,6 +310,7 @@ async function validateSemantics(project: string, index: NavigationIndex, featur
       }
       const root = rootFor(index, reference.file);
       if (!root) { errors.push(`Navigation index is invalid: ${reference.file} is outside a module root`); continue; }
+      if (!supportsSemanticSymbols(root)) continue;
       await validateTypeScriptSymbol(project, reference.file, reference.name, undefined, 'public', errors);
     }
   }
