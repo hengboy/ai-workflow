@@ -291,30 +291,20 @@ describe('current workflow documentation', () => {
     expect(normalized).not.toMatch(/ADR natural-language prose[^.]{0,160}output_language/i);
   });
 
-  it('keeps the output-language configuration source, values and consumers (REQ-008)', async () => {
+  it('no longer documents an output_language configuration source (REQ-008)', async () => {
     const readme = (await readFile(packagePath('README.md'), 'utf8')).replace(/\s+/g, ' ');
 
     expect(readme).toContain('~/.config/ai-workflow/config.yaml');
-    expect(readme).toContain('output_language');
-    expect(readme).toContain('`en`');
-    expect(readme).toContain('`zh-CN`');
-    expect(readme).toMatch(/default is `en`/);
-    expect(readme).toMatch(/re-running `ai-workflow install`/);
-    expect(readme).toMatch(/\$switch-profile/);
-    for (const consumer of ['`planning`', '`plan-to-tasks`', '`coding`', '`documentation-maintainer`']) {
-      expect(readme, `README documents the ${consumer} language consumer`).toContain(consumer);
-    }
-    for (const category of ['clarification questions', 'confirmation previews', 'progress narration', 'final summary']) {
-      expect(readme, `README documents the ${category} session-prose category`).toContain(category);
-    }
+    expect(readme, 'the removed configuration key is gone from the docs').not.toMatch(/output_language/i);
+    expect(readme, 'config.yaml is documented with its active_profile field').toMatch(/active_profile/);
   });
 
-  it('keeps notes bilingual and independent of the language preference (REQ-008 / AC-016)', async () => {
+  it('keeps notes and planning artifacts bilingual without a language preference (REQ-008 / AC-016)', async () => {
     const readme = (await readFile(packagePath('README.md'), 'utf8')).replace(/\s+/g, ' ');
 
     expect(readme, 'notes are always bilingual').toMatch(/notes.{0,200}bilingual/i);
     expect(readme, 'the Chinese body is documented').toMatch(/\.zh\.md/);
     expect(readme, 'the consistency record is documented').toMatch(/\.i18n\.yaml/);
-    expect(readme, 'output_language remains a documented configuration source').toMatch(/output_language/i);
+    expect(readme, 'no language preference selects the artifact language').not.toMatch(/output_language/i);
   });
 });

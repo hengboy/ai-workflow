@@ -328,7 +328,7 @@ agents:
   it('leaves config.yaml unchanged when a host is uninstalled (regression)', async () => {
     const home = await temporary('ai-workflow-uninstall-config-');
     await writeProfile(home, 'team', 'gpt-5.6');
-    await writeConfig(home, 'output_language: zh-CN\nactive_profile: team\n');
+    await writeConfig(home, 'version: 1\nactive_profile: team\n');
     await install(['codex'], { home });
     const before = await readFile(configPath(home));
 

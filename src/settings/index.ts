@@ -4,14 +4,10 @@ import { join, resolve } from 'node:path';
 import { atomicWrite } from '../utils/fs.js';
 import { formatSchemaErrors, schemaValidator } from '../utils/schema.js';
 
-export type OutputLanguage = 'en' | 'zh-CN';
-
 export interface Settings {
-  output_language: OutputLanguage;
   active_profile?: string;
 }
 
-const supportedLanguages = "'en' and 'zh-CN'";
 const profileNamePattern = /^[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?$/i;
 
 function settingsPath(home: string): string {
@@ -19,7 +15,7 @@ function settingsPath(home: string): string {
 }
 
 function configurationError(path: string, detail: string): Error {
-  return new Error(`Invalid ai-workflow configuration at ${path}: ${detail}; output_language must be one of ${supportedLanguages}`);
+  return new Error(`Invalid ai-workflow configuration at ${path}: ${detail}`);
 }
 
 export async function loadSettings(home: string): Promise<Settings> {
@@ -28,7 +24,7 @@ export async function loadSettings(home: string): Promise<Settings> {
   try {
     source = await readFile(path, 'utf8');
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { output_language: 'en' };
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return {};
     throw error;
   }
 
@@ -39,22 +35,15 @@ export async function loadSettings(home: string): Promise<Settings> {
     throw configurationError(path, error instanceof Error ? error.message : String(error));
   }
 
-  if (settings === null || settings === undefined) return { output_language: 'en' };
+  if (settings === null || settings === undefined) return {};
 
   const validate = await schemaValidator('settings.schema.json');
   if (!validate(settings)) {
     throw configurationError(path, formatSchemaErrors(validate.errors));
   }
 
-  const parsed = settings as { output_language?: OutputLanguage; active_profile?: string };
-  return {
-    output_language: parsed.output_language ?? 'en',
-    ...(parsed.active_profile !== undefined ? { active_profile: parsed.active_profile } : {}),
-  };
-}
-
-export async function loadOutputLanguage(home: string): Promise<OutputLanguage> {
-  return (await loadSettings(home)).output_language;
+  const parsed = settings as { active_profile?: string };
+  return parsed.active_profile !== undefined ? { active_profile: parsed.active_profile } : {};
 }
 
 export async function writeActiveProfile(home: string, name: string): Promise<void> {

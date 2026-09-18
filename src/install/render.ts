@@ -3,34 +3,9 @@ import { basename, join, relative } from 'node:path';
 import { packagePath } from '../utils/schema.js';
 import { parseMarkdown } from '../utils/frontmatter.js';
 import type { Profile } from '../profile/index.js';
-import type { OutputLanguage } from '../settings/index.js';
 import type { Host } from '../workflow/types.js';
 
 export interface RenderedFile { relativePath: string; contents: string }
-
-const languageSkillPaths = new Set(['planning/SKILL.md', 'plan-to-tasks/SKILL.md', 'coding/SKILL.md']);
-
-function languageSection(language: OutputLanguage): string {
-  const name = language === 'en' ? 'English' : 'Simplified Chinese (zh-CN)';
-  return [
-    '## Output language',
-    '',
-    `Output language: ${name}`,
-    '',
-    `Write the agent's interactive and session natural-language prose in ${name}, including clarification questions, confirmation previews, progress narration and final summary.`,
-    '',
-    'Agent notes are the current decision records and are always maintained as a complete bilingual triplet, independent of this preference: the English `<note>.md`, the Chinese `<note>.zh.md`, and the `<note>.i18n.yaml` consistency record that stores each side\'s git blob hash. Both languages carry equal authority. After both sides say the same thing, record the pair with `ai-workflow notes pairing --project <project-root> --write <note>`.',
-    '',
-    'Planning artifacts `spec.md`/`plan.md`/`tasks/*.md` are maintained exactly like Agent Notes: `spec`, `plan` and `tasks` always form a complete bilingual triplet, independent of this preference, with their `.zh.md` Chinese side and `.i18n.yaml` consistency record. This preference only selects the agent\'s interactive and session prose, never the planning artifact sides. After both sides of a planning document say the same thing, record the pair with `ai-workflow plan pairing --plan <plan-directory> --write --all` and verify it with `ai-workflow plan validate --plan <plan-directory>`.',
-    '',
-    `Structural elements remain English in generated planning artifacts and notes alike: the \`# Agent Note:\` title, section headings, table headers, YAML frontmatter keys and their order, \`Status\` and its values, field names, \`REQ-###\`/\`AC-###\` identifiers, file paths, code, dates and enumerated values such as \`surface\`. Only natural-language prose is translated.`,
-    ''
-  ].join('\n');
-}
-
-function appendLanguageSection(source: string, language: OutputLanguage): string {
-  return `${source.endsWith('\n') ? source : `${source}\n`}\n${languageSection(language)}`;
-}
 
 function frontmatterFor(host: Host, source: string): string {
   if (host === 'codex') return source;
@@ -80,25 +55,25 @@ async function markdownFiles(root: string): Promise<string[]> {
   return (await filesRecursively(root)).filter((path) => path.endsWith('.md'));
 }
 
-export async function renderSkills(language: OutputLanguage): Promise<RenderedFile[]> {
+export async function renderSkills(): Promise<RenderedFile[]> {
   const skillRoot = packagePath('templates', 'skills');
   const files: RenderedFile[] = [];
   for (const path of await filesRecursively(skillRoot)) {
     const relativePath = relative(skillRoot, path);
     const contents = await readFile(path, 'utf8');
-    files.push({ relativePath, contents: languageSkillPaths.has(relativePath) ? appendLanguageSection(contents, language) : contents });
+    files.push({ relativePath, contents });
   }
   return files;
 }
 
-export async function renderHost(host: Host, profile?: Profile, language?: OutputLanguage): Promise<RenderedFile[]> {
+export async function renderHost(host: Host, profile?: Profile): Promise<RenderedFile[]> {
   const agentRoot = packagePath('templates', 'agents');
   const agents: RenderedFile[] = [];
   for (const path of await markdownFiles(agentRoot)) {
     const name = basename(path, '.md'); const extension = host === 'codex' ? '.toml' : '.md';
     const source = await readFile(path, 'utf8');
     const rendered = agentFrontmatterFor(host, source, profile?.agents[name]?.[host]);
-    agents.push({ relativePath: `${name}${extension}`, contents: language && name === 'documentation-maintainer' ? `${rendered}\n${languageSection(language)}` : rendered });
+    agents.push({ relativePath: `${name}${extension}`, contents: rendered });
   }
   return agents;
 }

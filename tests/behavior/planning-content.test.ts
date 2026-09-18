@@ -246,6 +246,21 @@ describe('native prompt contracts', () => {
       /\.zh\.md[\s\S]{0,4000}?digest[\s\S]{0,4000}?plan pairing[\s\S]{0,2000}?plan validate/i
     );
   });
+  // REQ-001: the numbered planning workflow itself must carry the triplet and the
+  // validation gate, so an agent following the steps cannot stop at spec.md/plan.md.
+  it('makes the bilingual triplet and the plan validate gate ordered planning workflow steps', async () => {
+    const text = await readFile(packagePath('templates', 'skills', 'planning', 'SKILL.md'), 'utf8');
+    const workflow = text.match(/## Draft and review workflow[\s\S]*?(?=\n## |$)/)?.[0] ?? '';
+
+    expect(workflow, 'the workflow section exists').not.toBe('');
+    for (const file of ['spec.zh.md', 'plan.zh.md', 'spec.i18n.yaml', 'plan.i18n.yaml']) {
+      expect(workflow, `the workflow names ${file}`).toContain(file);
+    }
+    expect(workflow, 'the workflow records the pair').toMatch(/ai-workflow plan pairing --plan[^\n]*--write spec plan/);
+    expect(workflow, 'the workflow validates the triplet').toMatch(/ai-workflow plan validate --plan/);
+    expect(workflow, 'the workflow makes validation a hard gate').toMatch(/hard completion gate/i);
+    expect(workflow, 'the workflow forbids freezing an incomplete triplet').toMatch(/incomplete triplet/i);
+  });
   // REQ-002 / AC-005 (production half): plan-to-tasks must require the task triplet
   // before recording and validating the pair.
   it('requires plan-to-tasks to write both language sides, record the pair, then validate', async () => {

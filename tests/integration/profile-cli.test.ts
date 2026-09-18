@@ -56,16 +56,16 @@ describe('profile CLI', () => {
     expect(config.active_profile).toBe('local');
   });
 
-  it('preserves output_language while adding the new active_profile (AC-002)', async () => {
-    const home = await temporary('ai-workflow-profile-cli-language-');
+  it('preserves an unrelated configuration key while adding the new active_profile (AC-002)', async () => {
+    const home = await temporary('ai-workflow-profile-cli-preserve-');
     await writeProfile(home, 'team');
-    await writeConfig(home, 'output_language: zh-CN\n');
+    await writeConfig(home, 'version: 1\n');
     await exec('pnpm', ['exec', 'tsx', 'src/cli.ts', 'install', '--host', 'codex', '--home', home]);
 
     await exec('pnpm', ['exec', 'tsx', 'src/cli.ts', 'profile', 'activate', 'team', '--home', home]);
 
     const config = await readConfig(home);
-    expect(config.output_language).toBe('zh-CN');
+    expect(config.version).toBe(1);
     expect(config.active_profile).toBe('team');
   });
 });

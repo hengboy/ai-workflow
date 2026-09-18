@@ -177,12 +177,12 @@ async function installUnsafe(hosts: Host[], options: { home?: string; version?: 
   const explicit = options.profile;
   const profile = explicit ?? (settings.active_profile ? await loadProfile(home, settings.active_profile) : undefined);
   // Shared skills are host-neutral and installed once, independent of the requested host list.
-  const skills = await renderSkills(settings.output_language);
+  const skills = await renderSkills();
   const ownedSkills: ManifestFile[] = []; const skipped: string[] = [];
   for (const file of skills) { const path = join(skillsRoot(home), file.relativePath); if (await writeOwnedFile(home, file, manifest.skills, skillsRoot(home))) ownedSkills.push({ path: relative(home, path), digest: sha256(file.contents), kind: 'file' }); else { const prior = manifest.skills?.find((item) => item.path === relative(home, path)); if (prior) { ownedSkills.push(prior); skipped.push(prior.path); } } }
   await removeStaleOwnedFiles(home, manifest.skills ?? [], ownedSkills);
   manifest.skills = ownedSkills;
-  const renderedHosts = new Map<Host, RenderedFile[]>(); for (const host of hosts) renderedHosts.set(host, await renderHost(host, profile, settings.output_language));
+  const renderedHosts = new Map<Host, RenderedFile[]>(); for (const host of hosts) renderedHosts.set(host, await renderHost(host, profile));
   for (const host of hosts) {
     const rendered = renderedHosts.get(host); if (!rendered) throw new Error(`Missing rendered host: ${host}`);
     const target = agentsRoot(home, host);

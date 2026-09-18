@@ -46,7 +46,7 @@ ai-workflow notes archive [--project .] --seal
 
 Navigation is JSON-authoritative. `context locate` resolves a feature by exact ID then exact alias; task queries match exact feature, alias, task, requirement, or acceptance-criterion IDs; symbols match an exact export name or qualified `file#symbol` name. A hit returns exact indexed paths; `missing_index`, `miss`, `stale`, and `invalid` return a fallback packet that must be validated before bounded discovery. `context candidate` emits the structured input for refresh, while `context refresh` atomically replaces `navigation.json` and its generated Markdown view only after candidate validation succeeds.
 
-`ai-workflow notes` works on the Agent Notes under `.ai-workflow/notes/`, which are the project's proposal and decision records. The retired ADR mechanism has no command, alias, migration path or fallback: existing local ADR history files are left untouched but are never read, listed or validated by the workflow.
+`ai-workflow notes` works on the Agent Notes under `.ai-workflow/notes/`, which are the project's proposal and decision records, maintained as complete bilingual English/Chinese triplets. The retired ADR mechanism has no command, alias, migration path or fallback: existing local ADR history files are left untouched but are never read, listed or validated by the workflow.
 
 Every planning artifact under `.ai-workflow/plans/<planId>/` is a complete bilingual triplet, the same contract as Agent Notes: planning writes `spec.md` and `plan.md` as `<doc>.md` (English) plus `<doc>.zh.md` (Chinese) and `<doc>.i18n.yaml` (consistency record), and plan-to-tasks writes each `tasks/task-NNN-slug.md` the same way. The English side alone carries the YAML frontmatter, the `REQ-###`/`AC-###` identifiers and counts and the `digest`; the Chinese side has no frontmatter and starts with the same English title, then `[English](<doc>.md) | 中文`, while the English side carries `English | [中文](<doc>.zh.md)`. Both sides mirror each other's heading, code, table, list and link structure. Task enumeration treats only `task-NNN-slug.md` as a main document and reports a `.zh.md` or `.i18n.yaml` without a matching main document as an orphan error, and the `.i18n.yaml` record is never treated as a third body.
 
@@ -123,7 +123,7 @@ Navigation is JSON-authoritative version-1 output produced by a single builder, 
 
 ## Profiles
 
-Store profiles at `~/.config/ai-workflow/profiles/<name>.yaml`, then activate one with `ai-workflow profile activate <name>` or the installed `$switch-profile` skill. `~/.config/ai-workflow/config.yaml` is the single configuration source, and it stores the top-level optional `active_profile` field alongside `output_language`. Activation only accepts an existing, valid profile, writes or updates `active_profile` in `config.yaml`, and immediately reinstalls agents for every host already managed by ai-workflow. It always targets the explicit `<name>` argument; it never reads the current `active_profile` value as its activation target. Its JSON report lists each host, agents directory, installed agent path and explicit profile model settings. Later `install` or upgrade commands resolve the active profile from `active_profile` in `config.yaml` and reuse it automatically.
+Store profiles at `~/.config/ai-workflow/profiles/<name>.yaml`, then activate one with `ai-workflow profile activate <name>` or the installed `$switch-profile` skill. `~/.config/ai-workflow/config.yaml` is the single configuration source, and it stores the top-level optional `active_profile` field. Activation only accepts an existing, valid profile, writes or updates `active_profile` in `config.yaml`, and immediately reinstalls agents for every host already managed by ai-workflow. It always targets the explicit `<name>` argument; it never reads the current `active_profile` value as its activation target. Its JSON report lists each host, agents directory, installed agent path and explicit profile model settings. Later `install` or upgrade commands resolve the active profile from `active_profile` in `config.yaml` and reuse it automatically.
 
 Do not hand-edit the `active_profile` field in `config.yaml`; use `ai-workflow profile activate <name>` so the value is validated and agents are reinstalled.
 
@@ -151,21 +151,6 @@ agents:
 ```
 
 Supported reasoning values are `low`, `medium`, `high`, `xhigh`, `max` and `ultra`. The installer converts the shared `reasoning_effort` field to each host's native agent configuration.
-
-## Output language
-
-`output_language` selects the natural-language prose of the agent's own interactive/session output. It is read from `~/.config/ai-workflow/config.yaml`, the single user-owned configuration source that also carries the optional `active_profile` field described under Profiles. It does not select the language of planning artifacts or Agent Notes.
-
-```yaml
-output_language: zh-CN
-```
-
-- `output_language` accepts `en` (English) or `zh-CN` (Simplified Chinese). The default is `en` when the file or the field is absent.
-- The language is resolved when `ai-workflow install` runs, so changing it requires re-running `ai-workflow install` or the installed `$switch-profile` skill, which reinstalls through the same path.
-- The directive is injected into exactly the installed `planning`, `plan-to-tasks` and `coding` skills and the installed `documentation-maintainer` role. It governs only the agent's interactive/session natural-language prose: clarification questions, confirmation previews, progress narration and final summary.
-- Planning artifacts and Agent Notes are always complete bilingual triplets and do not follow `output_language`. `planning` and `plan-to-tasks` write the English side, the Chinese side and the `.i18n.yaml` record for `spec.md`, `plan.md` and `tasks/*.md`, and record the pair with `ai-workflow plan pairing --plan <directory> --write --all`; `documentation-maintainer` writes the English and Chinese bodies plus the `.i18n.yaml` consistency record for every note, independent of the configured language. There is no new configuration item.
-- Structural elements remain English in both sides regardless of the preference, including the `# Agent Note:` prefix, section headings, table headers, YAML frontmatter keys and their order, field names, `Status` and its values, `REQ-###`/`AC-###` identifiers, file paths, code, dates and enumerated values such as `surface`; only the prose is translated. Record a confirmed note pair with `ai-workflow notes pairing --write`.
-- An unsupported value or malformed configuration fails installation before any managed file is written. The file remains user-owned: ai-workflow reads `output_language` and writes only `active_profile`, preserving existing keys, and never records the file in the install manifest.
 
 ## Optional real-host smoke
 

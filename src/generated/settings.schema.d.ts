@@ -2,6 +2,5 @@
 
 export interface Settings {
   version?: 1;
-  output_language?: "en" | "zh-CN";
   active_profile?: string;
 }
