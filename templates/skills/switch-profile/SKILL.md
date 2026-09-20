@@ -12,9 +12,10 @@ Activate one existing profile and use the local, self-contained `ai-workflow` CL
 ## Workflow
 
 1. Obtain the exact profile name from the request. Profile files live at `~/.config/ai-workflow/profiles/<name>.yaml`.
-2. Run `ai-workflow profile activate <name>` once. Use `--home <path>` only when the user explicitly targets another home directory or the surrounding test uses an isolated home.
-3. Treat a zero exit status and parseable JSON output as success. The CLI records the active profile in the top-level `active_profile` field of `~/.config/ai-workflow/config.yaml`; do not hand-edit the `active_profile` field in `config.yaml`, and do not edit the profile, install manifest, skill files, or agent files directly.
-4. Report `active_profile`, then each entry in `installations` with its `host`, `agents_directory`, and installed agents. Include explicit `model` and `reasoning_effort` values when present; otherwise say the agent uses the host default.
-5. If `installations` is empty, explain that the profile is active but no previously managed host had agents to reinstall. The user can install a host separately with `ai-workflow install --host <host>`.
+2. Ensure the `ai-workflow` binary is freshly built from its backing checkout before activating. The global binary runs `<checkout>/dist/cli.js` while the test suite runs against `<checkout>/src/`, so a stale `dist/` silently reinstalls outdated agents. Locate the checkout (e.g. `grep -o '[^" ]*/dist/cli.js' "$(command -v ai-workflow)"` or `ls -l "$(pnpm root -g)/ai-workflow"`), and if any file under `<checkout>/src` is newer than `<checkout>/dist/cli.js`, run `pnpm --dir <checkout> build` first. Abort the switch if the build fails.
+3. Run `ai-workflow profile activate <name>` once. Use `--home <path>` only when the user explicitly targets another home directory or the surrounding test uses an isolated home.
+4. Treat a zero exit status and parseable JSON output as success. The CLI records the active profile in the top-level `active_profile` field of `~/.config/ai-workflow/config.yaml`; do not hand-edit the `active_profile` field in `config.yaml`, and do not edit the profile, install manifest, skill files, or agent files directly.
+5. Report `active_profile`, then each entry in `installations` with its `host`, `agents_directory`, and installed agents. Include explicit `model` and `reasoning_effort` values when present; otherwise say the agent uses the host default.
+6. If `installations` is empty, explain that the profile is active but no previously managed host had agents to reinstall. The user can install a host separately with `ai-workflow install --host <host>`.
 
 If activation fails, return the CLI error and do not claim that the profile switched or that agents were reinstalled. Do not retry with a different profile or install additional hosts without the user's direction.
