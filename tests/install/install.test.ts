@@ -150,8 +150,11 @@ agents:
     const claude = await readFile(join(home, '.claude/agents/backend.md'), 'utf8');
     expect(claude).toContain('allowed-tools: [read, edit, shell]');
     const opencode = await readFile(join(home, '.config/opencode/agents/backend.md'), 'utf8');
-    expect(opencode).toContain('hidden: true');
-    expect(opencode).toContain('permission:\n  read: allow\n  edit: allow\n  bash: allow');
+    // OpenCode V2: subagent-mode agents stay dispatchable through the `subagent` tool, while
+    // `hidden: true` would remove them from the subagent catalog entirely.
+    expect(opencode).toContain('mode: subagent');
+    expect(opencode).not.toContain('hidden: true');
+    expect(opencode).toContain('permissions:');
     expect(opencode).not.toContain('tools:');
   });
   it('removes previously managed prefixed agents during an upgrade', async () => {

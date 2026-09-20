@@ -7,18 +7,28 @@ import type { Host } from '../workflow/types.js';
 
 export interface RenderedFile { relativePath: string; contents: string }
 
+// OpenCode V2 actions covering the template tool vocabulary. `search` has no single action;
+// it maps to the filename and content discovery tools. `web` maps to both web tools.
+const opencodeActions: Record<string, string[]> = {
+  read: ['read'],
+  search: ['glob', 'grep'],
+  edit: ['edit'],
+  shell: ['shell'],
+  web: ['webfetch', 'websearch']
+};
+
+function opencodePermissionRules(tools: string): string {
+  const rules = tools.split(',').map((tool) => tool.trim()).filter(Boolean).flatMap((tool) => opencodeActions[tool] ?? [tool])
+    .map((action) => `  - action: ${action}\n    resource: "*"\n    effect: allow`);
+  // Only the primary orchestrator dispatches, so role agents never launch nested subagents.
+  rules.push('  - action: subagent\n    resource: "*"\n    effect: deny');
+  return `mode: subagent\npermissions:\n${rules.join('\n')}`;
+}
+
 function frontmatterFor(host: Host, source: string): string {
   if (host === 'codex') return source;
   if (host === 'claude') return source.replace(/^tools: \[(.*)]$/m, 'allowed-tools: [$1]');
-  return source.replace(/^tools: \[(.*)]$/m, (_match, tools: string) => {
-    const permissions = tools.split(',').map((tool) => tool.trim()).filter(Boolean).flatMap((tool) => {
-      const key = tool === 'shell' ? 'bash' : tool;
-      // OpenCode models search as a combination of filename and content queries.
-      if (key === 'search') return [['glob', 'allow'], ['grep', 'allow'], ['list', 'allow']];
-      return [[key, 'allow']];
-    });
-    return `permission:\n${permissions.map(([key, action]) => `  ${key}: ${action}`).join('\n')}`;
-  });
+  return source.replace(/^tools: \[(.*)]$/m, (_match, tools: string) => opencodePermissionRules(tools));
 }
 
 function quoted(value: string): string { return JSON.stringify(value); }
@@ -38,11 +48,12 @@ function codexAgent(source: string, settings: { model: string; reasoning_effort:
 function agentFrontmatterFor(host: Host, source: string, settings: { model: string; reasoning_effort: string } | undefined): string {
   if (host === 'codex') return codexAgent(source, settings);
   const rendered = frontmatterFor(host, source);
-  const configuration = settings ? host === 'claude'
-    ? `model: ${quoted(settings.model)}\neffort: ${quoted(settings.reasoning_effort)}\n`
-    : `model: ${quoted(settings.model)}\nreasoningEffort: ${quoted(settings.reasoning_effort)}\n`
+  const configuration = settings
+    ? host === 'claude'
+      ? `model: ${quoted(settings.model)}\neffort: ${quoted(settings.reasoning_effort)}\n`
+      : `model: ${quoted(settings.model)}\nreasoningEffort: ${quoted(settings.reasoning_effort)}\n`
     : '';
-  return host === 'opencode' ? rendered.replace(/^---\n/, `---\nhidden: true\n${configuration}`) : rendered.replace(/^---\n/, `---\n${configuration}`);
+  return rendered.replace(/^---\n/, `---\n${configuration}`);
 }
 
 async function filesRecursively(root: string): Promise<string[]> {
