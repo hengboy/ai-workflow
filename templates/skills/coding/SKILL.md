@@ -26,6 +26,10 @@ non-blocked delegated step remains.
 - When a test must be written or changed, delegate that test work to the
   `test` sub-agent first. The implementation sub-agent may consume the test
   and fix production code, but must not write the test itself.
+- Do not dispatch the same sub-agent role more than once for the same plan
+  step or task; batch all work for that role into its single delegation. A
+  second dispatch to the same role is allowed only as a review repair with new
+  evidence or new inputs.
 - The primary orchestrator directly dispatches Git Operator for every per-step commit, merge and finalization; Git Operator is the only role allowed to run Git and uses the prescribed `git-commit` conventions, and specialists never dispatch children.
 
 ## Surface routing
