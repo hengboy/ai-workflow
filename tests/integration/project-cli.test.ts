@@ -37,7 +37,7 @@ describe('project CLI', () => {
     expect(output).toMatch(/update/i);
   });
 
-  it('adds .ai-workflow/ to .gitignore on init', async () => {
+  it('ignores only .ai-workflow/plans on init', async () => {
     const project = await temporary('ai-workflow-project-cli-ignore-');
 
     await exec('pnpm', ['exec', 'tsx', 'src/cli.ts', 'init', project]);
@@ -45,21 +45,37 @@ describe('project CLI', () => {
     const { readFile } = await import('node:fs/promises');
     const ignore = await readFile(join(project, '.gitignore'), 'utf8');
     const lines = ignore.split(/\r?\n/).map((line) => line.trim());
-    expect(lines).toContain('.ai-workflow/');
-    expect(lines).toContain('*.log');
-    expect(lines).toContain('MEMORY.md');
+    expect(lines).toContain('.ai-workflow/plans/');
+    expect(lines).toContain('.worktrees/');
+    expect(lines).not.toContain('.ai-workflow/');
+    expect(lines).not.toContain('MEMORY.md');
+    expect(lines).not.toContain('*.log');
   });
 
-  it('does not duplicate .ai-workflow or MEMORY.md entries if already present in .gitignore', async () => {
+  it('does not duplicate .ai-workflow/plans or .worktrees entries if already present in .gitignore', async () => {
     const project = await temporary('ai-workflow-project-cli-ignore-dup-');
     const { writeFile, readFile } = await import('node:fs/promises');
-    await writeFile(join(project, '.gitignore'), 'node_modules/\n.ai-workflow/\nMEMORY.md\n');
+    await writeFile(join(project, '.gitignore'), 'node_modules/\n.ai-workflow/plans/\n.worktrees/\n');
+
+    await exec('pnpm', ['exec', 'tsx', 'src/cli.ts', 'init', project]);
+
+    const ignore = await readFile(join(project, '.gitignore'), 'utf8');
+    const lines = ignore.split(/\r?\n/).map((line) => line.trim());
+    expect(lines.filter((line) => line === '.ai-workflow/plans' || line === '.ai-workflow/plans/')).toHaveLength(1);
+    expect(lines.filter((line) => line === '.worktrees' || line === '.worktrees/')).toHaveLength(1);
+  });
+
+  it('treats a legacy whole-tree .ai-workflow ignore as covering plans', async () => {
+    const project = await temporary('ai-workflow-project-cli-ignore-legacy-');
+    const { writeFile, readFile } = await import('node:fs/promises');
+    await writeFile(join(project, '.gitignore'), 'node_modules/\n.ai-workflow/\n');
 
     await exec('pnpm', ['exec', 'tsx', 'src/cli.ts', 'init', project]);
 
     const ignore = await readFile(join(project, '.gitignore'), 'utf8');
     const lines = ignore.split(/\r?\n/).map((line) => line.trim());
     expect(lines.filter((line) => line === '.ai-workflow' || line === '.ai-workflow/')).toHaveLength(1);
-    expect(lines.filter((line) => line === 'MEMORY.md')).toHaveLength(1);
+    expect(lines).not.toContain('.ai-workflow/plans/');
+    expect(lines).toContain('.worktrees/');
   });
 });

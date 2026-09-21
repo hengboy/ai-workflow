@@ -4,7 +4,7 @@ Describe architecture, module responsibilities, coding standards and invariants 
 
 Planning produces frozen `spec.md` and `plan.md`; plan-to-tasks produces immutable task documents. Coding implements split tasks or an approved unsplit frozen plan with TDD and never creates a workflow runtime artifact.
 
-- Coding must create one project-local temporary worktree under `<project>/.worktrees/<name>` before implementation; all implementation and validation happen inside that single worktree. Git Operator materializes the project's entire gitignored state into the worktree, excluding the `.worktrees/` container, so the project contract, MEMORY, navigation and notes stay visible and single-source at the project root.
+- Coding must create one project-local temporary worktree under `<project>/.worktrees/<name>` before implementation; all implementation and validation happen inside that single worktree. Git Operator materializes the project's entire gitignored state into the worktree, excluding the `.worktrees/` container, so `.ai-workflow/plans/` stays visible and single-source at the project root while the project contract, MEMORY, navigation and notes arrive with the worktree through Git.
 
 ## Host role agents
 

@@ -59,7 +59,9 @@ describe('generated project initialization', () => {
 
     expect(await exists(join(root, 'MEMORY.md'))).toBe(true);
     const ignoreLines = (await readText(root, '.gitignore')).split(/\r?\n/).map((line) => line.trim());
-    expect(ignoreLines).toContain('MEMORY.md');
+    expect(ignoreLines).toContain('.ai-workflow/plans/');
+    expect(ignoreLines).toContain('.worktrees/');
+    expect(ignoreLines).not.toContain('MEMORY.md');
   });
 
   it('initializes an empty project with an empty index and matching markdown', async () => {

@@ -72,8 +72,9 @@ installed role, fail before execution and request clarification.
   under `<project>/.worktrees/<name>` (ensure `.gitignore` contains
   `.worktrees/`). Git Operator must then materialize the project's entire
   gitignored state into the worktree, excluding only the `.worktrees/` container,
-  so the frozen plan, `MEMORY.md`, navigation, notes and dependencies stay
-  visible and single-source at the project root. This is a mandatory step of
+  so `.ai-workflow/plans/` and dependencies stay visible and single-source at
+  the project root; `MEMORY.md`, navigation and notes travel with Git and arrive
+  with the worktree. This is a mandatory step of
   every coding execution unit, not an option reserved for high-risk work: all
   implementation, validation and per-step commits happen inside that single
   worktree, and only the owned worktree and branch are merged and removed at the

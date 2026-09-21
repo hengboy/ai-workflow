@@ -67,10 +67,12 @@ function notesStructureDirectories(): string[] {
 }
 function missingIgnoreLines(original: string): string[] {
   const lines = original.split(/\r?\n/).map((line) => line.trim());
+  const has = (candidates: string[]): boolean => lines.some((line) => candidates.includes(line));
   const additions: string[] = [];
-  if (!lines.some((line) => line === '.ai-workflow' || line === '.ai-workflow/')) additions.push('.ai-workflow/');
-  if (!lines.includes('*.log')) additions.push('*.log');
-  if (!lines.includes('MEMORY.md')) additions.push('MEMORY.md');
+  // Only `.ai-workflow/plans/` is ignored. When the whole `.ai-workflow/` tree is
+  // already ignored (legacy projects), plans are already covered, so skip the redundant entry.
+  if (!has(['.ai-workflow', '.ai-workflow/', '.ai-workflow/plans', '.ai-workflow/plans/'])) additions.push('.ai-workflow/plans/');
+  if (!has(['.worktrees', '.worktrees/'])) additions.push('.worktrees/');
   return additions;
 }
 

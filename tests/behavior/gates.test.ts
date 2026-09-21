@@ -41,9 +41,8 @@ describe('write gates', () => {
     expect(await readFile(join(root, 'AGENTS.md'), 'utf8')).toBe(agentsBytes);
     expect(await exists(join(root, 'MEMORY.md'))).toBe(true);
     const ignoreLines = (await readFile(join(root, '.gitignore'), 'utf8')).split(/\r?\n/).map((line) => line.trim());
-    expect(ignoreLines).toContain('.ai-workflow/');
-    expect(ignoreLines).toContain('MEMORY.md');
-    expect(ignoreLines).toContain('*.log');
+    expect(ignoreLines).toContain('.ai-workflow/plans/');
+    expect(ignoreLines).toContain('.worktrees/');
   });
   it('init preflights conflicts without partial writes', async () => {
     const root = await temporary();
