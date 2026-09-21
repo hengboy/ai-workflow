@@ -4,8 +4,10 @@ import { packagePath } from '../utils/schema.js';
 import { parseMarkdown } from '../utils/frontmatter.js';
 import type { Profile } from '../profile/index.js';
 import type { Host } from '../workflow/types.js';
+import type { OpencodeVersion } from './opencode-version.js';
 
 export interface RenderedFile { relativePath: string; contents: string }
+export interface RenderHostOptions { opencodeVersion?: OpencodeVersion }
 
 // OpenCode V2 actions covering the template tool vocabulary. `search` has no single action;
 // it maps to the filename and content discovery tools. `web` maps to both web tools.
@@ -17,6 +19,18 @@ const opencodeActions: Record<string, string[]> = {
   web: ['webfetch', 'websearch']
 };
 
+// OpenCode V1 permission keys. V1 uses `bash` instead of `shell` and `task`
+// instead of `subagent`. See https://opencode.ai/v2/docs/migrate-v1.
+const opencodeV1Actions: Record<string, string[]> = {
+  read: ['read'],
+  search: ['glob', 'grep'],
+  edit: ['edit'],
+  shell: ['bash'],
+  web: ['webfetch', 'websearch']
+};
+
+const opencodeV1KeyOrder = ['read', 'edit', 'glob', 'grep', 'bash', 'webfetch', 'websearch'];
+
 function opencodePermissionRules(tools: string): string {
   const rules = tools.split(',').map((tool) => tool.trim()).filter(Boolean).flatMap((tool) => opencodeActions[tool] ?? [tool])
     .map((action) => `  - action: ${action}\n    resource: "*"\n    effect: allow`);
@@ -25,10 +39,18 @@ function opencodePermissionRules(tools: string): string {
   return `mode: subagent\npermissions:\n${rules.join('\n')}`;
 }
 
-function frontmatterFor(host: Host, source: string): string {
+function opencodeV1PermissionRules(tools: string): string {
+  const allowed = new Set(tools.split(',').map((tool) => tool.trim()).filter(Boolean).flatMap((tool) => opencodeV1Actions[tool] ?? [tool]));
+  const lines = opencodeV1KeyOrder.filter((key) => allowed.has(key)).map((key) => `  ${key}: allow`);
+  // Only the primary orchestrator dispatches, so role agents never launch nested subagents.
+  lines.push('  task: deny');
+  return `mode: subagent\npermission:\n${lines.join('\n')}`;
+}
+
+function frontmatterFor(host: Host, source: string, opencodeVersion: OpencodeVersion): string {
   if (host === 'codex') return source;
   if (host === 'claude') return source.replace(/^tools: \[(.*)]$/m, 'allowed-tools: [$1]');
-  return source.replace(/^tools: \[(.*)]$/m, (_match, tools: string) => opencodePermissionRules(tools));
+  return source.replace(/^tools: \[(.*)]$/m, (_match, tools: string) => opencodeVersion === 'v1' ? opencodeV1PermissionRules(tools) : opencodePermissionRules(tools));
 }
 
 function quoted(value: string): string { return JSON.stringify(value); }
@@ -45,9 +67,9 @@ function codexAgent(source: string, settings: { model: string; reasoning_effort:
   ].join('\n');
 }
 
-function agentFrontmatterFor(host: Host, source: string, settings: { model: string; reasoning_effort: string } | undefined): string {
+function agentFrontmatterFor(host: Host, source: string, settings: { model: string; reasoning_effort: string } | undefined, opencodeVersion: OpencodeVersion): string {
   if (host === 'codex') return codexAgent(source, settings);
-  const rendered = frontmatterFor(host, source);
+  const rendered = frontmatterFor(host, source, opencodeVersion);
   const configuration = settings
     ? host === 'claude'
       ? `model: ${quoted(settings.model)}\neffort: ${quoted(settings.reasoning_effort)}\n`
@@ -77,13 +99,14 @@ export async function renderSkills(): Promise<RenderedFile[]> {
   return files;
 }
 
-export async function renderHost(host: Host, profile?: Profile): Promise<RenderedFile[]> {
+export async function renderHost(host: Host, profile?: Profile, options?: RenderHostOptions): Promise<RenderedFile[]> {
   const agentRoot = packagePath('templates', 'agents');
   const agents: RenderedFile[] = [];
+  const opencodeVersion = options?.opencodeVersion ?? 'v2';
   for (const path of await markdownFiles(agentRoot)) {
     const name = basename(path, '.md'); const extension = host === 'codex' ? '.toml' : '.md';
     const source = await readFile(path, 'utf8');
-    const rendered = agentFrontmatterFor(host, source, profile?.agents[name]?.[host]);
+    const rendered = agentFrontmatterFor(host, source, profile?.agents[name]?.[host], opencodeVersion);
     agents.push({ relativePath: `${name}${extension}`, contents: rendered });
   }
   return agents;

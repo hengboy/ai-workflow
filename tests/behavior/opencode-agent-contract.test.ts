@@ -81,3 +81,33 @@ describe('opencode v2 role agent frontmatter', () => {
     }
   });
 });
+
+describe('opencode v1 role agent frontmatter', () => {
+  it('renders every role with singular permission keys (bash/task)', async () => {
+    const files = await renderHost('opencode', undefined, { opencodeVersion: 'v1' });
+    expect(files).toHaveLength(Object.keys(expectedActions).length);
+
+    for (const file of files) {
+      const head = frontmatter(file.contents);
+      expect(head, file.relativePath).toContain('mode: subagent');
+      expect(head, file.relativePath).toMatch(/^permission:$/m);
+      expect(head, file.relativePath).not.toMatch(/^permissions:$/m);
+      expect(head, file.relativePath).not.toMatch(/^tools:/m);
+      expect(head, file.relativePath).toContain('  task: deny');
+      expect(head, file.relativePath).not.toContain('action:');
+      expect(head, file.relativePath).not.toMatch(/^  shell:/m);
+    }
+
+    const headOf = (role: string): string => {
+      const file = files.find((candidate) => candidate.relativePath === `${role}.md`);
+      if (!file) throw new Error(`Missing rendered agent for ${role}`);
+      return frontmatter(file.contents);
+    };
+    expect(headOf('backend')).toContain('  bash: allow');
+    expect(headOf('backend')).toContain('  edit: allow');
+    expect(headOf('file-explorer')).toContain('  glob: allow');
+    expect(headOf('file-explorer')).toContain('  grep: allow');
+    expect(headOf('researcher')).toContain('  webfetch: allow');
+    expect(headOf('researcher')).toContain('  websearch: allow');
+  });
+});

@@ -5,6 +5,8 @@ import { atomicWrite, exists, readJson, writeJson } from '../utils/fs.js';
 import { sha256 } from '../utils/hash.js';
 import { packagePath } from '../utils/schema.js';
 import { renderHost, renderSkills, type RenderedFile } from './render.js';
+import type { OpencodeVersionOption } from './opencode-version.js';
+import { resolveOpencodeVersion } from './opencode-version.js';
 import { loadProfile, type Profile } from '../profile/index.js';
 import { loadSettings, writeActiveProfile } from '../settings/index.js';
 import { noteClasses, noteLifecycles } from '../notes/index.js';
@@ -170,19 +172,20 @@ async function installContracts(home: string, hosts: Host[], manifest: InstallMa
   if (Object.keys(contracts).length) manifest.contracts = contracts; else delete manifest.contracts;
 }
 
-async function installUnsafe(hosts: Host[], options: { home?: string; version?: string; profile?: Profile } = {}): Promise<InstallManifest> {
+async function installUnsafe(hosts: Host[], options: { home?: string; version?: string; profile?: Profile; opencodeVersion?: OpencodeVersionOption } = {}): Promise<InstallManifest> {
   const home = resolve(options.home ?? homedir()); const version = options.version ?? '0.1.0'; const manifest = await readManifest(home);
   // Resolve settings once before any render or write so an invalid active_profile aborts pre-write.
   const settings = await loadSettings(home);
   const explicit = options.profile;
   const profile = explicit ?? (settings.active_profile ? await loadProfile(home, settings.active_profile) : undefined);
+  const opencodeVersion = hosts.includes('opencode') ? await resolveOpencodeVersion(options.opencodeVersion ?? 'v2') : 'v2';
   // Shared skills are host-neutral and installed once, independent of the requested host list.
   const skills = await renderSkills();
   const ownedSkills: ManifestFile[] = []; const skipped: string[] = [];
   for (const file of skills) { const path = join(skillsRoot(home), file.relativePath); if (await writeOwnedFile(home, file, manifest.skills, skillsRoot(home))) ownedSkills.push({ path: relative(home, path), digest: sha256(file.contents), kind: 'file' }); else { const prior = manifest.skills?.find((item) => item.path === relative(home, path)); if (prior) { ownedSkills.push(prior); skipped.push(prior.path); } } }
   await removeStaleOwnedFiles(home, manifest.skills ?? [], ownedSkills);
   manifest.skills = ownedSkills;
-  const renderedHosts = new Map<Host, RenderedFile[]>(); for (const host of hosts) renderedHosts.set(host, await renderHost(host, profile));
+  const renderedHosts = new Map<Host, RenderedFile[]>(); for (const host of hosts) renderedHosts.set(host, await renderHost(host, profile, host === 'opencode' ? { opencodeVersion } : undefined));
   for (const host of hosts) {
     const rendered = renderedHosts.get(host); if (!rendered) throw new Error(`Missing rendered host: ${host}`);
     const target = agentsRoot(home, host);
@@ -197,7 +200,7 @@ async function installUnsafe(hosts: Host[], options: { home?: string; version?: 
   return manifest;
 }
 
-export async function install(hosts: Host[], options: { home?: string; version?: string; profile?: Profile } = {}): Promise<InstallManifest> {
+export async function install(hosts: Host[], options: { home?: string; version?: string; profile?: Profile; opencodeVersion?: OpencodeVersionOption } = {}): Promise<InstallManifest> {
   const home = resolve(options.home ?? homedir()); const manifestPath = join(home, manifestRelative); const hadManifest = await exists(manifestPath); const previous = hadManifest ? await readFile(manifestPath) : undefined;
   const configPath = settingsConfigPath(home); const hadConfig = await exists(configPath); const previousConfig = hadConfig ? await readFile(configPath) : undefined;
   const globalSnapshots = new Map<string, Buffer | undefined>();
@@ -233,7 +236,7 @@ function profileInstallations(home: string, hosts: Host[], manifest: InstallMani
   });
 }
 
-export async function activateProfile(name: string, options: { home?: string; version?: string } = {}): Promise<ProfileActivationReport> {
+export async function activateProfile(name: string, options: { home?: string; version?: string; opencodeVersion?: OpencodeVersionOption } = {}): Promise<ProfileActivationReport> {
   const home = resolve(options.home ?? homedir()); const profile = await loadProfile(home, name);
   // Validate the existing configuration before any mutation so an illegal active_profile aborts pre-write.
   await loadSettings(home);
@@ -248,7 +251,7 @@ export async function activateProfile(name: string, options: { home?: string; ve
   const configPath = settingsConfigPath(home); const manifestPath = join(home, manifestRelative);
   const configBefore = await readIfExists(configPath); const manifestBefore = await readIfExists(manifestPath);
   try {
-    const installed = hosts.length ? await install(hosts, { home, version: options.version ?? manifest.version, profile }) : manifest;
+    const installed = hosts.length ? await install(hosts, { home, version: options.version ?? manifest.version, profile, ...(options.opencodeVersion ? { opencodeVersion: options.opencodeVersion } : {}) }) : manifest;
     await writeActiveProfile(home, name);
      return { active_profile: name, hosts: reportedHosts, installations: profileInstallations(home, reportedHosts, installed, profile) };
   } catch (error) {
