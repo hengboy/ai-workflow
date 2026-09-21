@@ -36,6 +36,8 @@ Only the English `plan.md` carries the YAML frontmatter with `plan_id`, `status:
 
 ## Implementation sequence
 
+Keep the sequence cohesive and priority-ordered: merge tightly related behavior and its tests into one step, and do not create per-file or mechanical steps that only add execution overhead.
+
 ### Step 1: Short outcome name
 
 - Responsible role: `backend`, `frontend`, `test`, or another installed native role. Do not add a `surface` field to a plan step; surface routing belongs to generated task files.

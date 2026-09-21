@@ -102,6 +102,27 @@ describe('native prompt contracts', () => {
     expect(step).not.toMatch(/^- surface:/im);
     expect(planTemplate).not.toMatch(/^surface:/im);
   });
+  it('requires cohesive, priority-ordered decomposition without over-fine steps or tasks', async () => {
+    const planning = await readFile(packagePath('templates', 'skills', 'planning', 'SKILL.md'), 'utf8');
+    expect(planning).toMatch(/## Step granularity/);
+    expect(planning).toMatch(/cohesive, independently verifiable outcomes/i);
+    expect(planning).toMatch(/dependency and priority/i);
+    expect(planning).toMatch(/Never over-decompose: every step adds a delegation, a verification and a commit/i);
+    expect(planning).toMatch(/merge work that shares one outcome, one responsible role and one validation command/i);
+
+    const planToTasks = await readFile(packagePath('templates', 'skills', 'plan-to-tasks', 'SKILL.md'), 'utf8');
+    expect(planToTasks).toMatch(/relatedness, priority or dependency/i);
+    expect(planToTasks).toMatch(/Never over-decompose: every task adds a delegation, a verification and a commit/i);
+    expect(planToTasks).toMatch(/merge changes that share one outcome, one surface and one validation command/i);
+
+    const planReference = await readFile(packagePath('templates', 'skills', 'planning', 'references', 'plan.md'), 'utf8');
+    expect(planReference).toMatch(/cohesive and priority-ordered/i);
+    expect(planReference).toMatch(/per-file or mechanical steps that only add execution overhead/i);
+
+    const taskReference = await readFile(packagePath('templates', 'skills', 'plan-to-tasks', 'references', 'task.md'), 'utf8');
+    expect(taskReference).toMatch(/per-file or mechanical edit/i);
+    expect(taskReference).toMatch(/merge work that shares one outcome, surface and validation command/i);
+  });
   it('documents the shared frozen-plan digest protocol in all lifecycle skills', async () => {
     const skillRoot = packagePath('templates', 'skills');
     const digest = await readFile(join(skillRoot, 'planning', 'references', 'digest.md'), 'utf8');

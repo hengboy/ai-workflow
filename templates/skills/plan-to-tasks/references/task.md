@@ -31,7 +31,7 @@ Frontmatter (`id`, `requirements`, `acceptance_criteria`, `depends_on`, `surface
 
 ## Objective
 
-State one coherent, independently testable outcome that can be delivered in one commit.
+State one coherent, independently testable outcome that can be delivered in one commit. Keep it cohesive: do not open a task for a per-file or mechanical edit, and merge work that shares one outcome, surface and validation command.
 
 ## Implementation notes
 

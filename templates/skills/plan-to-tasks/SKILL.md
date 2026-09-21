@@ -27,6 +27,8 @@ Route note format, lifecycle, supersession and archive governance through `.ai-w
 ## Decomposition rules
 
 - Prefer independently testable vertical outcomes over file-by-file chores.
+- Split only where relatedness, priority or dependency justifies it; order dependent and higher-priority work before the rest.
+- Never over-decompose: every task adds a delegation, a verification and a commit, so merge changes that share one outcome, one surface and one validation command into one task.
 - Assign sequential IDs: `task-001-short-slug`, `task-002-short-slug`.
 - Map every REQ and AC to at least one task; explain intentional shared coverage.
 - Declare dependencies only for data, contract, ordering or overlapping-write constraints.

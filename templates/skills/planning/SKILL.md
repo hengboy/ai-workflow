@@ -62,6 +62,12 @@ Before requesting confirmation, verify that:
 - compatibility and rollback expectations are explicit;
 - no implementation choice is disguised as a requirement unless the user mandated it.
 
+## Step granularity
+
+- Split by cohesive, independently verifiable outcomes, not by file, layer or mechanical edit; keep tightly related behavior and its tests in one step.
+- Order steps by dependency and priority so upstream, higher-priority outcomes land first and the critical path stays short.
+- Never over-decompose: every step adds a delegation, a verification and a commit, so merge work that shares one outcome, one responsible role and one validation command into one step.
+
 ## Confirmation gate
 
 Show the complete goals, non-goals, REQ/AC inventory, scenarios, constraints, error boundaries and verification matrix in one preview. Ask for explicit approval. Until approval:
