@@ -124,7 +124,8 @@ agents:
 
     const skill = (await readFile(join(home, '.agents/skills/coding/SKILL.md'), 'utf8')).replace(/\s+/g, ' ');
     expect(skill).toContain('test-driven');
-    expect(skill).toContain('approved task');
+    expect(skill).toContain('Change routing');
+    expect(skill).toContain('without the dual-axis review');
     expect(skill).not.toContain('workflow.json');
     expect(skill).toContain('create one project-local temporary worktree');
     expect(skill).toContain('.worktrees');

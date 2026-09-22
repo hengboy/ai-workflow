@@ -1,6 +1,6 @@
 # ai-workflow
 
-A self-contained macOS/Node.js 22 CLI for installing planning/context skills and native role agents for Codex, Claude Code and OpenCode. Planning produces frozen `spec.md`, `plan.md` and `tasks/*.md` documents, each a complete bilingual triplet; agents choose an appropriate level of planning and verification for each change.
+A self-contained macOS/Node.js 22 CLI for installing planning/context skills and native role agents for Codex, Claude Code and OpenCode. Planning produces frozen `spec.md`, `plan.md` and `tasks/*.md` documents, each a complete bilingual triplet; small requirements, feature adjustments and defect fixes are implemented directly, while new or ambiguous features keep the frozen plan and the dual-axis review.
 
 The product does not execute, depend on or provide compatibility for external workflow frameworks or provider APIs.
 
@@ -65,6 +65,10 @@ A recorded pair is an explicit, reviewable state rather than a silent refresh: t
 `ai-workflow init /path/to/project` writes `MEMORY.md`, `.ai-workflow/AGENTS.md`, the `.ai-workflow/notes/` management tree, the generated `.ai-workflow/index/navigation.json` and `.ai-workflow/index/navigation.md`, and the required entries in `.gitignore`. Only `.ai-workflow/plans/` is gitignored; `MEMORY.md` and the rest of `.ai-workflow/` travel with Git and arrive in worktrees through Git. It does not write, preflight or conflict on root-level `AGENTS.md`/`CLAUDE.md`. It discovers repository files, optionally reads user configuration, and builds and validates navigation. An ordinary filesystem failure removes only files/directories created by that invocation and restores the original `.gitignore` bytes.
 
 `ai-workflow init <project> --upgrade` completes the management structure of an existing project. It requires an existing `.ai-workflow/` directory, `MEMORY.md` and both navigation files, and reports anything missing without writing. It creates only missing management files and `notes/` lifecycle and category directories, and reports existing matching files and directories as `skipped`, so the returned `created` and `skipped` lists are separate. It preserves existing `MEMORY.md`, navigation, plans, `project.yml`, notes and local ADR history byte for byte. A management file that differs from the template, and a `MEMORY.md` or project contract that still instructs agents to create or read ADRs, are reported with the exact path (and line for rule conflicts) before any write; merge those explicitly and retry. Repeating an upgrade reports an empty `created`.
+
+### Change routing
+
+Every request is classified before work starts, and the class decides the workflow. A direct change — a small requirement, feature adjustment or defect fix with clear, bounded intent and one observable outcome — is implemented directly without Planning, without `spec.md`, `plan.md` or task files, and without the dual-axis review. A mechanical change — typo, copy, comment, formatting or test-only adjustment with no observable behavior change — runs only the narrowest relevant check. A planned change — new feature, unclear or contested requirements, more than one materially different design, or a change to a public interface, persistent format, cross-module or cross-stack behavior, migration, compatibility or the project contract — runs Planning first, implements the frozen plan, and keeps the dual-axis review gate. Direct and mechanical changes still execute as one coding execution unit with its worktree and Git Operator commit; only the planning artifacts and the dual-axis review are skipped. The same classification is stated in `templates/project/AGENTS.md` and the `coding` and `planning` skills.
 
 ### Agent Notes
 

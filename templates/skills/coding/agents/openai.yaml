@@ -1,4 +1,4 @@
 interface:
   display_name: "Coding (TDD)"
-  short_description: "Implement approved tasks with bounded test-driven development."
-  default_prompt: "Use $coding to implement the approved task with TDD and report evidence."
+  short_description: "Implement scoped coding changes directly or from a frozen plan."
+  default_prompt: "Use $coding to implement this scoped change with TDD and report evidence."

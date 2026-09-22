@@ -1,14 +1,28 @@
 ---
 name: coding
-description: Implements an approved task with test-driven development and bounded scope.
+description: Implements a scoped coding change, directly or from a frozen plan, with test-driven development and risk-proportional review.
 ---
 
 # Coding
 
-Implement approved coding work exclusively through delegated sub-agents and
+Implement scoped coding work exclusively through delegated sub-agents and
 test-driven development. The orchestrating agent must keep dispatching until
 the scoped work is complete; it must not pause for progress reports while a
 non-blocked delegated step remains.
+
+## Change routing
+
+Classify the request before dispatching and state the class in one line.
+
+- Direct change — a small requirement, feature adjustment or defect fix with clear, bounded intent and one observable outcome: implement it without Planning, without `spec.md`, `plan.md` or task files, and without the dual-axis review. Run the relevant checks and add one focused regression test for a defect.
+- Mechanical change — a typo, copy, comment, formatting or test-only adjustment with no observable behavior change: implement it and run only the narrowest relevant check.
+- Planned change — a new feature, unclear or contested requirements, more than one materially different design, or a change to a public interface, persistent format, cross-module or cross-stack behavior, migration, compatibility or the project contract: implement the frozen plan and keep the dual-axis review gate.
+
+Never run Planning to restate a request with clear, bounded intent, and never
+label a change direct to skip required checks or evidence. Ask the user only
+when these rules cannot classify the request. A direct or mechanical change
+still executes as one coding execution unit with its worktree and Git Operator
+commit; only the planning artifacts and the dual-axis review are skipped.
 
 ## Delegation and Scheduling
 
@@ -58,7 +72,7 @@ installed role, fail before execution and request clarification.
 
 ## Preconditions
 
-- Read `.ai-workflow/AGENTS.md`, `MEMORY.md`, both navigation index files, and the frozen `spec.md` and `plan.md`. The project contract applies to the whole project and to every participating agent.
+- Read `.ai-workflow/AGENTS.md`, `MEMORY.md` and both navigation index files. Read the frozen `spec.md` and `plan.md` for a planned change; a direct or mechanical change uses the request's explicit scope and acceptance evidence as its boundary. The project contract applies to the whole project and to every participating agent.
 - A plan may be implemented either as a whole or through its split tasks. When a
   `tasks/<taskId>.md` is assigned, use only that task's exact read and write
   scopes and declared commands. When no task files exist, use the frozen plan's
@@ -109,9 +123,11 @@ Choose focused tests and commits according to task risk and repository practice.
 6. Run the task's complete validation commands and report every changed path and
    check result.
 
-After implementation, run relevant validation. For larger or high-risk changes,
-delegate Spec Review and Standards Review simultaneously in one parallel batch
-(never Spec first and Standards after Spec completes) and request Test as useful.
+After implementation, run relevant validation. For a planned or other larger or
+high-risk change, delegate Spec Review and Standards Review simultaneously in
+one parallel batch (never Spec first and Standards after Spec completes) and
+request Test as useful. A direct or mechanical change runs the relevant checks
+without the dual-axis review.
 Collect every finding from both axes and present the findings to the user for a
 choice of selected repairs or repairing all findings. Do not merge the
 temporary branch or worktree until the user's repair choice is resolved. A
@@ -164,8 +180,9 @@ Git Operator to commit only that step using the prescribed `git-commit`
 conventions; after all steps merge the temporary branch,
 rerun affected checks, and clean up only the owned worktree and branch.
 
-For larger or high-risk changes, the dual-axis review runs exactly once after implementation completes:
+For a planned or other larger or high-risk change, the dual-axis review runs exactly once after implementation completes:
 delegate Spec Review and Standards Review simultaneously in one parallel batch.
+A direct or mechanical change completes with its relevant checks and commits without the dual-axis review.
 Spec Review checks the frozen requirements and acceptance criteria, while
 Standards Review checks `MEMORY.md`. Report both reviewers' findings together
 and wait for the user's repair selection. Never merge code before this gate is
@@ -181,8 +198,8 @@ record coding may create, and no other workflow manifest or run record may be
 generated. It holds `plan_id` and `status: in-progress` with an ISO 8601
 `started_at`, and no `completed_at`.
 
-Only a frozen plan creates this implementation record. A small fix without a
-frozen plan creates no record.
+Only a frozen plan creates this implementation record. A direct or mechanical
+change without a frozen plan creates no record.
 
 After the final merge and the cleanup of only the run-owned worktree and branch,
 update that same file in place to `status: completed` with an ISO 8601
@@ -200,8 +217,10 @@ status exists.
 
 ## Completion checklist
 
-- Every assigned REQ/AC has implementation and test evidence from a completed
-  red -> green slice.
+- The change class was stated at intake and matches the delivered scope; direct
+  and mechanical changes carry relevant check evidence without planning artifacts.
+- Every assigned REQ/AC, or the direct change's stated outcome, has implementation
+  and test evidence from a completed red -> green slice.
 - Every slice was verified, self-checked once, and committed before the next
   slice began; commits contain only that slice's scoped changes.
 - Negative cases and failure output are reported truthfully.

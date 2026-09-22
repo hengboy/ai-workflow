@@ -15,9 +15,19 @@ This contract applies to the entire project and every participating agent, inclu
 
 Read `.ai-workflow/notes/AGENTS.md` and `.ai-workflow/notes/README.md` before maintaining notes. The README is the single source for format, lifecycle, supersession and archive governance. Planning schedules the relevant note work; the change that lands the decision owns its record and lifecycle transition. MEMORY records current standards (how), while notes record why; keep them consistent in the same change.
 
+## Change routing
+
+Classify every request before starting and state the class in one line.
+
+- Direct change — a small requirement, feature adjustment or defect fix with clear, bounded intent and one observable outcome: implement it directly without Planning, without `spec.md`, `plan.md` or task files, and without the dual-axis review. Run the relevant checks and add one focused regression test for a defect.
+- Planned change — a new feature, unclear or contested requirements, more than one materially different design, or a change to a public interface, persistent format, cross-module or cross-stack behavior, migration, compatibility or this contract: run Planning first, implement the frozen plan, and keep the dual-axis review gate.
+- Mechanical change — a typo, copy, comment, formatting or test-only adjustment with no observable behavior change: implement it directly and run only the narrowest relevant check.
+
+Never run Planning to restate a request with clear, bounded intent, and never label a change direct to skip required checks or evidence. Ask the user only when these rules cannot classify the request.
+
 ## Workflow roles
 
-- Planning asks one business-impact question at a time, obtains approval, and creates frozen `spec.md` and `plan.md`.
+- Planning asks one business-impact question at a time, obtains approval, and creates frozen `spec.md` and `plan.md` for a planned change only.
 - Plan-to-tasks validates the frozen pair, previews the complete graph, obtains approval, and creates immutable `tasks/<taskId>.md` files. It never edits frozen plans.
 - Coding creates one project-local temporary worktree under `<project>/.worktrees/<name>` before implementation and performs all implementation, validation and per-step commits inside that single worktree; planning, TDD and review depth remain proportional to risk. Git Operator materializes the project's entire gitignored state into the worktree, excluding the `.worktrees/` container, so `.ai-workflow/plans/` stays visible and single-source at the project root while MEMORY, navigation and notes arrive with the worktree through Git. Coding creates no workflow manifest or run record other than the single implementation record at `<project>/.ai-workflow/plans/<planId>/implementation.yaml`, which holds `plan_id` with `status: in-progress` and an ISO 8601 `started_at` before the first implementation step and becomes `status: completed` with `completed_at` and the final commit SHA after the final merge and owned cleanup; it is the only permitted run record.
 - Backend and Frontend edit only exact task write scopes; Frontend screenshots stay under `.ai-workflow/plans/<planId>/screenshot/`.

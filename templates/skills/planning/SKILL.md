@@ -1,9 +1,13 @@
 ---
 name: planning
-description: Clarify a feature one question at a time, review it, then freeze spec.md and plan.md.
+description: Freeze a reviewed spec.md and plan.md for a new or ambiguous feature; small fixes are implemented directly.
 ---
 
 # Planning
+
+## When to use
+
+Planning is only for a planned change: a new feature, unclear or contested requirements, more than one materially different design, or a change to a public interface, persistent format, cross-module or cross-stack behavior, migration, compatibility or the project contract. A small requirement, feature adjustment or defect fix with clear, bounded intent is implemented directly and must not enter Planning; never use Planning to restate a request whose scope is already settled. Ask the user only when the request cannot be classified.
 
 ## Outcome
 
