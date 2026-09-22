@@ -170,6 +170,31 @@ resolved.
 
 Do not generate workflow manifests or run records. Do not expand scope, search outside the packet, publish, or edit frozen planning artifacts. Git operations are allowed only through Git Operator, which uses the prescribed `git-commit` conventions.
 
+## Implementation Record
+
+Before the first implementation step, write the single permitted run record at
+`<project>/.ai-workflow/plans/<planId>/implementation.yaml`; it is the only run
+record coding may create, and no other workflow manifest or run record may be
+generated. It holds `plan_id` and `status: in-progress` with an ISO 8601
+`started_at`, and no `completed_at`.
+
+Only a frozen plan creates this implementation record. A small fix without a
+frozen plan creates no record.
+
+After the final merge and the cleanup of only the run-owned worktree and branch,
+update that same file in place to `status: completed` with an ISO 8601
+`completed_at` and the final commit SHA, preserving `plan_id` and `started_at`.
+The update is idempotent. When the start record is missing, still write a valid
+completed record that omits `started_at`.
+
+An interrupted implementation leaves this record at `status: in-progress` with
+only `plan_id` and `started_at`, and never a failure or abandonment reason. A
+later successful implementation of the same plan rewrites it as a completed
+record.
+
+The record has only two status values, `in-progress` and `completed`; no failure
+status exists.
+
 ## Completion checklist
 
 - Every assigned REQ/AC has implementation and test evidence from a completed
