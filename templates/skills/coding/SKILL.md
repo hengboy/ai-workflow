@@ -31,6 +31,7 @@ non-blocked delegated step remains.
   second dispatch to the same role is allowed only as a review repair with new
   evidence or new inputs.
 - The primary orchestrator directly dispatches Git Operator for every per-step commit, merge and finalization; Git Operator is the only role allowed to run Git and uses the prescribed `git-commit` conventions, and specialists never dispatch children.
+- Spec Review and Standards Review are the sole exception to serial dispatch: delegate both reviews simultaneously in one parallel batch with identical evidence; do not delegate Spec first and only delegate Standards after Spec completes.
 
 ## Surface routing
 
@@ -109,7 +110,8 @@ Choose focused tests and commits according to task risk and repository practice.
    check result.
 
 After implementation, run relevant validation. For larger or high-risk changes,
-request Test, Spec Review or Standards Review as useful.
+delegate Spec Review and Standards Review simultaneously in one parallel batch
+(never Spec first and Standards after Spec completes) and request Test as useful.
 Collect every finding from both axes and present the findings to the user for a
 choice of selected repairs or repairing all findings. Do not merge the
 temporary branch or worktree until the user's repair choice is resolved. A
@@ -163,6 +165,7 @@ conventions; after all steps merge the temporary branch,
 rerun affected checks, and clean up only the owned worktree and branch.
 
 For larger or high-risk changes, the dual-axis review runs exactly once after implementation completes:
+delegate Spec Review and Standards Review simultaneously in one parallel batch.
 Spec Review checks the frozen requirements and acceptance criteria, while
 Standards Review checks `MEMORY.md`. Report both reviewers' findings together
 and wait for the user's repair selection. Never merge code before this gate is

@@ -26,7 +26,8 @@ describe('v2 coding guidance', () => {
     expect(coding).toContain('A small bug fix or small request is delegated as one complete unit');
     expect(coding).toContain('delegate that test work to the');
     expect(coding).toContain('relevant validation');
-    expect(coding).toContain('request Test, Spec Review or Standards Review as useful');
+    expect(coding).toContain('delegate Spec Review and Standards Review simultaneously in one parallel batch');
+    expect(coding).toContain('sole exception to serial dispatch');
     expect(testAgent).toMatch(/write or update scoped behavior tests/i);
     expect(testAgent).toContain('public interface plus observable boundary');
   });
