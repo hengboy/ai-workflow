@@ -2,7 +2,7 @@
 
 Describe architecture, module responsibilities, coding standards and invariants used by the native agents.
 
-Planning produces frozen `spec.md` and `plan.md`; plan-to-tasks produces immutable task documents. Coding implements split tasks or an approved unsplit frozen plan with TDD and never creates a workflow runtime artifact.
+Planning produces frozen `spec.md` and `plan.md`; plan-to-tasks produces immutable task documents. Coding implements split tasks or an approved unsplit frozen plan with TDD and creates no workflow runtime artifact other than the single implementation record at `<project>/.ai-workflow/plans/<planId>/implementation.yaml`, which holds `plan_id` with `status: in-progress` and an ISO 8601 `started_at` before the first implementation step and becomes `status: completed` with `completed_at` and the final commit SHA after the final merge and owned cleanup; it is the only permitted run record.
 
 - Coding must create one project-local temporary worktree under `<project>/.worktrees/<name>` before implementation; all implementation and validation happen inside that single worktree. Git Operator materializes the project's entire gitignored state into the worktree, excluding the `.worktrees/` container, so `.ai-workflow/plans/` stays visible and single-source at the project root while the project contract, MEMORY, navigation and notes arrive with the worktree through Git.
 
