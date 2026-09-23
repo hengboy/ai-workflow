@@ -18,6 +18,14 @@ Classify the request before dispatching and state the class in one line.
 - Mechanical change — a typo, copy, comment, formatting or test-only adjustment with no observable behavior change: implement it and run only the narrowest relevant check.
 - Planned change — a new feature, unclear or contested requirements, more than one materially different design, or a change to a public interface, persistent format, cross-module or cross-stack behavior, migration, compatibility or the project contract: implement the frozen plan and keep the dual-axis review gate.
 
+When a planned change has no frozen plan, run Planning first, then stop: freeze
+and validate `spec.md` and `plan.md` as the `planning` skill requires, report
+the frozen plan path, and tell the user to start a new session and invoke the
+coding skill to implement it. Do not start implementation in that planning
+session: no worktree, no implementation record, no implementation or review
+dispatch, and no commit. Implementation resumes only in the new session, where
+the frozen plan is the boundary.
+
 Never run Planning to restate a request with clear, bounded intent, and never
 label a change direct to skip required checks or evidence. Ask the user only
 when these rules cannot classify the request. A direct or mechanical change
@@ -219,6 +227,9 @@ status exists.
 
 - The change class was stated at intake and matches the delivered scope; direct
   and mechanical changes carry relevant check evidence without planning artifacts.
+- A planned change without a frozen plan ended the session after Planning with
+  the frozen plan path and the new-session instruction; that session created no
+  worktree, implementation record or commit.
 - Every assigned REQ/AC, or the direct change's stated outcome, has implementation
   and test evidence from a completed red -> green slice.
 - Every slice was verified, self-checked once, and committed before the next

@@ -135,5 +135,6 @@ Both frontmatters contain `plan_id`, `status: frozen`, `created_at`, nullable `s
 - Both English documents share the same plan ID and counts, and both `.zh.md` sides mirror their English structure.
 - The pair is recorded in `spec.i18n.yaml` and `plan.i18n.yaml`, and `ai-workflow plan validate --plan <directory>` passes.
 - Digests match the frozen English bytes.
+- Planning ends at the frozen plan: report the frozen plan path and the `plan validate` result, and tell the user to start a new session and invoke the coding skill to implement it; the planning session never starts implementation.
 - No Git commit was created for `spec.md` or `plan.md`; both remain gitignored local artifacts under `.ai-workflow/plans/<planId>/`.
 - No task, workflow, run or code file was created.

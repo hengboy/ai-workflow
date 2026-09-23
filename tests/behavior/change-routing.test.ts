@@ -103,6 +103,33 @@ describe('change routing guidance', () => {
     );
   });
 
+  it('stops a coding session after Planning and hands off to a new session', async () => {
+    const coding = flatten(await read('templates/skills/coding/SKILL.md'));
+
+    expect(coding, 'a planned change with no frozen plan runs Planning first').toMatch(
+      /planned change has no frozen plan[^.]*run Planning first/i,
+    );
+    expect(coding, 'the planning session stops and hands off to a new session').toMatch(
+      /tell the user to start a new session and invoke the coding skill/i,
+    );
+    expect(coding, 'the planning session creates no implementation state').toMatch(
+      /Do not start implementation in that planning session: no worktree, no implementation record/i,
+    );
+    expect(coding, 'the completion checklist records the handoff').toMatch(
+      /A planned change without a frozen plan ended the session after Planning/i,
+    );
+
+    const planning = flatten(await read('templates/skills/planning/SKILL.md'));
+    expect(planning, 'Planning itself ends with the new-session handoff').toMatch(
+      /tell the user to start a new session and invoke the coding skill/i,
+    );
+
+    const readme = await read('README.md');
+    expect(readme, 'README documents the Planning-to-Coding session boundary').toMatch(
+      /start a new session and invoke the coding skill/i,
+    );
+  });
+
   it('removes the approved-task bias from the catalog metadata', async () => {
     const codingMetadata = await read('templates/skills/coding/agents/openai.yaml');
     expect(codingMetadata, 'coding metadata names scoped changes').toMatch(/scoped coding changes/i);
