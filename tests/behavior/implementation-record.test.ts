@@ -88,6 +88,13 @@ describe('implementation record guidance', () => {
       );
     });
 
+    it('pins every record timestamp to the UTC+08:00 timezone', async () => {
+      const coding = flatten(await codingSkill());
+
+      expect(coding).toMatch(/UTC\+08:00/);
+      expect(coding).toMatch(/`\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\+08:00`/);
+    });
+
     it('updates the same file to completed after the final merge and the owned cleanup', async () => {
       const coding = flatten(await codingSkill());
 
@@ -191,6 +198,11 @@ describe('implementation record guidance', () => {
 
       expect(memory).toContain(RECORD_PATH);
       assertScopedExemption(memory, 'templates/project/MEMORY.md');
+    });
+
+    it('states the same UTC+08:00 timestamp rule in both project templates', async () => {
+      expect(flatten(await projectContractTemplate())).toMatch(/UTC\+08:00/);
+      expect(flatten(await projectMemoryTemplate())).toMatch(/UTC\+08:00/);
     });
   });
 });

@@ -127,14 +127,14 @@ async function writeRecord(directory: string, lines: string[]): Promise<string> 
 const START_RECORD = [
   `plan_id: "${PLAN_ID}"`,
   'status: in-progress',
-  'started_at: "2026-09-22T06:16:13Z"',
+  'started_at: "2026-09-22T14:16:13+08:00"',
 ];
 
 const COMPLETED_RECORD = [
   `plan_id: "${PLAN_ID}"`,
   'status: completed',
-  'started_at: "2026-09-22T06:16:13Z"',
-  'completed_at: "2026-09-22T07:20:00Z"',
+  'started_at: "2026-09-22T14:16:13+08:00"',
+  'completed_at: "2026-09-22T15:20:00+08:00"',
   'commit: "0123456789abcdef0123456789abcdef01234567"',
 ];
 

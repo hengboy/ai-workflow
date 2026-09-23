@@ -11,8 +11,8 @@ Status: implemented
 ## Decision
 
 - 唯一被允许的运行记录是 `<project>/.ai-workflow/plans/<planId>/implementation.yaml`。写入归属仍属于 `coding` 编排器，worktree 物化归属仍属于 `git-operator`，治理文本归属仍属于 `documentation-maintainer`；文件边界始终解析到项目根，并保持为 gitignored 本地状态。
-- 在第一个实施步骤之前，该文件持有 `plan_id`、`status: in-progress` 与 ISO 8601 的 `started_at`，且不含 `completed_at`。
-- 在最终合并与仅清理运行拥有的 worktree 和分支之后，同一文件变为 `status: completed`，带有 ISO 8601 的 `completed_at` 与最终 commit SHA，并保留 `plan_id` 与 `started_at`。该更新是幂等的；当开始记录缺失时，仍写入省略 `started_at` 的有效完成记录。
+- 在第一个实施步骤之前，该文件持有 `plan_id`、`status: in-progress` 与 UTC+08:00 时区 ISO 8601 的 `started_at`，且不含 `completed_at`。
+- 在最终合并与仅清理运行拥有的 worktree 和分支之后，同一文件变为 `status: completed`，带有 UTC+08:00 时区 ISO 8601 的 `completed_at` 与最终 commit SHA，并保留 `plan_id` 与 `started_at`。该更新是幂等的；当开始记录缺失时，仍写入省略 `started_at` 的有效完成记录。
 - 该记录只有 `in-progress` 与 `completed` 两个状态值。中断的运行停留在 `status: in-progress`，仅保留开始字段，绝不写入失败或放弃原因。只有冻结计划才会创建该记录；没有冻结计划的小修复不创建任何记录。
 - 该标准由 `templates/skills/coding/SKILL.md` 中的 `coding` 技能、`templates/project/AGENTS.md` 与 `.ai-workflow/AGENTS.md` 中的项目契约、`templates/project/MEMORY.md` 与 `MEMORY.md` 中的项目记忆以及 `README.md` 共同陈述。不得生成任何其他 workflow manifest 或运行记录，`ai-workflow plan validate` 与 `ai-workflow plan pairing` 既不要求也不读取 `implementation.yaml`。
 
@@ -30,4 +30,4 @@ Status: implemented
 - 编码保留全面禁令并只开一个豁免：该 `implementation.yaml` 是唯一被允许的运行记录，因此任何额外的 manifest 或运行记录仍属违规。
 - 中断的工作绝不写入失败态，这保持了文件的如实性，但意味着中断原因必须到该记录之外查找。
 - 已安装的宿主技能与代理只有在下一次宿主安装或 profile 激活后才会获得新文本，因此运行时记录是在 rollout 之后下一次真实实施中被观察到，而不是由本计划自身产生。
-- 没有任何 active note 被全部或部分取代：[worktree 策略记录](./2026-09-14-project-local-worktree-policy.md)、[忽略状态共享记录](./2026-09-14-share-ignored-state-into-worktree.md)与[项目契约与 Agent Notes 替代记录](./2026-09-16-project-contract-and-agent-notes.md)仍然有效，本记录只增加了它们此前未允许的唯一豁免。
+- 没有任何 active note 被全部或部分取代：[worktree 策略记录](./2026-09-14-project-local-worktree-policy.md)、[忽略状态共享记录](./2026-09-14-share-ignored-state-into-worktree.md)与[项目契约与 Agent Notes 替代记录](./2026-09-16-project-contract-and-agent-notes.md)仍然有效，本记录只增加了它们此前未允许的唯一豁免。该记录的时间戳时区后来由 [UTC+08:00 时间戳记录](./2026-09-23-implementation-record-utc-offset.md)固定。

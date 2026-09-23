@@ -204,14 +204,16 @@ Before the first implementation step, write the single permitted run record at
 `<project>/.ai-workflow/plans/<planId>/implementation.yaml`; it is the only run
 record coding may create, and no other workflow manifest or run record may be
 generated. It holds `plan_id` and `status: in-progress` with an ISO 8601
-`started_at`, and no `completed_at`.
+`started_at` in the UTC+08:00 timezone (for example
+`2026-09-23T15:04:05+08:00`), and no `completed_at`.
 
 Only a frozen plan creates this implementation record. A direct or mechanical
 change without a frozen plan creates no record.
 
 After the final merge and the cleanup of only the run-owned worktree and branch,
 update that same file in place to `status: completed` with an ISO 8601
-`completed_at` and the final commit SHA, preserving `plan_id` and `started_at`.
+`completed_at` in the UTC+08:00 timezone and the final commit SHA, preserving
+`plan_id` and `started_at`.
 The update is idempotent. When the start record is missing, still write a valid
 completed record that omits `started_at`.
 
