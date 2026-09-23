@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (.ai-workflow/notes/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+# ai-workflow notes pairing --project <project-root> --write .ai-workflow/notes/implemented/process/2026-09-17-bilingual-note-triplets.md
+2026-09-17-bilingual-note-triplets.md: d04b1b8e64d6f196dce857d7cc9eb4f18e02be51
+2026-09-17-bilingual-note-triplets.zh.md: 6b4cc9bc9836d739e78fd28c0211386385ba8203

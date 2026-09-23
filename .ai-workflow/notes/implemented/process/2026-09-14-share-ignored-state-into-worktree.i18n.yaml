@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (.ai-workflow/notes/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+# ai-workflow notes pairing --project <project-root> --write .ai-workflow/notes/implemented/process/2026-09-14-share-ignored-state-into-worktree.md
+2026-09-14-share-ignored-state-into-worktree.md: 8d27bc22c5619f53af5220ae55b49bb287e7b146
+2026-09-14-share-ignored-state-into-worktree.zh.md: 78a3cfb739d3d2228b0a23c82ec46235baf3d073

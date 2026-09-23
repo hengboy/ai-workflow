@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (.ai-workflow/notes/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+# ai-workflow notes pairing --project <project-root> --write .ai-workflow/notes/implemented/process/2026-09-17-migrate-retired-adr-records-to-notes.md
+2026-09-17-migrate-retired-adr-records-to-notes.md: 1d0225ea6af495dfdc8d3fe52b02f1c18a18897d
+2026-09-17-migrate-retired-adr-records-to-notes.zh.md: 2266a9d6120f5a141d3064e937ffd35fea4de8fc
