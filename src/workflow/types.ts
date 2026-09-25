@@ -1,3 +1,5 @@
 export type Host = 'codex' | 'claude' | 'opencode';
 export interface PlanDocument { planId: string; status: string; requirements: string[]; acceptanceCriteria: string[]; specDigest: string; planDigest: string; digest: string; directory: string }
 export interface TaskDocument { id: string; requirements: string[]; acceptanceCriteria: string[]; dependsOn: string[]; surface: string; readScope: string[]; writeScope: string[]; testCommands: string[]; path: string }
+export interface TaskPhase { parallel: string[] }
+export interface TaskSchedule { planId: string; phases: TaskPhase[] }

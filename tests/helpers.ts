@@ -60,6 +60,16 @@ export function renderPlanPairMeta(planDirectory: string, englishBasename: strin
   ].join('\n');
 }
 
+/** Render the frozen `tasks/execution-order.yaml` schedule a split-plan fixture must carry. */
+export function renderExecutionOrderYaml(planId: string, phases: string[][]): string {
+  const lines = [`plan_id: ${planId}`, 'phases:'];
+  for (const phase of phases) {
+    lines.push('  - parallel:');
+    for (const id of phase) lines.push(`      - ${id}`);
+  }
+  return `${lines.join('\n')}\n`;
+}
+
 /** Build the English and Chinese sides plus the consistency record for one planning document. */
 export function planDocumentPair(
   planDirectory: string,
@@ -109,6 +119,7 @@ export async function frozenPlan(root: string, withTasks = true): Promise<string
     await writeFile(join(root, 'MEMORY.md'), '# Memory\n'); await writeFile(join(root, 'src/input.ts'), 'export const input = true;\n'); await writeFile(join(root, '.ai-workflow/index/navigation.json'), `${JSON.stringify(navigation)}\n`); await writeFile(join(root, '.ai-workflow/index/navigation.md'), renderNavigation(navigation));
     const task = { id: 'task-001-example', requirements: ['REQ-001'], acceptance_criteria: ['AC-001'], depends_on: [], surface: 'backend', read_scope: ['MEMORY.md', '.ai-workflow/index/navigation.json', '.ai-workflow/index/navigation.md', 'src/input.ts'], write_scope: ['src/output.ts'], test_commands: ['pnpm test'] };
     await writePlanTriplet(join(directory, 'tasks'), 'task-001-example.md', '# Task', '# Task', (body) => renderMarkdown(task, body));
+    await writeFile(join(directory, 'tasks', 'execution-order.yaml'), renderExecutionOrderYaml('20260831-example', [['task-001-example']]));
   }
   return directory;
 }

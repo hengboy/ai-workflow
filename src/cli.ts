@@ -9,6 +9,7 @@ import { locateContext } from './context/locate.js';
 import { discoverFallback, type FallbackPacket } from './context/fallback.js';
 import { resolveCandidatePath, resolveProjectRoot } from './context/paths.js';
 import { readPlan, readTasks } from './workflow/parse.js';
+import { readExecutionOrder } from './workflow/order.js';
 import { listPlanPairs, recordPlanPairs, verifyPlanPairs } from './workflow/pairing.js';
 import { listNotes } from './notes/index.js';
 import { validateNotes } from './notes/validate.js';
@@ -31,8 +32,11 @@ profile.command('activate').argument('<name>').option('--home <path>').option('-
 const plan = program.command('plan');
 plan.command('validate').requiredOption('--plan <directory>').action(async ({ plan: directory }: { plan: string }) => {
   const document = await readPlan(directory);
-  await readTasks(directory);
-  print({ valid: true, plan_id: document.planId, digests: { spec: document.specDigest, plan: document.planDigest, combined: document.digest } });
+  const tasks = await readTasks(directory);
+  const digests = { spec: document.specDigest, plan: document.planDigest, combined: document.digest };
+  if (!tasks.length) { print({ valid: true, plan_id: document.planId, digests }); return; }
+  const schedule = await readExecutionOrder(directory, document.planId, tasks);
+  print({ valid: true, plan_id: document.planId, digests, execution_order: schedule.phases.map((phase) => phase.parallel) });
 });
 plan.command('pairing')
   .requiredOption('--plan <directory>')

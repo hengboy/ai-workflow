@@ -6,7 +6,7 @@ import { promisify } from 'node:util';
 import { renderFrozenMarkdown } from '../../src/workflow/digest.js';
 import { renderMarkdown } from '../../src/utils/frontmatter.js';
 import { blobHash, parsePairMeta } from '../../src/notes/pairing.js';
-import { recordPlanPair, temporary, writePlanTriplet } from '../helpers.js';
+import { recordPlanPair, renderExecutionOrderYaml, temporary, writePlanTriplet } from '../helpers.js';
 
 const exec = promisify(execFile);
 const cli = ['exec', 'tsx', 'src/cli.ts'] as const;
@@ -176,6 +176,7 @@ async function completePlan(root: string, withTasks = false): Promise<string> {
   await writePlanTriplet(directory, 'plan.md', PLAN_EN, PLAN_ZH, frozenRenderer);
   if (withTasks) {
     await writePlanTriplet(join(directory, 'tasks'), 'task-001-example.md', TASK_EN, TASK_ZH, (body) => renderMarkdown(taskAttributes(), body));
+    await writeFile(join(directory, 'tasks', 'execution-order.yaml'), renderExecutionOrderYaml(PLAN_ID, [['task-001-example']]));
   }
   return directory;
 }
