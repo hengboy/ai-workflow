@@ -67,7 +67,7 @@ Show the entire task set in one response, including:
 - dependencies and why they exist;
 - read/write scopes;
 - test commands and expected evidence;
-- critical path, parallel groups and risks;
+- parallel phases, the critical path, parallel groups and risks;
 - a coverage matrix for all REQ/AC.
 
 Ask for explicit approval. Before approval, do not create `tasks/` or write partial task files. Any material edit requires a fresh complete preview.
@@ -89,15 +89,23 @@ Frontmatter lives only on the English `task-NNN-slug.md` side and must contain e
 
 The Chinese `.zh.md` side has no frontmatter and starts with `# Task`; both sides use the switchers `English | [中文](task-NNN-slug.zh.md)` and `[English](task-NNN-slug.md) | 中文`, and mirror headings, structure, tables, lists and link targets, differing only in prose.
 
-Confirm the parent plan passes with `ai-workflow plan validate --plan <directory>` before creating tasks. Write both language sides of every task first, record each pair with `ai-workflow plan pairing --plan <directory> --write --all`, then verify the frozen triplet with `ai-workflow plan validate --plan <directory>`.
+Confirm the parent plan passes with `ai-workflow plan validate --plan <directory>` before creating tasks. Write both language sides of every task first, record each pair with `ai-workflow plan pairing --plan <directory> --write --all`, then write the schedule. Write `tasks/execution-order.yaml` after writing and recording every task triplet, and before the final `ai-workflow plan validate --plan <directory>`. The written `tasks/execution-order.yaml` matches the approved preview.
 
 Read [the task template](references/task.md) before drafting. Preserve its frontmatter and body contract while replacing the illustrative example with the approved task's actual scope and evidence.
 
 The body states the outcome, implementation notes justified by the plan, negative cases, test evidence and completion definition. Do not modify `spec.md` or `plan.md`.
 
-After writing, re-read every task file and repeat the coverage, dependency, acyclicity and scope checks against the frozen spec/plan.
+After writing, re-read every task file and `tasks/execution-order.yaml`, then repeat the coverage, dependency, acyclicity and write-scope checks against the frozen spec/plan.
 
 Task files live under the plan's gitignored `.ai-workflow/` directory. Plan-to-tasks creates no Git commit: do not dispatch Git Operator and do not stage or commit the task files. Leave them as local, untracked files.
+
+## Execution order
+
+Derive the task graph's phases from `depends_on`: a task's phase is one greater than the latest phase of its dependencies, and tasks at the same depth form one parallel group. The critical path is the longest dependency chain through the graph.
+
+Read [the execution-order reference](references/execution-order.md) for the exact schedule shape before computing phases. `tasks/execution-order.yaml` is an ordered list of non-empty parallel phases that covers every task exactly once; `ai-workflow plan validate --plan <directory>` reports the phases and fails on a missing or invalid order.
+
+The schedule has no .zh.md or .i18n.yaml sibling. It is a machine-readable local artifact like `implementation.yaml`; never pair it with a translated side.
 
 ## Completion checklist
 
@@ -105,5 +113,6 @@ Task files live under the plan's gitignored `.ai-workflow/` directory. Plan-to-t
 - All files match the approved graph.
 - Coverage is complete and the DAG is valid.
 - Frozen spec/plan bytes are unchanged.
+- `tasks/execution-order.yaml` is written for every split plan and `ai-workflow plan validate --plan <directory>` passes.
 - No Git commit was created for the task files; they remain gitignored local artifacts under `.ai-workflow/plans/<planId>/tasks/`.
 - No workflow or run was started.
