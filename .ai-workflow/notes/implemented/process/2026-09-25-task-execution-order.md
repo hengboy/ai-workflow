@@ -1,0 +1,34 @@
+# Agent Note: Task execution order frozen at split time
+
+Status: implemented
+
+English | [中文](2026-09-25-task-execution-order.zh.md)
+
+## Problem
+
+A split plan had no durable execution schedule. Plan-to-tasks wrote each task's `depends_on` and `write_scope`, and a coding session re-derived the run order at execution time, so the reviewed task graph was not the schedule that actually ran; the `coding` skill even required a split plan to execute strictly serially, one task after another. Nothing rejected an inconsistent order before execution: a task whose dependency sat in its own or a later phase, a task missing from the graph, or two same-phase tasks writing the same path could all reach implementation, where they surfaced as a stuck phase or a write collision instead of a split-time defect. Freezing the order as a validated artifact and executing it phase by phase was the missing contract.
+
+## Decision
+
+- The split freezes `tasks/execution-order.yaml` as the schedule: the frozen `plan_id` plus an ordered list of non-empty parallel phases, each a non-empty task-ID list under `- parallel:`. Every task appears exactly once, every `depends_on` target appears in a strictly earlier phase, and no two tasks in one phase share a normalized write-scope path. The order is frozen at split time because it is approved together with the task graph, so coding executes a reviewed order instead of re-deriving dependencies at runtime, and same-phase write scopes are proven disjoint before execution.
+- Plan-to-tasks computes each task's phase as one greater than the latest phase of its dependencies, so tasks at the same depth form one parallel group; it shows the parallel phases and the critical path (the longest dependency chain) in the approval preview, writes the schedule after the task triplets and their pair records and before the final `plan validate`, and the written file matches the approved preview. The schedule has no `.zh.md` or `.i18n.yaml` sibling; it is machine-readable like `implementation.yaml`.
+- `ai-workflow plan validate --plan <directory>` loads the schedule whenever the plan directory contains task documents and rejects a missing file, a `plan_id` mismatch, malformed YAML, an invalid shape, an unknown, duplicated or omitted task ID, a dependency in the same or a later phase, and overlapping same-phase write scopes, then reports the ordered phase ID arrays as `execution_order`. A plan directory with no task documents neither requires nor reads the file and keeps the previous output shape.
+- Coding treats `tasks/execution-order.yaml` as the only schedule for a split plan: phases run in file order, every task of the current phase is dispatched concurrently with test work before implementation inside each task, the whole phase is waited for and verified, and each task's write scope is committed through Git Operator one commit at a time before the next phase starts, all inside the single worktree. When a phase's validation commands contend for shared build artifacts, the orchestrator may serialize that phase's dispatch without changing the frozen order. A missing or invalid order stops the run before execution; coding never recomputes phases from `depends_on` and never falls back to serial execution.
+- The implementation is `readExecutionOrder` in `src/workflow/order.ts`, backed by the `TaskPhase` and `TaskSchedule` types in `src/workflow/types.ts`, with `src/cli.ts` adding the `execution_order` field only for task plans; the shipped text is `templates/skills/plan-to-tasks/SKILL.md` with its new `references/execution-order.md` and `templates/skills/coding/SKILL.md`, and the standard is stated by the project contract template and this repository's contract, the MEMORY template and this repository's MEMORY, and `README.md`.
+- The schedule is a new non-`.md` file under `tasks/`, so task enumeration, bilingual sidecar pairing, `plan pairing` and the task write-scope checks keep their patterns. Pre-existing task sets have no schedule and therefore fail the new validation by design: there is no migration, regeneration or backfill, and legacy single-language plans keep failing as before.
+
+## Alternatives considered
+
+- **Fall back to serial execution when the file is missing or invalid.** Declined: the approved order is the execution contract, so a fallback would silently run an unreviewed order and hide a split-time defect that must block the run instead.
+- **Recompute phases at coding time from `depends_on`.** Declined: it re-derives a reviewed artifact at run time, can produce a different order than the approved one and duplicates the derivation in the skill instead of validating one frozen source.
+- **Give each task its own worktree and commit concurrently.** Declined: it multiplies worktrees and branches, complicates merge and cleanup, and breaks the single-worktree and serial-Git invariants; committing each task's write scope one commit at a time inside one worktree already serializes the commit boundary.
+- **Give the schedule `.zh.md` and `.i18n.yaml` siblings.** Declined: the schedule is machine-readable runtime input for coding rather than prose for translation, so siblings would add pairing and validation surface with no reader.
+- **Store the order in the plan or in task frontmatter.** Declined: the frozen `plan.md` must not be edited, and the task frontmatter contract keeps `depends_on` as the dependency source of truth, so a separate file keeps one schedule authority and one validation boundary.
+
+## Consequences
+
+- A coding session executes the reviewed schedule instead of re-deriving it: phases are processed in file order, same-phase write scopes are proven disjoint before execution, and every dependency sits in a strictly earlier phase.
+- Invalid orders never reach implementation: `plan validate` fails with an error naming the defect and a coding session stops before execution rather than scheduling around it.
+- Pre-existing task sets with task documents but no schedule fail the new validation by design and are not repaired by this change; a new split or an explicit schedule write is required before they pass again, and legacy single-language plans keep failing as before.
+- Installed host skills and agents are copies, so the new scheduling text reaches daily sessions only after the next host install or profile activation; the first split implemented afterwards is the runtime observation of the phase scheduling.
+- Related records stay current without supersession: [the bilingual planning artifacts record](./2026-09-17-bilingual-planning-artifacts.md) owns planning-artifact triplets and this schedule is not one, while [the worktree policy record](./2026-09-14-project-local-worktree-policy.md) and [the implementation record](./2026-09-22-plan-implementation-record.md) keep their rules; no active note is superseded in full or in part.
