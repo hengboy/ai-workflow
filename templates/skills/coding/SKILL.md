@@ -37,14 +37,14 @@ commit; only the planning artifacts and the dual-axis review are skipped.
 - An unsplit plan is executed serially by each step's `Responsible role`:
   delegate one sub-agent for each plan
   step, wait for its result, verify it, then dispatch the next step.
-- A split plan is scheduled by `tasks/execution-order.yaml` as its only
-  schedule: process phases in file order, dispatch every task of the current
-  phase concurrently with test work before implementation inside each task,
-  wait for the whole phase and verify each result, then commit each task's
-  write scope through Git Operator one commit at a time before advancing.
-  Every phase runs inside the single worktree the coding execution unit
-  created. When a phase's validation commands contend for shared build
-  artifacts, the orchestrator may serialize that phase's dispatch without
+- A split plan is scheduled by `tasks/execution-order.yaml`, an ordered list of
+  non-empty parallel phases, as its only schedule: process phases in file order,
+  dispatch every task of the current phase concurrently with test work before
+  implementation inside each task, wait for the whole phase and verify each
+  result, then commit each task's write scope through Git Operator one commit at
+  a time before advancing. Every phase runs inside the single worktree the coding
+  execution unit created. When a phase's validation commands contend for shared
+  build artifacts, the orchestrator may serialize that phase's dispatch without
   changing the frozen order. A missing or invalid order stops the run before
   execution instead of falling back: never recompute phases from `depends_on`
   and never fall back to serial execution.

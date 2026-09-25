@@ -81,6 +81,7 @@
         "src/generated/review-repair-resolution.schema.d.ts",
         "src/generated/settings.schema.d.ts",
         "src/install/index.ts",
+        "src/install/opencode-version.ts",
         "src/install/render.ts",
         "src/notes/archive.ts",
         "src/notes/index.ts",
@@ -95,6 +96,7 @@
         "src/utils/paths.ts",
         "src/utils/schema.ts",
         "src/workflow/digest.ts",
+        "src/workflow/order.ts",
         "src/workflow/pairing.ts",
         "src/workflow/parse.ts",
         "src/workflow/read-scope.ts",
@@ -654,6 +656,42 @@
           "visibility": "public"
         },
         {
+          "file": "src/install/opencode-version.ts",
+          "name": "OpencodeVersion",
+          "kind": "type",
+          "visibility": "public"
+        },
+        {
+          "file": "src/install/opencode-version.ts",
+          "name": "OpencodeVersionOption",
+          "kind": "type",
+          "visibility": "public"
+        },
+        {
+          "file": "src/install/opencode-version.ts",
+          "name": "detectOpencodeVersion",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/install/opencode-version.ts",
+          "name": "parseOpencodeMajor",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/install/opencode-version.ts",
+          "name": "resolveOpencodeVersion",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/install/render.ts",
+          "name": "RenderHostOptions",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
           "file": "src/install/render.ts",
           "name": "RenderedFile",
           "kind": "interface",
@@ -1032,6 +1070,12 @@
           "visibility": "public"
         },
         {
+          "file": "src/workflow/order.ts",
+          "name": "readExecutionOrder",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
           "file": "src/workflow/pairing.ts",
           "name": "PlanDocumentAnchor",
           "kind": "interface",
@@ -1160,6 +1204,18 @@
         {
           "file": "src/workflow/types.ts",
           "name": "TaskDocument",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workflow/types.ts",
+          "name": "TaskPhase",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workflow/types.ts",
+          "name": "TaskSchedule",
           "kind": "interface",
           "visibility": "public"
         }
@@ -1463,6 +1519,11 @@
         {
           "kind": "imports",
           "from": "src/install/index.ts#activateProfile",
+          "to": "src/install/opencode-version.ts#OpencodeVersionOption"
+        },
+        {
+          "kind": "imports",
+          "from": "src/install/index.ts#activateProfile",
           "to": "src/profile/index.ts#loadProfile"
         },
         {
@@ -1538,6 +1599,11 @@
         {
           "kind": "imports",
           "from": "src/install/index.ts#install",
+          "to": "src/install/opencode-version.ts#OpencodeVersionOption"
+        },
+        {
+          "kind": "imports",
+          "from": "src/install/index.ts#install",
           "to": "src/profile/index.ts#Profile"
         },
         {
@@ -1584,6 +1650,11 @@
           "kind": "imports",
           "from": "src/install/index.ts#upgradeProject",
           "to": "src/utils/fs.ts#exists"
+        },
+        {
+          "kind": "imports",
+          "from": "src/install/render.ts#RenderHostOptions",
+          "to": "src/install/opencode-version.ts#OpencodeVersion"
         },
         {
           "kind": "imports",
@@ -1862,6 +1933,31 @@
         },
         {
           "kind": "imports",
+          "from": "src/workflow/order.ts#readExecutionOrder",
+          "to": "src/utils/paths.ts#scopesOverlap"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workflow/order.ts#readExecutionOrder",
+          "to": "src/workflow/read-scope.ts#normalizeProjectPaths"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workflow/order.ts#readExecutionOrder",
+          "to": "src/workflow/types.ts#TaskDocument"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workflow/order.ts#readExecutionOrder",
+          "to": "src/workflow/types.ts#TaskPhase"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workflow/order.ts#readExecutionOrder",
+          "to": "src/workflow/types.ts#TaskSchedule"
+        },
+        {
+          "kind": "imports",
           "from": "src/workflow/pairing.ts#enumeratePlanDocuments",
           "to": "src/notes/pairing.ts#englishPathOf"
         },
@@ -2020,6 +2116,7 @@
         "src/generated/review-repair-resolution.schema.d.ts",
         "src/generated/settings.schema.d.ts",
         "src/install/index.ts",
+        "src/install/opencode-version.ts",
         "src/install/render.ts",
         "src/notes/archive.ts",
         "src/notes/index.ts",
@@ -2034,6 +2131,7 @@
         "src/utils/paths.ts",
         "src/utils/schema.ts",
         "src/workflow/digest.ts",
+        "src/workflow/order.ts",
         "src/workflow/pairing.ts",
         "src/workflow/parse.ts",
         "src/workflow/read-scope.ts",
@@ -2100,6 +2198,12 @@
         },
         {
           "file": "tests/helpers.ts",
+          "name": "renderExecutionOrderYaml",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "tests/helpers.ts",
           "name": "renderPlanPairMeta",
           "kind": "function",
           "visibility": "public"
@@ -2125,11 +2229,14 @@
       ],
       "related_files": [],
       "tests": [
+        "tests/behavior/change-routing.test.ts",
         "tests/behavior/coding-v2-content.test.ts",
         "tests/behavior/gates.test.ts",
         "tests/behavior/implementation-record.test.ts",
         "tests/behavior/install-contract.test.ts",
         "tests/behavior/notes-content.test.ts",
+        "tests/behavior/opencode-agent-contract.test.ts",
+        "tests/behavior/plan-execution-order.test.ts",
         "tests/behavior/planning-bilingual.test.ts",
         "tests/behavior/planning-content.test.ts",
         "tests/behavior/profile-switch-content.test.ts",
@@ -2153,6 +2260,7 @@
         "tests/integration/notes-cli.test.ts",
         "tests/integration/notes-init.test.ts",
         "tests/integration/notes-pairing-cli.test.ts",
+        "tests/integration/plan-execution-order-cli.test.ts",
         "tests/integration/plan-implementation-record.test.ts",
         "tests/integration/plan-pairing-cli.test.ts",
         "tests/integration/profile-cli.test.ts",
@@ -2169,8 +2277,10 @@
         "tests/unit/notes-archive.test.ts",
         "tests/unit/notes-format.test.ts",
         "tests/unit/notes-pairing.test.ts",
+        "tests/unit/opencode-version.test.ts",
         "tests/unit/profile.test.ts",
         "tests/unit/settings.test.ts",
+        "tests/unit/workflow-execution-order.test.ts",
         "tests/unit/workflow-pairing.test.ts",
         "tests/unit/workflow-read-scope.test.ts"
       ],
@@ -2179,11 +2289,14 @@
       "owner_role": "shared",
       "responsibility": "Discovered typescript module at tests",
       "read_scope": [
+        "tests/behavior/change-routing.test.ts",
         "tests/behavior/coding-v2-content.test.ts",
         "tests/behavior/gates.test.ts",
         "tests/behavior/implementation-record.test.ts",
         "tests/behavior/install-contract.test.ts",
         "tests/behavior/notes-content.test.ts",
+        "tests/behavior/opencode-agent-contract.test.ts",
+        "tests/behavior/plan-execution-order.test.ts",
         "tests/behavior/planning-bilingual.test.ts",
         "tests/behavior/planning-content.test.ts",
         "tests/behavior/profile-switch-content.test.ts",
@@ -2208,6 +2321,7 @@
         "tests/integration/notes-cli.test.ts",
         "tests/integration/notes-init.test.ts",
         "tests/integration/notes-pairing-cli.test.ts",
+        "tests/integration/plan-execution-order-cli.test.ts",
         "tests/integration/plan-implementation-record.test.ts",
         "tests/integration/plan-pairing-cli.test.ts",
         "tests/integration/profile-cli.test.ts",
@@ -2224,8 +2338,10 @@
         "tests/unit/notes-archive.test.ts",
         "tests/unit/notes-format.test.ts",
         "tests/unit/notes-pairing.test.ts",
+        "tests/unit/opencode-version.test.ts",
         "tests/unit/profile.test.ts",
         "tests/unit/settings.test.ts",
+        "tests/unit/workflow-execution-order.test.ts",
         "tests/unit/workflow-pairing.test.ts",
         "tests/unit/workflow-read-scope.test.ts"
       ],

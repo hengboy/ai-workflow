@@ -243,6 +243,7 @@ export async function createNavigationCandidate(project: string, taskTarget: str
       if (!candidate) continue;
       current.entries = [...new Set(candidate.entries)].sort(compareStrings);
       current.related_files = [...new Set(candidate.relatedFiles)].sort(compareStrings);
+      current.tests = [...new Set(candidate.tests)].sort(compareStrings);
       current.symbols = candidate.symbols.map((symbol) => ({ ...symbol }));
       current.relations = candidate.relations.map((relation) => ({ ...relation }));
       current.owner_role = moduleRoot.owner_role;

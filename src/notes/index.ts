@@ -60,6 +60,8 @@ export async function* enumerateNotes(root: string, errors: string[] = []): Asyn
           errors.push(`${path}: unsupported lifecycle, class or nested directory`);
         }
         await walk(segments);
+      } else if (file.isFile() && file.name === '.gitkeep') {
+        continue;
       } else if (file.isFile() && managementFiles.has(segments.join('/'))) {
         continue;
       } else if (file.isFile() && lifecycle && validClass && segments.length === 3) {

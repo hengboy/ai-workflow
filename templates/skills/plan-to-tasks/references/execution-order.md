@@ -20,7 +20,9 @@ phases:
 
 - A task's phase is one greater than the latest phase of its dependencies, and tasks at the same depth form one parallel group.
 - The critical path is the longest dependency chain through the graph.
-- Every dependency appears in a strictly earlier phase, and no two tasks in one phase share a normalized write-scope path.
+- Every dependency appears in a strictly earlier phase, and no two tasks in one phase have overlapping normalized write-scope paths: a shared path and a directory that contains another task's file both collide, so same-phase write scopes must be disjoint.
+
+Coding keeps Git commits serial: after a phase is verified, each task's write scope is committed through Git Operator one commit at a time.
 
 ## Validation
 

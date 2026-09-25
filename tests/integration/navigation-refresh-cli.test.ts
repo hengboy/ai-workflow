@@ -48,6 +48,31 @@ function navigationWithOtherRoot(): NavigationIndex {
   };
 }
 
+const checksIndex: NavigationIndex = {
+  version: 1,
+  module_roots: [{ id: 'checks', path: 'tests', owner_role: 'backend', responsibility: 'test checks', language: 'typescript', entry_kinds: ['exported-symbol'] }],
+  features: [{
+    id: 'checks-input', name: 'checks input', aliases: [], module_root: 'checks',
+    entries: ['tests/helpers.ts'],
+    symbols: [{ file: 'tests/helpers.ts', name: 'buildChecksInput', kind: 'function', visibility: 'public' }],
+    related_files: [], tests: ['tests/unit/old.test.ts'], depends_on: [], relations: [],
+    owner_role: 'backend', responsibility: 'test checks',
+    read_scope: ['tests/helpers.ts', 'tests/unit/old.test.ts'], shared_entry: false
+  }]
+};
+
+async function projectWithChecksIndex(): Promise<string> {
+  const project = await temporary('ai-workflow-navigation-refresh-checks-');
+  await mkdir(join(project, 'tests/unit'), { recursive: true });
+  await mkdir(join(project, '.ai-workflow/index'), { recursive: true });
+  await writeFile(join(project, 'tests/helpers.ts'), 'export function buildChecksInput(): void {}\n');
+  await writeFile(join(project, 'tests/unit/old.test.ts'), '');
+  await writeFile(join(project, 'tests/unit/new.test.ts'), '');
+  await writeFile(join(project, '.ai-workflow/index/navigation.json'), `${JSON.stringify(checksIndex)}\n`);
+  await writeFile(join(project, '.ai-workflow/index/navigation.md'), renderNavigation(checksIndex));
+  return project;
+}
+
 async function projectWithIndex(index = navigation): Promise<string> {
   const project = await temporary('ai-workflow-navigation-refresh-');
   await mkdir(join(project, 'src/workflow'), { recursive: true });
@@ -186,5 +211,16 @@ describe('context refresh CLI', () => {
 
     await expect(readFile(jsonPath, 'utf8')).resolves.toBe(before);
     expect((await lstat(join(project, '.ai-workflow/index/navigation.md'))).isDirectory()).toBe(true);
+  });
+
+  it('classifies a new test file when generating a candidate for a test module root', async () => {
+    const project = await projectWithChecksIndex();
+
+    await cliFrom(project, ['context', 'candidate', '--project', project, '--output', '.ai-workflow/candidate.json', '--task-target', 'task-001-checks', '--root', 'tests', '--path', 'tests/helpers.ts']);
+    const generated = JSON.parse(await readFile(join(project, '.ai-workflow/candidate.json'), 'utf8')) as { navigation: NavigationIndex };
+    expect(generated.navigation.features.find((feature) => feature.id === 'checks-input')?.tests).toEqual(['tests/unit/new.test.ts', 'tests/unit/old.test.ts']);
+
+    await expect(cliFrom(project, ['context', 'refresh', '--project', project, '--candidate', '.ai-workflow/candidate.json', '--write'])).resolves.toMatchObject({ stdout: expect.stringContaining('navigation.json') });
+    await expect(cliFrom(project, ['context', 'validate', '--project', project, '--all'])).resolves.toMatchObject({ stdout: expect.stringContaining('"valid": true') });
   });
 });

@@ -148,6 +148,13 @@ describe('plan-to-tasks execution-order reference (REQ-001, REQ-004 / AC-001, AC
     expect(reference, 'the reference names the validation command').toContain('ai-workflow plan validate --plan');
   });
 
+  it('states the serial-commit rule for a split plan', async () => {
+    const reference = (await readShipped(REFERENCE_PARTS)) ?? '';
+
+    expect(reference, 'the reference states that Git commits stay serial').toMatch(/Git commits serial/i);
+    expect(reference, 'the reference states the one-commit-at-a-time rule').toContain('one commit at a time');
+  });
+
   it('states the no-sibling rule and that a missing or invalid order blocks the split', async () => {
     const reference = (await readShipped(REFERENCE_PARTS)) ?? '';
     expect(reference, 'the schedule has no bilingual siblings').toContain('no .zh.md or .i18n.yaml sibling');

@@ -157,6 +157,20 @@ describe('notes CLI', () => {
     expect(JSON.parse(withArchived)).toEqual({ entries: [] });
   });
 
+  it('AC-004 tolerates a tracked .gitkeep placeholder in an empty note class directory', async () => {
+    const project = await temporary('ai-workflow-notes-gitkeep-');
+    await initializeProject(project);
+    await writeFile(join(project, '.ai-workflow/notes/proposed/feature/.gitkeep'), '');
+
+    const validation = await runCli(['notes', 'validate', '--project', project]);
+    expect(validation.code, validation.stderr).toBe(0);
+    expect(JSON.parse(validation.stdout)).toEqual({ valid: true, errors: [] });
+
+    const list = await runCli(['notes', 'list', '--project', project]);
+    expect(list.code, list.stderr).toBe(0);
+    expect(JSON.parse(list.stdout)).toEqual({ entries: [] });
+  });
+
   it('AC-010 lists only active notes with the documented fields in stable relative-path order', async () => {
     const project = await listFixture('ai-workflow-notes-list-active-');
 

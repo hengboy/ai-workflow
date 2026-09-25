@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { parse } from 'yaml';
+import { scopesOverlap } from '../utils/paths.js';
 import { normalizeProjectPaths } from './read-scope.js';
 import type { TaskDocument, TaskPhase, TaskSchedule } from './types.js';
 
@@ -44,14 +45,18 @@ export async function readExecutionOrder(directory: string, planId: string, task
     }
   }
   phases.forEach((phase, index) => {
-    const owners = new Map<string, string>();
+    const scopes: string[][] = [];
     for (const id of phase.parallel) {
       const task = tasks.find((item) => item.id === id);
-      if (!task) continue;
-      for (const path of normalizeProjectPaths(task.writeScope).paths) {
-        const owner = owners.get(path);
-        if (owner !== undefined && owner !== id) throw new Error(`Overlapping write scope in phase ${index + 1}: ${path}`);
-        owners.set(path, id);
+      if (task) scopes.push(normalizeProjectPaths(task.writeScope).paths);
+    }
+    for (let later = 1; later < scopes.length; later += 1) {
+      const laterScope = scopes[later] ?? [];
+      for (let earlier = 0; earlier < later; earlier += 1) {
+        const earlierScope = scopes[earlier] ?? [];
+        if (!scopesOverlap(laterScope, earlierScope)) continue;
+        const path = laterScope.find((candidate) => scopesOverlap([candidate], earlierScope));
+        throw new Error(`Overlapping write scope in phase ${index + 1}: ${path}`);
       }
     }
   });

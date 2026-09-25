@@ -152,4 +152,30 @@ describe('readExecutionOrder', () => {
     expect(message).toMatch(/Overlapping write scope in phase 1\b/i);
     expect(message).toContain('src/shared.ts');
   });
+
+  it('rejects a write scope contained in another write scope inside one phase and names the overlapping path', async () => {
+    const directory = await planDirectory(renderExecutionOrderYaml(PLAN_ID, [['task-001-alpha', 'task-002-beta']]));
+    const tasks = [
+      taskDocument('task-001-alpha', { writeScope: ['src/workflow'] }),
+      taskDocument('task-002-beta', { writeScope: ['src/workflow/order.ts'] }),
+    ];
+
+    const message = await errorMessage(readExecutionOrder(directory, PLAN_ID, tasks));
+
+    expect(message).toMatch(/Overlapping write scope in phase 1\b/i);
+    expect(message).toContain('src/workflow/order.ts');
+  });
+
+  it('rejects a write scope that duplicates another after normalization inside one phase', async () => {
+    const directory = await planDirectory(renderExecutionOrderYaml(PLAN_ID, [['task-001-alpha', 'task-002-beta']]));
+    const tasks = [
+      taskDocument('task-001-alpha', { writeScope: ['./src/shared.ts'] }),
+      taskDocument('task-002-beta', { writeScope: ['src/shared.ts'] }),
+    ];
+
+    const message = await errorMessage(readExecutionOrder(directory, PLAN_ID, tasks));
+
+    expect(message).toMatch(/Overlapping write scope in phase 1\b/i);
+    expect(message).toContain('src/shared.ts');
+  });
 });

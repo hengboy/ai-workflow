@@ -255,6 +255,20 @@ describe('plan validate execution order', () => {
     );
   });
 
+  it('fails when one task write scope contains another inside one phase', async () => {
+    await validateDefect(
+      {
+        tasks: [
+          { id: 'task-001-alpha', writeScope: ['src/workflow'] },
+          { id: 'task-002-beta', dependsOn: [], writeScope: ['src/workflow/order.ts'] },
+        ],
+        schedule: renderExecutionOrderYaml(PLAN_ID, [['task-001-alpha', 'task-002-beta']]),
+      },
+      /Overlapping write scope in phase/i,
+      /src\/workflow\/order\.ts/,
+    );
+  });
+
   it('does not read or require the schedule for a plan with no task documents', async () => {
     const root = await temporary('ai-workflow-order-notasks-');
     const directory = await buildPlan(root, { tasks: [], schedule: 'plan_id: [unclosed\n' });

@@ -35,6 +35,7 @@ describe('v2 coding guidance', () => {
 
     expect(coding).toContain('tasks/execution-order.yaml');
     expect(coding).toContain('only schedule');
+    expect(coding).toContain('an ordered list of non-empty parallel phases');
     expect(coding).toContain('process phases in file order');
     expect(coding).toContain('dispatch every task of the current phase concurrently');
     expect(coding).toContain('test work before implementation');
