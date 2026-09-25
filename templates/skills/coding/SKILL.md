@@ -37,9 +37,17 @@ commit; only the planning artifacts and the dual-axis review are skipped.
 - An unsplit plan is executed serially by each step's `Responsible role`:
   delegate one sub-agent for each plan
   step, wait for its result, verify it, then dispatch the next step.
-- A split plan is executed serially: delegate one sub-agent for each task in
-  dependency order, wait for its result, verify it, then dispatch the next
-  task.
+- A split plan is scheduled by `tasks/execution-order.yaml` as its only
+  schedule: process phases in file order, dispatch every task of the current
+  phase concurrently with test work before implementation inside each task,
+  wait for the whole phase and verify each result, then commit each task's
+  write scope through Git Operator one commit at a time before advancing.
+  Every phase runs inside the single worktree the coding execution unit
+  created. When a phase's validation commands contend for shared build
+  artifacts, the orchestrator may serialize that phase's dispatch without
+  changing the frozen order. A missing or invalid order stops the run before
+  execution instead of falling back: never recompute phases from `depends_on`
+  and never fall back to serial execution.
 - A small bug fix or small request is delegated as one complete unit to one
   sub-agent.
 - The orchestrator owns scheduling, dependency progression and automatic
@@ -53,7 +61,7 @@ commit; only the planning artifacts and the dual-axis review are skipped.
   second dispatch to the same role is allowed only as a review repair with new
   evidence or new inputs.
 - The primary orchestrator directly dispatches Git Operator for every per-step commit, merge and finalization; Git Operator is the only role allowed to run Git and uses the prescribed `git-commit` conventions, and specialists never dispatch children.
-- Spec Review and Standards Review are the sole exception to serial dispatch: delegate both reviews simultaneously in one parallel batch with identical evidence; do not delegate Spec first and only delegate Standards after Spec completes.
+- The dual-axis reviews are the review-side exception to serial dispatch: delegate Spec Review and Standards Review simultaneously in one parallel batch with identical evidence; do not delegate Spec first and only delegate Standards after Spec completes.
 
 ## Surface routing
 

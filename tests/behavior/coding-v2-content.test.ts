@@ -8,7 +8,6 @@ describe('v2 coding guidance', () => {
     for (const term of [
       'test-driven',
       'An unsplit plan is executed serially',
-      'A split plan is executed serially',
       'delegate that test work to the',
       'temporary worktree',
       'Do not generate workflow manifests or run records',
@@ -22,14 +21,32 @@ describe('v2 coding guidance', () => {
     const coding = (await readFile(packagePath('templates', 'skills', 'coding', 'SKILL.md'), 'utf8')).replace(/\s+/g, ' ');
     const testAgent = await readFile(packagePath('templates', 'agents', 'test.md'), 'utf8');
     expect(coding).toContain('An unsplit plan is executed serially');
-    expect(coding).toContain('A split plan is executed serially');
     expect(coding).toContain('A small bug fix or small request is delegated as one complete unit');
     expect(coding).toContain('delegate that test work to the');
     expect(coding).toContain('relevant validation');
     expect(coding).toContain('delegate Spec Review and Standards Review simultaneously in one parallel batch');
-    expect(coding).toContain('sole exception to serial dispatch');
+    expect(coding).toContain('review-side exception to serial dispatch');
     expect(testAgent).toMatch(/write or update scoped behavior tests/i);
     expect(testAgent).toContain('public interface plus observable boundary');
+  });
+
+  it('schedules a split plan by phases from the frozen execution order', async () => {
+    const coding = (await readFile(packagePath('templates', 'skills', 'coding', 'SKILL.md'), 'utf8')).replace(/\s+/g, ' ');
+
+    expect(coding).toContain('tasks/execution-order.yaml');
+    expect(coding).toContain('only schedule');
+    expect(coding).toContain('process phases in file order');
+    expect(coding).toContain('dispatch every task of the current phase concurrently');
+    expect(coding).toContain('test work before implementation');
+    expect(coding).toContain('wait for the whole phase');
+    expect(coding).toContain("commit each task's write scope through Git Operator one commit at a time");
+    expect(coding).toContain('inside the single worktree');
+    expect(coding).toContain("serialize that phase's dispatch");
+    expect(coding).toContain('without changing the frozen order');
+    expect(coding).toContain('missing or invalid order stops the run before execution');
+    expect(coding).toContain('never recompute phases from');
+    expect(coding).toContain('depends_on');
+    expect(coding).toContain('never fall back to serial execution');
   });
 
   it('routes an unsplit plan by each step\'s Responsible role when no task files exist', async () => {
