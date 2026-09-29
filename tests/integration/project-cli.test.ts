@@ -65,17 +65,21 @@ describe('project CLI', () => {
     expect(lines.filter((line) => line === '.worktrees' || line === '.worktrees/')).toHaveLength(1);
   });
 
-  it('treats a legacy whole-tree .ai-workflow ignore as covering plans', async () => {
+  it('migrates a legacy whole-tree .ai-workflow and MEMORY.md ignore to plans-only', async () => {
     const project = await temporary('ai-workflow-project-cli-ignore-legacy-');
     const { writeFile, readFile } = await import('node:fs/promises');
-    await writeFile(join(project, '.gitignore'), 'node_modules/\n.ai-workflow/\n');
+    await writeFile(join(project, '.gitignore'), 'node_modules/\n.ai-workflow/\n*.log\nMEMORY.md\n');
 
     await exec('pnpm', ['exec', 'tsx', 'src/cli.ts', 'init', project]);
 
     const ignore = await readFile(join(project, '.gitignore'), 'utf8');
     const lines = ignore.split(/\r?\n/).map((line) => line.trim());
-    expect(lines.filter((line) => line === '.ai-workflow' || line === '.ai-workflow/')).toHaveLength(1);
-    expect(lines).not.toContain('.ai-workflow/plans/');
+    expect(lines).not.toContain('.ai-workflow');
+    expect(lines).not.toContain('.ai-workflow/');
+    expect(lines).not.toContain('MEMORY.md');
+    expect(lines).toContain('.ai-workflow/plans/');
     expect(lines).toContain('.worktrees/');
+    expect(lines).toContain('node_modules/');
+    expect(lines).toContain('*.log');
   });
 });

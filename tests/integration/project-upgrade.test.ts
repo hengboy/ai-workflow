@@ -236,6 +236,21 @@ describe('project upgrade', () => {
     await expectUnchanged(root, afterFirst);
   });
 
+  it('migrates legacy whole-tree .ai-workflow and MEMORY.md ignore entries on upgrade', async () => {
+    const root = await temporary('ai-workflow-upgrade-ignore-legacy-');
+    await writeExistingProject(root);
+
+    await upgrade(root);
+
+    const lines = (await readFile(join(root, '.gitignore'), 'utf8')).split(/\r?\n/).map((line) => line.trim());
+    expect(lines).not.toContain('.ai-workflow');
+    expect(lines).not.toContain('.ai-workflow/');
+    expect(lines).not.toContain('MEMORY.md');
+    expect(lines).toContain('.ai-workflow/plans/');
+    expect(lines).toContain('.worktrees/');
+    expect(lines).toContain('*.log');
+  });
+
   it('REQ-007 keeps an existing non-empty valid archive manifest instead of overwriting it with the empty template', async () => {
     const root = await temporary('ai-workflow-upgrade-manifest-');
     const archivedNotePath = '.ai-workflow/notes/archived/architecture/2026-04-01-existing-decision.md';

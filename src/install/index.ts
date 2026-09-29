@@ -65,15 +65,24 @@ function notesStructureDirectories(): string[] {
   }
   return directories;
 }
+const legacyIgnoreLines = new Set(['.ai-workflow', '.ai-workflow/', 'MEMORY.md']);
 function missingIgnoreLines(original: string): string[] {
   const lines = original.split(/\r?\n/).map((line) => line.trim());
   const has = (candidates: string[]): boolean => lines.some((line) => candidates.includes(line));
   const additions: string[] = [];
-  // Only `.ai-workflow/plans/` is ignored. When the whole `.ai-workflow/` tree is
-  // already ignored (legacy projects), plans are already covered, so skip the redundant entry.
-  if (!has(['.ai-workflow', '.ai-workflow/', '.ai-workflow/plans', '.ai-workflow/plans/'])) additions.push('.ai-workflow/plans/');
+  if (!has(['.ai-workflow/plans', '.ai-workflow/plans/'])) additions.push('.ai-workflow/plans/');
   if (!has(['.worktrees', '.worktrees/'])) additions.push('.worktrees/');
   return additions;
+}
+// Legacy versions ignored the whole `.ai-workflow/` tree and `MEMORY.md`. Migrate those entries
+// in place so only `.ai-workflow/plans/` stays ignored and the rest travels with Git.
+function reconcileIgnoreFile(original: string): string | undefined {
+  const lines = original.split('\n');
+  const retained = lines.filter((line) => !legacyIgnoreLines.has(line.trim()));
+  const additions = missingIgnoreLines(retained.join('\n'));
+  if (retained.length === lines.length && additions.length === 0) return undefined;
+  const body = retained.join('\n').trimEnd();
+  return `${body}${body ? '\n' : ''}${additions.join('\n')}${additions.length ? '\n' : ''}`;
 }
 
 function agentsRoot(home: string, host: Host): string {
@@ -368,8 +377,8 @@ export async function initializeProject(project: string): Promise<string[]> {
       await atomicWrite(path, item.contents);
       created.push(item.target);
     }
-    const additions = missingIgnoreLines(ignoreOriginal);
-    if (additions.length) { await atomicWrite(ignorePath, `${ignoreOriginal.trimEnd()}${ignoreOriginal ? '\n' : ''}${additions.join('\n')}\n`); created.push('.gitignore'); }
+    const ignoreContents = reconcileIgnoreFile(ignoreOriginal);
+    if (ignoreContents !== undefined) { await atomicWrite(ignorePath, ignoreContents); created.push('.gitignore'); }
   } catch (error) {
     for (const path of writtenFiles) await rm(path, { force: true });
     if (ignoreExisted) await writeFile(ignorePath, ignoreOriginal);
@@ -472,8 +481,8 @@ export async function upgradeProject(project: string): Promise<ProjectUpgradeRep
       await atomicWrite(path, item.contents);
       created.push(item.target);
     }
-    const additions = missingIgnoreLines(ignoreOriginal);
-    if (additions.length) { await atomicWrite(ignorePath, `${ignoreOriginal.trimEnd()}${ignoreOriginal ? '\n' : ''}${additions.join('\n')}\n`); created.push('.gitignore'); }
+    const ignoreContents = reconcileIgnoreFile(ignoreOriginal);
+    if (ignoreContents !== undefined) { await atomicWrite(ignorePath, ignoreContents); created.push('.gitignore'); }
   } catch (error) {
     for (const path of writtenFiles) await rm(path, { force: true });
     if (ignoreExisted) await writeFile(ignorePath, ignoreOriginal);
