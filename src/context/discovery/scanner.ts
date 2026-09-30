@@ -1,5 +1,6 @@
 import { readdir } from 'node:fs/promises';
 import { join, relative, sep } from 'node:path';
+import { findSubmoduleBoundary, readSubmodules, type SubmoduleDeclaration } from '../submodules.js';
 
 export type DiscoveredLanguage = 'typescript' | 'javascript' | 'java' | 'unknown';
 
@@ -46,13 +47,14 @@ function comparePaths(left: DiscoveredFile, right: DiscoveredFile): number {
   return left.path < right.path ? -1 : left.path > right.path ? 1 : 0;
 }
 
-async function walk(root: string, directory: string, files: DiscoveredFile[]): Promise<void> {
+async function walk(root: string, directory: string, files: DiscoveredFile[], declarations: SubmoduleDeclaration[]): Promise<void> {
   const entries = await readdir(directory, { withFileTypes: true });
   for (const entry of entries) {
     const absolute = join(directory, entry.name);
     if (entry.isDirectory()) {
       if (isExcludedDirectory(entry.name)) continue;
-      await walk(root, absolute, files);
+      if (findSubmoduleBoundary(toPosixPath(relative(root, absolute)), declarations)) continue;
+      await walk(root, absolute, files, declarations);
     } else if (entry.isFile()) {
       files.push({ path: toPosixPath(relative(root, absolute)), language: languageFor(entry.name) });
     }
@@ -60,8 +62,9 @@ async function walk(root: string, directory: string, files: DiscoveredFile[]): P
 }
 
 export async function scanProject(root: string): Promise<DiscoveryFacts> {
+  const declarations = await readSubmodules(root);
   const files: DiscoveredFile[] = [];
-  await walk(root, root, files);
+  await walk(root, root, files, declarations);
   files.sort(comparePaths);
   return { files };
 }

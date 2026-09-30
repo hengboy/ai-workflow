@@ -120,6 +120,49 @@ describe('scanProject', () => {
 
     await expect(scanProject(root)).resolves.toEqual({ files: [] });
   });
+
+  it('prunes declared submodule directories before traversal', async () => {
+    const root = await temporary('ai-workflow-submodule-scan-');
+    await writeFile(
+      join(root, '.gitmodules'),
+      '[submodule "child"]\n\tpath = child\n\turl = ../child\n[submodule "nested"]\n\tpath = nested/child\n\turl = ../nested-child\n'
+    );
+    await writeFileAt(root, 'src/app.ts');
+    await writeFileAt(root, 'child/src/nested.ts');
+    await writeFileAt(root, 'nested/child/deep.ts');
+
+    const facts = await scanProject(root);
+    const paths = facts.files.map((file) => file.path);
+
+    expect(paths).toContain('src/app.ts');
+    expect(paths.filter((path) => path === 'child' || path.startsWith('child/'))).toEqual([]);
+    expect(paths.filter((path) => path === 'nested/child' || path.startsWith('nested/child/'))).toEqual([]);
+  });
+
+  it('treats a declared submodule without a directory as a safe boundary', async () => {
+    const root = await temporary('ai-workflow-submodule-uninitialized-');
+    await writeFile(join(root, '.gitmodules'), '[submodule "empty"]\n\tpath = empty\n\turl = ../empty\n');
+    await writeFileAt(root, 'src/app.ts');
+
+    const facts = await scanProject(root);
+    const paths = facts.files.map((file) => file.path);
+
+    expect(paths).toContain('src/app.ts');
+    expect(paths.some((path) => path === 'empty' || path.startsWith('empty/'))).toBe(false);
+  });
+
+  it('does not error on a declared submodule whose directory is empty', async () => {
+    const root = await temporary('ai-workflow-submodule-empty-');
+    await writeFile(join(root, '.gitmodules'), '[submodule "child"]\n\tpath = child\n\turl = ../child\n');
+    await mkdir(join(root, 'child'), { recursive: true });
+    await writeFileAt(root, 'src/app.ts');
+
+    const facts = await scanProject(root);
+    const paths = facts.files.map((file) => file.path);
+
+    expect(paths).toContain('src/app.ts');
+    expect(paths.some((path) => path === 'child' || path.startsWith('child/'))).toBe(false);
+  });
 });
 
 describe('isExcludedDirectory', () => {
