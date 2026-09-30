@@ -12,6 +12,8 @@ import { readPlan, readTasks } from './workflow/parse.js';
 import { readExecutionOrder } from './workflow/order.js';
 import { readWorkspaceManifest, validateWorkspaceManifest } from './workflow/workspace.js';
 import { listPlanPairs, recordPlanPairs, verifyPlanPairs } from './workflow/pairing.js';
+import { distributeWorkspace } from './workspace/distribute.js';
+import { workspaceStatus } from './workspace/status.js';
 import { listNotes } from './notes/index.js';
 import { validateNotes } from './notes/validate.js';
 import { sealArchive } from './notes/archive.js';
@@ -118,4 +120,15 @@ context.command('refresh').option('--project <project>', projectOption, process.
 context.command('candidate').option('--project <project>', projectOption, process.cwd()).requiredOption('--output <path>').requiredOption('--task-target <id>').requiredOption('--root <path...>').requiredOption('--path <path...>').action(async ({ project, output, taskTarget, root, path }: { project: string; output: string; taskTarget: string; root: string[]; path: string[] }) => { const projectRoot = resolveProjectRoot(project); await createNavigationCandidate(projectRoot, taskTarget, root, path, output); print({ candidate: resolveCandidatePath(projectRoot, output) }); });
 context.command('locate').option('--project <project>', projectOption, process.cwd()).option('--feature <id>').option('--symbol <symbol>').option('--task <id>').option('--root <path...>').option('--maintain-index').option('--depth <count>', 'follow direct relations to this depth', Number).option('--verify').action(async (options: { project: string; feature?: string; symbol?: string; task?: string; root?: string[]; maintainIndex?: boolean; depth?: number; verify?: boolean }) => print(await locateContext(resolveProjectRoot(options.project), { ...options, ...(options.root ? { roots: options.root } : {}), ...(options.maintainIndex !== undefined ? { maintenanceAuthorized: options.maintainIndex } : {}) })));
 context.command('discover').option('--project <project>', projectOption, process.cwd()).requiredOption('--packet <path>').action(async ({ project, packet }: { project: string; packet: string }) => print(await discoverFallback(resolveProjectRoot(project), await jsonFile<FallbackPacket>(packet))));
+const workspace = program.command('workspace');
+workspace.command('distribute').requiredOption('--plan <directory>').action(async ({ plan: directory }: { plan: string }) => {
+  const result = await distributeWorkspace(directory);
+  print(result);
+  if (!result.valid) process.exitCode = 1;
+});
+workspace.command('status').requiredOption('--plan <directory>').action(async ({ plan: directory }: { plan: string }) => {
+  const result = await workspaceStatus(directory);
+  print(result);
+  if (!result.valid) process.exitCode = 1;
+});
 program.parseAsync().catch((error: unknown) => { process.stderr.write(`ai-workflow: ${error instanceof Error ? error.message : String(error)}\n`); process.exitCode = 1; });

@@ -1,5 +1,6 @@
-import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
-import { basename, join } from 'node:path';
+import { mkdtemp, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { basename, join, relative, sep } from 'node:path';
+import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -248,4 +249,81 @@ export async function workspacePlanFixture(root: string, spec: WorkspacePlanFixt
   await writeFile(join(directory, 'tasks', 'execution-order.yaml'), renderExecutionOrderYaml(spec.planId, spec.phases));
   if (spec.manifest) await writeFile(join(directory, 'workspace.yaml'), renderWorkspaceManifestYaml(spec.manifest));
   return directory;
+}
+
+/** Recursively hash every regular file and symlink under `root`, skipping `.git` entries. */
+export async function snapshotTree(root: string): Promise<Map<string, string>> {
+  const snapshot = new Map<string, string>();
+  async function walk(directory: string): Promise<void> {
+    for (const entry of await readdir(directory, { withFileTypes: true })) {
+      if (entry.name === '.git') continue;
+      const absolute = join(directory, entry.name);
+      const key = relative(root, absolute).split(sep).join('/');
+      if (entry.isDirectory()) await walk(absolute);
+      else if (entry.isSymbolicLink()) snapshot.set(key, 'symlink');
+      else if (entry.isFile()) snapshot.set(key, createHash('sha256').update(await readFile(absolute)).digest('hex'));
+    }
+  }
+  await walk(root);
+  return snapshot;
+}
+
+/** Project-relative paths whose bytes differ between two `snapshotTree` results, sorted. */
+export function changedPaths(before: Map<string, string>, after: Map<string, string>): string[] {
+  const paths = new Set([...before.keys(), ...after.keys()]);
+  return [...paths].filter((path) => before.get(path) !== after.get(path)).sort();
+}
+
+async function gitInitRepository(directory: string): Promise<void> {
+  await mkdir(directory, { recursive: true });
+  await exec('git', ['init', '-b', 'main'], { cwd: directory });
+  await exec('git', ['config', 'user.email', 'test@example.com'], { cwd: directory });
+  await exec('git', ['config', 'user.name', 'Test'], { cwd: directory });
+  await exec('git', ['config', 'commit.gpgsign', 'false'], { cwd: directory });
+}
+
+async function gitCommitAll(directory: string, message: string): Promise<void> {
+  await exec('git', ['add', '-A'], { cwd: directory });
+  await exec('git', ['commit', '-m', message], { cwd: directory });
+}
+
+/** One participating child repository of a real-git workspace fixture; `init` defaults to true. */
+export interface RealWorkspaceRepoSpec { name: string; path: string; init?: boolean }
+
+/** A materialized child repository of a real-git workspace fixture. */
+export interface RealWorkspaceRepo { name: string; path: string; absolute: string }
+
+/**
+ * Build a real workspace root whose `.gitmodules` declares each `repos` entry as a
+ * local git submodule, using the repository name as the submodule section name. Each
+ * repository (`init !== false`) and the workspace root are initialized as ai-workflow
+ * projects with the CLI, and every initialized child is committed so
+ * `git status --porcelain` is clean. Local file-protocol submodules are used so the
+ * fixture stays offline.
+ */
+export async function realWorkspaceFixture(repos: RealWorkspaceRepoSpec[]): Promise<{ root: string; repos: RealWorkspaceRepo[] }> {
+  const root = await temporary('ai-workflow-real-workspace-');
+  await gitInitRepository(root);
+  await writeFile(join(root, 'README.md'), '# Workspace\n');
+  await gitCommitAll(root, 'workspace initial');
+
+  for (const repo of repos) {
+    const source = await temporary('ai-workflow-real-child-');
+    await gitInitRepository(source);
+    await mkdir(join(source, 'src'), { recursive: true });
+    await writeFile(join(source, 'src', 'index.ts'), 'export const childEntry = true;\n');
+    await gitCommitAll(source, 'child initial');
+    await exec('git', ['-c', 'protocol.file.allow=always', 'submodule', 'add', '--name', repo.name, source, repo.path], { cwd: root });
+  }
+  await gitCommitAll(root, 'add submodules');
+
+  const initialized = repos.filter((repo) => repo.init !== false);
+  await Promise.all(
+    [root, ...initialized.map((repo) => join(root, repo.path))].map((target) =>
+      exec('pnpm', ['exec', 'tsx', 'src/cli.ts', 'init', target], { maxBuffer: 10 * 1024 * 1024 }),
+    ),
+  );
+  for (const repo of initialized) await gitCommitAll(join(root, repo.path), 'initialize project');
+
+  return { root, repos: repos.map((repo) => ({ name: repo.name, path: repo.path, absolute: join(root, repo.path) })) };
 }
