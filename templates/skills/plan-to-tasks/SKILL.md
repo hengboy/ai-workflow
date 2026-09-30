@@ -82,6 +82,7 @@ Frontmatter lives only on the English `task-NNN-slug.md` side and must contain e
 - `requirements`;
 - `acceptance_criteria`;
 - `depends_on`;
+- `repo` (required for a workspace plan);
 - `surface`;
 - `read_scope`;
 - `write_scope`;
@@ -106,6 +107,37 @@ Derive the task graph's phases from `depends_on`: a task's phase is one greater 
 Read [the execution-order reference](references/execution-order.md) for the exact schedule shape before computing phases. `tasks/execution-order.yaml` is an ordered list of non-empty parallel phases that covers every task exactly once; `ai-workflow plan validate --plan <directory>` reports the phases and fails on a missing or invalid order.
 
 The schedule has no .zh.md or .i18n.yaml sibling. It is a machine-readable local artifact like `implementation.yaml`; never pair it with a translated side.
+
+## Workspace split
+
+A plan whose frozen `plan.md` declares `workspace_repos` is a workspace plan. Split it with the workspace rules below; a plan without `workspace_repos` keeps the single-repository flow above `unchanged`.
+
+Assign `repo` to every task: each task's `repo` is one declared repository name, required exactly for a workspace plan and forbidden otherwise. Task read and write scopes are repository-relative; never mix repositories in one task.
+
+plan-to-tasks `derives each repository's phases from the declared order` while keeping the `repository-internal task DAG`: `depends_on` only ever names a task in the same repository, and each repository's `repository phases` come from the `workspace_repos` dependency order. Preview the repository phases with the `critical path` in the approval preview, showing each repository's phase list and the ordered delivery sequence.
+
+Write `workspace.yaml` after the task triplets and their pair records and before the final `ai-workflow plan validate --plan <directory>`. The manifest carries `plan_id`, `role: workspace`, and one `repositories` entry per declared repository, including the `reserved` `workspace` `root entry` and `its tasks`. A repository entry carries `name`, `path`, `depends_on`, `requirements` and `acceptance_criteria`; the reserved root entry carries the tasks assigned to the workspace root itself.
+
+```yaml
+plan_id: 20260925-example
+role: workspace
+repositories:
+  - name: workspace
+    path: .
+    depends_on: []
+    requirements: [REQ-001]
+    acceptance_criteria: [AC-001]
+  - name: lib-core
+    path: vendor/lib-core
+    depends_on: [workspace]
+    requirements: [REQ-002]
+    acceptance_criteria: [AC-002]
+  - name: app-web
+    path: apps/app-web
+    depends_on: [workspace, lib-core]
+    requirements: [REQ-003]
+    acceptance_criteria: [AC-003]
+```
 
 ## Completion checklist
 
