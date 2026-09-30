@@ -307,7 +307,7 @@ describe('workspace distribute', () => {
     const result = await runCli(['workspace', 'distribute', '--plan', directory]);
 
     expect(result.code, outputOf(result)).toBe(1);
-    expect(refusalErrors(result)).toContain(`Repository "ghost" path "packages/ghost" is not a declared submodule of ${root}`);
+    expect(refusalErrors(result)).toContain(`Repository "ghost" path "packages/ghost" is not a declared submodule of ${root}; declare it in .gitmodules or correct the plan's workspace_repos entry`);
     expect(changedPaths(before, await snapshotTree(root))).toEqual([]);
   }, TIMEOUT);
 
@@ -336,7 +336,7 @@ describe('workspace distribute', () => {
     const result = await runCli(['workspace', 'distribute', '--plan', directory]);
 
     expect(result.code, outputOf(result)).toBe(1);
-    expect(refusalErrors(result)).toContain('Repository "frontend" path "packages/app" does not match the declared submodule "app" at "packages/app"');
+    expect(refusalErrors(result)).toContain(`Repository "frontend" path "packages/app" does not match the declared submodule "app" at "packages/app"; correct the plan's workspace_repos entry to the declared submodule name`);
     expect(changedPaths(before, await snapshotTree(root))).toEqual([]);
   }, TIMEOUT);
 

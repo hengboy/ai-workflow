@@ -74,6 +74,29 @@ function subsetErrors(prefix: string, declared: string[], covered: string[]): st
   return errors;
 }
 
+/**
+ * Enforce that every task of a repository is scheduled strictly after every task of the
+ * repositories it depends on. Shared by the manifest validation and the no-manifest
+ * workspace check that `plan validate` runs from the plan's `workspace_repos` declaration.
+ */
+export function validateWorkspaceRepositoryOrder(repositories: { name: string; dependsOn: string[] }[], tasks: TaskDocument[], schedule: TaskSchedule): string[] {
+  const errors: string[] = [];
+  const tasksOf = (name: string): TaskDocument[] => tasks.filter((task) => task.repo === name);
+  const phaseOf = new Map<string, number>();
+  schedule.phases.forEach((phase, index) => phase.parallel.forEach((id) => phaseOf.set(id, index)));
+  for (const repository of repositories) {
+    for (const dependency of repository.dependsOn) {
+      const dependencyTasks = tasksOf(dependency);
+      for (const task of tasksOf(repository.name)) {
+        const taskPhase = phaseOf.get(task.id) ?? -1;
+        const violation = dependencyTasks.some((candidate) => (phaseOf.get(candidate.id) ?? -1) >= taskPhase);
+        if (violation) errors.push(`Workspace repository order violation: task ${task.id} of repository "${repository.name}" must be scheduled after repository "${dependency}"`);
+      }
+    }
+  }
+  return errors;
+}
+
 export function validateWorkspaceManifest(manifest: WorkspaceManifest, plan: PlanDocument, tasks: TaskDocument[], schedule: TaskSchedule): string[] {
   const errors: string[] = [];
   if (manifest.planId !== plan.planId) errors.push(`Workspace manifest plan_id mismatch: ${manifest.planId}, expected ${plan.planId}`);
@@ -109,17 +132,6 @@ export function validateWorkspaceManifest(manifest: WorkspaceManifest, plan: Pla
     const acMissing = plan.acceptanceCriteria.filter((criterion) => !tasks.some((task) => task.acceptanceCriteria.includes(criterion)));
     if (reqMissing.length || acMissing.length) errors.push(`Frozen plan coverage is incomplete: missing ${[...reqMissing, ...acMissing].join(', ')}`);
   }
-  const phaseOf = new Map<string, number>();
-  schedule.phases.forEach((phase, index) => phase.parallel.forEach((id) => phaseOf.set(id, index)));
-  for (const repository of manifest.repositories) {
-    for (const dependency of repository.dependsOn) {
-      const dependencyTasks = tasksOf(dependency);
-      for (const task of tasksOf(repository.name)) {
-        const taskPhase = phaseOf.get(task.id) ?? -1;
-        const violation = dependencyTasks.some((candidate) => (phaseOf.get(candidate.id) ?? -1) >= taskPhase);
-        if (violation) errors.push(`Workspace repository order violation: task ${task.id} of repository "${repository.name}" must be scheduled after repository "${dependency}"`);
-      }
-    }
-  }
+  errors.push(...validateWorkspaceRepositoryOrder(manifest.repositories, tasks, schedule));
   return errors;
 }

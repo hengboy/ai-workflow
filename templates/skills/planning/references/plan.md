@@ -78,7 +78,7 @@ For the notification preference requirement in `spec.md`, a completed step could
 
 ## Workspace repositories
 
-When the plan targets a workspace root, the frozen frontmatter additionally declares `workspace_repos`: the participating repositories and their dependency order. Each entry carries a repository `name`, a repository-relative `path` and a `depends_on` list naming the participants that must be delivered first. The declaration must contain exactly one `reserved` `root entry` named `workspace` with `path: .` and an empty `depends_on`.
+When the plan targets a workspace root, the frozen frontmatter additionally declares `workspace_repos`: the participating repositories and their dependency order. Each entry carries a repository `name` — the `.gitmodules` submodule `section name` that distribution verifies — a repository-relative `path` and a `depends_on` list naming the participants that must be delivered first. The declaration must contain exactly one `reserved` `root entry` named `workspace` with `path: .` and an empty `depends_on`.
 
 ```yaml
 workspace_repos:

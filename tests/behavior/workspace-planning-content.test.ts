@@ -96,6 +96,7 @@ describe('planning declares and freezes a workspace plan (REQ-002 / AC-003, AC-0
       [
         'workspace_repos',
         'name',
+        'section name',
         'path',
         'depends_on',
         'reserved',
@@ -172,7 +173,7 @@ describe('planning plan reference declares the workspace repositories (REQ-002 /
     const workspace = section((await readShipped(PLANNING_PLAN_REFERENCE)) ?? '', '## Workspace repositories');
     expect(workspace, 'the Workspace repositories section exists').not.toBe('');
 
-    expectFragments(workspace, ['reserved', 'root entry', 'per-repository delivery boundary'], 'the plan reference prose');
+    expectFragments(workspace, ['reserved', 'root entry', 'per-repository delivery boundary', 'section name'], 'the plan reference prose');
   });
 });
 

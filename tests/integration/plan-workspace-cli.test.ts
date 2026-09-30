@@ -175,6 +175,21 @@ describe('plan validate for workspace plans', () => {
     expect(output).toContain('app');
   });
 
+  it('rejects a workspace plan with no manifest whose dependent task is scheduled before its dependency', async () => {
+    const root = await temporary('ai-workflow-plan-workspace-no-manifest-order-');
+    const spec = validWorkspaceSpec();
+    spec.phases = [['task-001-workspace'], ['task-003-lib'], ['task-002-app']];
+    delete spec.manifest;
+    const directory = await workspacePlanFixture(root, spec);
+
+    const result = await runCli(['plan', 'validate', '--plan', directory]);
+
+    expect(result.code).not.toBe(0);
+    expect(result.stderr).toContain('Workspace repository order violation');
+    expect(result.stderr).toContain('task-003-lib');
+    expect(result.stderr).toContain('app');
+  });
+
   it('keeps a non-workspace frozen plan output byte-identical', async () => {
     const root = await temporary('ai-workflow-plan-workspace-legacy-');
     const directory = await frozenPlan(root, true);

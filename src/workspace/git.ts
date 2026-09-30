@@ -36,11 +36,11 @@ export async function repositoryPreconditionErrors(root: string, name: string, r
   const errors: string[] = [];
   const declaration = declarations.find((entry) => entry.path === relativePath);
   if (declaration === undefined) {
-    errors.push(`Repository "${name}" path "${relativePath}" is not a declared submodule of ${root}`);
+    errors.push(`Repository "${name}" path "${relativePath}" is not a declared submodule of ${root}; declare it in .gitmodules or correct the plan's workspace_repos entry`);
     return errors;
   }
   if (declaration.name !== name) {
-    errors.push(`Repository "${name}" path "${relativePath}" does not match the declared submodule "${declaration.name}" at "${declaration.path}"`);
+    errors.push(`Repository "${name}" path "${relativePath}" does not match the declared submodule "${declaration.name}" at "${declaration.path}"; correct the plan's workspace_repos entry to the declared submodule name`);
     return errors;
   }
 

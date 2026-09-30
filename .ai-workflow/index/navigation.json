@@ -1291,6 +1291,12 @@
           "visibility": "public"
         },
         {
+          "file": "src/workflow/workspace.ts",
+          "name": "validateWorkspaceRepositoryOrder",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
           "file": "src/workspace/distribute.ts",
           "name": "DistributeResult",
           "kind": "interface",
@@ -2328,6 +2334,16 @@
         {
           "kind": "imports",
           "from": "src/workflow/workspace.ts#validateWorkspaceManifest",
+          "to": "src/workflow/types.ts#TaskSchedule"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workflow/workspace.ts#validateWorkspaceRepositoryOrder",
+          "to": "src/workflow/types.ts#TaskDocument"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workflow/workspace.ts#validateWorkspaceRepositoryOrder",
           "to": "src/workflow/types.ts#TaskSchedule"
         },
         {

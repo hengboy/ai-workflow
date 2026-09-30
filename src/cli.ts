@@ -10,7 +10,7 @@ import { discoverFallback, type FallbackPacket } from './context/fallback.js';
 import { resolveCandidatePath, resolveProjectRoot } from './context/paths.js';
 import { readPlan, readTasks } from './workflow/parse.js';
 import { readExecutionOrder } from './workflow/order.js';
-import { readWorkspaceManifest, validateWorkspaceManifest } from './workflow/workspace.js';
+import { readWorkspaceManifest, validateWorkspaceManifest, validateWorkspaceRepositoryOrder } from './workflow/workspace.js';
 import { listPlanPairs, recordPlanPairs, verifyPlanPairs } from './workflow/pairing.js';
 import { distributeWorkspace } from './workspace/distribute.js';
 import { workspaceStatus } from './workspace/status.js';
@@ -42,6 +42,9 @@ plan.command('validate').requiredOption('--plan <directory>').action(async ({ pl
   const schedule = await readExecutionOrder(directory, document.planId, tasks);
   if (manifest) {
     const errors = validateWorkspaceManifest(manifest, document, tasks, schedule);
+    if (errors.length) throw new Error(errors.join('\n'));
+  } else if (document.workspaceRepos) {
+    const errors = validateWorkspaceRepositoryOrder(document.workspaceRepos.map((repository) => ({ name: repository.name, dependsOn: repository.depends_on })), tasks, schedule);
     if (errors.length) throw new Error(errors.join('\n'));
   }
   const output: { valid: boolean; plan_id: string; digests: typeof digests; execution_order: string[][]; repos?: { name: string; path: string; depends_on: string[] }[] } = {
