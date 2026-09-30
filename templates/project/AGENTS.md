@@ -15,6 +15,14 @@ This contract applies to the entire project and every participating agent, inclu
 
 Read `.ai-workflow/notes/AGENTS.md` and `.ai-workflow/notes/README.md` before maintaining notes. The README is the single source for format, lifecycle, supersession and archive governance. Planning schedules the relevant note work; the change that lands the decision owns its record and lifecycle transition. MEMORY records current standards (how), while notes record why; keep them consistent in the same change.
 
+## Workspaces
+
+A workspace is a root repository that composes child repositories as local git submodules; `.gitmodules` is the source of the `submodule boundary` and keeps each child isolated, so a child's work never leaks into the root or a sibling. Each participating repository keeps its working tree at its declared workspace-root-relative path, and only its slice and plan artifacts live under the repository path convention `<root>/.ai-workflow/plans/<planId>`; the workspace plan records the `repository-level order` in which slices are delivered.
+
+The workspace commands are `ai-workflow workspace distribute --plan <directory>` to hand each child its slice and `ai-workflow workspace status --plan <directory>` to report each child's completion and delivery commit. Both `workspace status` and delivery-commit verification read the workspace working tree through `read-only Git` as an explicit `exception` to the `worktree confinement` that otherwise keeps every write inside the coding worktree: they inspect repository state without mutating a checkout, and `moving submodule checkouts after the pin is out of scope`.
+
+Cross-repository references stay `plain plan-ID text`. The `workspace root` owns the `decision` note, while `each repository` owns its own `delivered facts`; split the two, and each side updates only its own notes and `MEMORY.md`. During `finalization`, pin each verified delivery commit into the workspace as an authorized `pointer` and stage only those pointer paths and authorized workspace-root files.
+
 ## Change routing
 
 Classify every request before starting and state the class in one line.

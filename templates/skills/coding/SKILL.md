@@ -233,6 +233,45 @@ record.
 The record has only two status values, `in-progress` and `completed`; no failure
 status exists.
 
+## Slice sessions
+
+A workspace plan can hand this repository its own slice through a `slice manifest`.
+Read `workspace.yaml` before any other step. The slice matches only when the absolute current
+project directory ends with the manifest's declared workspace-relative repository path; when it
+`does not match`, the slice belongs to another repository and the session `refuses` it
+`before creating a worktree` or an `implementation record`. Do not create a branch, worktree or
+record for a mismatched slice; return a bounded support request naming the expected and actual
+repository.
+
+A matching slice session `implements only` its `slice tasks` `inside that repository` and
+keeps every edit, note and record inside that repository. It never edits a sibling slice or
+the workspace root. When the slice tasks are complete, record the resulting `delivery commit`
+SHA and report it to the workspace orchestrator; the workspace root pins that commit later.
+
+Repository-scoped completion runs `ai-workflow plan validate` for the slice plan,
+`ai-workflow notes validate` for that repository's notes, and updates that repository's
+`MEMORY.md` in the same change.
+
+## Workspace finalization
+
+When the workspace-root plan's `all slices are completed`, finalize the workspace by pinning
+each slice's `delivery commit` into the workspace. Verify each recorded `delivery commit` with
+`read-only Git` in its `source repository` first; the verification reads that repository's
+working tree without mutating it and never rewrites the checkout. Only after a commit is
+confirmed reachable, pin it through the exact command
+`git update-index --cacheinfo 160000,<sha>,<path>` run inside the `workspace worktree`, which
+starts clean with `empty submodule directories`; the run stages only the authorized `pointer`
+paths and workspace-root files, never a submodule working tree or an unrelated path. Moving a
+submodule checkout after the pin is out of scope.
+
+## Note ownership
+
+Cross-repository references in notes are `plain plan-ID text`; a note `never links` into
+another repository's files. The `workspace root` owns the cross-repository `decision` note that
+records what was decided and why, while `each repository` owns its own `delivered facts` note
+covering what it actually shipped. Split the two so each side updates only its own `MEMORY.md`
+and notes; the workspace root never rewrites a child's delivered facts commit.
+
 ## Completion checklist
 
 - The change class was stated at intake and matches the delivered scope; direct

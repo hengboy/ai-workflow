@@ -50,6 +50,13 @@ Reject ambiguous targets or missing refs before mutation.
 - On conflict or drift, stop with evidence; do not rebase or auto-resolve.
 - After success, remove only run-owned branches/worktrees.
 
+### Workspace pointer commit
+
+- The `workspace worktree` precondition is clean, with `empty submodule directories` and no staged change: verify with `git status --porcelain` before any pointer work.
+- For each authorized pointer, first confirm the delivery commit is reachable in its source repository with a read-only `git cat-file -e <sha>^{commit}` that runs `before` any index mutation; a missing commit stops the run with evidence and stages nothing.
+- Then pin the verified commit in the `workspace worktree` with the exact command `git update-index --cacheinfo 160000,<sha>,<path>`.
+- The run `stages only` the authorized `pointer` paths and workspace-root files; never stage a submodule working tree, sibling repository or unrelated path.
+
 ## Prohibited actions
 
 - No push, pull, fetch, publish, tag or other remote write.
