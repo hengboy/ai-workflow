@@ -124,3 +124,128 @@ export async function frozenPlan(root: string, withTasks = true): Promise<string
   return directory;
 }
 export async function gitInit(root: string): Promise<void> { await exec('git', ['init', '-b', 'main'], { cwd: root }); await exec('git', ['config', 'user.email', 'test@example.com'], { cwd: root }); await exec('git', ['config', 'user.name', 'Test'], { cwd: root }); await exec('git', ['config', 'commit.gpgsign', 'false'], { cwd: root }); await writeFile(join(root, 'README.md'), '# Test\n'); await exec('git', ['add', 'README.md'], { cwd: root }); await exec('git', ['commit', '-m', 'initial'], { cwd: root }); }
+
+/** One `workspace_repos` entry as it appears in the frozen plan.md frontmatter. */
+export interface WorkspaceRepoFixture { name: string; path: string; dependsOn: string[] }
+
+/** One task document in a workspace plan fixture; `repo` is omitted to model a missing repository. */
+export interface WorkspaceTaskFixture {
+  id: string;
+  repo?: string;
+  requirements: string[];
+  acceptanceCriteria: string[];
+  dependsOn?: string[];
+  surface?: string;
+  readScope?: string[];
+  writeScope?: string[];
+}
+
+/** One repository entry of a `workspace.yaml` manifest. */
+export interface WorkspaceManifestRepoFixture { name: string; path: string; dependsOn: string[]; requirements: string[]; acceptanceCriteria: string[] }
+
+/** The `workspace.yaml` manifest payload a workspace or slice plan fixture carries. */
+export interface WorkspaceManifestFixture { planId: string; role: 'workspace' | 'slice'; repositories: WorkspaceManifestRepoFixture[] }
+
+/** A complete workspace plan fixture: frozen pair, task triplets, schedule and optional manifest. */
+export interface WorkspacePlanFixtureSpec {
+  planId: string;
+  requirements: string[];
+  acceptanceCriteria: string[];
+  workspaceRepos?: WorkspaceRepoFixture[];
+  tasks: WorkspaceTaskFixture[];
+  phases: string[][];
+  manifest?: WorkspaceManifestFixture;
+}
+
+function workspaceSpecBody(requirements: string[], acceptanceCriteria: string[], prose: (id: string) => string): string {
+  return [
+    '# Specification',
+    '',
+    ...requirements.flatMap((id) => [`## ${id}: requirement`, '', prose(id), '']),
+    ...acceptanceCriteria.flatMap((id) => [`## ${id}: acceptance criteria`, '', prose(id), '']),
+    '',
+  ].join('\n');
+}
+
+function workspacePlanBody(requirements: string[], acceptanceCriteria: string[], step: (id: string) => string): string {
+  return [
+    '# Implementation Plan',
+    '',
+    '## Requirement coverage',
+    '',
+    '| Requirement | Acceptance criteria | Implementation step |',
+    '| --- | --- | --- |',
+    ...requirements.map((id, index) => `| ${id} | ${acceptanceCriteria[index] ?? ''} | ${step(id)} |`),
+    '',
+    '## Implementation sequence',
+    '',
+    ...requirements.map((id, index) => `${index + 1}. ${step(id)}`),
+    '',
+  ].join('\n');
+}
+
+/** Render the deterministic YAML body of a `workspace.yaml` manifest fixture. */
+export function renderWorkspaceManifestYaml(manifest: WorkspaceManifestFixture): string {
+  const lines = [`plan_id: ${manifest.planId}`, `role: ${manifest.role}`, 'repositories:'];
+  for (const repo of manifest.repositories) {
+    lines.push(`  - name: ${repo.name}`);
+    lines.push(`    path: ${repo.path}`);
+    lines.push(`    depends_on: [${repo.dependsOn.join(', ')}]`);
+    lines.push(`    requirements: [${repo.requirements.join(', ')}]`);
+    lines.push(`    acceptance_criteria: [${repo.acceptanceCriteria.join(', ')}]`);
+  }
+  return `${lines.join('\n')}\n`;
+}
+
+/**
+ * Write a complete workspace plan fixture under `<root>/.ai-workflow/plans/<planId>`:
+ * the frozen spec/plan pair (with an optional `workspace_repos` declaration), the task
+ * triplets, `tasks/execution-order.yaml` and, when supplied, `workspace.yaml`.
+ */
+export async function workspacePlanFixture(root: string, spec: WorkspacePlanFixtureSpec): Promise<string> {
+  const directory = join(root, '.ai-workflow/plans', spec.planId);
+  await mkdir(join(directory, 'tasks'), { recursive: true });
+  const baseAttributes: Record<string, unknown> = {
+    plan_id: spec.planId,
+    status: 'frozen',
+    created_at: '2026-09-30T00:00:00.000Z',
+    supersedes: null,
+    requirement_count: spec.requirements.length,
+    acceptance_criteria_count: spec.acceptanceCriteria.length,
+    digest: 'sha256:placeholder',
+  };
+  const planAttributes: Record<string, unknown> = spec.workspaceRepos
+    ? { ...baseAttributes, workspace_repos: spec.workspaceRepos.map((repo) => ({ name: repo.name, path: repo.path, depends_on: repo.dependsOn })) }
+    : { ...baseAttributes };
+  await writePlanTriplet(
+    directory,
+    'spec.md',
+    workspaceSpecBody(spec.requirements, spec.acceptanceCriteria, (id) => `${id} prose.`),
+    workspaceSpecBody(spec.requirements, spec.acceptanceCriteria, (id) => `${id} 正文。`),
+    (body) => renderFrozenMarkdown(baseAttributes, body),
+  );
+  await writePlanTriplet(
+    directory,
+    'plan.md',
+    workspacePlanBody(spec.requirements, spec.acceptanceCriteria, (id) => `Implement ${id}.`),
+    workspacePlanBody(spec.requirements, spec.acceptanceCriteria, (id) => `实现 ${id}。`),
+    (body) => renderFrozenMarkdown(planAttributes, body),
+  );
+  for (const task of spec.tasks) {
+    const attributes: Record<string, unknown> = {
+      id: task.id,
+      requirements: task.requirements,
+      acceptance_criteria: task.acceptanceCriteria,
+      depends_on: task.dependsOn ?? [],
+      surface: task.surface ?? 'backend',
+      read_scope: task.readScope ?? ['MEMORY.md'],
+      write_scope: task.writeScope ?? [`src/${task.id}.ts`],
+      test_commands: ['pnpm test'],
+    };
+    if (task.repo !== undefined) attributes.repo = task.repo;
+    await writePlanTriplet(join(directory, 'tasks'), `${task.id}.md`, '# Task', '# Task', (body) => renderMarkdown(attributes, body));
+  }
+  await writeFile(join(directory, 'tasks', 'execution-order.yaml'), renderExecutionOrderYaml(spec.planId, spec.phases));
+  if (spec.manifest) await writeFile(join(directory, 'workspace.yaml'), renderWorkspaceManifestYaml(spec.manifest));
+  return directory;
+}

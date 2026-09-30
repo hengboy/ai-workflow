@@ -45,18 +45,24 @@ export async function readExecutionOrder(directory: string, planId: string, task
     }
   }
   phases.forEach((phase, index) => {
-    const scopes: string[][] = [];
+    const buckets = new Map<string, string[][]>();
     for (const id of phase.parallel) {
       const task = tasks.find((item) => item.id === id);
-      if (task) scopes.push(normalizeProjectPaths(task.writeScope).paths);
+      if (!task) continue;
+      const key = task.repo ?? '';
+      const bucket = buckets.get(key) ?? [];
+      bucket.push(normalizeProjectPaths(task.writeScope).paths);
+      buckets.set(key, bucket);
     }
-    for (let later = 1; later < scopes.length; later += 1) {
-      const laterScope = scopes[later] ?? [];
-      for (let earlier = 0; earlier < later; earlier += 1) {
-        const earlierScope = scopes[earlier] ?? [];
-        if (!scopesOverlap(laterScope, earlierScope)) continue;
-        const path = laterScope.find((candidate) => scopesOverlap([candidate], earlierScope));
-        throw new Error(`Overlapping write scope in phase ${index + 1}: ${path}`);
+    for (const scopes of buckets.values()) {
+      for (let later = 1; later < scopes.length; later += 1) {
+        const laterScope = scopes[later] ?? [];
+        for (let earlier = 0; earlier < later; earlier += 1) {
+          const earlierScope = scopes[earlier] ?? [];
+          if (!scopesOverlap(laterScope, earlierScope)) continue;
+          const path = laterScope.find((candidate) => scopesOverlap([candidate], earlierScope));
+          throw new Error(`Overlapping write scope in phase ${index + 1}: ${path}`);
+        }
       }
     }
   });

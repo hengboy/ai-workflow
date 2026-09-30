@@ -10,6 +10,7 @@ import { discoverFallback, type FallbackPacket } from './context/fallback.js';
 import { resolveCandidatePath, resolveProjectRoot } from './context/paths.js';
 import { readPlan, readTasks } from './workflow/parse.js';
 import { readExecutionOrder } from './workflow/order.js';
+import { readWorkspaceManifest, validateWorkspaceManifest } from './workflow/workspace.js';
 import { listPlanPairs, recordPlanPairs, verifyPlanPairs } from './workflow/pairing.js';
 import { listNotes } from './notes/index.js';
 import { validateNotes } from './notes/validate.js';
@@ -34,9 +35,21 @@ plan.command('validate').requiredOption('--plan <directory>').action(async ({ pl
   const document = await readPlan(directory);
   const tasks = await readTasks(directory);
   const digests = { spec: document.specDigest, plan: document.planDigest, combined: document.digest };
+  const manifest = await readWorkspaceManifest(directory);
   if (!tasks.length) { print({ valid: true, plan_id: document.planId, digests }); return; }
   const schedule = await readExecutionOrder(directory, document.planId, tasks);
-  print({ valid: true, plan_id: document.planId, digests, execution_order: schedule.phases.map((phase) => phase.parallel) });
+  if (manifest) {
+    const errors = validateWorkspaceManifest(manifest, document, tasks, schedule);
+    if (errors.length) throw new Error(errors.join('\n'));
+  }
+  const output: { valid: boolean; plan_id: string; digests: typeof digests; execution_order: string[][]; repos?: { name: string; path: string; depends_on: string[] }[] } = {
+    valid: true,
+    plan_id: document.planId,
+    digests,
+    execution_order: schedule.phases.map((phase) => phase.parallel),
+  };
+  if (manifest?.role === 'workspace') output.repos = manifest.repositories.map((repository) => ({ name: repository.name, path: repository.path, depends_on: repository.dependsOn }));
+  print(output);
 });
 plan.command('pairing')
   .requiredOption('--plan <directory>')

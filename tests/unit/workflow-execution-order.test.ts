@@ -10,11 +10,12 @@ const PLAN_ID = '20260831-example';
 interface TaskOverrides {
   dependsOn?: string[];
   writeScope?: string[];
+  repo?: string;
 }
 
 /** Build a task document directly for the loader's `tasks` argument. */
 function taskDocument(id: string, overrides: TaskOverrides = {}): TaskDocument {
-  return {
+  const document = {
     id,
     requirements: ['REQ-001'],
     acceptanceCriteria: ['AC-001'],
@@ -24,7 +25,9 @@ function taskDocument(id: string, overrides: TaskOverrides = {}): TaskDocument {
     writeScope: overrides.writeScope ?? [],
     testCommands: [],
     path: `tasks/${id}.md`,
+    ...(overrides.repo === undefined ? {} : { repo: overrides.repo }),
   };
+  return document as TaskDocument;
 }
 
 /** Create a temporary plan directory carrying the given raw schedule (`null` = no file). */
@@ -177,5 +180,53 @@ describe('readExecutionOrder', () => {
 
     expect(message).toMatch(/Overlapping write scope in phase 1\b/i);
     expect(message).toContain('src/shared.ts');
+  });
+
+  it('treats equal repository-relative write scopes in different repositories as disjoint', async () => {
+    const directory = await planDirectory(renderExecutionOrderYaml(PLAN_ID, [['task-001-alpha', 'task-002-beta']]));
+    const tasks = [
+      taskDocument('task-001-alpha', { repo: 'app', writeScope: ['src/shared.ts'] }),
+      taskDocument('task-002-beta', { repo: 'lib', writeScope: ['src/shared.ts'] }),
+    ];
+
+    const schedule = await readExecutionOrder(directory, PLAN_ID, tasks);
+
+    expect(schedule.phases).toEqual([{ parallel: ['task-001-alpha', 'task-002-beta'] }]);
+  });
+
+  it('allows a repository-relative scope contained in another repository scope inside one phase', async () => {
+    const directory = await planDirectory(renderExecutionOrderYaml(PLAN_ID, [['task-001-alpha', 'task-002-beta']]));
+    const tasks = [
+      taskDocument('task-001-alpha', { repo: 'app', writeScope: ['src/workflow'] }),
+      taskDocument('task-002-beta', { repo: 'lib', writeScope: ['src/workflow/order.ts'] }),
+    ];
+
+    await expect(readExecutionOrder(directory, PLAN_ID, tasks)).resolves.toMatchObject({ planId: PLAN_ID });
+  });
+
+  it('still rejects equal write scopes inside the same repository phase', async () => {
+    const directory = await planDirectory(renderExecutionOrderYaml(PLAN_ID, [['task-001-alpha', 'task-002-beta']]));
+    const tasks = [
+      taskDocument('task-001-alpha', { repo: 'app', writeScope: ['src/shared.ts'] }),
+      taskDocument('task-002-beta', { repo: 'app', writeScope: ['src/shared.ts'] }),
+    ];
+
+    const message = await errorMessage(readExecutionOrder(directory, PLAN_ID, tasks));
+
+    expect(message).toMatch(/Overlapping write scope in phase 1\b/i);
+    expect(message).toContain('src/shared.ts');
+  });
+
+  it('still rejects repository-relative containment inside the same repository phase', async () => {
+    const directory = await planDirectory(renderExecutionOrderYaml(PLAN_ID, [['task-001-alpha', 'task-002-beta']]));
+    const tasks = [
+      taskDocument('task-001-alpha', { repo: 'app', writeScope: ['src/workflow'] }),
+      taskDocument('task-002-beta', { repo: 'app', writeScope: ['src/workflow/order.ts'] }),
+    ];
+
+    const message = await errorMessage(readExecutionOrder(directory, PLAN_ID, tasks));
+
+    expect(message).toMatch(/Overlapping write scope in phase 1\b/i);
+    expect(message).toContain('src/workflow/order.ts');
   });
 });

@@ -5,7 +5,8 @@ import { metaPathOf, zhPathOf } from '../notes/pairing.js';
 import { frozenDocumentDigest, frozenPlanDigest } from './digest.js';
 import { enumeratePlanDocuments, validatePlanPair, type PlanDocumentAnchor } from './pairing.js';
 import { normalizeProjectPaths } from './read-scope.js';
-import type { PlanDocument, TaskDocument } from './types.js';
+import { readWorkspaceManifest } from './workspace.js';
+import type { PlanDocument, TaskDocument, WorkspaceRepo } from './types.js';
 
 function listStrings(value: unknown): string[] { return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []; }
 function stringValue(value: unknown, fallback = ''): string { return typeof value === 'string' ? value : fallback; }
@@ -13,6 +14,42 @@ const allowedSurfaces: string[] = ['backend', 'frontend', 'cross-stack', 'test',
 export { fixedTaskContext } from './read-scope.js';
 
 function planAnchor(directory: string, basename: string): PlanDocumentAnchor { const path = join(directory, basename); return { path, zhPath: zhPathOf(path), metaPath: metaPathOf(path) }; }
+
+/** Parse the optional `workspace_repos` frontmatter declaration, validating the reserved root entry, names, paths and dependency graph. */
+function parseWorkspaceRepos(value: unknown): WorkspaceRepo[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value)) throw new Error('Invalid workspace_repos entry: expected a list of repositories');
+  const repos: WorkspaceRepo[] = value.map((raw) => {
+    if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('Invalid workspace_repos entry: expected an object with name, path and depends_on');
+    const record = raw as Record<string, unknown>;
+    const name = record.name; const path = record.path; const dependsOn = record.depends_on;
+    if (typeof name !== 'string' || typeof path !== 'string' || !Array.isArray(dependsOn) || dependsOn.some((item) => typeof item !== 'string')) {
+      throw new Error('Invalid workspace_repos entry: name, path and depends_on are required');
+    }
+    return { name, path, depends_on: dependsOn as string[] };
+  });
+  const roots = repos.filter((repo) => repo.name === 'workspace');
+  if (roots.length !== 1) throw new Error('workspace_repos must declare exactly one reserved "workspace" root entry');
+  const root = roots[0] as WorkspaceRepo;
+  if (root.path !== '.') throw new Error('workspace repository "workspace" must use path "."');
+  const names = new Set<string>();
+  for (const repo of repos) {
+    if (names.has(repo.name)) throw new Error(`duplicate workspace repository name: ${repo.name}`);
+    names.add(repo.name);
+  }
+  for (const repo of repos) if (repo.name !== 'workspace' && repo.path === '.') throw new Error('workspace repository path "." is reserved for the workspace root entry');
+  for (const repo of repos) for (const dependency of repo.depends_on) if (!names.has(dependency)) throw new Error(`unknown workspace repository dependency: ${repo.name} -> ${dependency}`);
+  const visiting = new Set<string>(); const visited = new Set<string>();
+  const visit = (name: string): void => {
+    if (visiting.has(name)) throw new Error(`workspace repository dependency cycle: ${name}`);
+    if (visited.has(name)) return;
+    visiting.add(name);
+    for (const dependency of repos.find((repo) => repo.name === name)?.depends_on ?? []) visit(dependency);
+    visiting.delete(name); visited.add(name);
+  };
+  for (const repo of repos) visit(repo.name);
+  return repos;
+}
 
 export async function readPlan(directory: string): Promise<PlanDocument> {
   const [spec, plan] = await Promise.all([readFile(join(directory, 'spec.md'), 'utf8'), readFile(join(directory, 'plan.md'), 'utf8')]);
@@ -31,7 +68,10 @@ export async function readPlan(directory: string): Promise<PlanDocument> {
   await validatePlanPair(planAnchor(directory, 'spec.md'), pairErrors);
   await validatePlanPair(planAnchor(directory, 'plan.md'), pairErrors);
   if (pairErrors.length) throw new Error(pairErrors.join('\n'));
-  return { planId, status: 'frozen', requirements, acceptanceCriteria, specDigest, planDigest, digest: frozenPlanDigest(spec, plan), directory };
+  const workspaceRepos = parseWorkspaceRepos(planDoc.attributes.workspace_repos);
+  const document: PlanDocument = { planId, status: 'frozen', requirements, acceptanceCriteria, specDigest, planDigest, digest: frozenPlanDigest(spec, plan), directory };
+  if (workspaceRepos) document.workspaceRepos = workspaceRepos;
+  return document;
 }
 
 function extractHeadings(body: string, pattern: RegExp): string[] { return [...body.matchAll(pattern)].map((match) => match[1] ?? ''); }
@@ -64,11 +104,28 @@ export async function readTasks(directory: string): Promise<TaskDocument[]> {
     if (!requirements.length || !acceptanceCriteria.length) throw new Error(`Task must declare requirements and acceptance_criteria: ${id}`);
     if (requirements.some((item) => !plan.requirements.includes(item)) || acceptanceCriteria.some((item) => !plan.acceptanceCriteria.includes(item))) throw new Error(`Task references unknown REQ/AC: ${id}`);
     if (['backend', 'frontend', 'cross-stack'].includes(surface) && !writeScope.paths.length) throw new Error(`Coding task requires write_scope: ${id}`);
-    tasks.push({ id, requirements, acceptanceCriteria, dependsOn, surface, readScope: scope.paths, writeScope: writeScope.paths, testCommands: listStrings(a.test_commands), path });
+    const rawRepo = a.repo;
+    let repo: string | undefined;
+    if (plan.workspaceRepos) {
+      if (typeof rawRepo !== 'string' || rawRepo.length === 0) throw new Error(`Task must declare repo: ${id}`);
+      if (!plan.workspaceRepos.some((entry) => entry.name === rawRepo)) throw new Error(`Task repo is not declared: ${id} -> ${rawRepo}`);
+      repo = rawRepo;
+    } else if (rawRepo !== undefined) {
+      throw new Error(`Task must not declare repo outside a workspace plan: ${id}`);
+    }
+    tasks.push({ id, requirements, acceptanceCriteria, dependsOn, surface, readScope: scope.paths, writeScope: writeScope.paths, testCommands: listStrings(a.test_commands), path, ...(repo === undefined ? {} : { repo }) });
   }
   const ids = new Set(tasks.map((task) => task.id));
   for (const task of tasks) for (const dependency of task.dependsOn) if (!ids.has(dependency)) throw new Error(`Unknown task dependency: ${task.id} -> ${dependency}`);
-  if (tasks.length) {
+  const taskById = new Map(tasks.map((task) => [task.id, task]));
+  for (const task of tasks) {
+    if (task.repo === undefined) continue;
+    for (const dependency of task.dependsOn) {
+      const target = taskById.get(dependency);
+      if (target && target.repo !== task.repo) throw new Error(`Cross-repository task dependency: ${task.id} -> ${dependency}`);
+    }
+  }
+  if (tasks.length && (await readWorkspaceManifest(directory)) === undefined) {
     const coveredReqs = new Set(tasks.flatMap((task) => task.requirements)); const coveredAcs = new Set(tasks.flatMap((task) => task.acceptanceCriteria));
     if (plan.requirements.some((item) => !coveredReqs.has(item)) || plan.acceptanceCriteria.some((item) => !coveredAcs.has(item))) throw new Error('Frozen plan REQ/AC coverage is incomplete');
   }
