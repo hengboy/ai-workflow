@@ -72,6 +72,7 @@
         "src/context/locate.ts",
         "src/context/navigation.ts",
         "src/context/paths.ts",
+        "src/context/submodules.ts",
         "src/context/validate.ts",
         "src/generated/navigation.candidate.schema.d.ts",
         "src/generated/navigation.schema.d.ts",
@@ -100,7 +101,11 @@
         "src/workflow/pairing.ts",
         "src/workflow/parse.ts",
         "src/workflow/read-scope.ts",
-        "src/workflow/types.ts"
+        "src/workflow/types.ts",
+        "src/workflow/workspace.ts",
+        "src/workspace/distribute.ts",
+        "src/workspace/git.ts",
+        "src/workspace/status.ts"
       ],
       "symbols": [
         {
@@ -386,8 +391,32 @@
           "visibility": "public"
         },
         {
+          "file": "src/context/submodules.ts",
+          "name": "SubmoduleDeclaration",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/context/submodules.ts",
+          "name": "findSubmoduleBoundary",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/context/submodules.ts",
+          "name": "readSubmodules",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
           "file": "src/context/validate.ts",
           "name": "ContextValidation",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/context/validate.ts",
+          "name": "NavigationRebuildReport",
           "kind": "interface",
           "visibility": "public"
         },
@@ -400,6 +429,12 @@
         {
           "file": "src/context/validate.ts",
           "name": "createNavigationCandidate",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/context/validate.ts",
+          "name": "rebuildNavigation",
           "kind": "function",
           "visibility": "public"
         },
@@ -1218,6 +1253,150 @@
           "name": "TaskSchedule",
           "kind": "interface",
           "visibility": "public"
+        },
+        {
+          "file": "src/workflow/types.ts",
+          "name": "WorkspaceRepo",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workflow/workspace.ts",
+          "name": "WorkspaceManifest",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workflow/workspace.ts",
+          "name": "WorkspaceRepository",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workflow/workspace.ts",
+          "name": "readWorkspaceManifest",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workflow/workspace.ts",
+          "name": "renderWorkspaceManifest",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workflow/workspace.ts",
+          "name": "validateWorkspaceManifest",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workspace/distribute.ts",
+          "name": "DistributeResult",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workspace/distribute.ts",
+          "name": "DistributeSliceEntry",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workspace/distribute.ts",
+          "name": "DistributeWorkspaceRootEntry",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workspace/distribute.ts",
+          "name": "ResolvedWorkspacePlan",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workspace/distribute.ts",
+          "name": "SliceFileState",
+          "kind": "type",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workspace/distribute.ts",
+          "name": "classifySlice",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workspace/distribute.ts",
+          "name": "computeSliceFiles",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workspace/distribute.ts",
+          "name": "distributeWorkspace",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workspace/distribute.ts",
+          "name": "resolveWorkspacePlan",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workspace/git.ts",
+          "name": "repositoryPreconditionErrors",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workspace/git.ts",
+          "name": "symbolicHead",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workspace/git.ts",
+          "name": "workingTreeStatus",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workspace/status.ts",
+          "name": "ImplementationRecordState",
+          "kind": "type",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workspace/status.ts",
+          "name": "SlicePresence",
+          "kind": "type",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workspace/status.ts",
+          "name": "StatusRepository",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workspace/status.ts",
+          "name": "StatusResult",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workspace/status.ts",
+          "name": "StatusWorkspaceRootEntry",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workspace/status.ts",
+          "name": "workspaceStatus",
+          "kind": "function",
+          "visibility": "public"
         }
       ],
       "related_files": [
@@ -1359,12 +1538,22 @@
         {
           "kind": "imports",
           "from": "src/context/discovery/project-config.ts#loadProjectConfig",
+          "to": "src/context/submodules.ts#readSubmodules"
+        },
+        {
+          "kind": "imports",
+          "from": "src/context/discovery/project-config.ts#loadProjectConfig",
           "to": "src/utils/schema.ts#formatSchemaErrors"
         },
         {
           "kind": "imports",
           "from": "src/context/discovery/project-config.ts#loadProjectConfig",
           "to": "src/utils/schema.ts#schemaValidator"
+        },
+        {
+          "kind": "imports",
+          "from": "src/context/discovery/scanner.ts#scanProject",
+          "to": "src/context/submodules.ts#readSubmodules"
         },
         {
           "kind": "imports",
@@ -1460,6 +1649,36 @@
           "kind": "imports",
           "from": "src/context/validate.ts#createNavigationCandidate",
           "to": "src/utils/schema.ts#schemaValidator"
+        },
+        {
+          "kind": "imports",
+          "from": "src/context/validate.ts#rebuildNavigation",
+          "to": "src/context/discovery/builder.ts#buildNavigation"
+        },
+        {
+          "kind": "imports",
+          "from": "src/context/validate.ts#rebuildNavigation",
+          "to": "src/context/discovery/project-config.ts#loadProjectConfig"
+        },
+        {
+          "kind": "imports",
+          "from": "src/context/validate.ts#rebuildNavigation",
+          "to": "src/context/discovery/scanner.ts#scanProject"
+        },
+        {
+          "kind": "imports",
+          "from": "src/context/validate.ts#rebuildNavigation",
+          "to": "src/context/navigation.ts#renderNavigation"
+        },
+        {
+          "kind": "imports",
+          "from": "src/context/validate.ts#rebuildNavigation",
+          "to": "src/context/paths.ts#resolveProjectRoot"
+        },
+        {
+          "kind": "imports",
+          "from": "src/context/validate.ts#rebuildNavigation",
+          "to": "src/utils/fs.ts#atomicDirectory"
         },
         {
           "kind": "imports",
@@ -2090,6 +2309,131 @@
           "kind": "imports",
           "from": "src/workflow/parse.ts#readTasks",
           "to": "src/workflow/types.ts#TaskDocument"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workflow/parse.ts#readTasks",
+          "to": "src/workflow/workspace.ts#readWorkspaceManifest"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workflow/workspace.ts#validateWorkspaceManifest",
+          "to": "src/workflow/types.ts#PlanDocument"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workflow/workspace.ts#validateWorkspaceManifest",
+          "to": "src/workflow/types.ts#TaskDocument"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workflow/workspace.ts#validateWorkspaceManifest",
+          "to": "src/workflow/types.ts#TaskSchedule"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workspace/distribute.ts#ResolvedWorkspacePlan",
+          "to": "src/workflow/types.ts#PlanDocument"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workspace/distribute.ts#ResolvedWorkspacePlan",
+          "to": "src/workflow/types.ts#TaskDocument"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workspace/distribute.ts#ResolvedWorkspacePlan",
+          "to": "src/workflow/types.ts#TaskSchedule"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workspace/distribute.ts#ResolvedWorkspacePlan",
+          "to": "src/workflow/workspace.ts#WorkspaceManifest"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workspace/distribute.ts#computeSliceFiles",
+          "to": "src/workflow/workspace.ts#WorkspaceRepository"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workspace/distribute.ts#computeSliceFiles",
+          "to": "src/workflow/workspace.ts#renderWorkspaceManifest"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workspace/distribute.ts#distributeWorkspace",
+          "to": "src/context/submodules.ts#readSubmodules"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workspace/distribute.ts#distributeWorkspace",
+          "to": "src/utils/fs.ts#atomicWrite"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workspace/distribute.ts#distributeWorkspace",
+          "to": "src/workflow/workspace.ts#WorkspaceRepository"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workspace/distribute.ts#distributeWorkspace",
+          "to": "src/workflow/workspace.ts#validateWorkspaceManifest"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workspace/distribute.ts#distributeWorkspace",
+          "to": "src/workspace/git.ts#repositoryPreconditionErrors"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workspace/distribute.ts#resolveWorkspacePlan",
+          "to": "src/workflow/order.ts#readExecutionOrder"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workspace/distribute.ts#resolveWorkspacePlan",
+          "to": "src/workflow/parse.ts#readPlan"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workspace/distribute.ts#resolveWorkspacePlan",
+          "to": "src/workflow/parse.ts#readTasks"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workspace/distribute.ts#resolveWorkspacePlan",
+          "to": "src/workflow/workspace.ts#readWorkspaceManifest"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workspace/git.ts#repositoryPreconditionErrors",
+          "to": "src/context/submodules.ts#SubmoduleDeclaration"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workspace/git.ts#repositoryPreconditionErrors",
+          "to": "src/utils/fs.ts#exists"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workspace/status.ts#workspaceStatus",
+          "to": "src/workspace/distribute.ts#ResolvedWorkspacePlan"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workspace/status.ts#workspaceStatus",
+          "to": "src/workspace/distribute.ts#classifySlice"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workspace/status.ts#workspaceStatus",
+          "to": "src/workspace/distribute.ts#computeSliceFiles"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workspace/status.ts#workspaceStatus",
+          "to": "src/workspace/distribute.ts#resolveWorkspacePlan"
         }
       ],
       "owner_role": "shared",
@@ -2107,6 +2451,7 @@
         "src/context/locate.ts",
         "src/context/navigation.ts",
         "src/context/paths.ts",
+        "src/context/submodules.ts",
         "src/context/validate.ts",
         "src/generated/navigation.candidate.schema.d.ts",
         "src/generated/navigation.schema.d.ts",
@@ -2135,7 +2480,11 @@
         "src/workflow/pairing.ts",
         "src/workflow/parse.ts",
         "src/workflow/read-scope.ts",
-        "src/workflow/types.ts"
+        "src/workflow/types.ts",
+        "src/workflow/workspace.ts",
+        "src/workspace/distribute.ts",
+        "src/workspace/git.ts",
+        "src/workspace/status.ts"
       ],
       "shared_entry": false
     },
@@ -2158,6 +2507,54 @@
           "file": "tests/helpers.ts",
           "name": "PlanTripletFiles",
           "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "tests/helpers.ts",
+          "name": "RealWorkspaceRepo",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "tests/helpers.ts",
+          "name": "RealWorkspaceRepoSpec",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "tests/helpers.ts",
+          "name": "WorkspaceManifestFixture",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "tests/helpers.ts",
+          "name": "WorkspaceManifestRepoFixture",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "tests/helpers.ts",
+          "name": "WorkspacePlanFixtureSpec",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "tests/helpers.ts",
+          "name": "WorkspaceRepoFixture",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "tests/helpers.ts",
+          "name": "WorkspaceTaskFixture",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "tests/helpers.ts",
+          "name": "changedPaths",
+          "kind": "function",
           "visibility": "public"
         },
         {
@@ -2192,6 +2589,12 @@
         },
         {
           "file": "tests/helpers.ts",
+          "name": "realWorkspaceFixture",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "tests/helpers.ts",
           "name": "recordPlanPair",
           "kind": "function",
           "visibility": "public"
@@ -2210,7 +2613,25 @@
         },
         {
           "file": "tests/helpers.ts",
+          "name": "renderWorkspaceManifestYaml",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "tests/helpers.ts",
+          "name": "snapshotTree",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "tests/helpers.ts",
           "name": "temporary",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "tests/helpers.ts",
+          "name": "workspacePlanFixture",
           "kind": "function",
           "visibility": "public"
         },
@@ -2242,12 +2663,15 @@
         "tests/behavior/profile-switch-content.test.ts",
         "tests/behavior/setup-ai-workflow-content.test.ts",
         "tests/behavior/surface-routing.test.ts",
+        "tests/behavior/workspace-planning-content.test.ts",
+        "tests/behavior/workspace-workflow-content.test.ts",
         "tests/behavior/worktree-policy.test.ts",
         "tests/install/agent-output.test.ts",
         "tests/install/install.test.ts",
         "tests/install/protection.test.ts",
         "tests/install/skill-installation.test.ts",
         "tests/integration/context-project-help-cli.test.ts",
+        "tests/integration/context-rebuild-cli.test.ts",
         "tests/integration/global-agent-guidance.test.ts",
         "tests/integration/navigation-fallback-cli.test.ts",
         "tests/integration/navigation-init.test.ts",
@@ -2263,10 +2687,15 @@
         "tests/integration/plan-execution-order-cli.test.ts",
         "tests/integration/plan-implementation-record.test.ts",
         "tests/integration/plan-pairing-cli.test.ts",
+        "tests/integration/plan-workspace-cli.test.ts",
         "tests/integration/profile-cli.test.ts",
         "tests/integration/project-cli.test.ts",
         "tests/integration/project-upgrade.test.ts",
+        "tests/integration/workspace-distribute-cli.test.ts",
+        "tests/integration/workspace-finalization-git.test.ts",
+        "tests/integration/workspace-status-cli.test.ts",
         "tests/unit/atomic-write.test.ts",
+        "tests/unit/context-submodules.test.ts",
         "tests/unit/navigation-adapters.test.ts",
         "tests/unit/navigation-builder.test.ts",
         "tests/unit/navigation-contract.test.ts",
@@ -2282,7 +2711,8 @@
         "tests/unit/settings.test.ts",
         "tests/unit/workflow-execution-order.test.ts",
         "tests/unit/workflow-pairing.test.ts",
-        "tests/unit/workflow-read-scope.test.ts"
+        "tests/unit/workflow-read-scope.test.ts",
+        "tests/unit/workflow-workspace.test.ts"
       ],
       "depends_on": [],
       "relations": [],
@@ -2302,6 +2732,8 @@
         "tests/behavior/profile-switch-content.test.ts",
         "tests/behavior/setup-ai-workflow-content.test.ts",
         "tests/behavior/surface-routing.test.ts",
+        "tests/behavior/workspace-planning-content.test.ts",
+        "tests/behavior/workspace-workflow-content.test.ts",
         "tests/behavior/worktree-policy.test.ts",
         "tests/helpers.ts",
         "tests/install/agent-output.test.ts",
@@ -2309,6 +2741,7 @@
         "tests/install/protection.test.ts",
         "tests/install/skill-installation.test.ts",
         "tests/integration/context-project-help-cli.test.ts",
+        "tests/integration/context-rebuild-cli.test.ts",
         "tests/integration/global-agent-guidance.test.ts",
         "tests/integration/navigation-fallback-cli.test.ts",
         "tests/integration/navigation-init.test.ts",
@@ -2324,10 +2757,15 @@
         "tests/integration/plan-execution-order-cli.test.ts",
         "tests/integration/plan-implementation-record.test.ts",
         "tests/integration/plan-pairing-cli.test.ts",
+        "tests/integration/plan-workspace-cli.test.ts",
         "tests/integration/profile-cli.test.ts",
         "tests/integration/project-cli.test.ts",
         "tests/integration/project-upgrade.test.ts",
+        "tests/integration/workspace-distribute-cli.test.ts",
+        "tests/integration/workspace-finalization-git.test.ts",
+        "tests/integration/workspace-status-cli.test.ts",
         "tests/unit/atomic-write.test.ts",
+        "tests/unit/context-submodules.test.ts",
         "tests/unit/navigation-adapters.test.ts",
         "tests/unit/navigation-builder.test.ts",
         "tests/unit/navigation-contract.test.ts",
@@ -2343,7 +2781,8 @@
         "tests/unit/settings.test.ts",
         "tests/unit/workflow-execution-order.test.ts",
         "tests/unit/workflow-pairing.test.ts",
-        "tests/unit/workflow-read-scope.test.ts"
+        "tests/unit/workflow-read-scope.test.ts",
+        "tests/unit/workflow-workspace.test.ts"
       ],
       "shared_entry": false
     }
