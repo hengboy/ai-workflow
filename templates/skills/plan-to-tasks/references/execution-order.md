@@ -35,3 +35,13 @@ The schedule has no .zh.md or .i18n.yaml sibling. It is machine-readable like `i
 ## Example
 
 A plan whose three tasks form a single dependency chain produces three one-task phases, while independent tasks with disjoint write scopes collapse into one parallel phase.
+
+## Workspace repositories
+
+For a workspace plan, `workspace.yaml` splits the schedule by repository. Derive the repository phases from the plan's `declared order`: a repository is scheduled after every repository it `depends_on`, and each repository keeps its own `repository's task DAG` for the tasks inside it. The critical path is the longest chain across the repository order and the task DAGs.
+
+Within one repository, same-phase scope comparison uses each task's repository-relative scopes, so equal write-scope paths `inside one repository` still collide and must be `disjoint`. Because scopes are repository-relative, equal repository-relative paths in different repositories are disjoint and may share a phase.
+
+The strictly-after rule holds at repository granularity: every task of a repository is scheduled `strictly after every task of the repositories it depends on`, so a dependent repository never starts in the same phase as any task of its dependencies.
+
+A plan without `workspace_repos` uses the single-repository schedule above unchanged.

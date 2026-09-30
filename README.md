@@ -30,6 +30,7 @@ ai-workflow plan pairing --plan .ai-workflow/plans/<planId> --write spec plan
 ai-workflow plan pairing --plan .ai-workflow/plans/<planId> --write --all
 ai-workflow context validate [--project .] --all
 ai-workflow context validate [--project .] --feature <id>
+ai-workflow context rebuild [--project .] [--write]
 ai-workflow context locate [--project .] --feature <id> --verify
 ai-workflow context candidate --project . --output <candidate.json> --task-target <id> --root <module-root> --path <changed-file>
 ai-workflow context refresh --project . --candidate <candidate.json> --write
@@ -40,6 +41,8 @@ ai-workflow notes pairing [--project .] [<note>...]
 ai-workflow notes pairing --project . --list
 ai-workflow notes pairing --project . --write <note> | --write --all
 ai-workflow notes archive [--project .] --seal
+ai-workflow workspace distribute --plan <directory>
+ai-workflow workspace status --plan <directory>
 ```
 
 `--project` is always a project root directory path. From that directory use `--project .` (project root directory path); from elsewhere pass an absolute path such as `--project /path/to/project`. Internal orchestration uses absolute project-root paths, and a relative `--candidate` is resolved from that project root.
@@ -125,7 +128,17 @@ features:
 
 ### Navigation lifecycle
 
-Navigation is JSON-authoritative version-1 output produced by a single builder, and `.ai-workflow/index/navigation.md` is rendered exclusively from that JSON. Validation dispatches by capability: structural roots are checked for file existence and coverage, while semantic roots are checked for exported symbols and import relations. `context validate`, `context locate --feature <id> --verify` and the authorized `context refresh` (which reuses the same adapters and preserves structural coverage) all operate on the generated navigation. A language that claims the semantic `exported-symbol` capability without a supported parser is rejected.
+Navigation is JSON-authoritative version-1 output produced by a single builder, and `.ai-workflow/index/navigation.md` is rendered exclusively from that JSON. Validation dispatches by capability: structural roots are checked for file existence and coverage, while semantic roots are checked for exported symbols and import relations. `context validate`, `context locate --feature <id> --verify` and the authorized `context refresh` (which reuses the same adapters and preserves structural coverage) all operate on the generated navigation. A language that claims the semantic `exported-symbol` capability without a supported parser is rejected. `ai-workflow context rebuild --project <root>` re-scans the project through the same builder and validates the rebuilt index before anything is written; `--write` atomically replaces `navigation.json` and `navigation.md`, while a dry run reports the verdict untouched.
+
+### Workspaces
+
+A workspace is a root repository that composes child repositories as local git submodules, and `.gitmodules` is the sole boundary signal: every declared submodule path is excluded from the workspace root's navigation discovery and validation, so a child's files, symbols and state never enter the root index. A workspace navigation generated before this boundary existed keeps its bytes until `ai-workflow context rebuild --project <root> --write` refreshes the pair; `context validate` reports each indexed submodule path with that exact instruction instead of failing silently, and a project without `.gitmodules` keeps its previous discovery and validation behavior unchanged.
+
+The workspace plan is one frozen bilingual `spec.md`/`plan.md` pair in the workspace root whose frontmatter declares `workspace_repos` — the participating repositories, their workspace-root-relative paths and the repository-level delivery order — and `workspace.yaml` assigns every task to exactly one repository. `ai-workflow workspace distribute --plan <directory>` writes a self-contained slice into each participating repository: the frozen planning triplets, that repository's task triplets, its filtered execution order and the `slice` manifest. It refuses divergent slice files before writing anything, and the reserved `workspace` root entry is skipped because the root's own tasks stay in the root plan. Each repository then implements its slice in its own session with its own worktree, validation, record and delivery commit.
+
+`ai-workflow workspace status --plan <directory>` reports, in delivery order and without writing, each repository's slice presence, implementation-record state and delivery commit, plus the next repository to deliver and whether all slices are complete, so finalization starts only on a ready report. After all slices complete, verify each recorded delivery commit with read-only Git in its source repository, then pin each affected submodule inside the workspace worktree with `git update-index --cacheinfo 160000,<sha>,<path>` and stage only the authorized pointer paths and workspace-root files.
+
+Note ownership splits with the boundary: the workspace root owns the cross-repository decision note, each repository owns the note covering the facts it delivered, and cross-repository references stay plain plan-ID text, so each side updates only its own notes and `MEMORY.md`.
 
 ### Implementation record
 

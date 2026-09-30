@@ -436,4 +436,45 @@ features:
     expect(result.errors.length).toBeGreaterThan(0);
     expect(result.errors.some((error) => error.includes('.ai-workflow') || /exclud/i.test(error))).toBe(true);
   });
+
+  it('rejects a module path inside a declared submodule boundary', async () => {
+    const root = await projectWithConfig(`version: 1
+modules:
+  - id: child-module
+    path: child
+    languages: [typescript]
+    source_roots: [src]
+    test_roots: []
+features: []
+`);
+    await writeFile(join(root, '.gitmodules'), '[submodule "child"]\n\tpath = child\n\turl = ../child\n');
+    await mkdir(join(root, 'child/src'), { recursive: true });
+
+    const result = await loadProjectConfig(root);
+
+    expect(result.errors).toEqual(['module "child-module" path "child" is inside a declared submodule boundary']);
+  });
+
+  it('rejects a feature path inside a declared submodule boundary', async () => {
+    const root = await projectWithConfig(`version: 1
+modules:
+  - id: root
+    path: .
+    languages: [typescript]
+    source_roots: [src]
+    test_roots: []
+features:
+  - id: child-feature
+    name: Child Feature
+    module_root: root
+    paths: [child/src]
+`);
+    await writeFile(join(root, '.gitmodules'), '[submodule "child"]\n\tpath = child\n\turl = ../child\n');
+    await mkdir(join(root, 'src'), { recursive: true });
+    await mkdir(join(root, 'child/src'), { recursive: true });
+
+    const result = await loadProjectConfig(root);
+
+    expect(result.errors).toEqual(['feature "child-feature" path "child/src" is inside a declared submodule boundary']);
+  });
 });

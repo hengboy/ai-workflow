@@ -1,5 +1,6 @@
-import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
-import { basename, join } from 'node:path';
+import { mkdtemp, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { basename, join, relative, sep } from 'node:path';
+import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -124,3 +125,205 @@ export async function frozenPlan(root: string, withTasks = true): Promise<string
   return directory;
 }
 export async function gitInit(root: string): Promise<void> { await exec('git', ['init', '-b', 'main'], { cwd: root }); await exec('git', ['config', 'user.email', 'test@example.com'], { cwd: root }); await exec('git', ['config', 'user.name', 'Test'], { cwd: root }); await exec('git', ['config', 'commit.gpgsign', 'false'], { cwd: root }); await writeFile(join(root, 'README.md'), '# Test\n'); await exec('git', ['add', 'README.md'], { cwd: root }); await exec('git', ['commit', '-m', 'initial'], { cwd: root }); }
+
+/** One `workspace_repos` entry as it appears in the frozen plan.md frontmatter. */
+export interface WorkspaceRepoFixture { name: string; path: string; dependsOn: string[] }
+
+/** One task document in a workspace plan fixture; `repo` is omitted to model a missing repository. */
+export interface WorkspaceTaskFixture {
+  id: string;
+  repo?: string;
+  requirements: string[];
+  acceptanceCriteria: string[];
+  dependsOn?: string[];
+  surface?: string;
+  readScope?: string[];
+  writeScope?: string[];
+}
+
+/** One repository entry of a `workspace.yaml` manifest. */
+export interface WorkspaceManifestRepoFixture { name: string; path: string; dependsOn: string[]; requirements: string[]; acceptanceCriteria: string[] }
+
+/** The `workspace.yaml` manifest payload a workspace or slice plan fixture carries. */
+export interface WorkspaceManifestFixture { planId: string; role: 'workspace' | 'slice'; repositories: WorkspaceManifestRepoFixture[] }
+
+/** A complete workspace plan fixture: frozen pair, task triplets, schedule and optional manifest. */
+export interface WorkspacePlanFixtureSpec {
+  planId: string;
+  requirements: string[];
+  acceptanceCriteria: string[];
+  workspaceRepos?: WorkspaceRepoFixture[];
+  tasks: WorkspaceTaskFixture[];
+  phases: string[][];
+  manifest?: WorkspaceManifestFixture;
+}
+
+function workspaceSpecBody(requirements: string[], acceptanceCriteria: string[], prose: (id: string) => string): string {
+  return [
+    '# Specification',
+    '',
+    ...requirements.flatMap((id) => [`## ${id}: requirement`, '', prose(id), '']),
+    ...acceptanceCriteria.flatMap((id) => [`## ${id}: acceptance criteria`, '', prose(id), '']),
+    '',
+  ].join('\n');
+}
+
+function workspacePlanBody(requirements: string[], acceptanceCriteria: string[], step: (id: string) => string): string {
+  return [
+    '# Implementation Plan',
+    '',
+    '## Requirement coverage',
+    '',
+    '| Requirement | Acceptance criteria | Implementation step |',
+    '| --- | --- | --- |',
+    ...requirements.map((id, index) => `| ${id} | ${acceptanceCriteria[index] ?? ''} | ${step(id)} |`),
+    '',
+    '## Implementation sequence',
+    '',
+    ...requirements.map((id, index) => `${index + 1}. ${step(id)}`),
+    '',
+  ].join('\n');
+}
+
+/** Render the deterministic YAML body of a `workspace.yaml` manifest fixture. */
+export function renderWorkspaceManifestYaml(manifest: WorkspaceManifestFixture): string {
+  const lines = [`plan_id: ${manifest.planId}`, `role: ${manifest.role}`, 'repositories:'];
+  for (const repo of manifest.repositories) {
+    lines.push(`  - name: ${repo.name}`);
+    lines.push(`    path: ${repo.path}`);
+    lines.push(`    depends_on: [${repo.dependsOn.join(', ')}]`);
+    lines.push(`    requirements: [${repo.requirements.join(', ')}]`);
+    lines.push(`    acceptance_criteria: [${repo.acceptanceCriteria.join(', ')}]`);
+  }
+  return `${lines.join('\n')}\n`;
+}
+
+/**
+ * Write a complete workspace plan fixture under `<root>/.ai-workflow/plans/<planId>`:
+ * the frozen spec/plan pair (with an optional `workspace_repos` declaration), the task
+ * triplets, `tasks/execution-order.yaml` and, when supplied, `workspace.yaml`.
+ */
+export async function workspacePlanFixture(root: string, spec: WorkspacePlanFixtureSpec): Promise<string> {
+  const directory = join(root, '.ai-workflow/plans', spec.planId);
+  await mkdir(join(directory, 'tasks'), { recursive: true });
+  const baseAttributes: Record<string, unknown> = {
+    plan_id: spec.planId,
+    status: 'frozen',
+    created_at: '2026-09-30T00:00:00.000Z',
+    supersedes: null,
+    requirement_count: spec.requirements.length,
+    acceptance_criteria_count: spec.acceptanceCriteria.length,
+    digest: 'sha256:placeholder',
+  };
+  const planAttributes: Record<string, unknown> = spec.workspaceRepos
+    ? { ...baseAttributes, workspace_repos: spec.workspaceRepos.map((repo) => ({ name: repo.name, path: repo.path, depends_on: repo.dependsOn })) }
+    : { ...baseAttributes };
+  await writePlanTriplet(
+    directory,
+    'spec.md',
+    workspaceSpecBody(spec.requirements, spec.acceptanceCriteria, (id) => `${id} prose.`),
+    workspaceSpecBody(spec.requirements, spec.acceptanceCriteria, (id) => `${id} 正文。`),
+    (body) => renderFrozenMarkdown(baseAttributes, body),
+  );
+  await writePlanTriplet(
+    directory,
+    'plan.md',
+    workspacePlanBody(spec.requirements, spec.acceptanceCriteria, (id) => `Implement ${id}.`),
+    workspacePlanBody(spec.requirements, spec.acceptanceCriteria, (id) => `实现 ${id}。`),
+    (body) => renderFrozenMarkdown(planAttributes, body),
+  );
+  for (const task of spec.tasks) {
+    const attributes: Record<string, unknown> = {
+      id: task.id,
+      requirements: task.requirements,
+      acceptance_criteria: task.acceptanceCriteria,
+      depends_on: task.dependsOn ?? [],
+      surface: task.surface ?? 'backend',
+      read_scope: task.readScope ?? ['MEMORY.md'],
+      write_scope: task.writeScope ?? [`src/${task.id}.ts`],
+      test_commands: ['pnpm test'],
+    };
+    if (task.repo !== undefined) attributes.repo = task.repo;
+    await writePlanTriplet(join(directory, 'tasks'), `${task.id}.md`, '# Task', '# Task', (body) => renderMarkdown(attributes, body));
+  }
+  await writeFile(join(directory, 'tasks', 'execution-order.yaml'), renderExecutionOrderYaml(spec.planId, spec.phases));
+  if (spec.manifest) await writeFile(join(directory, 'workspace.yaml'), renderWorkspaceManifestYaml(spec.manifest));
+  return directory;
+}
+
+/** Recursively hash every regular file and symlink under `root`, skipping `.git` entries. */
+export async function snapshotTree(root: string): Promise<Map<string, string>> {
+  const snapshot = new Map<string, string>();
+  async function walk(directory: string): Promise<void> {
+    for (const entry of await readdir(directory, { withFileTypes: true })) {
+      if (entry.name === '.git') continue;
+      const absolute = join(directory, entry.name);
+      const key = relative(root, absolute).split(sep).join('/');
+      if (entry.isDirectory()) await walk(absolute);
+      else if (entry.isSymbolicLink()) snapshot.set(key, 'symlink');
+      else if (entry.isFile()) snapshot.set(key, createHash('sha256').update(await readFile(absolute)).digest('hex'));
+    }
+  }
+  await walk(root);
+  return snapshot;
+}
+
+/** Project-relative paths whose bytes differ between two `snapshotTree` results, sorted. */
+export function changedPaths(before: Map<string, string>, after: Map<string, string>): string[] {
+  const paths = new Set([...before.keys(), ...after.keys()]);
+  return [...paths].filter((path) => before.get(path) !== after.get(path)).sort();
+}
+
+async function gitInitRepository(directory: string): Promise<void> {
+  await mkdir(directory, { recursive: true });
+  await exec('git', ['init', '-b', 'main'], { cwd: directory });
+  await exec('git', ['config', 'user.email', 'test@example.com'], { cwd: directory });
+  await exec('git', ['config', 'user.name', 'Test'], { cwd: directory });
+  await exec('git', ['config', 'commit.gpgsign', 'false'], { cwd: directory });
+}
+
+async function gitCommitAll(directory: string, message: string): Promise<void> {
+  await exec('git', ['add', '-A'], { cwd: directory });
+  await exec('git', ['commit', '-m', message], { cwd: directory });
+}
+
+/** One participating child repository of a real-git workspace fixture; `init` defaults to true. */
+export interface RealWorkspaceRepoSpec { name: string; path: string; init?: boolean }
+
+/** A materialized child repository of a real-git workspace fixture. */
+export interface RealWorkspaceRepo { name: string; path: string; absolute: string }
+
+/**
+ * Build a real workspace root whose `.gitmodules` declares each `repos` entry as a
+ * local git submodule, using the repository name as the submodule section name. Each
+ * repository (`init !== false`) and the workspace root are initialized as ai-workflow
+ * projects with the CLI, and every initialized child is committed so
+ * `git status --porcelain` is clean. Local file-protocol submodules are used so the
+ * fixture stays offline.
+ */
+export async function realWorkspaceFixture(repos: RealWorkspaceRepoSpec[]): Promise<{ root: string; repos: RealWorkspaceRepo[] }> {
+  const root = await temporary('ai-workflow-real-workspace-');
+  await gitInitRepository(root);
+  await writeFile(join(root, 'README.md'), '# Workspace\n');
+  await gitCommitAll(root, 'workspace initial');
+
+  for (const repo of repos) {
+    const source = await temporary('ai-workflow-real-child-');
+    await gitInitRepository(source);
+    await mkdir(join(source, 'src'), { recursive: true });
+    await writeFile(join(source, 'src', 'index.ts'), 'export const childEntry = true;\n');
+    await gitCommitAll(source, 'child initial');
+    await exec('git', ['-c', 'protocol.file.allow=always', 'submodule', 'add', '--name', repo.name, source, repo.path], { cwd: root });
+  }
+  await gitCommitAll(root, 'add submodules');
+
+  const initialized = repos.filter((repo) => repo.init !== false);
+  await Promise.all(
+    [root, ...initialized.map((repo) => join(root, repo.path))].map((target) =>
+      exec('pnpm', ['exec', 'tsx', 'src/cli.ts', 'init', target], { maxBuffer: 10 * 1024 * 1024 }),
+    ),
+  );
+  for (const repo of initialized) await gitCommitAll(join(root, repo.path), 'initialize project');
+
+  return { root, repos: repos.map((repo) => ({ name: repo.name, path: repo.path, absolute: join(root, repo.path) })) };
+}

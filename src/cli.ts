@@ -4,13 +4,16 @@ import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import type { Host } from './workflow/types.js';
 import { activateProfile, install, uninstall, initializeProject, upgradeProject } from './install/index.js';
-import { createNavigationCandidate, refreshContext, validateContext, verifyNavigation } from './context/validate.js';
+import { createNavigationCandidate, rebuildNavigation, refreshContext, validateContext, verifyNavigation } from './context/validate.js';
 import { locateContext } from './context/locate.js';
 import { discoverFallback, type FallbackPacket } from './context/fallback.js';
 import { resolveCandidatePath, resolveProjectRoot } from './context/paths.js';
 import { readPlan, readTasks } from './workflow/parse.js';
 import { readExecutionOrder } from './workflow/order.js';
+import { readWorkspaceManifest, validateWorkspaceManifest, validateWorkspaceRepositoryOrder } from './workflow/workspace.js';
 import { listPlanPairs, recordPlanPairs, verifyPlanPairs } from './workflow/pairing.js';
+import { distributeWorkspace } from './workspace/distribute.js';
+import { workspaceStatus } from './workspace/status.js';
 import { listNotes } from './notes/index.js';
 import { validateNotes } from './notes/validate.js';
 import { sealArchive } from './notes/archive.js';
@@ -34,9 +37,24 @@ plan.command('validate').requiredOption('--plan <directory>').action(async ({ pl
   const document = await readPlan(directory);
   const tasks = await readTasks(directory);
   const digests = { spec: document.specDigest, plan: document.planDigest, combined: document.digest };
+  const manifest = await readWorkspaceManifest(directory);
   if (!tasks.length) { print({ valid: true, plan_id: document.planId, digests }); return; }
   const schedule = await readExecutionOrder(directory, document.planId, tasks);
-  print({ valid: true, plan_id: document.planId, digests, execution_order: schedule.phases.map((phase) => phase.parallel) });
+  if (manifest) {
+    const errors = validateWorkspaceManifest(manifest, document, tasks, schedule);
+    if (errors.length) throw new Error(errors.join('\n'));
+  } else if (document.workspaceRepos) {
+    const errors = validateWorkspaceRepositoryOrder(document.workspaceRepos.map((repository) => ({ name: repository.name, dependsOn: repository.depends_on })), tasks, schedule);
+    if (errors.length) throw new Error(errors.join('\n'));
+  }
+  const output: { valid: boolean; plan_id: string; digests: typeof digests; execution_order: string[][]; repos?: { name: string; path: string; depends_on: string[] }[] } = {
+    valid: true,
+    plan_id: document.planId,
+    digests,
+    execution_order: schedule.phases.map((phase) => phase.parallel),
+  };
+  if (manifest?.role === 'workspace') output.repos = manifest.repositories.map((repository) => ({ name: repository.name, path: repository.path, depends_on: repository.dependsOn }));
+  print(output);
 });
 plan.command('pairing')
   .requiredOption('--plan <directory>')
@@ -100,8 +118,20 @@ notes.command('pairing')
     if (!result.valid) process.exitCode = 1;
   });
 const context = program.command('context'); context.command('validate').option('--project <project>', projectOption, process.cwd()).option('--feature <id>').option('--all').action(async ({ project, feature, all }: { project: string; feature?: string; all?: boolean }) => { if (feature && all) throw new Error('Use either --feature or --all'); const root = resolveProjectRoot(project); const result = feature ? await verifyNavigation(root, feature) : await validateContext(root); print(result); if (!result.valid) process.exitCode = 1; });
+context.command('rebuild').option('--project <project>', projectOption, process.cwd()).option('--write', 'replace the navigation pair with the rebuilt index').action(async ({ project, write }: { project: string; write?: boolean }) => { const result = await rebuildNavigation(resolveProjectRoot(project), Boolean(write)); print(result); if (!result.valid) process.exitCode = 1; });
 context.command('refresh').option('--project <project>', projectOption, process.cwd()).requiredOption('--candidate <path>').requiredOption('--write').action(async ({ project, candidate }: { project: string; candidate: string }) => print(await refreshContext(resolveProjectRoot(project), candidate)));
 context.command('candidate').option('--project <project>', projectOption, process.cwd()).requiredOption('--output <path>').requiredOption('--task-target <id>').requiredOption('--root <path...>').requiredOption('--path <path...>').action(async ({ project, output, taskTarget, root, path }: { project: string; output: string; taskTarget: string; root: string[]; path: string[] }) => { const projectRoot = resolveProjectRoot(project); await createNavigationCandidate(projectRoot, taskTarget, root, path, output); print({ candidate: resolveCandidatePath(projectRoot, output) }); });
 context.command('locate').option('--project <project>', projectOption, process.cwd()).option('--feature <id>').option('--symbol <symbol>').option('--task <id>').option('--root <path...>').option('--maintain-index').option('--depth <count>', 'follow direct relations to this depth', Number).option('--verify').action(async (options: { project: string; feature?: string; symbol?: string; task?: string; root?: string[]; maintainIndex?: boolean; depth?: number; verify?: boolean }) => print(await locateContext(resolveProjectRoot(options.project), { ...options, ...(options.root ? { roots: options.root } : {}), ...(options.maintainIndex !== undefined ? { maintenanceAuthorized: options.maintainIndex } : {}) })));
 context.command('discover').option('--project <project>', projectOption, process.cwd()).requiredOption('--packet <path>').action(async ({ project, packet }: { project: string; packet: string }) => print(await discoverFallback(resolveProjectRoot(project), await jsonFile<FallbackPacket>(packet))));
+const workspace = program.command('workspace');
+workspace.command('distribute').requiredOption('--plan <directory>').action(async ({ plan: directory }: { plan: string }) => {
+  const result = await distributeWorkspace(directory);
+  print(result);
+  if (!result.valid) process.exitCode = 1;
+});
+workspace.command('status').requiredOption('--plan <directory>').action(async ({ plan: directory }: { plan: string }) => {
+  const result = await workspaceStatus(directory);
+  print(result);
+  if (!result.valid) process.exitCode = 1;
+});
 program.parseAsync().catch((error: unknown) => { process.stderr.write(`ai-workflow: ${error instanceof Error ? error.message : String(error)}\n`); process.exitCode = 1; });

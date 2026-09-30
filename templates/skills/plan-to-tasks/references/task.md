@@ -3,6 +3,7 @@ id: "{{task_id}}"
 requirements: ["REQ-001"]
 acceptance_criteria: ["AC-001"]
 depends_on: []
+repo: "{{repo}}"
 surface: backend
 read_scope: [".ai-workflow/AGENTS.md", "MEMORY.md", ".ai-workflow/index/navigation.json", ".ai-workflow/index/navigation.md", "{{exact/locator/file.ts}}"]
 write_scope: ["{{exact/write/file}}"]
@@ -27,11 +28,19 @@ The Chinese `.zh.md` side has no YAML frontmatter and starts with `# Task` follo
 （中文正文，结构镜像英文侧；无 YAML frontmatter。）
 ```
 
-Frontmatter (`id`, `requirements`, `acceptance_criteria`, `depends_on`, `surface`, `read_scope`, `write_scope`, `test_commands`) lives only on the English `task-NNN-slug.md` side. Both sides mirror headings, structure, tables, lists and link targets, differing only in prose.
+Frontmatter (`id`, `requirements`, `acceptance_criteria`, `depends_on`, `repo`, `surface`, `read_scope`, `write_scope`, `test_commands`) lives only on the English `task-NNN-slug.md` side. Both sides mirror headings, structure, tables, lists and link targets, differing only in prose.
 
 ## Objective
 
 State one coherent, independently testable outcome that can be delivered in one commit. Keep it cohesive: do not open a task for a per-file or mechanical edit, and merge work that shares one outcome, surface and validation command.
+
+## Repository scope
+
+In a workspace plan, frontmatter `repo` names the single repository this task belongs to. `repo` is `required exactly when the plan declares repositories` and `forbidden otherwise`; a task in a plan without `workspace_repos` must not carry it.
+
+Task read and write scopes are `repository-relative`: they resolve inside that repository's root, never against the workspace root, and must not escape it with `..`.
+
+A task never declares a `cross-repository` `depends_on`: every dependency names a task in the same repository. Repository ordering comes from the plan's declared repository order, not from task `depends_on`.
 
 ## Implementation notes
 

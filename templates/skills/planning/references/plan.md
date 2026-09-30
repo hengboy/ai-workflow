@@ -75,3 +75,22 @@ For the notification preference requirement in `spec.md`, a completed step could
 - Validation: `pnpm vitest run tests/preferences/store.test.ts` proves AC-001 and the missing-value compatibility case.
 - Dependencies: none
 ```
+
+## Workspace repositories
+
+When the plan targets a workspace root, the frozen frontmatter additionally declares `workspace_repos`: the participating repositories and their dependency order. Each entry carries a repository `name` — the `.gitmodules` submodule `section name` that distribution verifies — a repository-relative `path` and a `depends_on` list naming the participants that must be delivered first. The declaration must contain exactly one `reserved` `root entry` named `workspace` with `path: .` and an empty `depends_on`.
+
+```yaml
+workspace_repos:
+  - name: workspace
+    path: .
+    depends_on: []
+  - name: lib-core
+    path: vendor/lib-core
+    depends_on: [workspace]
+  - name: app-web
+    path: apps/app-web
+    depends_on: [workspace, lib-core]
+```
+
+State the `per-repository delivery boundary` here as well: every task belongs to exactly one repository, task read and write scopes are repository-relative, no task depends on a task in another repository, and every task of a repository is delivered strictly after every task of the repositories it depends on. A plan without `workspace_repos` has no repositories and keeps the single-repository contract unchanged.

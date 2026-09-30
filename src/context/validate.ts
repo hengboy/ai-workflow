@@ -1,16 +1,23 @@
 import { lstat, readdir, readFile, realpath, writeFile } from 'node:fs/promises';
-import { dirname, extname, isAbsolute, join, relative, resolve } from 'node:path';
+import { dirname, extname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import ts from 'typescript';
 import { atomicDirectory, atomicWrite, exists } from '../utils/fs.js';
 import { formatSchemaErrors, schemaValidator } from '../utils/schema.js';
 import { renderNavigation, type NavigationIndex, type NavigationModuleRoot } from './navigation.js';
 import { resolveCandidatePath, resolveProjectRoot } from './paths.js';
 import { analyzeModule } from './discovery/adapters.js';
+import { buildNavigation } from './discovery/builder.js';
+import { loadProjectConfig } from './discovery/project-config.js';
 import { isExcludedDirectory, scanProject, type DiscoveredFile } from './discovery/scanner.js';
 import type { CandidateModuleRoot } from './discovery/types.js';
+import { findSubmoduleBoundary, readSubmodules, type SubmoduleDeclaration } from './submodules.js';
 
 function compareStrings(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0;
+}
+
+function relativePosix(root: string, absolute: string): string {
+  return relative(root, absolute).split(sep).join('/');
 }
 
 export interface ContextValidation { valid: boolean; errors: string[] }
@@ -62,25 +69,27 @@ async function validateNavigationPath(project: string, realProject: string, path
   }
 }
 
-async function typeScriptFiles(project: string, directory: string): Promise<string[]> {
+async function typeScriptFiles(project: string, directory: string, declarations: SubmoduleDeclaration[]): Promise<string[]> {
   const files: string[] = [];
   for (const entry of await readdir(directory, { withFileTypes: true })) {
     const path = join(directory, entry.name);
     if (entry.isDirectory()) {
       if (isExcludedDirectory(entry.name)) continue;
-      files.push(...await typeScriptFiles(project, path));
+      if (findSubmoduleBoundary(relativePosix(project, path), declarations)) continue;
+      files.push(...await typeScriptFiles(project, path, declarations));
     } else if (entry.isFile() && /\.(?:ts|tsx|js|jsx|mjs|cjs)$/.test(entry.name)) files.push(relative(project, path));
   }
   return files;
 }
 
-async function regularFiles(project: string, directory: string): Promise<string[]> {
+async function regularFiles(project: string, directory: string, declarations: SubmoduleDeclaration[]): Promise<string[]> {
   const files: string[] = [];
   for (const entry of await readdir(directory, { withFileTypes: true })) {
     const path = join(directory, entry.name);
     if (entry.isDirectory()) {
       if (isExcludedDirectory(entry.name)) continue;
-      files.push(...await regularFiles(project, path));
+      if (findSubmoduleBoundary(relativePosix(project, path), declarations)) continue;
+      files.push(...await regularFiles(project, path, declarations));
     } else if (entry.isFile()) files.push(relative(project, path));
   }
   return files;
@@ -187,7 +196,8 @@ function importedBindingsIn(node: ts.Node, bindings: Map<string, { file: string;
 }
 
 async function parseTypeScriptModuleRoot(project: string, root: NavigationModuleRoot): Promise<ParsedModuleRoot> {
-  const files = await typeScriptFiles(project, join(project, root.path));
+  const submoduleDeclarations = await readSubmodules(project);
+  const files = await typeScriptFiles(project, join(project, root.path), submoduleDeclarations);
   const fileSet = new Set(files);
   const symbols: ParsedSymbol[] = [];
   const relations: ParsedRelation[] = [];
@@ -356,6 +366,7 @@ async function validateModuleRoots(project: string, index: NavigationIndex, root
 
 async function validateModuleCoverage(project: string, index: NavigationIndex, errors: string[]): Promise<void> {
   const registered = new Set(index.features.flatMap((feature) => [...feature.entries, ...feature.related_files, ...feature.tests, ...feature.symbols.map((symbol) => symbol.file)]));
+  const submoduleDeclarations = await readSubmodules(project);
   for (const moduleRoot of index.module_roots) {
     const hasSymbolCapability = moduleRoot.entry_kinds.includes('exported-symbol');
     const hasFileCapability = moduleRoot.entry_kinds.includes('file');
@@ -368,7 +379,7 @@ async function validateModuleCoverage(project: string, index: NavigationIndex, e
       const hasFeature = index.features.some((feature) => feature.module_root === moduleRoot.id);
       if (!hasFeature) errors.push(`${moduleRoot.id}: featureless module root`);
       if (hasSymbolCapability) {
-        for (const file of await typeScriptFiles(project, path)) {
+        for (const file of await typeScriptFiles(project, path, submoduleDeclarations)) {
           const owner = rootFor(index, file);
           if (owner?.id === moduleRoot.id && !registered.has(file)) errors.push(`Navigation index is stale: unclassified module file ${file}`);
         }
@@ -376,7 +387,7 @@ async function validateModuleCoverage(project: string, index: NavigationIndex, e
       if (hasFileCapability) {
         const javaRelated = moduleRoot.language === 'java' || hasSymbolCapability;
         if (javaRelated) {
-          const files = (await regularFiles(project, path))
+          const files = (await regularFiles(project, path, submoduleDeclarations))
             .sort(compareStrings)
             .filter((file) => file.endsWith('.java') && rootFor(index, file)?.id === moduleRoot.id);
           const covered = new Set(index.features.filter((feature) => feature.module_root === moduleRoot.id).flatMap((feature) => [...feature.entries, ...feature.related_files, ...feature.tests, ...feature.symbols.map((symbol) => symbol.file)]));
@@ -425,6 +436,16 @@ async function validateIndex(project: string, featureIds?: Set<string>, supplied
   const raw = index as unknown as { features?: Array<Record<string, unknown>> };
   for (const feature of raw.features ?? []) if ('write_scope' in feature) errors.push('Navigation features cannot declare write_scope');
   validateIndexRelationships(index, errors);
+  const submoduleDeclarations = await readSubmodules(root);
+  const boundaryPaths = new Set<string>();
+  for (const feature of index.features) {
+    for (const path of [...feature.entries, ...feature.related_files, ...feature.tests, ...feature.symbols.map((symbol) => symbol.file)]) {
+      if (findSubmoduleBoundary(path, submoduleDeclarations)) boundaryPaths.add(path);
+    }
+  }
+  for (const path of [...boundaryPaths].sort(compareStrings)) {
+    errors.push(`Navigation index references declared submodule path "${path}"; run ai-workflow context rebuild --write to refresh`);
+  }
   if (errors.length) return { errors };
 
   const features = featureIds ? index.features.filter((feature) => featureIds.has(feature.id)) : index.features;
@@ -473,6 +494,39 @@ export async function verifyNavigation(project: string, featureId: string): Prom
   const markdown = await readFile(join(root, '.ai-workflow/index/navigation.md'), 'utf8');
   if (markdown !== renderNavigation(result.index)) result.errors.push('Navigation index is stale: navigation.md does not match navigation.json');
   return { valid: result.errors.length === 0, errors: result.errors };
+}
+
+export interface NavigationRebuildReport {
+  valid: boolean;
+  wrote: boolean;
+  module_roots?: number;
+  features?: number;
+  errors?: string[];
+}
+
+/**
+ * Rebuild `navigation.json` and `navigation.md` from current discovery plus
+ * `.ai-workflow/project.yml`, using the same builder path as `init`. The built
+ * index is validated before anything is written; `--write` replaces only the
+ * navigation pair atomically, while a dry run reports the verdict untouched.
+ */
+export async function rebuildNavigation(project: string, write: boolean): Promise<NavigationRebuildReport> {
+  const root = resolveProjectRoot(project);
+  const facts = await scanProject(root);
+  const configResult = await loadProjectConfig(root, facts.files);
+  if (configResult.errors.length) return { valid: false, wrote: false, errors: configResult.errors };
+  const { index } = await buildNavigation(root, facts, configResult.config);
+  const validation = await validateNavigationModel(root, index);
+  if (!validation.valid) return { valid: false, wrote: false, errors: validation.errors };
+  if (!write) {
+    return { valid: true, wrote: false, module_roots: index.module_roots.length, features: index.features.length };
+  }
+  const indexDirectory = join(root, '.ai-workflow/index');
+  await atomicDirectory(indexDirectory, async (temporary) => {
+    await writeFile(join(temporary, 'navigation.json'), `${JSON.stringify(index, null, 2)}\n`, { mode: 0o600 });
+    await writeFile(join(temporary, 'navigation.md'), renderNavigation(index), { mode: 0o600 });
+  });
+  return { valid: true, wrote: true, module_roots: index.module_roots.length, features: index.features.length };
 }
 
 function isConcreteDirectory(path: string): boolean {

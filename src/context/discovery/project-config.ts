@@ -4,6 +4,7 @@ import { parse } from 'yaml';
 import { schemaValidator, formatSchemaErrors } from '../../utils/schema.js';
 import { exists } from '../../utils/fs.js';
 import { isExcludedDirectory, type DiscoveredFile } from './scanner.js';
+import { findSubmoduleBoundary, readSubmodules, type SubmoduleDeclaration } from '../submodules.js';
 
 export interface ProjectConfigModule {
   id: string;
@@ -116,6 +117,7 @@ async function collectErrors(
   root: string,
   modules: ProjectConfigModule[],
   features: ProjectConfigFeature[],
+  declarations: SubmoduleDeclaration[],
   files: DiscoveredFile[] | undefined
 ): Promise<string[]> {
   const errors: string[] = [];
@@ -144,6 +146,10 @@ async function collectErrors(
     }
     if (hasExcludedSegment(module.path)) {
       errors.push(`module "${module.id}" path "${module.path}" is inside an excluded directory`);
+      continue;
+    }
+    if (findSubmoduleBoundary(module.path, declarations)) {
+      errors.push(`module "${module.id}" path "${module.path}" is inside a declared submodule boundary`);
       continue;
     }
     if (!(await exists(moduleAbsolute))) {
@@ -214,6 +220,10 @@ async function collectErrors(
         errors.push(`feature "${feature.id}" path "${featurePath}" is inside an excluded directory`);
         continue;
       }
+      if (findSubmoduleBoundary(featurePath, declarations)) {
+        errors.push(`feature "${feature.id}" path "${featurePath}" is inside a declared submodule boundary`);
+        continue;
+      }
       if (ownerModule && !isWithinModule(featurePath, ownerModule.path)) {
         errors.push(
           `feature "${feature.id}" path "${featurePath}" is outside its module "${ownerModule.id}" (${ownerModule.path})`
@@ -271,6 +281,6 @@ export async function loadProjectConfig(root: string, files?: DiscoveredFile[]):
     paths: [...feature.paths]
   }));
 
-  const errors = await collectErrors(root, modules, features, files);
+  const errors = await collectErrors(root, modules, features, await readSubmodules(root), files);
   return { present: true, config: { version: 1, modules, features }, errors };
 }

@@ -26,6 +26,20 @@ If the project root or goal is missing, ask for that information before drafting
 
 Before repository context work, directly read `.ai-workflow/AGENTS.md`, `MEMORY.md`, `.ai-workflow/index/navigation.json` and `.ai-workflow/index/navigation.md`. The project contract applies to the whole project and to every participating agent. Treat absent `MEMORY.md` as a recorded legal state. For a known feature run `ai-workflow context locate --project <absolute-project-root> --feature <id> --verify`, then read only its exact `read_order`. `<absolute-project-root>` is the normalized project directory path, never its directory name. Do not search the repository. If locate returns `missing_index`, `miss`, `stale` or `invalid`, request File Explorer with the original goal, status/reason and authorized module roots. Keep each task `read_scope` to the fixed context (`.ai-workflow/AGENTS.md`, `MEMORY.md`, both navigation files) plus exact locator paths; it must not contain `src/`, `tests/` or the project root. Add relevant notes and governance files only as exact bounded paths.
 
+## Workspace planning
+
+When the project root declares submodules in its `.gitmodules` file, treat that root as a workspace root. Detect participation from that declaration only; never infer it from directory layout, nested checkouts or a scan.
+
+A workspace plan names the participating repositories and their dependency order. Confirm both as clarification questions, each in the numbered clarification prompt format: which declared repositories participate in this change, and which participating repository depends on which other participant. Fix the dependency order before drafting, because it sets the repository delivery order.
+
+Read each child's context through that child's own root: that repository's `own project contract` (`.ai-workflow/AGENTS.md`), its `MEMORY.md`, and `navigation through that repository's root`. Never substitute the workspace root's contract for a child's; each participating repository's own project contract governs that repository.
+
+Write the `workspace_repos` declaration into the frozen `plan.md` frontmatter. Each entry carries `name`, the `.gitmodules` submodule `section name` that distribution verifies against the declaration, a repository-relative `path` and `depends_on`, the names of participants that must be delivered first; the list declares exactly one `reserved` `workspace` `root entry` with `path: .` and an empty `depends_on`. State the `per-repository delivery boundary` in the plan: every task belongs to one repository, task scopes are repository-relative, no task depends on a task in another repository, and every task of a repository is delivered strictly after every task of the repositories it depends on.
+
+The workflow `stops before freezing` when a participating child `is not an initialized ai-workflow project` (missing `.ai-workflow/AGENTS.md`). Report the offending child and the repair `ai-workflow init <child> --upgrade`; never freeze a workspace plan whose participating child is uninitialized.
+
+Planning `schedules each repository's note` and `MEMORY.md` work `in that repository`, through that repository's own notes and memory rather than the workspace root. After the frozen plan is split into tasks, planning `hands off` repository distribution to `ai-workflow workspace distribute --plan <directory>`; planning never distributes or writes a slice itself.
+
 ## Clarification loop
 
 Ask the highest-priority clarifying question per turn. Pick the unanswered item whose ambiguity would change the most downstream work:
