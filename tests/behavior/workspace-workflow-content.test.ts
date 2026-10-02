@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { packagePath } from '../../src/utils/schema.js';
 
 const CODING_SKILL = ['templates', 'skills', 'coding', 'SKILL.md'];
+const PLAN_TO_TASKS_SKILL = ['templates', 'skills', 'plan-to-tasks', 'SKILL.md'];
 const GIT_OPERATOR = ['templates', 'agents', 'git-operator.md'];
 const PROJECT_CONTRACT = ['templates', 'project', 'AGENTS.md'];
 
@@ -176,6 +177,137 @@ describe('decision records stay in their owning repository (REQ-010 / AC-020)', 
         'pointer'
       ],
       'the Workspaces section'
+    );
+  });
+});
+
+describe('plan-to-tasks completes a workspace split by distributing slices (REQ-001 / AC-001, AC-002, AC-003)', () => {
+  it('states in Outcome that a workspace split also hands each participating repository its slice', async () => {
+    const text = await readShipped(PLAN_TO_TASKS_SKILL);
+    expect(text, 'the plan-to-tasks skill is shipped').not.toBeNull();
+    const outcome = section(text ?? '', '## Outcome');
+    expect(outcome, 'the Outcome section exists').not.toBe('');
+
+    expectFragments(
+      flatten(outcome),
+      ['hands each participating repository its slice'],
+      'the Outcome workspace completion'
+    );
+  });
+
+  it('requires the approval preview to announce the slice writes and the distribute command', async () => {
+    const preview = section((await readShipped(PLAN_TO_TASKS_SKILL)) ?? '', '## Approval preview');
+    expect(preview, 'the Approval preview section exists').not.toBe('');
+
+    expectFragments(
+      flatten(preview),
+      [
+        'writes a slice into each participating repository',
+        'ai-workflow workspace distribute --plan <directory>'
+      ],
+      'the approval preview slice announcement'
+    );
+  });
+
+  it('runs distribution after the task triplets, pair records and plan validate, then reports each slice state', async () => {
+    const workspace = section((await readShipped(PLAN_TO_TASKS_SKILL)) ?? '', '## Workspace split');
+    expect(workspace, 'the Workspace split section exists').not.toBe('');
+
+    expectFragments(
+      flatten(workspace),
+      [
+        'after the task triplets and their pair records',
+        'ai-workflow plan validate --plan <directory>',
+        'ai-workflow workspace distribute --plan <directory>',
+        'slice state',
+        'reserved root entry'
+      ],
+      'the workspace split distribution completion'
+    );
+  });
+
+  it('reports a refusal without declaring the plan ready and keeps the written artifacts in place', async () => {
+    const workspace = section((await readShipped(PLAN_TO_TASKS_SKILL)) ?? '', '## Workspace split');
+    expect(workspace, 'the Workspace split section exists').not.toBe('');
+
+    expectFragments(
+      flatten(workspace),
+      ['exact error', 'repair instructions', 'not ready for coding', 'stay in place'],
+      'the workspace split refusal report'
+    );
+  });
+
+  it('exempts a workspace plan that declares only the reserved workspace root entry', async () => {
+    const workspace = section((await readShipped(PLAN_TO_TASKS_SKILL)) ?? '', '## Workspace split');
+    expect(workspace, 'the Workspace split section exists').not.toBe('');
+
+    expectFragments(
+      flatten(workspace),
+      ['reserved workspace root entry', 'implemented unsplit'],
+      'the plan-to-tasks root-only workspace exemption'
+    );
+  });
+});
+
+describe('coding gates an undistributed workspace plan (REQ-002, REQ-003 / AC-004, AC-005, AC-006)', () => {
+  it('refuses an undistributed cross-repository workspace plan using workspace status before any worktree or record', async () => {
+    const text = await readShipped(CODING_SKILL);
+    expect(text, 'the coding skill is shipped').not.toBeNull();
+    const coding = flatten(text ?? '');
+
+    expectFragments(
+      coding,
+      [
+        'at least one non-root participating repository',
+        'workspace status --plan <directory>',
+        'before creating a worktree',
+        'implementation record',
+        'plan-to-tasks',
+        'ai-workflow workspace distribute --plan <directory>',
+        'root-only',
+        'unsplit'
+      ],
+      'the coding workspace handoff gate'
+    );
+  });
+
+  it('refuses a participating repository with no slice manifest and names the distribute repair', async () => {
+    const text = await readShipped(CODING_SKILL);
+    expect(text, 'the coding skill is shipped').not.toBeNull();
+    const slice = section(text ?? '', '## Slice sessions');
+    expect(slice, 'the Slice sessions section exists').not.toBe('');
+
+    expectFragments(
+      flatten(slice),
+      [
+        'missing manifest',
+        'workspace.yaml',
+        'before creating a worktree',
+        'implementation record',
+        'ai-workflow workspace distribute --plan <directory>'
+      ],
+      'the missing slice manifest refusal'
+    );
+  });
+});
+
+describe('the shipped contract states the workspace split rule (REQ-004 / AC-007)', () => {
+  it('requires the split and distribution for a cross-repository workspace plan and exempts a root-only plan', async () => {
+    const text = await readShipped(PROJECT_CONTRACT);
+    expect(text, 'the project contract is shipped').not.toBeNull();
+    const workspaces = section(text ?? '', '## Workspaces');
+    expect(workspaces, 'the Workspaces section exists').not.toBe('');
+
+    expectFragments(
+      flatten(workspaces),
+      [
+        'at least one non-root participating repository',
+        'before implementation',
+        'ai-workflow workspace distribute --plan <directory>',
+        'reserved workspace root entry',
+        'implemented unsplit'
+      ],
+      'the shipped workspace split rule'
     );
   });
 });

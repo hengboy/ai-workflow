@@ -57,6 +57,11 @@ function frontmatter(text: string): string {
   return text.match(/^---\n([\s\S]*?)\n---/)?.[1] ?? '';
 }
 
+/** Whitespace-normalized text so multi-word fragments match across source wrapping. */
+function flatten(text: string): string {
+  return text.replace(/\s+/g, ' ');
+}
+
 /** Assert every required fragment appears in the scoped text, naming the missing fragment. */
 function expectFragments(haystack: string, fragments: readonly string[], scope: string): void {
   for (const fragment of fragments) {
@@ -291,6 +296,38 @@ describe('plan-to-tasks execution-order reference orders repositories (REQ-004 /
         'strictly after every task of the repositories it depends on'
       ],
       'the Workspace repositories section'
+    );
+  });
+});
+
+describe('planning owns the workspace split handoff and exempts a root-only plan (REQ-004 / AC-007)', () => {
+  it('requires splitting a cross-repository workspace plan before implementation and keeps distribution in the split session', async () => {
+    const text = await readShipped(PLANNING_SKILL);
+    expect(text, 'the planning skill is shipped').not.toBeNull();
+    const workspace = section(text ?? '', '## Workspace planning');
+    expect(workspace, 'the Workspace planning section exists').not.toBe('');
+
+    expectFragments(
+      flatten(workspace),
+      [
+        'at least one non-root participating repository',
+        'plan-to-tasks',
+        'before implementation',
+        'split session owns distribution',
+        'never distributes or writes a slice'
+      ],
+      'the planning workspace split handoff'
+    );
+  });
+
+  it('exempts a workspace plan that declares only the reserved workspace root entry', async () => {
+    const workspace = section((await readShipped(PLANNING_SKILL)) ?? '', '## Workspace planning');
+    expect(workspace, 'the Workspace planning section exists').not.toBe('');
+
+    expectFragments(
+      flatten(workspace),
+      ['workspace_repos', 'reserved workspace root entry', 'implemented unsplit'],
+      'the planning root-only workspace exemption'
     );
   });
 });

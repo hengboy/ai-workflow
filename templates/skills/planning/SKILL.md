@@ -40,6 +40,8 @@ The workflow `stops before freezing` when a participating child `is not an initi
 
 Planning `schedules each repository's note` and `MEMORY.md` work `in that repository`, through that repository's own notes and memory rather than the workspace root. After the frozen plan is split into tasks, planning `hands off` repository distribution to `ai-workflow workspace distribute --plan <directory>`; planning never distributes or writes a slice itself.
 
+A workspace plan that declares at least one non-root participating repository must be split by plan-to-tasks before implementation, and that split session owns distribution. A workspace plan whose `workspace_repos` declares only the reserved workspace root entry may be implemented unsplit. Planning itself never distributes or writes a slice.
+
 ## Clarification loop
 
 Ask the highest-priority clarifying question per turn. Pick the unanswered item whose ambiguity would change the most downstream work:

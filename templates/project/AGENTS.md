@@ -23,6 +23,8 @@ The workspace commands are `ai-workflow workspace distribute --plan <directory>`
 
 Cross-repository references stay `plain plan-ID text`. The `workspace root` owns the `decision` note, while `each repository` owns its own `delivered facts`; split the two, and each side updates only its own notes and `MEMORY.md`. During `finalization`, pin each verified delivery commit into the workspace as an authorized `pointer` and stage only those pointer paths and authorized workspace-root files.
 
+A workspace plan that declares at least one non-root participating repository must be split by plan-to-tasks before implementation, and completing that split runs `ai-workflow workspace distribute --plan <directory>` to hand each participating repository its slice. A workspace plan whose `workspace_repos` declares only the reserved workspace root entry may be implemented unsplit.
+
 ## Change routing
 
 Classify every request before starting and state the class in one line.
