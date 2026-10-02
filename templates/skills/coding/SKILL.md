@@ -99,6 +99,7 @@ installed role, fail before execution and request clarification.
   symbols. For an unsplit plan, do not invoke File Explorer merely because the
   feature is absent from the index; use the frozen plan's scope directly.
   Request File Explorer only when the implementation boundary remains unclear.
+- A session asked to implement a workspace plan that declares at least one non-root participating repository must confirm the distributed slices first with `ai-workflow workspace status --plan <directory>`. When no slice is distributed, refuse before creating a worktree or an implementation record and direct to plan-to-tasks, or to `ai-workflow workspace distribute --plan <directory>` when the split artifacts exist. A root-only workspace plan whose `workspace_repos` declares only the reserved `workspace` root entry is exempt and may be implemented unsplit.
 - Before implementation, Git Operator must create one project-local temporary worktree
   under `<project>/.worktrees/<name>` (ensure `.gitignore` contains
   `.worktrees/`). Git Operator must then materialize the project's entire
@@ -242,6 +243,10 @@ project directory ends with the manifest's declared workspace-relative repositor
 `before creating a worktree` or an `implementation record`. Do not create a branch, worktree or
 record for a mismatched slice; return a bounded support request naming the expected and actual
 repository.
+
+When the plan directory for a participating repository has no slice `workspace.yaml`, stop
+before creating a worktree or an implementation record, report the missing manifest for that
+repository and name `ai-workflow workspace distribute --plan <directory>` as the repair.
 
 A matching slice session `implements only` its `slice tasks` `inside that repository` and
 keeps every edit, note and record inside that repository. It never edits a sibling slice or

@@ -7,7 +7,7 @@ description: Preview and freeze executable task files from a confirmed plan.
 
 ## Outcome
 
-Convert one frozen spec/plan pair into an approved, immutable task DAG that coding can execute. This skill only previews and writes task documents; it does not generate or run a workflow.
+Convert one frozen spec/plan pair into an approved, immutable task DAG that coding can execute. This skill only previews and writes task documents; it does not generate or run a workflow. A workspace split also completes when the split session hands each participating repository its slice.
 
 ## Preconditions
 
@@ -68,7 +68,8 @@ Show the entire task set in one response, including:
 - read/write scopes;
 - test commands and expected evidence;
 - parallel phases, the critical path, parallel groups and risks;
-- a coverage matrix for all REQ/AC.
+- a coverage matrix for all REQ/AC;
+- for a workspace split, that completing the split writes a slice into each participating repository through `ai-workflow workspace distribute --plan <directory>`.
 
 Ask for explicit approval. Before approval, do not create `tasks/` or write partial task files. Any material edit requires a fresh complete preview.
 
@@ -117,6 +118,8 @@ Assign `repo` to every task: each task's `repo` is one declared repository name,
 plan-to-tasks `derives each repository's phases from the declared order` while keeping the `repository-internal task DAG`: `depends_on` only ever names a task in the same repository, and each repository's `repository phases` come from the `workspace_repos` dependency order. Preview the repository phases with the `critical path` in the approval preview, showing each repository's phase list and the ordered delivery sequence.
 
 Write `workspace.yaml` after the task triplets and their pair records and before the final `ai-workflow plan validate --plan <directory>`. The manifest carries `plan_id`, `role: workspace`, and one `repositories` entry per declared repository, including the `reserved` `workspace` `root entry` and `its tasks`. A repository entry carries `name`, `path`, `depends_on`, `requirements` and `acceptance_criteria`; the reserved root entry carries the tasks assigned to the workspace root itself.
+
+After `workspace.yaml` is written and the final `ai-workflow plan validate --plan <directory>` passes, the split runs `ai-workflow workspace distribute --plan <directory>`, reports each participating repository's slice state and the reserved root entry, and completes the handoff. When distribution refuses, report the exact error and the repair instructions, state that the plan is not ready for coding and the written task artifacts stay in place, and complete the handoff only after a later successful distribution. A workspace plan whose `workspace_repos` declares only the reserved workspace root entry may be implemented unsplit.
 
 ```yaml
 plan_id: 20260925-example
