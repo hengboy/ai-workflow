@@ -42,3 +42,5 @@ Status: implemented
 - OpenCode 1.18.35 自动加载了初始化器，且真实 SDK `session.get` 解析出实际会话目录，但执行仍未被验证：模型 API 在任何 chat、system 或 tool 钩子被记录之前返回 401 `missing_api_key`，因此门禁被跳过而非执行。Claude Code 2.1.229 需要交互式认证与未使用的独立凭据，Codex 0.155.1 需要钩子信任但无 TTY 且未使用绕过，因此两个钩子加载器仍未被验证。条目仅为已安装且初始化器已加载，绝不声称自动生效。
 - 2026-09-14 的[用户级代理契约记录](../architecture/2026-09-14-user-level-agent-contract.md)被部分取代：其用户级标记块仍拥有加载入口，标记块所有权与历史理由得以保留，但已安装的 OpenCode 插件与 Claude/Codex 钩子条目现在也调用共享同步动作，因此其“仅全局入口”的执行方式不再描述完整的入口面。
 - Codex 信任、OpenCode 重启与任何重复的宿主作用域技能仍是显式用户步骤；被禁用、未受信任或未加载的条目，以及 fail open 的宿主崩溃或超时，都作为执行限制而非成功阻断来报告。
+- `.gitignore` 的精确调和与 notes 管理结构补齐复用了[旧式 .gitignore 迁移记录](../process/2026-09-29-migrate-legacy-gitignore-on-init.md) 确立的旧条目迁移；该记录的决定与封存字节保持不变，且只保留 `.ai-workflow/plans/` 与 `.worktrees/` 被忽略。
+- 上游 `hengboy/ai-workflow` 分支 `simplify` 尚未带有所有权标记，因此实时尝试无法作出完整的管理新鲜度声明；观测到的真实运行报告 `unverified` 且 `created` 与 `updated` 均为空，完整声明须等待带标记模板发布到上游，而本计划未授权该发布。

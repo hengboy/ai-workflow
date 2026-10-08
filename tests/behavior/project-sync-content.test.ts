@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { parse } from 'yaml';
 import { install } from '../../src/install/index.js';
+import { packagePath } from '../../src/utils/schema.js';
 import { temporary } from '../helpers.js';
 
 /**
@@ -107,5 +108,121 @@ describe('project synchronization shipped instructions', () => {
     expect(enablement).toMatch(/trust/i);
     expect(enablement).toMatch(/restart/i);
     expect(enablement).toMatch(/duplicate|shadow/i);
+  });
+});
+
+/**
+ * Published-documentation boundary for slice 3 rollout (AC-006 authority reload / AC-013
+ * truthful published behavior). This reads only the user-consumed `README.md` and asserts the
+ * semantics a reader must be able to rely on. It deliberately checks behavior-level meaning,
+ * not exact phrases or the private module layout, so prose may be reworded as long as the
+ * documented contract holds.
+ */
+describe('project synchronization published documentation', () => {
+  it('AC-006/AC-013: the public README documents incremental, warning-aware synchronization rather than template copying', async () => {
+    const readme = await readFile(packagePath('README.md'), 'utf8');
+    const flat = readme.replace(/\s+/g, ' ');
+
+    // 1. Incremental CLI, including check mode.
+    expect(flat, 'README documents the incremental sync command').toMatch(/ai-workflow sync\b/);
+    expect(flat, 'README documents check mode').toMatch(/--check/);
+
+    // 2. Fixed upstream source and explicit bearer credentials (GH_TOKEN before GITHUB_TOKEN).
+    expect(flat, 'README names the fixed source repository').toMatch(/hengboy\/ai-workflow/);
+    expect(flat, 'README names the fixed branch').toMatch(/\bsimplify\b/);
+    expect(flat, 'README documents GH_TOKEN').toMatch(/GH_TOKEN/);
+    expect(flat, 'README documents GITHUB_TOKEN').toMatch(/GITHUB_TOKEN/);
+    expect(readme.indexOf('GH_TOKEN'), 'README documents GH_TOKEN before GITHUB_TOKEN').toBeLessThan(
+      readme.indexOf('GITHUB_TOKEN'),
+    );
+
+    // 3. Truthful statuses, verified/proceed, exit codes, and warning continuation with no freshness claim.
+    for (const status of ['synchronized', 'unverified', 'needs_attention', 'pending', 'conflict', 'failed']) {
+      expect(flat, `README documents the ${status} status`).toMatch(new RegExp(`\\b${status}\\b`));
+    }
+    expect(flat, 'README exposes the verified flag').toMatch(/\bverified\b/);
+    expect(flat, 'README exposes the proceed flag').toMatch(/\bproceed\b/);
+    expect(
+      flat,
+      'README maps the synchronized/warning/blocking statuses to exit codes 0/2/1',
+    ).toMatch(/\b0\b[\s\S]{0,160}\b2\b[\s\S]{0,160}\b1\b/);
+    expect(
+      flat,
+      'README explains that warning results allow continuation without claiming freshness',
+    ).toMatch(
+      /(?:warning|unverified|needs_attention)[\s\S]{0,220}(?:continue|proceed|allow|permit)[\s\S]{0,220}(?:no|not|without|never)[\s\S]{0,90}(?:fresh|current|verified)|(?:no|not|without|never)[\s\S]{0,90}(?:fresh|current)[\s\S]{0,140}(?:claim|verified|guarantee)/i,
+    );
+    expect(flat, 'README states that partial or unverified results are not current').toMatch(
+      /(?:partial|unverified|warning)[\s\S]{0,180}(?:not|never|no)[\s\S]{0,70}(?:current|fresh|verified|complete)/i,
+    );
+
+    // 4. Local upgrade is distinct from the remote source and makes no upstream freshness claim.
+    expect(flat, 'README documents the upgrade path').toMatch(/--upgrade/);
+    expect(flat, 'README distinguishes shipped/local templates from the remote source').toMatch(
+      /shipped|local[\s-]?(?:project[\s-]?)?templates?/i,
+    );
+    expect(flat, 'README says local upgrade makes no upstream freshness claim').toMatch(
+      /(?:upgrade|local)[\s\S]{0,220}(?:no|not|never|without)[\s\S]{0,90}(?:upstream|remote)[\s\S]{0,90}(?:fresh|verified|claim)|(?:no|not|never|without)[\s\S]{0,90}(?:upstream|remote)[\s\S]{0,90}(?:fresh|claim)[\s\S]{0,90}(?:upgrade|local)/i,
+    );
+
+    // 5. File strategies: project data is preserved and never treated as template input.
+    for (const artifact of [
+      'navigation',
+      'notes?',
+      'archive',
+      'frozen',
+      'project\\.yml',
+      'AGENTS\\.md|CLAUDE\\.md|root (?:user )?instructions?',
+    ]) {
+      expect(flat, `README lists "${artifact}" as project-owned content`).toMatch(new RegExp(artifact, 'i'));
+    }
+    expect(flat, 'README states project-owned content is preserved').toMatch(
+      /preserv|retain|never[\s\S]{0,50}(?:overwrite|rewrite|replace|touch)|unchanged|byte[- ]for[- ]byte/i,
+    );
+
+    // 6. Ownership markers, legacy adoption warnings, no baseline, and no whole-file copy.
+    expect(flat, 'README describes the ownership section markers').toMatch(
+      /ownership (?:marker|section)|owned section|section marker|ai-workflow:section/i,
+    );
+    expect(flat, 'README warns on differing unmarked legacy content instead of duplicating it').toMatch(
+      /unmarked|legacy[\s\S]{0,180}(?:differ|mismatch|warning|attention)/i,
+    );
+    expect(flat, 'README states that no previous-template baseline is stored').toMatch(
+      /no (?:stored )?(?:previous[\s-]?)?(?:template )?baseline|without[\s\S]{0,50}baseline|never[\s\S]{0,50}baseline/i,
+    );
+    expect(flat, 'README refuses whole-file template copying').toMatch(
+      /(?:never|not|no|without|refus)[\s\S]{0,70}(?:whole[\s-]?file|wholesale|complete(?: template| file)? copy)|(?:whole[\s-]?file|wholesale)[\s\S]{0,70}(?:never|not|refus|avoid)/i,
+    );
+
+    // 7. Truthful enablement: host entry, trust, restart, and disabled/unloaded entries are not active.
+    expect(flat, 'README documents the native host preflight entry').toMatch(/sync-hook/);
+    expect(flat, 'README documents the phase/project host-entry form').toMatch(
+      /--phase[\s\S]{0,90}--project|--project[\s\S]{0,90}--phase/,
+    );
+    expect(flat, 'README names Codex hook trust').toMatch(/trust/i);
+    expect(flat, 'README names the OpenCode restart step').toMatch(/restart/i);
+    expect(flat, 'README names disabled/untrusted/unloaded entries as not active').toMatch(
+      /(?:disabled|untrusted|unloaded)[\s\S]{0,180}(?:not active|inactive|not automatic|enforcement limitation)|(?:not active|inactive)[\s\S]{0,180}(?:disabled|untrusted|unloaded)/i,
+    );
+
+    // 8. Dirty path disclosure and frozen-scope collision escalation, without silent staging.
+    expect(flat, 'README discloses created and updated paths').toMatch(
+      /created[\s\S]{0,90}updated|updated[\s\S]{0,90}created/i,
+    );
+    expect(flat, 'README discloses uncommitted/dirty synchronization paths').toMatch(/uncommitted|dirty/i);
+    expect(flat, 'README escalates a frozen-scope collision instead of broadening authority').toMatch(
+      /(?:scope|frozen)[\s\S]{0,180}(?:collision|conflict)[\s\S]{0,180}(?:support request|escalat|bounded|stop|do(?:es)? not)|(?:support request|escalat)[\s\S]{0,180}(?:scope|frozen)[\s\S]{0,90}(?:collision|conflict)/i,
+    );
+
+    // 9. One-time explicit resolution of an unowned/shadowing host skill; never a blind delete.
+    expect(flat, 'README names the duplicate/shadow skill condition').toMatch(
+      /(?:duplicate|shadow)[\s\S]{0,90}skill|skill[\s\S]{0,90}(?:duplicate|shadow)/i,
+    );
+    expect(flat, 'README requires explicit user resolution rather than automatic cleanup').toMatch(
+      /explicit[\s\S]{0,180}(?:resolv|remove|cleanup|clean up)|(?:resolv|remov|cleanup|clean up)[\s\S]{0,180}explicit/i,
+    );
+    expect(flat, 'README refuses a blind delete of an unowned skill').toMatch(
+      /(?:never|not|no|without|does not)[\s\S]{0,70}delet[\s\S]{0,90}unowned|unowned[\s\S]{0,90}(?:never|not|no|without|does not)[\s\S]{0,50}delet/i,
+    );
   });
 });
