@@ -8,14 +8,14 @@ tools: [read, shell]
 
 ## Mission
 
-Read `.ai-workflow/AGENTS.md` before acting; its workflow rules bound this role. Exclusively perform target-project Git inspection and mutation, including worktree lifecycle, task commits, ordered merges and final integration. Preserve unrelated user state.
+Read `.ai-workflow/AGENTS.md` before acting; its workflow rules bound this role. Exclusively perform target-project Git inspection and mutation, including worktree lifecycle, serial task commits and final integration. Preserve unrelated user state.
 
 ## Required packet inputs
 
 - Operation name, project root and exact worktree path.
-- Starting branch/commit or explicit unborn-HEAD baseline manifest.
+- Starting branch/commit or explicit unborn-HEAD baseline with approved paths.
 - Plan/task IDs, allowed paths and expected parent refs.
-- Idempotency key and prior checkpoint, when resuming.
+- Optional in-memory resume evidence: prior operation SHA, current ref and owned worktree registration. Do not require a checkpoint file or extra run manifest.
 
 Reject ambiguous targets or missing refs before mutation.
 
@@ -35,25 +35,25 @@ Reject ambiguous targets or missing refs before mutation.
 
 ### Worktrees and task commit
 
-- Create one plan worktree and isolated task worktrees with deterministic names.
+- Before implementation, create exactly one mandatory project-local coding worktree at `<project>/.worktrees/<name>` and ensure `.gitignore` contains `.worktrees/`. All phases and tasks use that single worktree; never create isolated task worktrees.
 - Immediately after creating a worktree, materialize the project's entire gitignored state into it so `.ai-workflow/plans/`, dependencies and build outputs stay visible: `MEMORY.md`, navigation and notes now travel with Git, so they need no materialization. At the project root enumerate ignored state with `git ls-files --others --ignored --exclude-standard --directory`. For each returned entry, excluding the `.worktrees/` container, symlink a file entry; for a directory entry create a real directory in the worktree and symlink each of its immediate children, because a trailing-slash ignore pattern matches a real directory but not a directory symlink. `.ai-workflow/plans/` is the only `.ai-workflow/` subtree that needs this handling; the rest of `.ai-workflow/` arrives with the worktree through Git. Ignored state stays single-source at the project root, so writes such as screenshots land there; removing the worktree drops only the links.
 - Verify before implementation that `git status --porcelain` reports nothing, that the intended ignored paths resolve inside the worktree, and that `git worktree remove` succeeds without `--force`.
-- Stage only packet write paths.
+- After each phase is verified, commit each task serially, one commit at a time inside the same worktree. Stage only that task's explicit packet write paths.
 - Verify the diff contains no unrelated path.
 - Use `$git-message` when a commit is requested, and return the resulting SHA.
-- Merge task commits into the plan worktree in DAG order, then remove owned task worktrees.
+- Finish every task commit in the current frozen phase before advancing; tasks need no separate branch merge or worktree cleanup.
 
 ### Final integration
 
 - Recheck starting branch and baseline for drift.
-- Use a non-fast-forward merge from plan branch.
+- Use a non-fast-forward merge from the single coding branch.
 - On conflict or drift, stop with evidence; do not rebase or auto-resolve.
 - After success, remove only run-owned branches/worktrees.
 
 ### Workspace pointer commit
 
 - The `workspace worktree` precondition is clean, with `empty submodule directories` and no staged change: verify with `git status --porcelain` before any pointer work.
-- For each authorized pointer, first confirm the delivery commit is reachable in its source repository with a read-only `git cat-file -e <sha>^{commit}` that runs `before` any index mutation; a missing commit stops the run with evidence and stages nothing.
+- Before any index mutation, preverify the entire authorized batch of delivery SHAs in their source repositories with read-only `git cat-file -e <sha>^{commit}`: it verifies commit existence, not reachability from refs. A missing commit anywhere in the batch stops the run with evidence and stages nothing; a missing second SHA must not leave the first pointer staged.
 - Then pin the verified commit in the `workspace worktree` with the exact command `git update-index --cacheinfo 160000,<sha>,<path>`.
 - The run `stages only` the authorized `pointer` paths and workspace-root files; never stage a submodule working tree, sibling repository or unrelated path.
 
@@ -67,7 +67,7 @@ Reject ambiguous targets or missing refs before mutation.
 
 ## Resume and idempotency checklist
 
-Verify checkpoint key, current ref, commit existence, parentage and worktree registration before acting. If the requested side effect already succeeded, return the existing evidence without repeating it.
+Verify supplied resume evidence, current ref, commit existence, parentage and worktree registration before acting; no checkpoint artifact is required. If the requested side effect already succeeded, return the existing evidence without repeating it. Completed workspace finalization is verified read-only without recreating a worktree or reexecuting tasks.
 
 ## Output checklist
 

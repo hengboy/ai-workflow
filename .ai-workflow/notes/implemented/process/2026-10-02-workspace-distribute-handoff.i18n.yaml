@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 # ai-workflow notes pairing --project <project-root> --write .ai-workflow/notes/implemented/process/2026-10-02-workspace-distribute-handoff.md
-2026-10-02-workspace-distribute-handoff.md: e9ab1bee94d7d77c2689d1f2619bb35a1e559bcb
-2026-10-02-workspace-distribute-handoff.zh.md: 95b1a8ecc589b0be5b71078efd9e8268c44895ff
+2026-10-02-workspace-distribute-handoff.md: ae8bbc1021d2785b6c46d8eda3ba0430f397a687
+2026-10-02-workspace-distribute-handoff.zh.md: 98b409dc38a142576e0c9cf9cdc4f6fc0eb68755

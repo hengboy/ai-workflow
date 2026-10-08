@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { parse as parseYaml } from 'yaml';
+import { validateWorkspaceManifest } from '../workflow/workspace.js';
 import { classifySlice, computeSliceFiles, resolveWorkspacePlan, type ResolvedWorkspacePlan, type SliceFileState } from './distribute.js';
 
 const RESERVED_ROOT = 'workspace';
@@ -20,6 +21,8 @@ export interface StatusWorkspaceRootEntry {
   name: string;
   path: string;
   record: ImplementationRecordState;
+  tasks_delivered: boolean;
+  delivery_commit: string | null;
 }
 
 export interface StatusResult {
@@ -38,26 +41,34 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-/** Read `<directory>/implementation.yaml`; a missing or malformed file reports `missing`. */
-async function readRecordState(directory: string): Promise<{ state: ImplementationRecordState; commit: string | null }> {
+function fullCommit(value: unknown): string | null {
+  return typeof value === 'string' && /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(value) ? value : null;
+}
+
+/** Read a matching implementation record; malformed, wrong-plan or unknown-status records report `missing`. */
+async function readRecordState(directory: string, planId: string): Promise<{ state: ImplementationRecordState; commit: string | null; rootTasksCommit: string | null }> {
+  const missing = { state: 'missing' as const, commit: null, rootTasksCommit: null };
   let source: string;
   try {
     source = await readFile(join(directory, 'implementation.yaml'), 'utf8');
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { state: 'missing', commit: null };
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return missing;
     throw error;
   }
   let parsed: unknown;
   try {
     parsed = parseYaml(source);
   } catch {
-    return { state: 'missing', commit: null };
+    return missing;
   }
-  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return { state: 'missing', commit: null };
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return missing;
   const record = parsed as Record<string, unknown>;
-  if (record.status === 'completed') return { state: 'completed', commit: typeof record.commit === 'string' ? record.commit : null };
-  if (record.status === 'in-progress') return { state: 'in-progress', commit: null };
-  return { state: 'missing', commit: null };
+  if (record.plan_id !== planId || (record.status !== 'in-progress' && record.status !== 'completed')) return missing;
+  return {
+    state: record.status,
+    commit: record.status === 'completed' ? fullCommit(record.commit) : null,
+    rootTasksCommit: fullCommit(record.root_tasks_commit),
+  };
 }
 
 function slicePresence(states: Map<string, SliceFileState>): SlicePresence {
@@ -79,19 +90,33 @@ export async function workspaceStatus(planDirectory: string): Promise<StatusResu
     return { valid: false, errors: [errorMessage(error)] };
   }
 
-  const { root, plan, manifest } = resolved;
+  const { root, plan, tasks, schedule, manifest } = resolved;
   if (manifest === undefined || manifest.role !== 'workspace') {
     return { valid: false, plan_id: plan.planId, errors: ['workspace status requires a workspace manifest (role "workspace")'] };
   }
 
-  const order = manifest.repositories.map((repository) => repository.name);
+  const validationErrors = validateWorkspaceManifest(manifest, plan, tasks, schedule);
+  if (validationErrors.length > 0) {
+    return { valid: false, plan_id: plan.planId, errors: validationErrors };
+  }
+
+  const taskRepositories = new Map(tasks.map((task) => [task.id, task.repo]));
+  const order: string[] = [];
+  for (const phase of schedule.phases) for (const id of phase.parallel) {
+    const name = taskRepositories.get(id);
+    if (name !== undefined && !order.includes(name)) order.push(name);
+  }
+  for (const repository of plan.workspaceRepos ?? []) {
+    if (!order.includes(repository.name)) order.push(repository.name);
+  }
   const repositories: StatusRepository[] = [];
-  for (const repository of manifest.repositories) {
-    if (repository.name === RESERVED_ROOT) continue;
+  for (const name of order) {
+    const repository = manifest.repositories.find((entry) => entry.name === name);
+    if (repository === undefined || name === RESERVED_ROOT) continue;
     const sliceDirectory = join(root, repository.path, '.ai-workflow', 'plans', plan.planId);
     const expected = await computeSliceFiles(resolved, repository);
     const states = await classifySlice(sliceDirectory, expected);
-    const record = await readRecordState(sliceDirectory);
+    const record = await readRecordState(sliceDirectory, plan.planId);
     repositories.push({
       name: repository.name,
       path: repository.path,
@@ -102,8 +127,14 @@ export async function workspaceStatus(planDirectory: string): Promise<StatusResu
   }
 
   const workspaceEntry = manifest.repositories.find((repository) => repository.name === RESERVED_ROOT);
-  const workspaceRecord = await readRecordState(join(root, '.ai-workflow', 'plans', plan.planId));
-  const nextRepository = repositories.find((repository) => repository.record !== 'completed')?.name ?? null;
+  const workspaceRecord = await readRecordState(join(root, '.ai-workflow', 'plans', plan.planId), plan.planId);
+  const hasRootTasks = tasks.some((task) => task.repo === RESERVED_ROOT);
+  const rootDeliveryCommit = hasRootTasks ? workspaceRecord.rootTasksCommit ?? workspaceRecord.commit : null;
+  const rootTasksDelivered = !hasRootTasks || rootDeliveryCommit !== null;
+  const delivered = new Set(repositories
+    .filter((repository) => repository.slice === 'present' && repository.record === 'completed' && repository.delivery_commit !== null)
+    .map((repository) => repository.name));
+  const nextRepository = order.find((name) => name === RESERVED_ROOT ? !rootTasksDelivered : !delivered.has(name)) ?? null;
   return {
     valid: true,
     plan_id: plan.planId,
@@ -114,8 +145,10 @@ export async function workspaceStatus(planDirectory: string): Promise<StatusResu
       name: workspaceEntry?.name ?? RESERVED_ROOT,
       path: workspaceEntry?.path ?? '.',
       record: workspaceRecord.state,
+      tasks_delivered: rootTasksDelivered,
+      delivery_commit: rootDeliveryCommit,
     },
     next_repository: nextRepository,
-    ready_for_finalization: repositories.every((repository) => repository.record === 'completed'),
+    ready_for_finalization: rootTasksDelivered && delivered.size === repositories.length,
   };
 }

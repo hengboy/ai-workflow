@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 # ai-workflow notes pairing --project <project-root> --write .ai-workflow/notes/implemented/architecture/2026-09-30-submodule-workspace.md
-2026-09-30-submodule-workspace.md: a38eca57d918574f45f63d9eb140d1bf366ec1f6
-2026-09-30-submodule-workspace.zh.md: e6c06e891c952bedd9c9da0b7709dcfaf7843ff2
+2026-09-30-submodule-workspace.md: 3b9d483002661ca4b0049b7d8a0e810b41a825c3
+2026-09-30-submodule-workspace.zh.md: 7f8165fcce058b48c5724347b8c8d42a2f87a2f9

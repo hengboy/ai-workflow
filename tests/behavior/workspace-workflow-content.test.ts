@@ -114,7 +114,8 @@ describe('workspace finalization pins delivery commits through Git Operator (REQ
         'empty submodule directories',
         'stages only',
         'pointer',
-        'git update-index --cacheinfo 160000,<sha>,<path>'
+        'git update-index --cacheinfo 160000,<sha>,<path>',
+        'root_tasks_commit'
       ],
       'the Workspace finalization procedure'
     );
@@ -156,7 +157,11 @@ describe('workspace finalization pins delivery commits through Git Operator (REQ
         'git cat-file -e',
         'before',
         'stages only',
-        'pointer'
+        'pointer',
+        'entire authorized batch',
+        'Before any index mutation',
+        'stages nothing',
+        'missing second SHA must not leave the first pointer staged'
       ],
       'the Workspace pointer commit section'
     );
@@ -391,5 +396,43 @@ describe('the shipped contract states the workspace split rule (REQ-004 / AC-007
       ],
       'the shipped workspace split rule'
     );
+  });
+});
+
+describe('coding distinguishes Workspace root sessions', () => {
+  it('selects only the root-owned tasks of the parent plan in frozen file order without editing the schedule', async () => {
+    const text = await readShipped(CODING_SKILL);
+    expect(text, 'the coding skill is shipped').not.toBeNull();
+    const root = section(text ?? '', '## Workspace root sessions');
+    expect(root, 'the Workspace root sessions section exists').not.toBe('');
+
+    expectFragments(
+      flatten(root),
+      ['task.repo', 'workspace', 'file order', 'never edit', 'recompute', 'DAG'],
+      'the Workspace root session task selection'
+    );
+  });
+
+  it('gates root task delivery before a worktree and runs finalization-only with no new status', async () => {
+    const root = section((await readShipped(CODING_SKILL)) ?? '', '## Workspace root sessions');
+    expect(root, 'the Workspace root sessions section exists').not.toBe('');
+
+    expectFragments(
+      flatten(root),
+      ['delivery gate', 'before creating a worktree', 'skip', 'root_tasks_commit', 'finalization-only', 'zero task', 'no new status'],
+      'the Workspace root session delivery gate'
+    );
+  });
+});
+
+describe('plan-to-tasks reports the next repository including root-owned tasks', () => {
+  it('reports the next repository including root-owned tasks instead of a child-only advisory', async () => {
+    const workspace = section((await readShipped(PLAN_TO_TASKS_SKILL)) ?? '', '## Workspace split');
+    expect(workspace, 'the Workspace split section exists').not.toBe('');
+    const flat = flatten(workspace);
+
+    expect(flat, 'the Workspace split names next_repository').toMatch(/next_repository/i);
+    expect(flat, 'the reported next repository includes root-owned tasks').toMatch(/root-owned/i);
+    expect(flat, 'the next repository must not stay a child-only advisory').not.toMatch(/child-only/i);
   });
 });

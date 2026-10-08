@@ -53,4 +53,14 @@ describe('mandatory project-local temporary worktree policy', () => {
     expect(materialization, 'templates/project/MEMORY.md states the worktree materialization standard').toBeDefined();
     expect(materialization).toMatch(/notes/i);
   });
+
+  it('keeps a single coding worktree with serial task commits instead of isolated task worktrees', async () => {
+    const operator = normalize(await readFile(packagePath('templates', 'agents', 'git-operator.md'), 'utf8'));
+
+    expect(operator, 'Git Operator names the single coding worktree path').toContain('<project>/.worktrees/<name>');
+    expect(operator, 'Git Operator keeps one coding worktree').toMatch(/\b(?:single|one)\b[^.]{0,40}worktree/i);
+    expect(operator, 'task commits stay serial').toMatch(/\bserial(?:ly)?\b|one commit at a time/i);
+    expect(operator, 'the isolated task worktree instruction is gone').not.toContain('Create one plan worktree and isolated task worktrees');
+    expect(operator, 'the task-commit merge instruction is gone').not.toContain('Merge task commits into the plan worktree');
+  });
 });

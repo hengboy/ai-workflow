@@ -25,14 +25,6 @@ function flatten(text: string): string {
   return text.replace(/\s+/g, ' ').trim();
 }
 
-/** The blank-line separated block that names the record path, whitespace-normalized. */
-function recordParagraph(text: string): string {
-  return text
-    .split(/\n\s*\n/)
-    .map(flatten)
-    .find((paragraph) => paragraph.includes('implementation.yaml')) ?? '';
-}
-
 /** Sentences split on terminal punctuation, whitespace-normalized. */
 function sentences(text: string): string[] {
   return flatten(text)
@@ -41,20 +33,23 @@ function sentences(text: string): string[] {
 }
 
 /**
- * Substantive exemption check: the named record must be scoped to a single permitted
- * exception in the same block that names its path, not left as a blanket permission.
+ * Substantive exemption check: some block that names the record path must scope it as a
+ * single permitted exception about the run record, not left as a blanket permission. A
+ * document may carry other `implementation.yaml` blocks (for example the workspace root
+ * delivery rule), so every naming block is inspected rather than only the first.
  */
 function assertScopedExemption(text: string, label: string): void {
-  const paragraph = recordParagraph(text);
-  expect(paragraph, `${label}: the block must name the record path`).toContain('implementation.yaml');
+  const naming = text
+    .split(/\n\s*\n/)
+    .map(flatten)
+    .filter((paragraph) => paragraph.includes('implementation.yaml'));
+  expect(naming.length, `${label}: a block must name the record path`).toBeGreaterThan(0);
+  const scoped = naming.filter((paragraph) => /\b(?:only|sole|single|exclusive|except(?:ion)?|other than)\b/i.test(paragraph));
+  const exemptions = scoped.filter((paragraph) => /\b(?:run record|implementation record|runtime artifact|workflow artifact)\b/i.test(paragraph));
   expect(
-    paragraph,
-    `${label}: the record must be scoped as the only permitted exception`,
-  ).toMatch(/\b(?:only|sole|single|exclusive|except(?:ion)?|other than)\b/i);
-  expect(
-    paragraph,
-    `${label}: the exemption must be about the run record it permits`,
-  ).toMatch(/\b(?:run record|implementation record|runtime artifact|workflow artifact)\b/i);
+    exemptions.length,
+    `${label}: a block naming the record must scope it as the only permitted run record`,
+  ).toBeGreaterThan(0);
   // The record itself must never be forbidden, only the extra manifests/run records.
   expect(
     text,
@@ -118,7 +113,7 @@ describe('implementation record guidance', () => {
       expect(coding).toMatch(/\bomits?\b[^.]{0,60}started_at|\bwithout\b[^.]{0,40}started_at/i);
     });
 
-    it('leaves an interrupted run at in-progress with only the start fields and no failure reason', async () => {
+    it('leaves an interrupted run at in-progress with no failure reason', async () => {
       const coding = flatten(await codingSkill());
 
       expect(coding).toMatch(
@@ -203,6 +198,23 @@ describe('implementation record guidance', () => {
     it('states the same UTC+08:00 timestamp rule in both project templates', async () => {
       expect(flatten(await projectContractTemplate())).toMatch(/UTC\+08:00/);
       expect(flatten(await projectMemoryTemplate())).toMatch(/UTC\+08:00/);
+    });
+  });
+
+  describe('workspace root delivery record', () => {
+    it('keeps the same root record in-progress and pins root_tasks_commit when root tasks are delivered', async () => {
+      const coding = flatten(await codingSkill());
+
+      expect(coding).toContain('root_tasks_commit');
+      expect(coding).toMatch(/\bin-progress\b/);
+      expect(coding).toMatch(/root[- ]owned|root task/i);
+    });
+
+    it('represents root task delivery as one record with no new status', async () => {
+      const coding = flatten(await codingSkill());
+
+      expect(coding).toMatch(/one record|same record|single record/i);
+      expect(coding).toMatch(/no new status|without a new status/i);
     });
   });
 });

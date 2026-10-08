@@ -212,6 +212,43 @@ describe('plan validate for workspace plans', () => {
     expect(result.stdout).toBe(expected);
     expect(result.stdout).not.toContain('repos');
   });
+
+  it('rejects an acyclic workspace plan whose reserved workspace root declares a non-empty depends_on', async () => {
+    const root = await temporary('ai-workflow-plan-workspace-root-depends-');
+    const spec: WorkspacePlanFixtureSpec = {
+      planId: WORKSPACE_ID,
+      requirements: ['REQ-001', 'REQ-002', 'REQ-003'],
+      acceptanceCriteria: ['AC-001', 'AC-002', 'AC-003'],
+      workspaceRepos: [
+        { name: 'workspace', path: '.', dependsOn: ['app'] },
+        { name: 'app', path: 'packages/app', dependsOn: [] },
+        { name: 'lib', path: 'packages/lib', dependsOn: ['app'] },
+      ],
+      tasks: [
+        { id: 'task-001-workspace', repo: 'workspace', requirements: ['REQ-001'], acceptanceCriteria: ['AC-001'], writeScope: ['src/workspace.ts'] },
+        { id: 'task-002-app', repo: 'app', requirements: ['REQ-002'], acceptanceCriteria: ['AC-002'], writeScope: ['src/app.ts'] },
+        { id: 'task-003-lib', repo: 'lib', requirements: ['REQ-003'], acceptanceCriteria: ['AC-003'], writeScope: ['src/lib.ts'] },
+      ],
+      phases: [['task-002-app'], ['task-001-workspace'], ['task-003-lib']],
+      manifest: {
+        planId: WORKSPACE_ID,
+        role: 'workspace',
+        repositories: [
+          { name: 'workspace', path: '.', dependsOn: ['app'], requirements: ['REQ-001'], acceptanceCriteria: ['AC-001'] },
+          { name: 'app', path: 'packages/app', dependsOn: [], requirements: ['REQ-002'], acceptanceCriteria: ['AC-002'] },
+          { name: 'lib', path: 'packages/lib', dependsOn: ['app'], requirements: ['REQ-003'], acceptanceCriteria: ['AC-003'] },
+        ],
+      },
+    };
+    const directory = await workspacePlanFixture(root, spec);
+
+    const result = await runCli(['plan', 'validate', '--plan', directory]);
+
+    expect(result.code).not.toBe(0);
+    const output = outputOf(result);
+    expect(output).toMatch(/empty/i);
+    expect(output).toContain('depends_on');
+  });
 });
 
 describe('plan validate for slice manifests', () => {

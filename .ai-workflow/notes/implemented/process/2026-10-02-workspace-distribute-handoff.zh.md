@@ -27,8 +27,8 @@ Status: implemented
 ## Consequences
 
 - 已安装的主机技能和代理是副本，因此该规则只有在下次主机安装或 profile 激活之后才到达日常会话；上线后的第一次跨仓库拆分是该交接的运行时观察。
-- 没有 `src/`、CLI 或 schema 变更：`workspace distribute` 继续在写入任何内容之前以只读方式校验每个仓库并拒绝分歧和未满足的前置条件，`workspace status` 继续以只读方式报告，因此它们的行为不变。
+- 本记录界定的是 2026-10-02 那次交付：`workspace distribute` 继续在写入任何内容之前以只读方式校验每个仓库并拒绝分歧和未满足的前置条件，因此其分发行为不变。2026-10-08 [工作区执行一致性记录](../bug-fix/2026-10-08-workspace-execution-consistency.md)后来增加了 `workspace status` 清单校验、冻结顺序的 `order` 与 `next_repository`，以及根 `tasks_delivered`/根交付事实，因此本记录此前关于 `workspace status` 行为不变的说法被部分取代；此处的分发行为与决定保持有效。
 - 拒绝路径是明确的：未分发的跨仓库计划和缺失的切片清单在创建工作树或实施记录之前停止，而分发拒绝会保留已写出的任务工件并报告确切的错误与修复，只有在之后的成功分发后才完成交接。
 - 仅根条目和非工作区计划不变：仅根条目的工作区计划可以免拆分实现，而没有 `workspace_repos` 的计划保持其普通的单仓库流程。
-- 没有任何活动记录被整体或部分取代。[子模块工作区交付记录](../architecture/2026-09-30-submodule-workspace.md) 保持有效，且未被重写、移动或归档：它的分发、状态和定稿事实仍然描述未改变的命令行为，本记录只在其周围增加拆分与交接闸门。
+- 没有任何活动记录被整体取代。[子模块工作区交付记录](../architecture/2026-09-30-submodule-workspace.md) 保留其分发、状态与定稿决定，且未被移动或归档；2026-10-08 [工作区执行一致性记录](../bug-fix/2026-10-08-workspace-execution-consistency.md)后来更新了它的 `workspace status` 与根交付当前事实，因此那些事实指向该记录，而本记录及其边界决定保持有效。
 - 下一次会话路由由 2026-10-08 [工作区会话交接记录](../bug-fix/2026-10-08-workspace-session-handoff.md) 更详细地陈述，它涵盖父工作区根会话、绝对父计划目录、切片完成交接与 `ready_for_finalization` 定稿步骤，并部分取代本记录的通用交接措辞，而本记录保留分发行为。

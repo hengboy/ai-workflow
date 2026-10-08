@@ -110,7 +110,7 @@ installed role, fail before execution and request clarification.
   symbols. For an unsplit plan, do not invoke File Explorer merely because the
   feature is absent from the index; use the frozen plan's scope directly.
   Request File Explorer only when the implementation boundary remains unclear.
-- A session asked to implement a workspace plan that declares at least one non-root participating repository must confirm the distributed slices first with `ai-workflow workspace status --plan <directory>` using the absolute parent workspace plan directory. When no slice is distributed, refuse before creating a worktree or an implementation record: direct to a session at the parent workspace root that invokes plan-to-tasks with the absolute parent plan directory when the plan still needs splitting, or reruns `ai-workflow workspace distribute --plan <directory>` with the same absolute parent plan directory when the split artifacts exist. A root-only workspace plan whose `workspace_repos` declares only the reserved `workspace` root entry is exempt and may be implemented unsplit.
+- A session asked to implement a workspace plan that declares at least one non-root participating repository must confirm the delivery gate first with `ai-workflow workspace status --plan <directory>` using the absolute parent workspace plan directory. Require `valid: true`, the validated frozen `tasks/execution-order.yaml` and every child slice `present`; an invalid report or any missing or divergent slice refuses before creating a worktree or an implementation record. Direct to a session at the parent workspace root that invokes plan-to-tasks with the absolute parent plan directory when the plan still needs splitting, or reruns `ai-workflow workspace distribute --plan <directory>` with the same absolute parent plan directory after repairing the named divergence when the split artifacts exist. A root-only workspace plan whose `workspace_repos` declares only the reserved `workspace` root entry is exempt and may be implemented unsplit.
 - Before implementation, Git Operator must create one project-local temporary worktree
   under `<project>/.worktrees/<name>` (ensure `.gitignore` contains
   `.worktrees/`). Git Operator must then materialize the project's entire
@@ -226,11 +226,14 @@ record coding may create, and no other workflow manifest or run record may be
 generated. It holds `plan_id` and `status: in-progress` with an ISO 8601
 `started_at` in the UTC+08:00 timezone (for example
 `2026-09-23T15:04:05+08:00`), and no `completed_at`.
+On resume, preserve the existing `started_at` and any `root_tasks_commit` in the
+same record instead of replacing the start record.
 
 Only a frozen plan creates this implementation record. A direct or mechanical
 change without a frozen plan creates no record.
 
-After the final merge and the cleanup of only the run-owned worktree and branch,
+For an ordinary plan, a root-only workspace plan or a child slice, after the final
+merge and the cleanup of only the run-owned worktree and branch,
 update that same file in place to `status: completed` with an ISO 8601
 `completed_at` in the UTC+08:00 timezone and the final commit SHA, preserving
 `plan_id` and `started_at`.
@@ -238,22 +241,66 @@ The update is idempotent. When the start record is missing, still write a valid
 completed record that omits `started_at`.
 
 An interrupted implementation leaves this record at `status: in-progress` with
-only `plan_id` and `started_at`, and never a failure or abandonment reason. A
+`plan_id` and `started_at`, retaining `root_tasks_commit` if root delivery already
+succeeded, and never a failure or abandonment reason. A
 later successful implementation of the same plan rewrites it as a completed
 record.
 
 The record has only two status values, `in-progress` and `completed`; no failure
 status exists.
 
+## Workspace root sessions
+
+For a parent `workspace.yaml` with `role: workspace` and at least one non-root
+participant, run the delivery gate against the original parent plan and validate
+the frozen order before creating a worktree or an implementation record. Require
+the current project root to equal the reported absolute `workspace_root`. Execute
+root delivery only when `next_repository` is `workspace` and
+`workspace_root_entry.tasks_delivered` is false; otherwise hand off the reported
+next repository or enter finalization when ready. Ordinary and root-only plans
+keep the existing completion semantics.
+
+Select only tasks whose `task.repo` is `workspace`. Filter the parent phases in
+memory to those task IDs, preserve file order and remove empty phases; never edit
+`tasks/execution-order.yaml` or recompute the DAG. Execute only this root-owned
+task sequence in the single coding worktree, with its normal validation and
+review gate; never dispatch sibling tasks.
+
+After all root tasks pass, merge and perform only owned cleanup, then keep the
+SAME `implementation.yaml` record at `status: in-progress` with
+`root_tasks_commit` set to the delivered full lowercase 40- or 64-hex commit SHA.
+Preserve `plan_id` and `started_at`, with no `completed_at` or final `commit` until
+pointer finalization. Root delivery uses one record and no new status or artifact.
+Report the root delivery SHA, rerun parent status and hand off its `next_repository`.
+
+When `tasks_delivered` is true, skip delivered root tasks and all sibling tasks.
+A finalization-only session executes zero tasks and does not rerun root reviews;
+it preserves `root_tasks_commit` and `started_at`, including after interrupted
+finalization, and proceeds only through the finalization gate below. With no root
+tasks, delivery is implicit with a null delivery commit: do not create an
+artificial root-delivery worktree or record; create a worktree only for authorized
+finalization. After finalization's merge and owned cleanup, the same record becomes
+`status: completed` with `completed_at` and the final workspace `commit`, retaining
+`root_tasks_commit` when present.
+
+Completed root finalization is idempotent: verify the matching `plan_id`, the full
+recorded final commit and its delivery/pointer evidence read-only, then report the
+existing result without recreating a worktree, rewriting the record or reexecuting
+tasks. Invalid or unavailable evidence stops with a bounded support request.
+
 ## Slice sessions
 
 A workspace plan can hand this repository its own slice through a `slice manifest`.
-Read `workspace.yaml` before any other step. The slice matches only when the absolute current
-project directory ends with the manifest's declared workspace-relative repository path; when it
+Read `workspace.yaml` before any other step. Run parent workspace status using the original
+absolute parent plan directory and require `valid: true`, the current repository to equal
+`next_repository`, and its slice to be `present`. The slice matches only when the absolute current
+project directory equals the reported workspace root plus the manifest's declared repository path; when it
 `does not match`, the slice belongs to another repository and the session `refuses` it
 `before creating a worktree` or an `implementation record`. Do not create a branch, worktree or
 record for a mismatched slice; return a bounded support request naming the expected and actual
 repository.
+An invalid report, wrong delivery position or missing or divergent slice also refuses before
+creating a worktree or an implementation record; frozen inputs are never repaired in coding.
 
 When the plan directory for a participating repository has no slice `workspace.yaml`, stop
 before creating a worktree or an implementation record, report the missing manifest for that
@@ -269,10 +316,10 @@ After reporting the delivery SHA, run `ai-workflow workspace status --plan <dire
 absolute parent workspace plan directory and hand off the next repository, path, session and
 copyable prompt in the frozen delivery order, reusing the split handoff's concrete conventions:
 working directory `<repository-root>`, local frozen plan directory `<repository-plan-directory>`
-and the original parent `<workspace-plan-directory>`. Finalization requires both every child
-slice to be ready and the root-owned task delivery boundary to be satisfied, so a child session
-never finalizes by itself and only starts a new root session at the workspace root once both
-conditions hold and `ready_for_finalization` is true.
+and the original parent `<workspace-plan-directory>`. The validated `next_repository` includes
+pending root-owned tasks; when it is `workspace`, hand off a root delivery session. When it is
+null and `ready_for_finalization` and `workspace_root_entry.tasks_delivered` are true, hand off
+a new root session for finalization. A child session never finalizes by itself.
 
 Repository-scoped completion runs `ai-workflow plan validate` for the slice plan,
 `ai-workflow notes validate` for that repository's notes, and updates that repository's
@@ -280,22 +327,31 @@ Repository-scoped completion runs `ai-workflow plan validate` for the slice plan
 
 ## Workspace finalization
 
-When the workspace-root plan's `all slices are completed`, finalize the workspace by pinning
-each slice's `delivery commit` into the workspace. Verify each recorded `delivery commit` with
-`read-only Git` in its `source repository` first; the verification reads that repository's
-working tree without mutating it and never rewrites the checkout. Only after a commit is
-confirmed reachable, pin it through the exact command
+The workspace-root plan's `all slices are completed` condition is necessary but not sufficient.
+Run `ai-workflow workspace status --plan <directory>` against the original parent workspace plan
+directory `<workspace-plan-directory>`. Its `valid: true` requires the frozen plan, tasks,
+schedule and manifest to pass the same validation as distribution. Finalization requires every
+child `slice` to be `present`, every child `record` to be `completed` with a full lowercase
+40- or 64-hex `delivery_commit`, `ready_for_finalization: true`, and
+`workspace_root_entry.tasks_delivered: true`.
+
+Before any index mutation, verify the entire authorized batch of recorded child delivery SHAs
+and any root `root_tasks_commit` (or completed root delivery evidence) with `read-only Git` in
+each `source repository`: `git cat-file -e <sha>^{commit}` verifies commit existence, not
+reachability from refs. If any commit is missing, stop and stage nothing, including when the
+second SHA is missing. These authorized workspace/source reads are the read-only exception to
+worktree confinement; they never write sibling files or rewrite a checkout. Only after every
+commit exists, pin each child `delivery commit` through the exact command
 `git update-index --cacheinfo 160000,<sha>,<path>` run inside the `workspace worktree`, which
 starts clean with `empty submodule directories`; the run stages only the authorized `pointer`
 paths and workspace-root files, never a submodule working tree or an unrelated path. Moving a
-submodule checkout after the pin is out of scope.
+submodule checkout after the pin is out of scope. Run only the plan's authorized cross-repository
+acceptance checks read-only; do not automatically check out submodules or publish.
 
-Run `ai-workflow workspace status --plan <directory>` against the original parent workspace plan
-directory `<workspace-plan-directory>` to read `ready_for_finalization`. The command's own `valid`
-only means the plan and manifest resolved, so this finalization consumes the report only when
-`valid` is true, every child `slice` is `present`, every child `record` is `completed`,
-`ready_for_finalization` is true, the root-owned tasks are delivered, and every `delivery_commit`
-verifies with read-only Git in its source repository before Git Operator pins it. A child or other
+Keep the same root implementation record in-progress throughout finalization, preserving
+`root_tasks_commit` and `started_at` on interruption. Only after final merge and owned cleanup
+write `status: completed`, `completed_at` and the final workspace commit SHA, retaining the root
+delivery evidence. A child or other
 repository session that is not already running the correct parent finalization reports the copyable
 next-root prompt; a session already running the correct parent coding finalization performs it here
 and does not emit an instruction to reopen itself. Before showing the prompt, replace every
@@ -304,7 +360,7 @@ that contains spaces (including in the command), and write it in the user's lang
 other session reports:
 
 ```text
-Start a new root session at <workspace-root> and invoke the coding skill for the parent workspace plan <workspace-plan-directory>. Run ai-workflow workspace status --plan <workspace-plan-directory> against the original parent plan, require valid true with present and completed child slices, ready_for_finalization and root-owned tasks delivered, and verify each delivery commit read-only before Git Operator pins it.
+Start a new root session at <workspace-root> and invoke the coding skill for finalization-only of the parent workspace plan <workspace-plan-directory>. Run ai-workflow workspace status --plan <workspace-plan-directory> against the original parent plan, require valid true with present and completed child slices, ready_for_finalization and workspace_root_entry.tasks_delivered true. Execute zero tasks, skip delivered root tasks and siblings, preserve root_tasks_commit and started_at, and verify the entire delivery-commit batch read-only before Git Operator pins any pointer.
 ```
 
 ## Note ownership

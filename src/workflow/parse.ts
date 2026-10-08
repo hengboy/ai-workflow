@@ -32,6 +32,7 @@ function parseWorkspaceRepos(value: unknown): WorkspaceRepo[] | undefined {
   if (roots.length !== 1) throw new Error('workspace_repos must declare exactly one reserved "workspace" root entry');
   const root = roots[0] as WorkspaceRepo;
   if (root.path !== '.') throw new Error('workspace repository "workspace" must use path "."');
+  if (root.depends_on.length > 0) throw new Error('workspace repository "workspace" must use empty depends_on');
   const names = new Set<string>();
   for (const repo of repos) {
     if (names.has(repo.name)) throw new Error(`duplicate workspace repository name: ${repo.name}`);

@@ -31,16 +31,23 @@ function outputOf(result: GitResult): string {
 
 const deliveryCommand = (checkout: string, sha: string): string[] => ['-C', checkout, 'cat-file', '-e', `${sha}^{commit}`];
 
+interface FinalizePointer { checkout: string; sha: string; path: string }
+
 /**
- * The documented finalization procedure for one pointer: verify the delivery commit
- * read-only in its source repository first, then run the index-only pin. An unreachable
- * commit returns before `update-index` ever runs.
+ * The documented finalization procedure for a batch of pointers: preverify every
+ * delivery commit read-only in its source repository before any index mutation, then
+ * pin the whole batch. An unreachable commit returns before `update-index` ever runs,
+ * so no earlier pointer is left staged.
  */
-async function finalizePointer(worktree: string, checkout: string, sha: string, path: string): Promise<'pinned' | 'unreachable'> {
-  const exists = await git(deliveryCommand(checkout, sha));
-  if (exists.code !== 0) return 'unreachable';
-  const pinned = await git(['-C', worktree, 'update-index', '--cacheinfo', `160000,${sha},${path}`]);
-  if (pinned.code !== 0) throw new Error(`pin failed for ${path}: ${outputOf(pinned)}`);
+async function finalizePointers(worktree: string, pointers: FinalizePointer[]): Promise<'pinned' | 'unreachable'> {
+  for (const pointer of pointers) {
+    const exists = await git(deliveryCommand(pointer.checkout, pointer.sha));
+    if (exists.code !== 0) return 'unreachable';
+  }
+  for (const pointer of pointers) {
+    const pinned = await git(['-C', worktree, 'update-index', '--cacheinfo', `160000,${pointer.sha},${pointer.path}`]);
+    if (pinned.code !== 0) throw new Error(`pin failed for ${pointer.path}: ${outputOf(pinned)}`);
+  }
   return 'pinned';
 }
 
@@ -99,13 +106,10 @@ describe('workspace finalization pins delivery commits with real Git (REQ-009 / 
       }
 
       // 5. Execute the documented procedure with real Git inside the workspace worktree,
-      //    verifying each delivery commit read-only in its source repository first.
-      for (const [, entry] of delivery) {
-        const exists = await git(deliveryCommand(entry.checkout, entry.sha));
-        expect(exists.code, `delivery commit for ${entry.path} exists in its source repository`).toBe(0);
-        const pinned = await finalizePointer(worktree, entry.checkout, entry.sha, entry.path);
-        expect(pinned, `${entry.path} is pinned`).toBe('pinned');
-      }
+      //    preverifying the whole batch read-only in each source repository before pinning.
+      const pointerBatch: FinalizePointer[] = [...delivery.values()].map((entry) => ({ checkout: entry.checkout, sha: entry.sha, path: entry.path }));
+      const pinned = await finalizePointers(worktree, pointerBatch);
+      expect(pinned, 'every delivery pointer is pinned').toBe('pinned');
       const committed = await git(['commit', '-m', 'finalize workspace pointers'], worktree);
       expect(committed.code, outputOf(committed)).toBe(0);
       for (const [, entry] of delivery) {
@@ -127,12 +131,57 @@ describe('workspace finalization pins delivery commits with real Git (REQ-009 / 
 
       const missing = await git(deliveryCommand(target?.checkout ?? '', UNREACHABLE_SHA));
       expect(missing.code, 'the existence check fails for an unreachable commit').not.toBe(0);
-      const stopped = await finalizePointer(worktree, target?.checkout ?? '', UNREACHABLE_SHA, target?.path ?? '');
+      const stopped = await finalizePointers(worktree, [{ checkout: target?.checkout ?? '', sha: UNREACHABLE_SHA, path: target?.path ?? '' }]);
       expect(stopped, 'the procedure stops before update-index').toBe('unreachable');
 
       const after = await git(['ls-files', '-s', '--', target?.path ?? ''], worktree);
       expect(after.stdout, 'the pointer still points at the previously recorded commit').toContain(target?.sha);
       expect(after.stdout, 'no unreachable commit was staged').not.toContain(UNREACHABLE_SHA);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+      await rm(worktreeParent, { recursive: true, force: true });
+    }
+  }, TIMEOUT);
+
+  it('preverifies the entire batch read-only so a later unreachable commit stages no earlier pointer', async () => {
+    const { root, repos } = await realWorkspaceFixture([
+      { name: 'app', path: 'packages/app' },
+      { name: 'lib', path: 'packages/lib' },
+    ]);
+    const worktreeParent = await mkdtemp(join(tmpdir(), 'ai-workflow-finalize-batch-'));
+    const worktree = join(worktreeParent, 'workspace-wt');
+
+    try {
+      const deliveries = new Map<string, FinalizePointer>();
+      for (const repo of repos) {
+        await git(['config', 'user.email', 'test@example.com'], repo.absolute);
+        await git(['config', 'user.name', 'Test'], repo.absolute);
+        await git(['config', 'commit.gpgsign', 'false'], repo.absolute);
+        await writeFile(join(repo.absolute, 'delivery.txt'), `delivery ${repo.name}\n`);
+        await git(['add', 'delivery.txt'], repo.absolute);
+        const committed = await git(['commit', '-m', `delivery ${repo.name}`], repo.absolute);
+        expect(committed.code, outputOf(committed)).toBe(0);
+        const head = await git(['rev-parse', 'HEAD'], repo.absolute);
+        expect(head.code, outputOf(head)).toBe(0);
+        deliveries.set(repo.name, { checkout: repo.absolute, sha: head.stdout.trim(), path: repo.path });
+      }
+      const first = deliveries.get('app');
+      const second = deliveries.get('lib');
+      if (!first || !second) throw new Error('fixture is missing a delivery commit');
+
+      const addedWorktree = await git(['worktree', 'add', worktree, '-b', 'finalize-batch'], root);
+      expect(addedWorktree.code, outputOf(addedWorktree)).toBe(0);
+
+      const before = await git(['ls-files', '-s'], worktree);
+      expect(before.code, outputOf(before)).toBe(0);
+
+      const result = await finalizePointers(worktree, [first, { checkout: second.checkout, sha: UNREACHABLE_SHA, path: second.path }]);
+      expect(result, 'the batch stops before any pin for an unreachable second commit').toBe('unreachable');
+
+      const after = await git(['ls-files', '-s'], worktree);
+      expect(after.code, outputOf(after)).toBe(0);
+      expect(after.stdout, 'the reachable first pointer was not staged').not.toContain(first.sha);
+      expect(after.stdout, 'the index is unchanged by the refused batch').toBe(before.stdout);
     } finally {
       await rm(root, { recursive: true, force: true });
       await rm(worktreeParent, { recursive: true, force: true });

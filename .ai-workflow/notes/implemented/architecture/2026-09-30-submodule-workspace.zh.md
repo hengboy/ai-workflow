@@ -14,8 +14,8 @@ Status: implemented
 - `.gitmodules` 是唯一的边界信号：声明的子模块路径从工作区根的导航发现与校验中排除；既有工作区导航保持其字节不变，直到 `ai-workflow context rebuild --project <root> --write` 刷新该对；`context validate` 对每个被索引的子模块路径报告该指令，而没有 `.gitmodules` 的项目保持原有的发现与校验行为。
 - `ai-workflow workspace distribute --plan <directory>` 在写入任何内容之前先通过只读 Git 前置检查（`git -C <repo> symbolic-ref -q HEAD` 与 `git -C <repo> status --porcelain`）校验每个参与仓库，拒绝有分歧的切片文件，然后把自包含切片——冻结的规划三元组、该仓库的任务三元组、其过滤后的执行顺序和 `slice` 清单——写入每个参与仓库，并跳过保留的 `workspace` 根条目，根自身的任务留在根计划中。
 - 每个仓库在自己的会话中实现自己的切片，拥有自己的 worktree、校验、实施记录和交付提交，且它的任务绝不依赖另一个仓库中的任务。
-- `ai-workflow workspace status --plan <directory>` 以只读方式、按交付顺序报告且不写入：每个仓库的切片存在状态、实施记录状态和交付提交，以及下一个仓库和所有切片是否完成；它仅通过文件系统检查工作区树，不运行任何 Git。
-- 所有切片完成后，根用只读 Git 在其源仓库中校验每个记录的交付提交，并在工作区 worktree 内用 `git update-index --cacheinfo 160000,<sha>,<path>` 钉住每个受影响的子模块，只暂存授权的 pointer 路径和工作区根文件。工作区根拥有跨仓库决策笔记，每个仓库拥有覆盖其实际交付事实的笔记，跨仓库引用保持纯 plan-ID 文本。
+- `ai-workflow workspace status --plan <directory>` 先对照冻结的计划、任务与排程校验工作区清单，然后以只读方式、按冻结 `tasks/execution-order.yaml` 的仓库首次出现顺序（含待交付的根任务）报告且不写入：每个仓库的切片存在状态、实施记录状态和交付提交，以及带 `record`、`tasks_delivered` 与可为空的 `delivery_commit` 的 `workspace_root_entry`、`next_repository` 和 `ready_for_finalization`；它仅通过文件系统检查工作区树，不运行任何 Git。
+- 所有切片完成且根拥有的前缀已交付（其根 `implementation.yaml` 在定稿之前保持 `in-progress` 并带可选的 `root_tasks_commit`）之后，根在任何索引改动之前用只读的 `git cat-file -e <sha>^{commit}` 存在性检查在其源仓库中校验每个记录的交付提交，并在工作区 worktree 内用 `git update-index --cacheinfo 160000,<sha>,<path>` 钉住每个受影响的子模块，只暂存授权的 pointer 路径和工作区根文件。工作区根拥有跨仓库决策笔记，每个仓库拥有覆盖其实际交付事实的笔记，跨仓库引用保持纯 plan-ID 文本。
 
 ## Alternatives considered
 
@@ -32,4 +32,4 @@ Status: implemented
 - 交付提交通过工作区 worktree 钉住：工作区流程中唯一的 Git 变更就是 Git Operator 执行的最终 pointer 提交，提交校验会把每个生成的 pointer 与记录的交付 SHA 比较。
 - 钉住之后移动子模块 checkout 不在范围内，且 pointer 提交只引用本地可用的交付提交，因此远程操作不在范围内。
 - 既有工作区导航在显式重建之前保持字节不变，没有 `.gitmodules` 的项目保持其发现、校验和命令不变；工作区声明、任务 `repo` 字段、`workspace.yaml` 与两个工作区命令都是附加的。
-- 没有任何活动记录被整体或部分取代：[worktree 政策记录](../process/2026-09-14-project-local-worktree-policy.md) 与 [忽略状态共享记录](../process/2026-09-14-share-ignored-state-into-worktree.md) 保持有效，因为工作区流程在 worktree 内运行且仅以只读方式读取工作区树，而 [任务执行顺序记录](../process/2026-09-25-task-execution-order.md) 与 [实施记录](../process/2026-09-22-plan-implementation-record.md) 按仓库保持其规则；本记录只增加跨仓库层。
+- 没有任何活动记录被整体取代：[worktree 政策记录](../process/2026-09-14-project-local-worktree-policy.md) 与 [忽略状态共享记录](../process/2026-09-14-share-ignored-state-into-worktree.md) 保持有效，因为工作区流程在 worktree 内运行且仅以只读方式读取工作区树，而 [任务执行顺序记录](../process/2026-09-25-task-execution-order.md) 与 [实施记录](../process/2026-09-22-plan-implementation-record.md) 按仓库保持其规则；本记录只增加跨仓库层。本记录的 `workspace status` 与定稿细节被 [工作区执行一致性记录](../bug-fix/2026-10-08-workspace-execution-consistency.md) 部分取代，该记录保留边界决定并增加清单校验、冻结顺序报告与单记录 `root_tasks_commit`。

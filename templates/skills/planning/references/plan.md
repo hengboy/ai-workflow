@@ -94,3 +94,7 @@ workspace_repos:
 ```
 
 State the `per-repository delivery boundary` here as well: every task belongs to exactly one repository, task read and write scopes are repository-relative, no task depends on a task in another repository, and every task of a repository is delivered strictly after every task of the repositories it depends on. A plan without `workspace_repos` has no repositories and keeps the single-repository contract unchanged.
+
+Distinguish root-owned task delivery (the prefix for children depending on `workspace`) from later pointer finalization; the reserved root still has empty `depends_on`. The same root implementation record stays in-progress with `root_tasks_commit` after delivery and becomes completed only after finalization. Require exact schedule coverage, strictly earlier task and repository dependencies, and disjoint same-repository parallel write scopes; root sessions filter phases in memory without changing file order or recomputing the DAG.
+
+For required cross-repository acceptance evidence, name the responsible owner, exact authorized commands and expected evidence. Finalization requires validated parent workspace status, present completed children with full SHAs, `ready_for_finalization` and root `tasks_delivered` true. Explicitly authorize read-only workspace/source checks and whole-batch delivery-commit existence verification before pinning; no sibling writes, automatic checkout changes or publishing are authorized.
