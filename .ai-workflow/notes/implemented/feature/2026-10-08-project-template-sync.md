@@ -1,0 +1,37 @@
+# Agent Note: Project template synchronization
+
+Status: implemented
+
+English | [中文](2026-10-08-project-template-sync.zh.md)
+
+## Problem
+
+Adopted projects carry a copy of ai-workflow's project instructions, but nothing kept those copies consistent with later upstream templates, and no baseline existed to tell a stale template section apart from a collaborator's deliberate local edit. Copying a whole template file would overwrite project-owned content, and storing a previous-template baseline had been rejected. The earlier upgrade entry described in the [project contract and Agent Notes record](../process/2026-09-16-project-contract-and-agent-notes.md) created only missing management files and either skipped or stopped on any differing file, so it could neither patch an owned section nor safely adopt an unmarked legacy project.
+
+## Decision
+
+- `ai-workflow sync [project]` and `ai-workflow init <project> --upgrade` patch an existing adoption from the fixed source `hengboy/ai-workflow` branch `simplify`; an omitted project defaults to the actual current directory and is normalized to its adopted root.
+- `resolveTemplateSnapshot` in `src/sync/source.ts` resolves the branch HEAD, requires one immutable 40-hex commit, lists every supported `templates/project` directory and file at that commit, validates the listing and each file's identity, encoding, size and structure, and reads `GH_TOKEN` before `GITHUB_TOKEN` into an explicit bearer authorization header. A failed or incomplete retrieval returns `unverified` with `verified: false` and `proceed: true` before any target mutation.
+- The markers `<!-- ai-workflow:section <id>:begin -->` and `<!-- ai-workflow:section <id>:end -->` define the only sections `mergeOwnedSections` in `src/sync/merge.ts` may replace. Begin and end pairs must be unique, non-nested and well formed; malformed, duplicate, nested or unclosed markers are structural conflicts that write nothing.
+- `mergeOwnedSections` splices only changed, added or removed owned section bodies from the source, preserves every byte outside those sections including line endings, keeps the existing project-owned segment order, appends new sections in source order, and warns about differing or unknown unmarked legacy prose instead of duplicating it.
+- `applyTemplateSnapshot` in `src/sync/index.ts` runs the shared transaction. It preflights every managed target, the existing archive manifest, the notes structure directories and the exact `.gitignore` entries, and a conflict blocks the whole invocation before any write. On success it creates missing directories, publishes each changed file atomically, and reports `created`, `updated` and `skipped`. On a publication failure it restores invocation-local originals and removes only invocation-created artifacts.
+- The report carries `project`, `source` with a nullable `commit`, `status`, `verified`, `proceed`, `check`, `created`, `updated`, `skipped`, `warnings` and `conflicts`. `synchronized` exits 0, `unverified` and `needs_attention` exit 2 with `proceed: true`, and `pending`, `conflict` and `failed` exit 1; `--check` computes the verdict and proposed changes without writing.
+- `applyTemplateSnapshot` is the single patch core. `upgradeProject` reuses it with the shipped local templates and a null source commit, so it reports `needs_attention` with an unverified local-source warning and makes no upstream freshness claim, while retaining its missing-prerequisite conflict and its exact retired-ADR imperative guard before any write.
+- Six mergeable project Markdown templates carry stable markers: `templates/project/AGENTS.md`, `templates/project/MEMORY.md`, `templates/project/notes/AGENTS.md`, `templates/project/notes/README.md`, `templates/project/notes/implemented/AGENTS.md` and `templates/project/notes/archived/AGENTS.md`. Generated navigation, the archive manifest and note triplets stay data-specific and are preserved.
+
+## Alternatives considered
+
+- Copying a whole template file over the project target. Declined because it destroys project-owned standards and architecture and cannot tell a stale section from a deliberate edit.
+- Storing a previous-template snapshot or project version stamp to compute differences. Declined because the approved policy stores no baseline; ownership markers, not stored history, define what may be replaced.
+- Blocking all work when the source is unavailable or an unmarked section differs. Declined because the approved policy continues with a visible warning for source failures and ambiguous legacy content, and blocks only structural or publication failures.
+- Letting synchronization rewrite navigation, note bodies, the archive manifest, frozen plans or root user instructions. Declined because those are data-specific or user-owned, and the supported writable set stays the six marked templates plus missing management structure and ignore entries.
+- Allowing an arbitrary repository or ref, a historical cache or a project-local run record. Declined because the source is fixed, and a stored baseline or extra record would reintroduce the drift and validation surface the policy removed.
+
+## Consequences
+
+- The upgrade record's missing-only behavior is partially superseded: the shared core now patches owned sections, reports `updated`, and treats a differing management file as a merge or warning instead of an abort, while the prerequisites, ADR guard and byte-preserving history rules it also described stay in the [project contract and Agent Notes record](../process/2026-09-16-project-contract-and-agent-notes.md).
+- Without a baseline, a differing unmarked same-heading section cannot be adopted and is preserved with `needs_attention`; only an exact same-heading body match gains markers, and a clearly absent marked section is inserted once.
+- A retired source artifact preserves its existing target and warns rather than deleting it, and an unsupported destination never expands the writable set.
+- The marker is an authorization boundary, not a record of previous content, so edits deliberately placed inside a correctly declared owned section follow the latest template.
+- Synchronization performs no Git operation, writes only the actual current project's managed files, and requires the ordinary worktree, clean-tree and scope gates to be respected rather than bypassed.
+- This record covers the delivered CLI and merge core only; native host trigger entries that would run synchronization automatically at work boundaries are not part of this delivered step.

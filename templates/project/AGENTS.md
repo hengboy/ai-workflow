@@ -1,7 +1,10 @@
+<!-- ai-workflow:section contract-introduction:begin -->
 # ai-workflow project contract
 
 This contract applies to the entire project and every participating agent, including sub-agents. Read it explicitly before repository work; do not rely on a host recursively loading hidden directories or following Markdown links. Installed role files must not override this contract.
 
+<!-- ai-workflow:section contract-introduction:end -->
+<!-- ai-workflow:section shared-context:begin -->
 ## Shared context and maintenance
 
 - Before repository work, read `MEMORY.md`, `.ai-workflow/index/navigation.json` and `.ai-workflow/index/navigation.md`.
@@ -11,10 +14,14 @@ This contract applies to the entire project and every participating agent, inclu
 - Fixed task context includes this contract, MEMORY and both navigation files. Add relevant notes and governance files to explicit bounded read/write scopes; do not require every task to read the entire history.
 - Agent results are Markdown under `## Output checklist` with `### Status`, `### Summary`, `### Evidence` and `### Support Requests`; File Explorer uses `### Found Paths`. JSON envelopes are prohibited; v2 manifest JSON is unchanged.
 
+<!-- ai-workflow:section shared-context:end -->
+<!-- ai-workflow:section agent-notes:begin -->
 ## Agent Notes
 
 Read `.ai-workflow/notes/AGENTS.md` and `.ai-workflow/notes/README.md` before maintaining notes. The README is the single source for format, lifecycle, supersession and archive governance. Planning schedules the relevant note work; the change that lands the decision owns its record and lifecycle transition. MEMORY records current standards (how), while notes record why; keep them consistent in the same change.
 
+<!-- ai-workflow:section agent-notes:end -->
+<!-- ai-workflow:section workspaces:begin -->
 ## Workspaces
 
 A workspace is a root repository that composes child repositories as local git submodules; `.gitmodules` is the source of the `submodule boundary` and keeps each child isolated, so a child's work never leaks into the root or a sibling. Each participating repository keeps its working tree at its declared workspace-root-relative path, and only its slice and plan artifacts live under the repository path convention `<root>/.ai-workflow/plans/<planId>`; the workspace plan records the `repository-level order` in which slices are delivered.
@@ -25,6 +32,8 @@ Cross-repository references stay `plain plan-ID text`. The `workspace root` owns
 
 A workspace plan that declares at least one non-root participating repository must be split by plan-to-tasks before implementation, and completing that split runs `ai-workflow workspace distribute --plan <directory>` to hand each participating repository its slice. A workspace plan whose `workspace_repos` declares only the reserved workspace root entry may be implemented unsplit.
 
+<!-- ai-workflow:section workspaces:end -->
+<!-- ai-workflow:section change-routing:begin -->
 ## Change routing
 
 Classify every request before starting and state the class in one line.
@@ -35,6 +44,8 @@ Classify every request before starting and state the class in one line.
 
 Never run Planning to restate a request with clear, bounded intent, and never label a change direct to skip required checks or evidence. Ask the user only when these rules cannot classify the request.
 
+<!-- ai-workflow:section change-routing:end -->
+<!-- ai-workflow:section workflow-roles:begin -->
 ## Workflow roles
 
 - Planning asks one business-impact question at a time, obtains approval, and creates frozen `spec.md` and `plan.md` for a planned change only.
@@ -48,6 +59,9 @@ Never run Planning to restate a request with clear, bounded intent, and never la
 - Spec Review checks requirements, acceptance criteria, testability, scope, coverage and actual delivery. Standards Review checks consistency with MEMORY and its referenced notes rules. Both are read-only.
 - Git Operator is the only role allowed to run Git, stages only explicit paths, invokes `$git-message` before commits, preserves unrelated changes and performs no remote mutation.
 
+<!-- ai-workflow:section workflow-roles:end -->
+<!-- ai-workflow:section orchestration:begin -->
 ## Orchestration
 
 The primary orchestrator directly dispatches Git Operator and every specialist in dependency order; no coordinator role exists. For split and unsplit coding it directly dispatches Git Operator, File Explorer, the implementation role, Test, both reviews simultaneously in one parallel batch (never Spec first and Standards after Spec completes), an optional repair, and finalization. After the Documentation Maintainer returns exact changed paths and validation evidence, the primary orchestrator directly dispatches Git Operator for the local commit. All agents stop on missing scope, contradictory frozen inputs, infrastructure failure or out-of-scope requests and return a bounded support request. Never weaken tests or silently expand authority.
+<!-- ai-workflow:section orchestration:end -->

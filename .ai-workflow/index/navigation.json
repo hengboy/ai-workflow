@@ -91,6 +91,9 @@
         "src/notes/validate.ts",
         "src/profile/index.ts",
         "src/settings/index.ts",
+        "src/sync/index.ts",
+        "src/sync/merge.ts",
+        "src/sync/source.ts",
         "src/utils/frontmatter.ts",
         "src/utils/fs.ts",
         "src/utils/hash.ts",
@@ -651,7 +654,7 @@
         {
           "file": "src/install/index.ts",
           "name": "ProjectUpgradeReport",
-          "kind": "interface",
+          "kind": "type",
           "visibility": "public"
         },
         {
@@ -957,6 +960,78 @@
         {
           "file": "src/settings/index.ts",
           "name": "writeActiveProfile",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/sync/index.ts",
+          "name": "SyncStatus",
+          "kind": "type",
+          "visibility": "public"
+        },
+        {
+          "file": "src/sync/index.ts",
+          "name": "SyncWarning",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/sync/index.ts",
+          "name": "SyncReport",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/sync/index.ts",
+          "name": "SynchronizeProjectOptions",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/sync/index.ts",
+          "name": "notesStructureDirectories",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/sync/index.ts",
+          "name": "reconcileIgnoreFile",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/sync/index.ts",
+          "name": "synchronizeProject",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/sync/index.ts",
+          "name": "applyTemplateSnapshot",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/sync/merge.ts",
+          "name": "OwnershipConflictError",
+          "kind": "class",
+          "visibility": "public"
+        },
+        {
+          "file": "src/sync/merge.ts",
+          "name": "mergeOwnedSections",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/sync/merge.ts",
+          "name": "validateOwnedSections",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/sync/source.ts",
+          "name": "resolveTemplateSnapshot",
           "kind": "function",
           "visibility": "public"
         },
@@ -1743,6 +1818,11 @@
         },
         {
           "kind": "imports",
+          "from": "src/install/index.ts#ProjectUpgradeReport",
+          "to": "src/sync/index.ts#SyncReport"
+        },
+        {
+          "kind": "imports",
           "from": "src/install/index.ts#activateProfile",
           "to": "src/install/opencode-version.ts#OpencodeVersionOption"
         },
@@ -1823,6 +1903,16 @@
         },
         {
           "kind": "imports",
+          "from": "src/install/index.ts#initializeProject",
+          "to": "src/sync/index.ts#notesStructureDirectories"
+        },
+        {
+          "kind": "imports",
+          "from": "src/install/index.ts#initializeProject",
+          "to": "src/sync/index.ts#reconcileIgnoreFile"
+        },
+        {
+          "kind": "imports",
           "from": "src/install/index.ts#install",
           "to": "src/install/opencode-version.ts#OpencodeVersionOption"
         },
@@ -1869,7 +1959,7 @@
         {
           "kind": "imports",
           "from": "src/install/index.ts#upgradeProject",
-          "to": "src/utils/fs.ts#atomicWrite"
+          "to": "src/sync/index.ts#applyTemplateSnapshot"
         },
         {
           "kind": "imports",
@@ -2450,6 +2540,51 @@
           "kind": "imports",
           "from": "src/workspace/status.ts#workspaceStatus",
           "to": "src/workspace/distribute.ts#resolveWorkspacePlan"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workspace/status.ts#workspaceStatus",
+          "to": "src/workflow/workspace.ts#validateWorkspaceManifest"
+        },
+        {
+          "kind": "imports",
+          "from": "src/sync/source.ts#resolveTemplateSnapshot",
+          "to": "src/sync/merge.ts#validateOwnedSections"
+        },
+        {
+          "kind": "imports",
+          "from": "src/sync/index.ts#applyTemplateSnapshot",
+          "to": "src/sync/merge.ts#mergeOwnedSections"
+        },
+        {
+          "kind": "imports",
+          "from": "src/sync/index.ts#applyTemplateSnapshot",
+          "to": "src/sync/merge.ts#OwnershipConflictError"
+        },
+        {
+          "kind": "imports",
+          "from": "src/sync/index.ts#applyTemplateSnapshot",
+          "to": "src/sync/merge.ts#validateOwnedSections"
+        },
+        {
+          "kind": "imports",
+          "from": "src/sync/index.ts#applyTemplateSnapshot",
+          "to": "src/utils/fs.ts#atomicWrite"
+        },
+        {
+          "kind": "imports",
+          "from": "src/sync/index.ts#notesStructureDirectories",
+          "to": "src/notes/index.ts#noteClasses"
+        },
+        {
+          "kind": "imports",
+          "from": "src/sync/index.ts#notesStructureDirectories",
+          "to": "src/notes/index.ts#noteLifecycles"
+        },
+        {
+          "kind": "imports",
+          "from": "src/sync/index.ts#synchronizeProject",
+          "to": "src/sync/source.ts#resolveTemplateSnapshot"
         }
       ],
       "owner_role": "shared",
@@ -2486,6 +2621,9 @@
         "src/notes/validate.ts",
         "src/profile/index.ts",
         "src/settings/index.ts",
+        "src/sync/index.ts",
+        "src/sync/merge.ts",
+        "src/sync/source.ts",
         "src/utils/frontmatter.ts",
         "src/utils/fs.ts",
         "src/utils/hash.ts",
@@ -2706,6 +2844,7 @@
         "tests/integration/plan-workspace-cli.test.ts",
         "tests/integration/profile-cli.test.ts",
         "tests/integration/project-cli.test.ts",
+        "tests/integration/project-sync-cli.test.ts",
         "tests/integration/project-upgrade.test.ts",
         "tests/integration/workspace-distribute-cli.test.ts",
         "tests/integration/workspace-finalization-git.test.ts",
@@ -2724,6 +2863,8 @@
         "tests/unit/notes-pairing.test.ts",
         "tests/unit/opencode-version.test.ts",
         "tests/unit/profile.test.ts",
+        "tests/unit/project-template-merge.test.ts",
+        "tests/unit/project-template-source.test.ts",
         "tests/unit/settings.test.ts",
         "tests/unit/workflow-execution-order.test.ts",
         "tests/unit/workflow-pairing.test.ts",
@@ -2776,6 +2917,7 @@
         "tests/integration/plan-workspace-cli.test.ts",
         "tests/integration/profile-cli.test.ts",
         "tests/integration/project-cli.test.ts",
+        "tests/integration/project-sync-cli.test.ts",
         "tests/integration/project-upgrade.test.ts",
         "tests/integration/workspace-distribute-cli.test.ts",
         "tests/integration/workspace-finalization-git.test.ts",
@@ -2794,6 +2936,8 @@
         "tests/unit/notes-pairing.test.ts",
         "tests/unit/opencode-version.test.ts",
         "tests/unit/profile.test.ts",
+        "tests/unit/project-template-merge.test.ts",
+        "tests/unit/project-template-source.test.ts",
         "tests/unit/settings.test.ts",
         "tests/unit/workflow-execution-order.test.ts",
         "tests/unit/workflow-pairing.test.ts",
@@ -2873,6 +3017,64 @@
         "tests/integration/plan-workspace-cli.test.ts",
         "tests/integration/workspace-finalization-git.test.ts",
         "tests/integration/workspace-status-cli.test.ts"
+      ],
+      "shared_entry": false
+    },
+    {
+      "id": "project-template-sync",
+      "name": "project-template-sync",
+      "aliases": [
+        "project template synchronization"
+      ],
+      "module_root": "root",
+      "entries": [
+        "templates/project/AGENTS.md",
+        "templates/project/MEMORY.md",
+        "templates/project/notes/AGENTS.md",
+        "templates/project/notes/README.md",
+        "templates/project/notes/archived/AGENTS.md",
+        "templates/project/notes/implemented/AGENTS.md"
+      ],
+      "symbols": [],
+      "related_files": [
+        ".ai-workflow/notes/implemented/feature/2026-10-08-project-template-sync.md",
+        ".ai-workflow/notes/implemented/process/2026-09-16-project-contract-and-agent-notes.md",
+        "MEMORY.md",
+        "src/cli.ts",
+        "src/install/index.ts",
+        "src/sync/index.ts",
+        "src/sync/merge.ts",
+        "src/sync/source.ts"
+      ],
+      "tests": [
+        "tests/integration/project-sync-cli.test.ts",
+        "tests/integration/project-upgrade.test.ts",
+        "tests/unit/project-template-merge.test.ts",
+        "tests/unit/project-template-source.test.ts"
+      ],
+      "depends_on": [],
+      "relations": [],
+      "owner_role": "shared",
+      "responsibility": "Latest-source project template synchronization for adopted projects: fixed branch HEAD retrieval at one immutable commit, owned-section patches, warning continuation and transactional publication",
+      "read_scope": [
+        ".ai-workflow/notes/implemented/feature/2026-10-08-project-template-sync.md",
+        ".ai-workflow/notes/implemented/process/2026-09-16-project-contract-and-agent-notes.md",
+        "MEMORY.md",
+        "src/cli.ts",
+        "src/install/index.ts",
+        "src/sync/index.ts",
+        "src/sync/merge.ts",
+        "src/sync/source.ts",
+        "templates/project/AGENTS.md",
+        "templates/project/MEMORY.md",
+        "templates/project/notes/AGENTS.md",
+        "templates/project/notes/README.md",
+        "templates/project/notes/archived/AGENTS.md",
+        "templates/project/notes/implemented/AGENTS.md",
+        "tests/integration/project-sync-cli.test.ts",
+        "tests/integration/project-upgrade.test.ts",
+        "tests/unit/project-template-merge.test.ts",
+        "tests/unit/project-template-source.test.ts"
       ],
       "shared_entry": false
     }

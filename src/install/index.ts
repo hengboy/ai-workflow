@@ -9,7 +9,7 @@ import type { OpencodeVersionOption } from './opencode-version.js';
 import { resolveOpencodeVersion } from './opencode-version.js';
 import { loadProfile, type Profile } from '../profile/index.js';
 import { loadSettings, writeActiveProfile } from '../settings/index.js';
-import { noteClasses, noteLifecycles } from '../notes/index.js';
+import { applyTemplateSnapshot, notesStructureDirectories, reconcileIgnoreFile, type SyncReport } from '../sync/index.js';
 import { renderNavigation } from '../context/navigation.js';
 import { scanProject } from '../context/discovery/scanner.js';
 import { loadProjectConfig } from '../context/discovery/project-config.js';
@@ -43,8 +43,6 @@ const navigationMarkdownRelative = '.ai-workflow/index/navigation.md';
 const marketplaceRelative = '.agents/plugins/marketplace.json';
 const skillsRelative = '.agents/skills';
 const projectTemplates = ['MEMORY.md', 'navigation.json', 'navigation.md', 'AGENTS.md', 'notes/AGENTS.md', 'notes/README.md', 'notes/implemented/AGENTS.md', 'notes/archived/AGENTS.md', 'notes/archived/manifest.json'] as const;
-const archiveManifestRelative = '.ai-workflow/notes/archived/manifest.json';
-const initOnlyTargets = new Set<string>(['MEMORY.md', navigationJsonRelative, navigationMarkdownRelative]);
 const contractBegin = '<!-- ai-workflow:begin -->';
 const contractEnd = '<!-- ai-workflow:end -->';
 const globalInstructionRelative: Record<Host, string> = { opencode: '.config/opencode/AGENTS.md', claude: '.claude/CLAUDE.md', codex: '.codex/AGENTS.md' };
@@ -57,34 +55,6 @@ async function readTemplateContents(targets: Array<{ source: string; target: str
 async function projectTemplateContents(): Promise<Array<{ target: string; contents: string }>> {
   return readTemplateContents(projectTargets());
 }
-function notesStructureDirectories(): string[] {
-  const directories = ['.ai-workflow/notes'];
-  for (const lifecycle of noteLifecycles) {
-    directories.push(`.ai-workflow/notes/${lifecycle}`);
-    for (const noteClass of noteClasses) directories.push(`.ai-workflow/notes/${lifecycle}/${noteClass}`);
-  }
-  return directories;
-}
-const legacyIgnoreLines = new Set(['.ai-workflow', '.ai-workflow/', 'MEMORY.md']);
-function missingIgnoreLines(original: string): string[] {
-  const lines = original.split(/\r?\n/).map((line) => line.trim());
-  const has = (candidates: string[]): boolean => lines.some((line) => candidates.includes(line));
-  const additions: string[] = [];
-  if (!has(['.ai-workflow/plans', '.ai-workflow/plans/'])) additions.push('.ai-workflow/plans/');
-  if (!has(['.worktrees', '.worktrees/'])) additions.push('.worktrees/');
-  return additions;
-}
-// Legacy versions ignored the whole `.ai-workflow/` tree and `MEMORY.md`. Migrate those entries
-// in place so only `.ai-workflow/plans/` stays ignored and the rest travels with Git.
-function reconcileIgnoreFile(original: string): string | undefined {
-  const lines = original.split('\n');
-  const retained = lines.filter((line) => !legacyIgnoreLines.has(line.trim()));
-  const additions = missingIgnoreLines(retained.join('\n'));
-  if (retained.length === lines.length && additions.length === 0) return undefined;
-  const body = retained.join('\n').trimEnd();
-  return `${body}${body ? '\n' : ''}${additions.join('\n')}${additions.length ? '\n' : ''}`;
-}
-
 function agentsRoot(home: string, host: Host): string {
   if (host === 'codex') return join(home, '.codex/agents');
   if (host === 'claude') return join(home, '.claude/agents');
@@ -391,7 +361,9 @@ export async function initializeProject(project: string): Promise<string[]> {
   return created;
 }
 
-export interface ProjectUpgradeReport { created: string[]; skipped: string[] }
+export type ProjectUpgradeReport = SyncReport & {
+  conflicts: Array<SyncReport['conflicts'][number] & { line?: number; originalLine?: string }>;
+};
 
 // Retired ADR instructions only: the command, its path or numbered references, or an imperative rule that
 // still tells agents to create/read/use ADRs. Descriptive history is not scanned because ADR files are never read here.
@@ -406,89 +378,40 @@ function retiredAdrInstruction(line: string): boolean {
     || /创建|读取|写入|记录|维护|新增|使用|必须|应当|需要/.test(line);
 }
 
-async function isArchiveManifest(path: string): Promise<boolean> {
-  try {
-    const parsed = await readJson<{ version?: unknown; files?: unknown }>(path);
-    return Boolean(parsed) && parsed.version === 1 && typeof parsed.files === 'object' && parsed.files !== null && !Array.isArray(parsed.files);
-  } catch { return false; }
-}
-
 export async function upgradeProject(project: string): Promise<ProjectUpgradeReport> {
   const root = resolve(project);
-  const missingPrerequisites: string[] = [];
+  const conflicts: ProjectUpgradeReport['conflicts'] = [];
   for (const path of ['.ai-workflow', 'MEMORY.md', navigationJsonRelative, navigationMarkdownRelative]) {
-    if (!(await exists(join(root, path)))) missingPrerequisites.push(path);
-  }
-  if (missingPrerequisites.length) throw new Error(`Upgrade prerequisites are missing; no files written. Run init only for a new project:\n${missingPrerequisites.join('\n')}`);
-
-  // Rule files only: never read or convert `.ai-workflow/adr/` history.
-  const ruleFindings: string[] = [];
-  for (const file of ['MEMORY.md', '.ai-workflow/AGENTS.md']) {
-    const path = join(root, file);
-    if (!(await exists(path))) continue;
-    (await readFile(path, 'utf8')).split(/\r?\n/).forEach((line, index) => { if (retiredAdrInstruction(line)) ruleFindings.push(`${file}:${index + 1}: ${line.trim()}`); });
-  }
-  if (ruleFindings.length) throw new Error(`Existing rules still require ADRs; merge them explicitly before upgrading:\n${ruleFindings.join('\n')}`);
-
-  const templates = await readTemplateContents(projectTargets().filter(({ target }) => !initOnlyTargets.has(target)));
-  const skipped: string[] = [];
-  const fileConflicts: Array<{ target: string; suggestion: string }> = [];
-  for (const item of templates) {
-    const path = join(root, item.target);
-    if (!(await exists(path))) continue;
-    if (item.target === archiveManifestRelative) {
-      // The archive manifest is user data: keep any valid manifest byte for byte instead of comparing it to the empty template.
-      if (await isArchiveManifest(path)) { skipped.push(item.target); continue; }
-      fileConflicts.push({ target: item.target, suggestion: item.contents });
-      continue;
-    }
-    if (!(await stat(path)).isFile()) { fileConflicts.push({ target: item.target, suggestion: item.contents }); continue; }
-    if ((await readFile(path, 'utf8')) === item.contents) skipped.push(item.target);
-    else fileConflicts.push({ target: item.target, suggestion: item.contents });
-  }
-  if (fileConflicts.length) throw new Error(`Upgrade conflicts; no files written. Merge these management files manually before retrying:\n${fileConflicts.map(({ target, suggestion }) => `${target}\n--- template content ---\n${suggestion}`).join('\n')}`);
-
-  const directoryConflicts: string[] = [];
-  const missingDirectories: string[] = [];
-  for (const directory of notesStructureDirectories()) {
     try {
-      if ((await stat(join(root, directory))).isDirectory()) { skipped.push(directory); continue; }
-      directoryConflicts.push(directory);
+      const entry = await stat(join(root, path));
+      if (path === '.ai-workflow' ? !entry.isDirectory() : !entry.isFile()) conflicts.push({ path, reason: 'Upgrade prerequisite has an invalid filesystem type' });
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
-      missingDirectories.push(directory);
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code !== 'ENOENT' && code !== 'ENOTDIR') throw error;
+      conflicts.push({ path, reason: 'Upgrade prerequisite is missing; no files written' });
     }
   }
-  if (directoryConflicts.length) throw new Error(`Upgrade conflicts; no files written. Required directories are occupied by non-directories:\n${directoryConflicts.join('\n')}`);
-
-  const ignorePath = join(root, '.gitignore');
-  const ignoreExisted = await exists(ignorePath);
-  const ignoreOriginal = ignoreExisted ? await readFile(ignorePath, 'utf8') : '';
-  const created: string[] = [];
-  // Registered before each write so a failure after rename has committed still reclaims the file.
-  const writtenFiles: string[] = [];
-  const createdDirectories: string[] = [];
-  try {
-    for (const directory of missingDirectories) {
-      await mkdir(join(root, directory), { recursive: true });
-      createdDirectories.push(directory);
-      created.push(directory);
+  const source = { repository: 'hengboy/ai-workflow', branch: 'simplify', commit: null };
+  if (!conflicts.length) {
+    // Rule files only: never read or convert `.ai-workflow/adr/` history.
+    for (const file of ['MEMORY.md', '.ai-workflow/AGENTS.md']) {
+      const path = join(root, file);
+      if (!(await exists(path))) continue;
+      if (!(await stat(path)).isFile()) continue;
+      (await readFile(path, 'utf8')).split(/\r?\n/).forEach((line, index) => {
+        if (retiredAdrInstruction(line)) {
+          conflicts.push({ path: file, line: index + 1, originalLine: line,
+            reason: `Existing rules still require ADRs; merge them explicitly before upgrading: ${file}:${index + 1}: ${line.trim()}` });
+        }
+      });
     }
-    for (const item of templates) {
-      if (skipped.includes(item.target)) continue;
-      const path = join(root, item.target);
-      writtenFiles.push(path);
-      await atomicWrite(path, item.contents);
-      created.push(item.target);
-    }
-    const ignoreContents = reconcileIgnoreFile(ignoreOriginal);
-    if (ignoreContents !== undefined) { await atomicWrite(ignorePath, ignoreContents); created.push('.gitignore'); }
-  } catch (error) {
-    for (const path of writtenFiles) await rm(path, { force: true });
-    if (ignoreExisted) await writeFile(ignorePath, ignoreOriginal);
-    else await rm(ignorePath, { force: true });
-    for (const directory of [...createdDirectories].reverse()) await removeEmptyDirectory(join(root, directory));
-    throw error;
   }
-  return { created, skipped };
+  if (conflicts.length) {
+    return { project: root, source, status: 'conflict', verified: false, proceed: false, check: false,
+      created: [], updated: [], skipped: [], warnings: [], conflicts: conflicts.sort((left, right) => left.path! < right.path! ? -1 : left.path! > right.path! ? 1 : 0) };
+  }
+  const targets = projectTargets();
+  const templates = await readTemplateContents(targets);
+  const files = Object.fromEntries(targets.map(({ source: path }, index) => [path.replace(/\\/g, '/'), templates[index]!.contents]));
+  return applyTemplateSnapshot({ projectRoot: root }, { source, files });
 }

@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
-import { upgradeProject } from '../../src/install/index.js';
+import { initializeProject, upgradeProject } from '../../src/install/index.js';
 import { exists } from '../../src/utils/fs.js';
 import { notePair, temporary } from '../helpers.js';
 
@@ -50,7 +50,6 @@ const managementFiles = [
 const existingProposalPath = '.ai-workflow/notes/proposed/feature/2026-08-01-existing-proposal.md';
 const existingPlanPath = '.ai-workflow/plans/20260901-existing/spec.md';
 const preservedPaths = [
-  'MEMORY.md',
   '.ai-workflow/index/navigation.json',
   '.ai-workflow/index/navigation.md',
   existingPlanPath,
@@ -118,7 +117,21 @@ Keep the delivered record as frozen history.
 `;
 
 type CliResult = { code: number; stdout: string; stderr: string };
-type UpgradeResult = { created: string[]; skipped: string[] };
+type UpgradeReport = {
+  project: string;
+  source: { repository: string; branch: string; commit: string | null };
+  status: string;
+  verified: boolean;
+  proceed: boolean;
+  check: boolean;
+  created: string[];
+  updated: string[];
+  skipped: string[];
+  warnings: Array<{ reason: string; path?: string; section?: string }>;
+  conflicts: Array<{ reason: string; path?: string; section?: string }>;
+};
+
+const localSnapshotWarningReason = 'Local shipped templates were used; the current upstream snapshot has not been verified';
 
 async function runCli(args: string[]): Promise<CliResult> {
   try {
@@ -134,10 +147,20 @@ async function runCli(args: string[]): Promise<CliResult> {
   }
 }
 
-async function upgrade(project: string): Promise<UpgradeResult> {
+/**
+ * Run the supported `init --upgrade` local path and enforce the local-only report contract:
+ * exit 2, `needs_attention`, unverified, safe continuation, and the exact local-snapshot warning.
+ */
+async function upgrade(project: string): Promise<UpgradeReport> {
   const result = await runCli(['init', project, '--upgrade']);
-  expect(result.code, `init --upgrade failed (exit ${result.code}): ${result.stderr}`).toBe(0);
-  return JSON.parse(result.stdout) as UpgradeResult;
+  expect(result.code, `init --upgrade exit ${result.code}: ${result.stderr}`).toBe(2);
+  const report = JSON.parse(result.stdout) as UpgradeReport;
+  expect(report.status).toBe('needs_attention');
+  expect(report.verified).toBe(false);
+  expect(report.proceed).toBe(true);
+  expect(report.source.commit).toBeNull();
+  expect(report.warnings).toEqual(expect.arrayContaining([expect.objectContaining({ reason: localSnapshotWarningReason })]));
+  return report;
 }
 
 function normalized(entries: readonly string[]): string[] {
@@ -216,6 +239,10 @@ describe('project upgrade', () => {
 
     for (const path of preservedPaths) expect(created).not.toContain(path);
     expect(created.filter((entry) => skipped.includes(entry))).toEqual([]);
+
+    // MEMORY.md is a managed target now: its independent standard survives even though managed sections are added.
+    expect(await readFile(join(root, 'MEMORY.md'), 'utf8')).toContain('Existing standard that must survive an upgrade.');
+    expect(created).not.toContain('MEMORY.md');
 
     await expectUnchanged(root, before);
   });
@@ -302,7 +329,7 @@ describe('project upgrade', () => {
     const result = await upgrade(root);
 
     expect(normalized(result.created)).toEqual(expect.arrayContaining([...managementFiles]));
-    expect(await readFile(join(root, 'MEMORY.md'), 'utf8')).toBe(memory);
+    expect(await readFile(join(root, 'MEMORY.md'), 'utf8')).toContain(line);
   });
 
   it('REQ-007 keeps the removed update command unavailable', async () => {
@@ -326,14 +353,17 @@ describe('project upgrade failure boundaries', () => {
     const before = await snapshotTree(root);
 
     const result = await runCli(['init', root, '--upgrade']);
-    const output = `${result.stderr}${result.stdout}`;
-
-    expect(result.code).not.toBe(0);
-    expect(output).toMatch(/prerequisites are missing/i);
-    expect(output).toMatch(/(^|\n)\.ai-workflow(\n|$)/);
-    expect(output).toContain('.ai-workflow/index/navigation.json');
-    expect(output).toContain('.ai-workflow/index/navigation.md');
-    expect(output).toMatch(/no files written/i);
+    expect(result.code).toBe(1);
+    const report = JSON.parse(result.stdout) as UpgradeReport;
+    expect(report.status).toBe('conflict');
+    expect(report.verified).toBe(false);
+    expect(report.proceed).toBe(false);
+    expect(report.created).toEqual([]);
+    expect(report.conflicts).toEqual(expect.arrayContaining([
+      expect.objectContaining({ path: '.ai-workflow', reason: expect.stringMatching(/no files written/i) }),
+      expect.objectContaining({ path: '.ai-workflow/index/navigation.json' }),
+      expect.objectContaining({ path: '.ai-workflow/index/navigation.md' }),
+    ]));
     await expectTreeUnchanged(root, before);
   });
 
@@ -344,12 +374,12 @@ describe('project upgrade failure boundaries', () => {
     const before = await snapshotTree(root);
 
     const result = await runCli(['init', root, '--upgrade']);
-    const output = `${result.stderr}${result.stdout}`;
-
-    expect(result.code).not.toBe(0);
-    expect(output).toMatch(/prerequisites are missing/i);
-    expect(output).toMatch(/(^|\n)MEMORY\.md(\n|$)/);
-    expect(output).toMatch(/no files written/i);
+    expect(result.code).toBe(1);
+    const report = JSON.parse(result.stdout) as UpgradeReport;
+    expect(report.status).toBe('conflict');
+    expect(report.proceed).toBe(false);
+    expect(report.created).toEqual([]);
+    expect(report.conflicts.some((entry) => entry.path === 'MEMORY.md' && /missing/i.test(entry.reason))).toBe(true);
     await expectTreeUnchanged(root, before);
   });
 
@@ -362,41 +392,53 @@ describe('project upgrade failure boundaries', () => {
       const before = await snapshotTree(root);
 
       const result = await runCli(['init', root, '--upgrade']);
-      const output = `${result.stderr}${result.stdout}`;
-
-      expect(result.code).not.toBe(0);
-      expect(output).toMatch(/prerequisites are missing/i);
-      expect(output).toContain(missing);
-      expect(output).toMatch(/no files written/i);
+      expect(result.code).toBe(1);
+      const report = JSON.parse(result.stdout) as UpgradeReport;
+      expect(report.status).toBe('conflict');
+      expect(report.proceed).toBe(false);
+      expect(report.created).toEqual([]);
+      expect(report.conflicts.some((entry) => entry.path === missing && /missing/i.test(entry.reason))).toBe(true);
       await expectTreeUnchanged(root, before);
     },
   );
 
-  it('AC-014 reports every conflicting management file with its suggested content before any write', async () => {
-    const root = await temporary('ai-workflow-upgrade-conflict-');
+  it('AC-014 preserves a differing unmarked same-heading rule and still creates safe missing management content', async () => {
+    const root = await temporary('ai-workflow-upgrade-unmarked-');
     await writeExistingProject(root);
-    const contractBytes = '# Custom contract\n\nHand-written project guidance.\n';
-    const readmeBytes = '# Custom notes governance\n\nHand-written rules.\n';
+    const contractBytes = [
+      '# Custom contract',
+      '',
+      '## Shared context and maintenance',
+      '',
+      'Hand-written differing shared context.',
+      '',
+    ].join('\n');
     await writeFile(join(root, '.ai-workflow/AGENTS.md'), contractBytes);
-    await writeFile(join(root, '.ai-workflow/notes/README.md'), readmeBytes);
-    const before = await snapshotTree(root);
+    const before = await snapshot(root, preservedPaths);
 
-    const result = await runCli(['init', root, '--upgrade']);
-    const output = `${result.stderr}${result.stdout}`;
+    const report = await upgrade(root);
 
-    expect(result.code).not.toBe(0);
-    expect(output).toMatch(/conflicts; no files written/i);
-    expect(output).toContain('.ai-workflow/AGENTS.md');
-    expect(output).toContain('.ai-workflow/notes/README.md');
-    expect(output).toContain('--- template content ---');
-    const suggestedContract = await readFile(new URL('../../templates/project/AGENTS.md', import.meta.url), 'utf8');
-    const suggestedReadme = await readFile(new URL('../../templates/project/notes/README.md', import.meta.url), 'utf8');
-    expect(output).toContain(suggestedContract);
-    expect(output).toContain(suggestedReadme);
+    // Local templates cannot claim freshness; the differing rule is a warning, not a blocker.
+    expect(report.status).toBe('needs_attention');
+    expect(report.warnings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ path: '.ai-workflow/AGENTS.md', section: 'shared-context', reason: expect.stringMatching(/differs|ambiguous/i) }),
+    ]));
 
-    await expectTreeUnchanged(root, before);
-    expect(await readFile(join(root, '.ai-workflow/AGENTS.md'), 'utf8')).toBe(contractBytes);
-    expect(await readFile(join(root, '.ai-workflow/notes/README.md'), 'utf8')).toBe(readmeBytes);
+    // The differing unmarked same-heading rule survives byte-for-byte exactly once: no overwrite and no duplicate.
+    const upgradedContract = await readFile(join(root, '.ai-workflow/AGENTS.md'), 'utf8');
+    expect(upgradedContract.startsWith(contractBytes)).toBe(true);
+    expect(upgradedContract.split('Hand-written differing shared context.').length - 1).toBe(1);
+    expect(upgradedContract.split('## Shared context and maintenance').length - 1).toBe(1);
+    // Safe missing managed sections are still added.
+    expect(upgradedContract).toContain('## Orchestration');
+    expect(normalized(report.updated)).toContain('.ai-workflow/AGENTS.md');
+
+    // Safe missing management files are still created.
+    expect(normalized(report.created)).toEqual(expect.arrayContaining(managementFiles.filter((path) => path !== '.ai-workflow/AGENTS.md')));
+    for (const path of managementFiles) expect(await exists(join(root, path))).toBe(true);
+
+    // Independent data survives.
+    await expectUnchanged(root, before);
   });
 
   it('AC-014 stops before writing and reports the exact MEMORY.md line that still requires ADRs', async () => {
@@ -503,7 +545,11 @@ describe('project upgrade failure boundaries', () => {
     // written earlier in this call and the .gitignore bytes it replaced.
     fsControl.failPath = '.gitignore';
     fsControl.after = true;
-    await expect(upgradeProject(root)).rejects.toThrow(/injected write failure/);
+    const report = await upgradeProject(root);
+    expect(report.status).toBe('failed');
+    expect(report.verified).toBe(false);
+    expect(report.proceed).toBe(false);
+    expect(report.warnings.some((warning) => /injected write failure/.test(warning.reason))).toBe(true);
 
     await expectTreeUnchanged(root, before);
     expect(await readFile(join(root, '.gitignore'), 'utf8')).toBe('dist/\n');
@@ -527,11 +573,120 @@ describe('project upgrade failure boundaries', () => {
     // though atomicWrite never returned and the upgrade never registered it for cleanup.
     fsControl.failPath = '.ai-workflow/AGENTS.md';
     fsControl.after = true;
-    await expect(upgradeProject(root)).rejects.toThrow(/injected write failure/);
+    const report = await upgradeProject(root);
+    expect(report.status).toBe('failed');
+    expect(report.verified).toBe(false);
+    expect(report.proceed).toBe(false);
+    expect(report.warnings.some((warning) => /injected write failure/.test(warning.reason))).toBe(true);
 
     await expectTreeUnchanged(root, before);
     expect(await readFile(join(root, '.gitignore'), 'utf8')).toBe('.ai-workflow/\n*.log\nMEMORY.md\n');
     expect(await readFile(historyPath, 'utf8')).toBe(historyBytes);
     expect(await exists(join(root, '.ai-workflow/AGENTS.md'))).toBe(false);
+  });
+
+  it('AC-010 blocks with a conflict when a supported managed path is occupied by a directory', async () => {
+    const root = await temporary('ai-workflow-upgrade-eisdir-');
+    await writeExistingProject(root);
+    await mkdir(join(root, '.ai-workflow/AGENTS.md'), { recursive: true });
+    await writeFile(join(root, '.ai-workflow/AGENTS.md/placeholder'), 'occupied\n');
+    const before = await snapshotTree(root);
+
+    const report = await upgradeProject(root);
+
+    expect(report.status).toBe('conflict');
+    expect(report.verified).toBe(false);
+    expect(report.proceed).toBe(false);
+    expect(report.updated).toEqual([]);
+    expect(report.conflicts.some((entry) => entry.path === '.ai-workflow/AGENTS.md')).toBe(true);
+    await expectTreeUnchanged(root, before);
+  });
+});
+
+// --- Owned-section adoption lifecycle (fresh init markers + local upgrade patch core) ---
+
+const ownedBeginMarker = /<!-- ai-workflow:section ([^:\s<>]+):begin -->\n/;
+
+/** Independent extraction of the first owned section, used only to build the stale fixture. */
+function firstOwnedSection(content: string): { id: string; bodyStart: number; bodyEnd: number } {
+  const begin = ownedBeginMarker.exec(content);
+  if (!begin) throw new Error('Shipped template is missing an owned section marker');
+  const id = begin[1] as string;
+  const bodyStart = begin.index + begin[0].length;
+  const bodyEnd = content.indexOf(`<!-- ai-workflow:section ${id}:end -->`, bodyStart);
+  if (bodyEnd === -1) throw new Error(`Shipped template is missing the end marker for ${id}`);
+  return { id, bodyStart, bodyEnd };
+}
+
+interface UpgradeLifecycleReport {
+  created: string[];
+  updated: string[];
+  skipped: string[];
+  status: string;
+  verified: boolean;
+  proceed: boolean;
+  source?: { repository: string; branch: string; commit: string | null };
+}
+
+const markdownDestinations = [
+  '.ai-workflow/AGENTS.md',
+  'MEMORY.md',
+  '.ai-workflow/notes/AGENTS.md',
+  '.ai-workflow/notes/README.md',
+  '.ai-workflow/notes/implemented/AGENTS.md',
+  '.ai-workflow/notes/archived/AGENTS.md',
+] as const;
+
+describe('project upgrade owned-section lifecycle', () => {
+  it('owned-section lifecycle: fresh init marks every management file and a local upgrade replaces stale owned bodies while preserving independent data', async () => {
+    const root = await temporary('ai-workflow-upgrade-owned-');
+    await mkdir(join(root, 'src'), { recursive: true });
+    await writeFile(join(root, 'src/index.ts'), 'export const existing = true;\n');
+
+    await initializeProject(root);
+
+    // Fresh init delivers ownership markers in all six Markdown management destinations.
+    for (const destination of markdownDestinations) {
+      const contents = await readFile(join(root, destination), 'utf8');
+      expect(contents, `${destination} must carry an owned begin marker`).toMatch(/<!-- ai-workflow:section [^:\s<>]+:begin -->/);
+      expect(contents, `${destination} must carry an owned end marker`).toMatch(/<!-- ai-workflow:section [^:\s<>]+:end -->/);
+    }
+
+    // Independent project data that must survive the upgrade.
+    const frozenPlan = '.ai-workflow/plans/20260101-custom/spec.md';
+    const customNote = '.ai-workflow/notes/implemented/feature/2026-01-01-custom.md';
+    await mkdir(join(root, '.ai-workflow/plans/20260101-custom'), { recursive: true });
+    await mkdir(join(root, '.ai-workflow/notes/implemented/feature'), { recursive: true });
+    await writeFile(join(root, frozenPlan), '# Frozen plan\n\nIndependent frozen plan bytes.\n');
+    await writeFile(join(root, customNote), '# Custom note\n\nIndependent note bytes.\n');
+    const memoryBefore = await readFile(join(root, 'MEMORY.md'), 'utf8');
+    const navigationBefore = await readFile(join(root, '.ai-workflow/index/navigation.json'), 'utf8');
+
+    // Stale one owned body in the shipped AGENTS.md template and add project-owned bytes around it.
+    const template = await readFile(new URL('../../templates/project/AGENTS.md', import.meta.url), 'utf8');
+    const section = firstOwnedSection(template);
+    const customPrefix = 'custom prefix line\n';
+    const customSuffix = 'custom suffix line\n';
+    const stale = `${template.slice(0, section.bodyStart)}STALE OWNED BODY\n${template.slice(section.bodyEnd)}`;
+    await writeFile(join(root, '.ai-workflow/AGENTS.md'), `${customPrefix}${stale}${customSuffix}`);
+
+    const report = (await upgradeProject(root)) as unknown as UpgradeLifecycleReport;
+
+    // The stale owned body is replaced from the shipped section; custom outside bytes are retained.
+    expect(await readFile(join(root, '.ai-workflow/AGENTS.md'), 'utf8')).toBe(`${customPrefix}${template}${customSuffix}`);
+    expect(report.updated).toContain('.ai-workflow/AGENTS.md');
+    expect(report.created).toEqual([]);
+    expect(report.skipped).toEqual(expect.arrayContaining(['MEMORY.md', '.ai-workflow/notes/AGENTS.md']));
+    // Local templates cannot claim current upstream freshness, but safe work may continue.
+    expect(report.verified).toBe(false);
+    expect(report.proceed).toBe(true);
+    expect(report.source?.commit ?? null).toBeNull();
+    expect(['synchronized', 'needs_attention']).toContain(report.status);
+
+    // Independent project data survives byte-for-byte.
+    expect(await readFile(join(root, frozenPlan), 'utf8')).toBe('# Frozen plan\n\nIndependent frozen plan bytes.\n');
+    expect(await readFile(join(root, customNote), 'utf8')).toBe('# Custom note\n\nIndependent note bytes.\n');
+    expect(await readFile(join(root, 'MEMORY.md'), 'utf8')).toBe(memoryBefore);
+    expect(await readFile(join(root, '.ai-workflow/index/navigation.json'), 'utf8')).toBe(navigationBefore);
   });
 });

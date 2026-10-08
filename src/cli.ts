@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import type { Host } from './workflow/types.js';
 import { activateProfile, install, uninstall, initializeProject, upgradeProject } from './install/index.js';
+import { synchronizeProject } from './sync/index.js';
 import { createNavigationCandidate, rebuildNavigation, refreshContext, validateContext, verifyNavigation } from './context/validate.js';
 import { locateContext } from './context/locate.js';
 import { discoverFallback, type FallbackPacket } from './context/fallback.js';
@@ -28,7 +29,17 @@ const program = new Command().name('ai-workflow').description('Native-host plann
 function opencodeVersionOption(value: string): 'v1' | 'v2' | 'auto' { if (value === 'v1' || value === 'v2' || value === 'auto') return value; throw new Error(`Invalid opencode version: ${value}`); }
 program.command('install').requiredOption('--host <host>').option('--home <path>').option('--opencode-version <version>', 'opencode agent format: v1, v2 or auto (default auto)', 'auto').action(async ({ host, home, opencodeVersion }: { host: string; home?: string; opencodeVersion: string }) => print(await install(hostList(host), { ...(home ? { home } : {}), opencodeVersion: opencodeVersionOption(opencodeVersion) })));
 program.command('uninstall').requiredOption('--host <host>').option('--home <path>').action(async ({ host, home }: { host: string; home?: string }) => print(await uninstall(hostList(host), { ...(home ? { home } : {}) })));
-program.command('init').argument('[project]').option('--upgrade', 'complete missing project contract and notes management files in an existing project').action(async (project: string | undefined, { upgrade }: { upgrade?: boolean }) => print(upgrade ? await upgradeProject(project ?? process.cwd()) : { created: await initializeProject(project ?? process.cwd()) }));
+program.command('init').argument('[project]').option('--upgrade', 'patch owned workflow sections from shipped templates in an existing project').action(async (project: string | undefined, { upgrade }: { upgrade?: boolean }) => {
+  if (!upgrade) { print({ created: await initializeProject(project ?? process.cwd()) }); return; }
+  const report = await upgradeProject(project ?? process.cwd());
+  print(report);
+  process.exitCode = report.status === 'synchronized' ? 0 : report.status === 'unverified' || report.status === 'needs_attention' ? 2 : 1;
+});
+program.command('sync').argument('[project]').option('--check', 'report pending synchronization without writing').action(async (project: string | undefined, { check }: { check?: boolean }) => {
+  const report = await synchronizeProject({ projectRoot: project ?? process.cwd(), check: Boolean(check) });
+  print(report);
+  process.exitCode = report.status === 'synchronized' ? 0 : report.status === 'unverified' || report.status === 'needs_attention' ? 2 : 1;
+});
 const profile = program.command('profile');
 profile.command('activate').argument('<name>').option('--home <path>').option('--opencode-version <version>', 'opencode agent format: v1, v2 or auto (default auto)', 'auto').action(async (name: string, { home, opencodeVersion }: { home?: string; opencodeVersion: string }) => print(await activateProfile(name, { ...(home ? { home } : {}), opencodeVersion: opencodeVersionOption(opencodeVersion) })));
 
