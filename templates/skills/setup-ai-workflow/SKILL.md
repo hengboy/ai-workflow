@@ -9,6 +9,18 @@ description: Initialize ai-workflow in a project, or upgrade an existing adoptio
 
 Set up ai-workflow with the locally installed `ai-workflow` CLI: first-time initialization for a project that has not adopted ai-workflow yet, or an upgrade that completes missing management files and directories in an existing project. Run an upgrade only when the user explicitly authorizes it. Report every result. Do not invoke external orchestrators or provider APIs.
 
+## Routine preflight and authorization
+
+Installing the shared synchronization entry authorizes only the narrow routine preflight that
+patches the project's management files (the marked workflow instructions); it does not run this
+setup workflow or first adoption by itself. A first-time initialization, and any upgrade of an
+existing adoption, remain explicit user-authorized actions and are never inferred from finding
+an existing `.ai-workflow/` directory.
+
+The synchronization entry and this setup workflow perform no Git operation. They write only the
+managed workflow instruction files inside the actual project root or coding worktree and never
+expand into product scope.
+
 ## Required inputs
 
 - The exact project path. Ask for it if the user did not provide one.

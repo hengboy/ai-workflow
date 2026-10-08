@@ -1,0 +1,4 @@
+interface:
+  display_name: "Sync AI Workflow"
+  short_description: "Synchronize an adopted project's managed workflow instructions."
+  default_prompt: "Use $sync-ai-workflow to synchronize this adopted project's managed workflow instructions."

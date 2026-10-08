@@ -40,9 +40,17 @@
       "module_root": "root",
       "entries": [
         "eslint.config.js",
+        "templates/hooks/opencode.js",
         "vitest.config.ts"
       ],
-      "symbols": [],
+      "symbols": [
+        {
+          "file": "templates/hooks/opencode.js",
+          "name": "AiWorkflowSyncPlugin",
+          "kind": "function",
+          "visibility": "public"
+        }
+      ],
       "related_files": [],
       "tests": [],
       "depends_on": [],
@@ -51,6 +59,7 @@
       "responsibility": "Discovered typescript module at .",
       "read_scope": [
         "eslint.config.js",
+        "templates/hooks/opencode.js",
         "vitest.config.ts"
       ],
       "shared_entry": false
@@ -108,7 +117,9 @@
         "src/workflow/workspace.ts",
         "src/workspace/distribute.ts",
         "src/workspace/git.ts",
-        "src/workspace/status.ts"
+        "src/workspace/status.ts",
+        "src/install/hooks.ts",
+        "src/sync/gate.ts"
       ],
       "symbols": [
         {
@@ -1478,6 +1489,66 @@
           "name": "workspaceStatus",
           "kind": "function",
           "visibility": "public"
+        },
+        {
+          "file": "src/install/hooks.ts",
+          "name": "SynchronizationDeployment",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/install/hooks.ts",
+          "name": "SynchronizationOwnership",
+          "kind": "type",
+          "visibility": "public"
+        },
+        {
+          "file": "src/install/hooks.ts",
+          "name": "SynchronizationRecords",
+          "kind": "type",
+          "visibility": "public"
+        },
+        {
+          "file": "src/install/hooks.ts",
+          "name": "installSynchronization",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/install/hooks.ts",
+          "name": "synchronizationPath",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/install/hooks.ts",
+          "name": "uninstallSynchronization",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/sync/gate.ts",
+          "name": "ProjectGateInput",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/sync/gate.ts",
+          "name": "ProjectGateOptions",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/sync/gate.ts",
+          "name": "ProjectGateResult",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/sync/gate.ts",
+          "name": "runProjectGate",
+          "kind": "function",
+          "visibility": "public"
         }
       ],
       "related_files": [
@@ -1920,16 +1991,6 @@
           "kind": "imports",
           "from": "src/install/index.ts#install",
           "to": "src/profile/index.ts#Profile"
-        },
-        {
-          "kind": "imports",
-          "from": "src/install/index.ts#install",
-          "to": "src/utils/fs.ts#atomicWrite"
-        },
-        {
-          "kind": "imports",
-          "from": "src/install/index.ts#install",
-          "to": "src/utils/fs.ts#exists"
         },
         {
           "kind": "imports",
@@ -2585,6 +2646,106 @@
           "kind": "imports",
           "from": "src/sync/index.ts#synchronizeProject",
           "to": "src/sync/source.ts#resolveTemplateSnapshot"
+        },
+        {
+          "kind": "imports",
+          "from": "src/install/hooks.ts#SynchronizationDeployment",
+          "to": "src/workflow/types.ts#Host"
+        },
+        {
+          "kind": "imports",
+          "from": "src/install/hooks.ts#SynchronizationRecords",
+          "to": "src/workflow/types.ts#Host"
+        },
+        {
+          "kind": "imports",
+          "from": "src/install/hooks.ts#synchronizationPath",
+          "to": "src/workflow/types.ts#Host"
+        },
+        {
+          "kind": "imports",
+          "from": "src/install/hooks.ts#installSynchronization",
+          "to": "src/workflow/types.ts#Host"
+        },
+        {
+          "kind": "imports",
+          "from": "src/install/hooks.ts#installSynchronization",
+          "to": "src/utils/fs.ts#exists"
+        },
+        {
+          "kind": "imports",
+          "from": "src/install/hooks.ts#installSynchronization",
+          "to": "src/utils/hash.ts#sha256"
+        },
+        {
+          "kind": "imports",
+          "from": "src/install/hooks.ts#installSynchronization",
+          "to": "src/utils/schema.ts#packagePath"
+        },
+        {
+          "kind": "imports",
+          "from": "src/install/hooks.ts#installSynchronization",
+          "to": "src/utils/fs.ts#atomicWrite"
+        },
+        {
+          "kind": "imports",
+          "from": "src/install/hooks.ts#installSynchronization",
+          "to": "src/utils/fs.ts#writeJson"
+        },
+        {
+          "kind": "imports",
+          "from": "src/install/hooks.ts#uninstallSynchronization",
+          "to": "src/workflow/types.ts#Host"
+        },
+        {
+          "kind": "imports",
+          "from": "src/install/hooks.ts#uninstallSynchronization",
+          "to": "src/utils/fs.ts#exists"
+        },
+        {
+          "kind": "imports",
+          "from": "src/install/hooks.ts#uninstallSynchronization",
+          "to": "src/utils/hash.ts#sha256"
+        },
+        {
+          "kind": "imports",
+          "from": "src/install/hooks.ts#uninstallSynchronization",
+          "to": "src/utils/fs.ts#writeJson"
+        },
+        {
+          "kind": "imports",
+          "from": "src/install/index.ts#install",
+          "to": "src/install/hooks.ts#synchronizationPath"
+        },
+        {
+          "kind": "imports",
+          "from": "src/install/index.ts#uninstall",
+          "to": "src/install/hooks.ts#uninstallSynchronization"
+        },
+        {
+          "kind": "imports",
+          "from": "src/sync/gate.ts#ProjectGateOptions",
+          "to": "src/sync/index.ts#SynchronizeProjectOptions"
+        },
+        {
+          "kind": "imports",
+          "from": "src/sync/gate.ts#ProjectGateResult",
+          "to": "src/sync/index.ts#SyncReport"
+        },
+        {
+          "kind": "imports",
+          "from": "src/sync/gate.ts#runProjectGate",
+          "to": "src/sync/index.ts#SyncReport"
+        },
+        {
+          "kind": "imports",
+          "from": "src/sync/gate.ts#runProjectGate",
+          "to": "src/utils/fs.ts#atomicWrite"
+        },
+        {
+          "kind": "imports",
+          "from": "src/sync/gate.ts#runProjectGate",
+          "to": "src/sync/index.ts#synchronizeProject"
         }
       ],
       "owner_role": "shared",
@@ -2638,7 +2799,9 @@
         "src/workflow/workspace.ts",
         "src/workspace/distribute.ts",
         "src/workspace/git.ts",
-        "src/workspace/status.ts"
+        "src/workspace/status.ts",
+        "src/install/hooks.ts",
+        "src/sync/gate.ts"
       ],
       "shared_entry": false
     },
@@ -2869,7 +3032,11 @@
         "tests/unit/workflow-execution-order.test.ts",
         "tests/unit/workflow-pairing.test.ts",
         "tests/unit/workflow-read-scope.test.ts",
-        "tests/unit/workflow-workspace.test.ts"
+        "tests/unit/workflow-workspace.test.ts",
+        "tests/behavior/project-sync-content.test.ts",
+        "tests/install/sync-hooks.test.ts",
+        "tests/integration/project-sync-hooks.test.ts",
+        "tests/unit/project-sync-gate.test.ts"
       ],
       "depends_on": [],
       "relations": [],
@@ -2942,7 +3109,11 @@
         "tests/unit/workflow-execution-order.test.ts",
         "tests/unit/workflow-pairing.test.ts",
         "tests/unit/workflow-read-scope.test.ts",
-        "tests/unit/workflow-workspace.test.ts"
+        "tests/unit/workflow-workspace.test.ts",
+        "tests/behavior/project-sync-content.test.ts",
+        "tests/install/sync-hooks.test.ts",
+        "tests/integration/project-sync-hooks.test.ts",
+        "tests/unit/project-sync-gate.test.ts"
       ],
       "shared_entry": false
     },
@@ -3044,35 +3215,67 @@
         "src/install/index.ts",
         "src/sync/index.ts",
         "src/sync/merge.ts",
-        "src/sync/source.ts"
+        "src/sync/source.ts",
+        ".ai-workflow/AGENTS.md",
+        ".ai-workflow/notes/implemented/architecture/2026-09-14-user-level-agent-contract.md",
+        "src/install/hooks.ts",
+        "src/sync/gate.ts",
+        "templates/contract/AGENTS.md",
+        "templates/hooks/opencode.js",
+        "templates/skills/coding/SKILL.md",
+        "templates/skills/planning/SKILL.md",
+        "templates/skills/plan-to-tasks/SKILL.md",
+        "templates/skills/setup-ai-workflow/SKILL.md",
+        "templates/skills/sync-ai-workflow/SKILL.md",
+        "templates/skills/sync-ai-workflow/agents/openai.yaml"
       ],
       "tests": [
         "tests/integration/project-sync-cli.test.ts",
         "tests/integration/project-upgrade.test.ts",
         "tests/unit/project-template-merge.test.ts",
-        "tests/unit/project-template-source.test.ts"
+        "tests/unit/project-template-source.test.ts",
+        "tests/behavior/project-sync-content.test.ts",
+        "tests/install/sync-hooks.test.ts",
+        "tests/integration/project-sync-hooks.test.ts",
+        "tests/unit/project-sync-gate.test.ts"
       ],
       "depends_on": [],
       "relations": [],
       "owner_role": "shared",
-      "responsibility": "Latest-source project template synchronization for adopted projects: fixed branch HEAD retrieval at one immutable commit, owned-section patches, warning continuation and transactional publication",
+      "responsibility": "Latest-source project template synchronization for adopted projects: fixed branch HEAD retrieval at one immutable commit, owned-section patches, warning continuation, transactional publication, and the additive native host entries and phase bridge that invoke the shared gate",
       "read_scope": [
+        ".ai-workflow/AGENTS.md",
+        ".ai-workflow/notes/implemented/architecture/2026-09-14-user-level-agent-contract.md",
         ".ai-workflow/notes/implemented/feature/2026-10-08-project-template-sync.md",
         ".ai-workflow/notes/implemented/process/2026-09-16-project-contract-and-agent-notes.md",
         "MEMORY.md",
         "src/cli.ts",
+        "src/install/hooks.ts",
         "src/install/index.ts",
+        "src/sync/gate.ts",
         "src/sync/index.ts",
         "src/sync/merge.ts",
         "src/sync/source.ts",
+        "templates/contract/AGENTS.md",
+        "templates/hooks/opencode.js",
         "templates/project/AGENTS.md",
         "templates/project/MEMORY.md",
         "templates/project/notes/AGENTS.md",
         "templates/project/notes/README.md",
         "templates/project/notes/archived/AGENTS.md",
         "templates/project/notes/implemented/AGENTS.md",
+        "templates/skills/coding/SKILL.md",
+        "templates/skills/plan-to-tasks/SKILL.md",
+        "templates/skills/planning/SKILL.md",
+        "templates/skills/setup-ai-workflow/SKILL.md",
+        "templates/skills/sync-ai-workflow/SKILL.md",
+        "templates/skills/sync-ai-workflow/agents/openai.yaml",
+        "tests/behavior/project-sync-content.test.ts",
+        "tests/install/sync-hooks.test.ts",
         "tests/integration/project-sync-cli.test.ts",
+        "tests/integration/project-sync-hooks.test.ts",
         "tests/integration/project-upgrade.test.ts",
+        "tests/unit/project-sync-gate.test.ts",
         "tests/unit/project-template-merge.test.ts",
         "tests/unit/project-template-source.test.ts"
       ],

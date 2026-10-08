@@ -30,3 +30,4 @@ Status: implemented
 - `update` 子命令与 `.ai-workflow/project-manifest.json` 的移除是破坏性变更，当时版本号为 `0.1.0`。
 - `README.md`、`templates/skills/setup-ai-workflow/SKILL.md` 与 `MEMORY.md` 在同一变更内对齐了新语义。
 - 取代带来的代价：契约文本不再完整存在于全局文件，缺失 `.ai-workflow/AGENTS.md` 的项目必须以 `ai-workflow init <project-root> --upgrade` 作为修复入口，不再回退到旧的全局完整契约。
+- 2026-10-08 的[项目模板同步记录](../feature/2026-10-08-project-template-sync.md)交付的原生宿主条目部分取代了本记录的“仅全局入口”执行方式：用户级标记块仍拥有加载入口，标记块所有权与历史理由得以保留，但已安装的 OpenCode 插件与 Claude/Codex 钩子条目现在也调用共享同步动作。

@@ -24,6 +24,28 @@ Directly read `.ai-workflow/AGENTS.md`, `MEMORY.md`, `.ai-workflow/index/navigat
 
 Route note format, lifecycle, supersession and archive governance through `.ai-workflow/notes/README.md`, reached via `.ai-workflow/notes/AGENTS.md`; do not copy those rules into task files. Add only the relevant notes and governance files to a task's bounded read/write scope, as exact paths, and never require a task to read the entire notes history.
 
+## Work-boundary synchronization
+
+Before it begins its own split phase, plan-to-tasks invokes the shared native synchronization
+entry for the actual project root:
+`ai-workflow sync-hook --host <current-host> --phase --project <actual-root>`.
+It prints the raw gate JSON: the top-level `decision` is `allow`, `deny` or `skip`, the nested
+`report` (absent for `skip` or an actor exemption) carries `status`, `verified` and `proceed`,
+and the process exits 0 even when it denies. Follow `decision` rather than the exit code: `deny`
+or a `conflict` or `failed` `report.status` stops the split, a warning `report.status` proceeds
+with visible context but makes no freshness claim, and `skip` means no adoption was found. The
+manual `ai-workflow sync [project]` command instead prints a `SyncReport` with `status`,
+`verified` and `proceed` and no `decision`. The installed host entry passes the native JSON
+payload to `ai-workflow sync-hook --host <host>` on stdin and must not be run by hand without it.
+
+One parent snapshot covers the whole unit, so same-root child agents and later phase
+invocations reuse it instead of synchronizing independently; a native session, user-turn,
+resume or root-change event, or an explicit phase entry, starts a new unit. After a safe patch
+changes the project contract or owned workflow rules, re-read the updated
+`.ai-workflow/AGENTS.md` before ordinary work continues; frozen `plan.md` bytes are immutable
+and a contradiction stops the split with a bounded support request rather than broadening
+scope.
+
 ## Decomposition rules
 
 - Prefer independently testable vertical outcomes over file-by-file chores.

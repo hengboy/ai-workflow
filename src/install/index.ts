@@ -7,6 +7,7 @@ import { packagePath } from '../utils/schema.js';
 import { renderHost, renderSkills, type RenderedFile } from './render.js';
 import type { OpencodeVersionOption } from './opencode-version.js';
 import { resolveOpencodeVersion } from './opencode-version.js';
+import { installSynchronization, synchronizationPath, uninstallSynchronization, type SynchronizationDeployment, type SynchronizationRecords } from './hooks.js';
 import { loadProfile, type Profile } from '../profile/index.js';
 import { loadSettings, writeActiveProfile } from '../settings/index.js';
 import { applyTemplateSnapshot, notesStructureDirectories, reconcileIgnoreFile, type SyncReport } from '../sync/index.js';
@@ -19,7 +20,7 @@ import type { Host } from '../workflow/types.js';
 
 interface ManifestFile { path: string; digest: string; kind: 'file' | 'directory' }
 export interface ContractRecord { path: string; digest: string; created: boolean }
-interface InstallManifest { version: string; installed_at: string; skills?: ManifestFile[]; hosts: Partial<Record<Host, ManifestFile[]>>; contracts?: Partial<Record<Host, ContractRecord>>; skipped?: string[] }
+interface InstallManifest { version: string; installed_at: string; skills?: ManifestFile[]; hosts: Partial<Record<Host, ManifestFile[]>>; contracts?: Partial<Record<Host, ContractRecord>>; sync_hooks?: SynchronizationRecords; synchronization?: SynchronizationDeployment[]; skipped?: string[] }
 export interface AgentInstallation {
   name: string;
   path: string;
@@ -62,10 +63,11 @@ function agentsRoot(home: string, host: Host): string {
 }
 function skillsRoot(home: string): string { return join(home, skillsRelative); }
 
-async function writeOwnedFile(home: string, file: RenderedFile, previous: ManifestFile[] | undefined, root: string): Promise<boolean> {
+async function writeOwnedFile(home: string, file: RenderedFile, previous: ManifestFile[] | undefined, root: string, snapshots: Map<string, Buffer | undefined>, newDirectories: Set<string>): Promise<boolean> {
   const path = join(root, file.relativePath);
   const owned = previous?.find((item) => item.path === relative(home, path));
   if (owned && (await exists(path)) && sha256(await readFile(path)) !== owned.digest) return false;
+  await snapshotInstallationPath(path, snapshots, newDirectories);
   await atomicWrite(path, file.contents);
   return true;
 }
@@ -79,6 +81,16 @@ function settingsConfigPath(home: string): string { return join(home, settingsRe
 async function readIfExists(path: string): Promise<Buffer | undefined> { return (await exists(path)) ? readFile(path) : undefined; }
 async function restoreIfChanged(path: string, contents: Buffer | undefined): Promise<void> {
   if (contents === undefined) await rm(path, { force: true }); else await atomicWrite(path, contents);
+}
+
+async function snapshotInstallationPath(path: string, snapshots: Map<string, Buffer | undefined>, newDirectories: Set<string>): Promise<void> {
+  if (snapshots.has(path)) return;
+  snapshots.set(path, await readIfExists(path));
+  let directory = dirname(path);
+  while (!(await exists(directory))) {
+    newDirectories.add(directory);
+    directory = dirname(directory);
+  }
 }
 
 // Legacy migration: previous versions recorded the Codex plugin in the shared marketplace.
@@ -153,7 +165,7 @@ async function installContracts(home: string, hosts: Host[], manifest: InstallMa
   if (Object.keys(contracts).length) manifest.contracts = contracts; else delete manifest.contracts;
 }
 
-async function installUnsafe(hosts: Host[], options: { home?: string; version?: string; profile?: Profile; opencodeVersion?: OpencodeVersionOption } = {}): Promise<InstallManifest> {
+async function installUnsafe(hosts: Host[], options: { home?: string; version?: string; profile?: Profile; opencodeVersion?: OpencodeVersionOption }, snapshots: Map<string, Buffer | undefined>, newDirectories: Set<string>): Promise<InstallManifest> {
   const home = resolve(options.home ?? homedir()); const version = options.version ?? '0.1.0'; const manifest = await readManifest(home);
   // Resolve settings once before any render or write so an invalid active_profile aborts pre-write.
   const settings = await loadSettings(home);
@@ -163,7 +175,19 @@ async function installUnsafe(hosts: Host[], options: { home?: string; version?: 
   // Shared skills are host-neutral and installed once, independent of the requested host list.
   const skills = await renderSkills();
   const ownedSkills: ManifestFile[] = []; const skipped: string[] = [];
-  for (const file of skills) { const path = join(skillsRoot(home), file.relativePath); if (await writeOwnedFile(home, file, manifest.skills, skillsRoot(home))) ownedSkills.push({ path: relative(home, path), digest: sha256(file.contents), kind: 'file' }); else { const prior = manifest.skills?.find((item) => item.path === relative(home, path)); if (prior) { ownedSkills.push(prior); skipped.push(prior.path); } } }
+  const sharedSyncSkill = `${skillsRelative}/sync-ai-workflow/SKILL.md`;
+  const priorSyncSkill = manifest.skills?.find((file) => file.path === sharedSyncSkill);
+  const preserveSyncSkill = await exists(join(home, sharedSyncSkill)) && (!priorSyncSkill || sha256(await readFile(join(home, sharedSyncSkill))) !== priorSyncSkill.digest);
+  for (const file of skills) {
+    const path = join(skillsRoot(home), file.relativePath);
+    if (preserveSyncSkill && file.relativePath.startsWith('sync-ai-workflow/')) {
+      const prior = manifest.skills?.find((item) => item.path === relative(home, path));
+      if (prior) ownedSkills.push(prior);
+      skipped.push(relative(home, path));
+      continue;
+    }
+    if (await writeOwnedFile(home, file, manifest.skills, skillsRoot(home), snapshots, newDirectories)) ownedSkills.push({ path: relative(home, path), digest: sha256(file.contents), kind: 'file' }); else { const prior = manifest.skills?.find((item) => item.path === relative(home, path)); if (prior) { ownedSkills.push(prior); skipped.push(prior.path); } }
+  }
   await removeStaleOwnedFiles(home, manifest.skills ?? [], ownedSkills);
   manifest.skills = ownedSkills;
   const renderedHosts = new Map<Host, RenderedFile[]>(); for (const host of hosts) renderedHosts.set(host, await renderHost(host, profile, host === 'opencode' ? { opencodeVersion } : undefined));
@@ -171,26 +195,28 @@ async function installUnsafe(hosts: Host[], options: { home?: string; version?: 
     const rendered = renderedHosts.get(host); if (!rendered) throw new Error(`Missing rendered host: ${host}`);
     const target = agentsRoot(home, host);
     const owned: ManifestFile[] = [];
-    for (const file of rendered) { const path = join(target, file.relativePath); if (await writeOwnedFile(home, file, manifest.hosts[host], target)) owned.push({ path: relative(home, path), digest: sha256(file.contents), kind: 'file' }); else { const prior = manifest.hosts[host]?.find((item) => item.path === relative(home, path)); if (prior) { owned.push(prior); skipped.push(prior.path); } } }
+    for (const file of rendered) { const path = join(target, file.relativePath); if (await writeOwnedFile(home, file, manifest.hosts[host], target, snapshots, newDirectories)) owned.push({ path: relative(home, path), digest: sha256(file.contents), kind: 'file' }); else { const prior = manifest.hosts[host]?.find((item) => item.path === relative(home, path)); if (prior) { owned.push(prior); skipped.push(prior.path); } } }
     if (host === 'codex') await removeMarketplaceEntry(home);
     await removeStaleOwnedFiles(home, manifest.hosts[host] ?? [], owned);
     manifest.hosts[host] = owned;
   }
   await installContracts(home, hosts, manifest, skipped);
+  const synchronization = await installSynchronization(home, hosts, manifest.sync_hooks ?? {}, preserveSyncSkill ? [`Existing shared synchronization skill is preserved: ${sharedSyncSkill}; resolve it explicitly before installing the shared safe skill.`] : []);
+  manifest.sync_hooks = synchronization.records;
+  manifest.synchronization = synchronization.reports;
+  skipped.push(...synchronization.skipped);
   manifest.version = version; manifest.installed_at = new Date().toISOString(); if (skipped.length) manifest.skipped = skipped; else delete manifest.skipped; await writeJson(join(home, manifestRelative), manifest);
   return manifest;
 }
 
 export async function install(hosts: Host[], options: { home?: string; version?: string; profile?: Profile; opencodeVersion?: OpencodeVersionOption } = {}): Promise<InstallManifest> {
-  const home = resolve(options.home ?? homedir()); const manifestPath = join(home, manifestRelative); const hadManifest = await exists(manifestPath); const previous = hadManifest ? await readFile(manifestPath) : undefined;
-  const configPath = settingsConfigPath(home); const hadConfig = await exists(configPath); const previousConfig = hadConfig ? await readFile(configPath) : undefined;
-  const globalSnapshots = new Map<string, Buffer | undefined>();
-  for (const host of hosts) { const path = globalInstructionPath(home, host); globalSnapshots.set(path, await readIfExists(path)); }
-  try { return await installUnsafe(hosts, options); } catch (error) {
-    for (const [path, contents] of globalSnapshots) await restoreIfChanged(path, contents);
-    await restoreIfChanged(configPath, previousConfig);
-    if (previous) await atomicWrite(manifestPath, previous); else await rm(manifestPath, { force: true });
-    if (!hadManifest) { await rm(skillsRoot(home), { recursive: true, force: true }); for (const host of hosts) await rm(agentsRoot(home, host), { recursive: true, force: true }); await removeEmptyDirectory(join(home, '.agents')); await removeEmptyDirectory(join(home, '.codex')); await removeEmptyDirectory(join(home, '.claude')); await removeEmptyDirectory(join(home, '.config/opencode')); await removeEmptyDirectory(join(home, '.config')); }
+  const home = resolve(options.home ?? homedir());
+  const snapshots = new Map<string, Buffer | undefined>();
+  const newDirectories = new Set<string>();
+  for (const path of [join(home, manifestRelative), settingsConfigPath(home), ...hosts.flatMap((host) => [globalInstructionPath(home, host), join(home, synchronizationPath(host))])]) await snapshotInstallationPath(path, snapshots, newDirectories);
+  try { return await installUnsafe(hosts, options, snapshots, newDirectories); } catch (error) {
+    for (const [path, contents] of [...snapshots].reverse()) await restoreIfChanged(path, contents);
+    for (const directory of [...newDirectories].sort((left, right) => right.length - left.length)) await removeEmptyDirectory(directory);
     throw error;
   }
 }
@@ -263,6 +289,7 @@ export async function uninstall(hosts: Host[], options: { home?: string } = {}):
   const home = resolve(options.home ?? homedir()); const manifest = await readManifest(home);
   const skipped: string[] = [];
   for (const host of hosts) {
+    if (manifest.sync_hooks) await uninstallSynchronization(home, host, manifest.sync_hooks, skipped);
     for (const file of manifest.hosts[host] ?? []) {
       const path = resolve(home, file.path); if (!path.startsWith(`${home}/`)) throw new Error(`Unsafe manifest path: ${file.path}`);
       if (file.path === marketplaceRelative) continue;
@@ -276,6 +303,11 @@ export async function uninstall(hosts: Host[], options: { home?: string } = {}):
     if (retained.length) manifest.hosts[host] = retained;
   }
   if (manifest.contracts && Object.keys(manifest.contracts).length === 0) delete manifest.contracts;
+  if (manifest.sync_hooks && Object.keys(manifest.sync_hooks).length === 0) delete manifest.sync_hooks;
+  if (manifest.synchronization) {
+    manifest.synchronization = manifest.synchronization.filter((entry) => !hosts.includes(entry.host));
+    if (manifest.synchronization.length === 0) delete manifest.synchronization;
+  }
   if (Object.keys(manifest.hosts).length === 0) {
     for (const file of manifest.skills ?? []) {
       const path = resolve(home, file.path); if (!path.startsWith(`${home}/`)) throw new Error(`Unsafe manifest path: ${file.path}`);
@@ -408,10 +440,18 @@ export async function upgradeProject(project: string): Promise<ProjectUpgradeRep
   }
   if (conflicts.length) {
     return { project: root, source, status: 'conflict', verified: false, proceed: false, check: false,
-      created: [], updated: [], skipped: [], warnings: [], conflicts: conflicts.sort((left, right) => left.path! < right.path! ? -1 : left.path! > right.path! ? 1 : 0) };
+      created: [], updated: [], skipped: [], warnings: [], conflicts: conflicts.sort((left, right) => {
+        const leftPath = left.path ?? '';
+        const rightPath = right.path ?? '';
+        return leftPath < rightPath ? -1 : leftPath > rightPath ? 1 : 0;
+      }) };
   }
   const targets = projectTargets();
   const templates = await readTemplateContents(targets);
-  const files = Object.fromEntries(targets.map(({ source: path }, index) => [path.replace(/\\/g, '/'), templates[index]!.contents]));
+  const files = Object.fromEntries(targets.map(({ source: path }, index) => {
+    const template = templates[index];
+    if (template === undefined) throw new Error(`Missing project template: ${path}`);
+    return [path.replace(/\\/g, '/'), template.contents];
+  }));
   return applyTemplateSnapshot({ projectRoot: root }, { source, files });
 }

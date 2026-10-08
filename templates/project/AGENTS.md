@@ -45,6 +45,16 @@ Classify every request before starting and state the class in one line.
 Never run Planning to restate a request with clear, bounded intent, and never label a change direct to skip required checks or evidence. Ask the user only when these rules cannot classify the request.
 
 <!-- ai-workflow:section change-routing:end -->
+<!-- ai-workflow:section work-boundary-synchronization:begin -->
+## Work-boundary synchronization
+
+Adopted projects synchronize their managed workflow instructions at work boundaries. The installed host entry invokes `ai-workflow sync-hook --host <current-host>`, which reads the host's native JSON payload on stdin; do not run that form by hand without the payload. At a cooperative phase boundary use the raw form `ai-workflow sync-hook --host <current-host> --phase --project <actual-root>`. Both print the raw gate JSON: its top-level `decision` is `allow`, `deny` or `skip`, its nested `report` (absent for `skip` or an actor exemption) carries `status`, `verified` and `proceed`, and the process exits 0 even when it denies. Follow `decision`: `deny`, or a `conflict` or `failed` `report.status`, blocks the phase; a warning `report.status` proceeds with visible context and makes no freshness claim; `skip` means no adoption was found. The manual `ai-workflow sync [project]` command instead prints a `SyncReport` with `status`, `verified` and `proceed` and no `decision`.
+
+This preflight is a narrow instruction-maintenance exception to coding-worktree confinement: it writes only the managed workflow instruction files of the actual current project root or the active coding worktree, and it performs no Git, no staging and no product edit. It discloses every created or updated dirty path, and a clean-baseline or task-scope collision produces a bounded support request instead of silent staging, worktree rewriting or broader authority.
+
+After a safe patch changes the contract or owned workflow rules, the updated `.ai-workflow/AGENTS.md` must be explicitly read or injected before ordinary work continues. Frozen `spec.md`, `plan.md`, task files and their declared repository/write scopes are never synchronized, and a contradiction between new authority and a frozen scope stops that phase with an explanation.
+
+<!-- ai-workflow:section work-boundary-synchronization:end -->
 <!-- ai-workflow:section workflow-roles:begin -->
 ## Workflow roles
 

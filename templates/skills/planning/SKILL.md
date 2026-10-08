@@ -26,6 +26,30 @@ If the project root or goal is missing, ask for that information before drafting
 
 Before repository context work, directly read `.ai-workflow/AGENTS.md`, `MEMORY.md`, `.ai-workflow/index/navigation.json` and `.ai-workflow/index/navigation.md`. The project contract applies to the whole project and to every participating agent. Treat absent `MEMORY.md` as a recorded legal state. For a known feature run `ai-workflow context locate --project <absolute-project-root> --feature <id> --verify`, then read only its exact `read_order`. `<absolute-project-root>` is the normalized project directory path, never its directory name. Do not search the repository. If locate returns `missing_index`, `miss`, `stale` or `invalid`, request File Explorer with the original goal, status/reason and authorized module roots. Keep each task `read_scope` to the fixed context (`.ai-workflow/AGENTS.md`, `MEMORY.md`, both navigation files) plus exact locator paths; it must not contain `src/`, `tests/` or the project root. Add relevant notes and governance files only as exact bounded paths.
 
+## Work-boundary synchronization
+
+Before each planning or execution phase, invoke the shared native synchronization entry for
+the actual project root:
+`ai-workflow sync-hook --host <current-host> --phase --project <actual-root>`.
+It prints the raw gate JSON: the top-level `decision` is `allow`, `deny` or `skip`, the nested
+`report` (absent for `skip` or an actor exemption) carries `status`, `verified` and `proceed`,
+and the process exits 0 even when it denies. Follow `decision` rather than the exit code: `deny`
+or a `conflict` or `failed` `report.status` stops the phase, a warning `report.status` proceeds
+with visible context but makes no freshness claim, and `skip` means no adoption was found. The
+manual `ai-workflow sync [project]` command instead prints a `SyncReport` with `status`,
+`verified` and `proceed` and no `decision`. The installed host entry passes the native JSON
+payload to `ai-workflow sync-hook --host <host>` on stdin and must not be run by hand without it.
+
+- A native session start, user turn, resume or actual-root change begins a new unit and
+  invalidates the previous snapshot; the explicit phase entry above starts one deliberately.
+- One parent snapshot covers the whole unit, so same-root child agents reuse it rather than
+  synchronizing on their own.
+- After a safe patch changes the project contract or owned workflow rules, re-read the updated
+  `.ai-workflow/AGENTS.md` before ordinary work continues.
+- Frozen `spec.md`, `plan.md` and task files are never synchronization input; when new authority
+  contradicts the frozen scope, stop and return a bounded support request instead of broadening
+  scope.
+
 ## Workspace planning
 
 When the project root declares submodules in its `.gitmodules` file, treat that root as a workspace root. Detect participation from that declaration only; never infer it from directory layout, nested checkouts or a scan.

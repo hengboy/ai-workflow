@@ -1,6 +1,8 @@
 # ai-workflow project loading
 
-Before project work, identify the project root. If it contains `.ai-workflow/`, explicitly read `.ai-workflow/AGENTS.md` relative to that root and follow its contract for the entire project and every participating agent, including sub-agents. Do not assume the host recursively loads hidden directories or automatically follows Markdown links.
+In an adopted project (one that contains `.ai-workflow/`) in a host with the synchronization entry installed, that entry runs `ai-workflow sync-hook --host <current-host>` with the host's native JSON payload on stdin before ordinary project work; do not run that form by hand without the payload. At a cooperative phase boundary run `ai-workflow sync-hook --host <current-host> --phase --project <actual-root>`, which prints the raw gate result. The gate result carries a top-level `decision` of `allow`, `deny` or `skip` and an optional nested `report` with `status`, `verified` and `proceed`; the process exits 0 even when it blocks, so follow `decision` rather than the exit code. The manual `ai-workflow sync` command reports a `SyncReport` with `status`, `verified` and `proceed` and no `decision`.
+
+If the project contains `.ai-workflow/`, explicitly read `.ai-workflow/AGENTS.md` relative to that root and follow its contract for the entire project and every participating agent, including sub-agents. Do not assume the host recursively loads hidden directories or automatically follows Markdown links. When the preflight changed that contract, read the updated file before ordinary project work continues.
 
 If the project contract is missing, report the missing `.ai-workflow/AGENTS.md` and direct the user to `ai-workflow init <project-root> --upgrade`. Stop project work until the contract is available; do not treat the project as fully initialized or fall back to an old global contract.
 

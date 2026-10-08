@@ -5,6 +5,7 @@ import { resolve } from 'node:path';
 import type { Host } from './workflow/types.js';
 import { activateProfile, install, uninstall, initializeProject, upgradeProject } from './install/index.js';
 import { synchronizeProject } from './sync/index.js';
+import { runProjectGate } from './sync/gate.js';
 import { createNavigationCandidate, rebuildNavigation, refreshContext, validateContext, verifyNavigation } from './context/validate.js';
 import { locateContext } from './context/locate.js';
 import { discoverFallback, type FallbackPacket } from './context/fallback.js';
@@ -25,6 +26,29 @@ function hostList(value: string): Host[] { if (value === 'all') return [...hosts
 async function jsonFile<T>(path: string): Promise<T> { return JSON.parse(await readFile(resolve(path), 'utf8')) as T; }
 function print(value: unknown): void { process.stdout.write(`${typeof value === 'string' ? value : JSON.stringify(value, null, 2)}\n`); }
 
+interface NativeHookInput {
+  cwd: string;
+  session_id: string;
+  hook_event_name: 'PreToolUse' | 'SessionStart' | 'UserPromptSubmit';
+  source?: string;
+  tool_name?: string;
+  tool_input?: unknown;
+}
+
+async function nativeHookInput(): Promise<NativeHookInput> {
+  process.stdin.setEncoding('utf8');
+  let contents = '';
+  for await (const chunk of process.stdin as AsyncIterable<string>) contents += chunk;
+  const input: unknown = JSON.parse(contents);
+  if (input === null || typeof input !== 'object' || Array.isArray(input)) throw new Error('Native hook input must be a JSON object');
+  const data = input as Record<string, unknown>;
+  if (typeof data.cwd !== 'string' || data.cwd === '' || typeof data.session_id !== 'string' || data.session_id === ''
+    || typeof data.hook_event_name !== 'string' || !['PreToolUse', 'SessionStart', 'UserPromptSubmit'].includes(data.hook_event_name)
+    || (data.source !== undefined && typeof data.source !== 'string')
+    || (data.tool_name !== undefined && typeof data.tool_name !== 'string')) throw new Error('Native hook input has invalid event, cwd or session fields');
+  return data as unknown as NativeHookInput;
+}
+
 const program = new Command().name('ai-workflow').description('Native-host planning and task workflow').version('0.1.0');
 function opencodeVersionOption(value: string): 'v1' | 'v2' | 'auto' { if (value === 'v1' || value === 'v2' || value === 'auto') return value; throw new Error(`Invalid opencode version: ${value}`); }
 program.command('install').requiredOption('--host <host>').option('--home <path>').option('--opencode-version <version>', 'opencode agent format: v1, v2 or auto (default auto)', 'auto').action(async ({ host, home, opencodeVersion }: { host: string; home?: string; opencodeVersion: string }) => print(await install(hostList(host), { ...(home ? { home } : {}), opencodeVersion: opencodeVersionOption(opencodeVersion) })));
@@ -39,6 +63,45 @@ program.command('sync').argument('[project]').option('--check', 'report pending 
   const report = await synchronizeProject({ projectRoot: project ?? process.cwd(), check: Boolean(check) });
   print(report);
   process.exitCode = report.status === 'synchronized' ? 0 : report.status === 'unverified' || report.status === 'needs_attention' ? 2 : 1;
+});
+program.command('sync-hook').requiredOption('--host <host>').option('--phase', 'begin a synchronization phase for the actual project').option('--project <project>', 'actual project root for --phase').action(async ({ host, phase, project }: { host: string; phase?: boolean; project?: string }) => {
+  if (!hosts.includes(host as Host)) throw new Error(`Invalid host: ${host}`);
+  if (phase) {
+    if (!project) throw new Error('--phase requires --project with the actual project root');
+    // PhaseEntry is keyed by the project, not by a native host session.
+    print(await runProjectGate({ host: host as Host, event: 'PhaseEntry', sessionId: '', cwd: project }));
+    process.exitCode = 0;
+    return;
+  }
+  if (project !== undefined) throw new Error('--project is only supported with --phase');
+  const input = await nativeHookInput();
+  const result = await runProjectGate({
+    host: host as Host,
+    event: input.hook_event_name,
+    sessionId: input.session_id,
+    cwd: input.cwd,
+    ...(input.source === undefined ? {} : { eventSource: input.source }),
+    ...(input.tool_name === undefined ? {} : { toolName: input.tool_name }),
+    ...(input.tool_input === undefined ? {} : { toolInput: input.tool_input }),
+  });
+  if (host === 'opencode') {
+    print(result);
+  } else {
+    const deny = result.decision === 'deny';
+    const context = deny && input.hook_event_name === 'SessionStart'
+      ? `${result.context}\nSessionStart supplies context only; the next project PreToolUse will deny work while this blocking result remains current.`
+      : result.context;
+    print({
+      systemMessage: context,
+      ...(deny && input.hook_event_name === 'UserPromptSubmit' ? { decision: 'block', reason: result.context } : {}),
+      hookSpecificOutput: {
+        hookEventName: input.hook_event_name,
+        additionalContext: context,
+        ...(deny && input.hook_event_name === 'PreToolUse' ? { permissionDecision: 'deny', permissionDecisionReason: result.context } : {}),
+      },
+    });
+  }
+  process.exitCode = 0;
 });
 const profile = program.command('profile');
 profile.command('activate').argument('<name>').option('--home <path>').option('--opencode-version <version>', 'opencode agent format: v1, v2 or auto (default auto)', 'auto').action(async (name: string, { home, opencodeVersion }: { home?: string; opencodeVersion: string }) => print(await activateProfile(name, { ...(home ? { home } : {}), opencodeVersion: opencodeVersionOption(opencodeVersion) })));
