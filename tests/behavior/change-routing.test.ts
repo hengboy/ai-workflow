@@ -14,6 +14,21 @@ function flatten(text: string): string {
   return text.replace(/\s+/g, ' ');
 }
 
+/** Extract one `## Heading` section up to the next level-two heading. */
+function section(text: string, heading: string): string {
+  const lines = text.split('\n');
+  const start = lines.findIndex((line) => line.trim() === heading);
+  if (start === -1) return '';
+  let end = lines.length;
+  for (let index = start + 1; index < lines.length; index += 1) {
+    if (/^## /.test(lines[index] ?? '')) {
+      end = index;
+      break;
+    }
+  }
+  return lines.slice(start, end).join('\n');
+}
+
 function frontmatter(text: string): string {
   return text.split(/^---$/m)[1] ?? '';
 }
@@ -103,24 +118,31 @@ describe('change routing guidance', () => {
     );
   });
 
-  it('stops a coding session after Planning and hands off to a new session', async () => {
-    const coding = flatten(await read('templates/skills/coding/SKILL.md'));
+  it('stops a coding session after Planning and delegates the handoff to the workspace-aware Planning route', async () => {
+    const codingText = await read('templates/skills/coding/SKILL.md');
+    const routing = flatten(section(codingText, '## Change routing'));
 
-    expect(coding, 'a planned change with no frozen plan runs Planning first').toMatch(
+    expect(routing, 'a planned change with no frozen plan runs Planning first').toMatch(
       /planned change has no frozen plan[^.]*run Planning first/i,
     );
-    expect(coding, 'the planning session stops and hands off to a new session').toMatch(
-      /tell the user to start a new session and invoke the coding skill/i,
+    expect(routing, 'the no-frozen-plan handoff is workspace-aware').toMatch(/workspace/i);
+    expect(routing, 'the no-frozen-plan handoff routes a workspace plan through plan-to-tasks').toMatch(
+      /plan-to-tasks/i,
     );
-    expect(coding, 'the planning session creates no implementation state').toMatch(
+    expect(routing, 'the ordinary or root-only handoff to a coding session stays represented').toMatch(
+      /root-only|coding skill/i,
+    );
+    expect(routing, 'the planning session creates no implementation state').toMatch(
       /Do not start implementation in that planning session: no worktree, no implementation record/i,
     );
+
+    const coding = flatten(codingText);
     expect(coding, 'the completion checklist records the handoff').toMatch(
       /A planned change without a frozen plan ended the session after Planning/i,
     );
 
     const planning = flatten(await read('templates/skills/planning/SKILL.md'));
-    expect(planning, 'Planning itself ends with the new-session handoff').toMatch(
+    expect(planning, 'Planning keeps the ordinary new-session coding handoff').toMatch(
       /tell the user to start a new session and invoke the coding skill/i,
     );
 

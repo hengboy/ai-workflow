@@ -2801,6 +2801,58 @@
         "tests/unit/workflow-workspace.test.ts"
       ],
       "shared_entry": false
+    },
+    {
+      "id": "workspace-handoff",
+      "name": "workspace-handoff",
+      "aliases": [
+        "workspace session handoff"
+      ],
+      "module_root": "root",
+      "entries": [
+        "templates/skills/planning/SKILL.md",
+        "templates/skills/plan-to-tasks/SKILL.md",
+        "templates/skills/coding/SKILL.md"
+      ],
+      "symbols": [],
+      "related_files": [
+        "README.md",
+        "MEMORY.md",
+        "templates/project/MEMORY.md",
+        "templates/skills/planning/references/plan.md",
+        "templates/skills/plan-to-tasks/references/task.md",
+        "templates/skills/plan-to-tasks/references/execution-order.md",
+        ".ai-workflow/notes/implemented/process/2026-09-23-planning-coding-session-boundary.md",
+        ".ai-workflow/notes/implemented/process/2026-10-02-workspace-distribute-handoff.md",
+        ".ai-workflow/notes/implemented/bug-fix/2026-10-08-workspace-session-handoff.md"
+      ],
+      "tests": [
+        "tests/behavior/change-routing.test.ts",
+        "tests/behavior/workspace-planning-content.test.ts",
+        "tests/behavior/workspace-workflow-content.test.ts"
+      ],
+      "depends_on": [],
+      "relations": [],
+      "owner_role": "shared",
+      "responsibility": "Conditional Planning-to-Coding workspace session handoff across the planning, plan-to-tasks and coding skills",
+      "read_scope": [
+        "templates/skills/planning/SKILL.md",
+        "templates/skills/plan-to-tasks/SKILL.md",
+        "templates/skills/coding/SKILL.md",
+        "README.md",
+        "MEMORY.md",
+        "templates/project/MEMORY.md",
+        "templates/skills/planning/references/plan.md",
+        "templates/skills/plan-to-tasks/references/task.md",
+        "templates/skills/plan-to-tasks/references/execution-order.md",
+        ".ai-workflow/notes/implemented/process/2026-09-23-planning-coding-session-boundary.md",
+        ".ai-workflow/notes/implemented/process/2026-10-02-workspace-distribute-handoff.md",
+        ".ai-workflow/notes/implemented/bug-fix/2026-10-08-workspace-session-handoff.md",
+        "tests/behavior/change-routing.test.ts",
+        "tests/behavior/workspace-planning-content.test.ts",
+        "tests/behavior/workspace-workflow-content.test.ts"
+      ],
+      "shared_entry": false
     }
   ]
 }

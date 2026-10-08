@@ -11,7 +11,7 @@ Status: implemented
 ## Decision
 
 - 当 `coding` 会话把请求分类为 planned change 且不存在冻结计划时，会话先运行 Planning，并在冻结计划通过其校验门禁后停止。
-- 交接时报告冻结计划的路径，并提示用户在新会话中调用 coding 技能来实施。
+- 交接时报告冻结计划的路径及其 `plan validate` 结果；普通或仅根条目计划随后提示用户在新会话中调用 coding 技能来实施，而声明至少一个非根参与仓库的计划则改为路由到工作区根的新会话，调用 plan-to-tasks 并在实施前分发，见 2026-10-08 [工作区会话交接记录](../bug-fix/2026-10-08-workspace-session-handoff.md)。
 - 规划会话不创建任何实施状态：不创建 worktree，不创建 `implementation.yaml`，不派发实施或评审，也不提交。
 - `planning` 技能的完成清单携带同样的交接，因此直接调用的 Planning 运行也在冻结计划处结束，而不是开始实施。
 - `tests/behavior/change-routing.test.ts` 守护 `coding` 与 `planning` 的已发布文本以及 README 句子，若重新把 Planning 接回自动实施，测试套件会失败。
@@ -26,4 +26,4 @@ Status: implemented
 
 - 在 coding 会话中发现的 planned change 现在会产出一份冻结且已校验的计划并停在那里；实施只在新会话中恢复，冻结计划就是边界。
 - [变更分流](./2026-09-22-change-routing.md)仍负责 direct、mechanical 与 planned 的分类；本记录只补上 Planning 到 Coding 的交接。
-- [项目契约与 Agent Notes 记录](./2026-09-16-project-contract-and-agent-notes.md)仍然有效；没有活动记录被取代。
+- [项目契约与 Agent Notes 记录](./2026-09-16-project-contract-and-agent-notes.md)仍然有效。2026-10-08 [工作区会话交接记录](../bug-fix/2026-10-08-workspace-session-handoff.md)部分取代本记录中无条件的单会话交接事实；本记录保留其边界决定与理由，其当前交接事实指向该记录。

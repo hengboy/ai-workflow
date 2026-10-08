@@ -35,6 +35,11 @@ function section(text: string, heading: string, level = 2): string {
   return lines.slice(start, end).join('\n');
 }
 
+/** Extract the body of every ```text fenced example. */
+function textFences(text: string): string[] {
+  return [...text.matchAll(/```text\n([\s\S]*?)```/g)].map((match) => match[1] ?? '');
+}
+
 /** Whitespace-normalized text so multi-word fragments match across source wrapping. */
 function flatten(text: string): string {
   return text.replace(/\s+/g, ' ');
@@ -112,6 +117,27 @@ describe('workspace finalization pins delivery commits through Git Operator (REQ
         'git update-index --cacheinfo 160000,<sha>,<path>'
       ],
       'the Workspace finalization procedure'
+    );
+  });
+
+  it('tells the user to check ready_for_finalization and start a new root session for finalization', async () => {
+    const finalization = section((await readShipped(CODING_SKILL)) ?? '', '## Workspace finalization');
+    expect(finalization, 'the Workspace finalization section exists').not.toBe('');
+
+    expectFragments(
+      flatten(finalization),
+      ['ready_for_finalization', 'ai-workflow workspace status --plan <directory>', 'new root session'],
+      'the workspace finalization readiness handoff'
+    );
+
+    const prompts = textFences(finalization);
+    expect(prompts.length, 'the Workspace finalization ships at least one ```text example').toBeGreaterThan(0);
+    const prompt = flatten(prompts.join('\n'));
+    expect(prompt, 'the shipped finalization prompt invokes coding').toMatch(/coding skill/i);
+    expectFragments(
+      prompt,
+      ['<workspace-root>', 'ai-workflow workspace status --plan <workspace-plan-directory>'],
+      'the shipped finalization prompt'
     );
   });
 
@@ -223,6 +249,62 @@ describe('plan-to-tasks completes a workspace split by distributing slices (REQ-
         'reserved root entry'
       ],
       'the workspace split distribution completion'
+    );
+  });
+
+  it('reports each repository name, path and slice state in delivery order with the workspace status command', async () => {
+    const workspace = section((await readShipped(PLAN_TO_TASKS_SKILL)) ?? '', '## Workspace split');
+    expect(workspace, 'the Workspace split section exists').not.toBe('');
+
+    const flat = flatten(workspace);
+    expect(flat, 'the completion report names each participating repository with its name and path').toMatch(
+      /each participating repository[^.]*name[^.]*path/i,
+    );
+    expectFragments(
+      flat,
+      [
+        'slice state',
+        'delivery order',
+        'reserved root entry',
+        'ai-workflow workspace status --plan <directory>'
+      ],
+      'the workspace completion report'
+    );
+  });
+
+  it('hands the next Coding session a copyable prompt naming the frozen plan directory', async () => {
+    const workspace = section((await readShipped(PLAN_TO_TASKS_SKILL)) ?? '', '## Workspace split');
+    expect(workspace, 'the Workspace split section exists').not.toBe('');
+
+    expectFragments(
+      flatten(workspace),
+      ['next Coding', 'copy', 'prompt', 'frozen plan directory'],
+      'the next-session handoff prompt'
+    );
+
+    const prompts = textFences(workspace);
+    expect(prompts.length, 'the Workspace split ships at least one ```text example').toBeGreaterThan(0);
+    const prompt = flatten(prompts.join('\n'));
+    expect(prompt, 'the shipped prompt actually invokes coding').toMatch(/coding skill/i);
+    expectFragments(
+      prompt,
+      [
+        '<repository-root>',
+        '<repository-plan-directory>',
+        'ai-workflow workspace status --plan <workspace-plan-directory>'
+      ],
+      'the shipped next-Coding prompt'
+    );
+  });
+
+  it('refuses with a rerun of workspace distribute after repair and keeps the not-ready wording', async () => {
+    const workspace = section((await readShipped(PLAN_TO_TASKS_SKILL)) ?? '', '## Workspace split');
+    expect(workspace, 'the Workspace split section exists').not.toBe('');
+
+    expectFragments(
+      flatten(workspace),
+      ['not ready', 'repair', 'rerun', 'ai-workflow workspace distribute --plan <directory>'],
+      'the workspace split refusal repair rerun'
     );
   });
 

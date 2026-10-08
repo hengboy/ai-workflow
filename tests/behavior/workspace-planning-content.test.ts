@@ -331,3 +331,37 @@ describe('planning owns the workspace split handoff and exempts a root-only plan
     );
   });
 });
+
+describe('planning completion routes a workspace plan to plan-to-tasks and a root-only plan to coding (REQ-004 / AC-007)', () => {
+  it('ends a cross-repository workspace plan with a new session at the workspace root that runs plan-to-tasks and distributes before coding', async () => {
+    const text = await readShipped(PLANNING_SKILL);
+    expect(text, 'the planning skill is shipped').not.toBeNull();
+    const completion = section(text ?? '', '## Completion checklist');
+    expect(completion, 'the Completion checklist section exists').not.toBe('');
+
+    expectFragments(
+      flatten(completion),
+      [
+        'at least one non-root participating repository',
+        'new session',
+        '<workspace-root>',
+        'plan-to-tasks',
+        'frozen plan directory',
+        'ai-workflow workspace distribute --plan <directory>',
+        'do not invoke coding'
+      ],
+      'the workspace planning completion handoff'
+    );
+  });
+
+  it('preserves the root-only or ordinary route to a coding session', async () => {
+    const completion = section((await readShipped(PLANNING_SKILL)) ?? '', '## Completion checklist');
+    expect(completion, 'the Completion checklist section exists').not.toBe('');
+
+    expectFragments(
+      flatten(completion),
+      ['root-only', 'invoke the coding skill'],
+      'the root-only planning completion handoff'
+    );
+  });
+});

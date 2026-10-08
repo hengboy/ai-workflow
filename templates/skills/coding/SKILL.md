@@ -19,12 +19,23 @@ Classify the request before dispatching and state the class in one line.
 - Planned change — a new feature, unclear or contested requirements, more than one materially different design, or a change to a public interface, persistent format, cross-module or cross-stack behavior, migration, compatibility or the project contract: implement the frozen plan and keep the dual-axis review gate.
 
 When a planned change has no frozen plan, run Planning first, then stop: freeze
-and validate `spec.md` and `plan.md` as the `planning` skill requires, report
-the frozen plan path, and tell the user to start a new session and invoke the
-coding skill to implement it. Do not start implementation in that planning
-session: no worktree, no implementation record, no implementation or review
-dispatch, and no commit. Implementation resumes only in the new session, where
-the frozen plan is the boundary.
+and validate `spec.md` and `plan.md` as the `planning` skill requires. When the
+plan declares at least one non-root participating repository, report the absolute
+workspace root, the frozen plan directory and the `plan validate` result, and
+tell the user to start a new session at that workspace root and invoke the
+plan-to-tasks skill with the absolute frozen plan directory to split the plan;
+the split then runs `ai-workflow workspace distribute --plan <directory>` after
+validation and before implementation. For an ordinary plan or a root-only
+workspace plan whose `workspace_repos` declares only the reserved workspace root
+entry, tell the user to start a new session and invoke the coding skill to
+implement it. Do not start implementation in that planning session: no worktree,
+no implementation record, no implementation or review dispatch, and no commit.
+Implementation resumes only in the new session, where the frozen plan is the
+boundary. The `planning` skill's `## Completion checklist` owns the full handoff
+report — the absolute project or workspace root, the frozen plan directory, the
+`plan validate` result, each participant's name, path and `depends_on` order, and
+the copyable prompt — so this paragraph defers to that checklist instead of
+improvising a partial independent handoff.
 
 Never run Planning to restate a request with clear, bounded intent, and never
 label a change direct to skip required checks or evidence. Ask the user only
@@ -99,7 +110,7 @@ installed role, fail before execution and request clarification.
   symbols. For an unsplit plan, do not invoke File Explorer merely because the
   feature is absent from the index; use the frozen plan's scope directly.
   Request File Explorer only when the implementation boundary remains unclear.
-- A session asked to implement a workspace plan that declares at least one non-root participating repository must confirm the distributed slices first with `ai-workflow workspace status --plan <directory>`. When no slice is distributed, refuse before creating a worktree or an implementation record and direct to plan-to-tasks, or to `ai-workflow workspace distribute --plan <directory>` when the split artifacts exist. A root-only workspace plan whose `workspace_repos` declares only the reserved `workspace` root entry is exempt and may be implemented unsplit.
+- A session asked to implement a workspace plan that declares at least one non-root participating repository must confirm the distributed slices first with `ai-workflow workspace status --plan <directory>` using the absolute parent workspace plan directory. When no slice is distributed, refuse before creating a worktree or an implementation record: direct to a session at the parent workspace root that invokes plan-to-tasks with the absolute parent plan directory when the plan still needs splitting, or reruns `ai-workflow workspace distribute --plan <directory>` with the same absolute parent plan directory when the split artifacts exist. A root-only workspace plan whose `workspace_repos` declares only the reserved `workspace` root entry is exempt and may be implemented unsplit.
 - Before implementation, Git Operator must create one project-local temporary worktree
   under `<project>/.worktrees/<name>` (ensure `.gitignore` contains
   `.worktrees/`). Git Operator must then materialize the project's entire
@@ -246,12 +257,22 @@ repository.
 
 When the plan directory for a participating repository has no slice `workspace.yaml`, stop
 before creating a worktree or an implementation record, report the missing manifest for that
-repository and name `ai-workflow workspace distribute --plan <directory>` as the repair.
+repository, and direct to a session at the parent workspace root that reruns
+`ai-workflow workspace distribute --plan <directory>` with the same absolute parent workspace
+plan directory as the repair.
 
 A matching slice session `implements only` its `slice tasks` `inside that repository` and
 keeps every edit, note and record inside that repository. It never edits a sibling slice or
 the workspace root. When the slice tasks are complete, record the resulting `delivery commit`
 SHA and report it to the workspace orchestrator; the workspace root pins that commit later.
+After reporting the delivery SHA, run `ai-workflow workspace status --plan <directory>` with the
+absolute parent workspace plan directory and hand off the next repository, path, session and
+copyable prompt in the frozen delivery order, reusing the split handoff's concrete conventions:
+working directory `<repository-root>`, local frozen plan directory `<repository-plan-directory>`
+and the original parent `<workspace-plan-directory>`. Finalization requires both every child
+slice to be ready and the root-owned task delivery boundary to be satisfied, so a child session
+never finalizes by itself and only starts a new root session at the workspace root once both
+conditions hold and `ready_for_finalization` is true.
 
 Repository-scoped completion runs `ai-workflow plan validate` for the slice plan,
 `ai-workflow notes validate` for that repository's notes, and updates that repository's
@@ -268,6 +289,23 @@ confirmed reachable, pin it through the exact command
 starts clean with `empty submodule directories`; the run stages only the authorized `pointer`
 paths and workspace-root files, never a submodule working tree or an unrelated path. Moving a
 submodule checkout after the pin is out of scope.
+
+Run `ai-workflow workspace status --plan <directory>` against the original parent workspace plan
+directory `<workspace-plan-directory>` to read `ready_for_finalization`. The command's own `valid`
+only means the plan and manifest resolved, so this finalization consumes the report only when
+`valid` is true, every child `slice` is `present`, every child `record` is `completed`,
+`ready_for_finalization` is true, the root-owned tasks are delivered, and every `delivery_commit`
+verifies with read-only Git in its source repository before Git Operator pins it. A child or other
+repository session that is not already running the correct parent finalization reports the copyable
+next-root prompt; a session already running the correct parent coding finalization performs it here
+and does not emit an instruction to reopen itself. Before showing the prompt, replace every
+placeholder with the actual absolute workspace root and plan directory, quote any path argument
+that contains spaces (including in the command), and write it in the user's language. The child or
+other session reports:
+
+```text
+Start a new root session at <workspace-root> and invoke the coding skill for the parent workspace plan <workspace-plan-directory>. Run ai-workflow workspace status --plan <workspace-plan-directory> against the original parent plan, require valid true with present and completed child slices, ready_for_finalization and root-owned tasks delivered, and verify each delivery commit read-only before Git Operator pins it.
+```
 
 ## Note ownership
 

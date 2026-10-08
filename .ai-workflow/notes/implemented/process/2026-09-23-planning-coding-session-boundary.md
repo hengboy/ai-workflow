@@ -11,7 +11,7 @@ English | [中文](2026-09-23-planning-coding-session-boundary.zh.md)
 ## Decision
 
 - When a `coding` session classifies a request as a planned change and no frozen plan exists, the session runs Planning first and then stops after the frozen plan passes its validation gate.
-- The handoff reports the frozen plan path and tells the user to start a new session and invoke the coding skill to implement it.
+- The handoff reports the frozen plan path and its `plan validate` result; an ordinary or root-only plan then tells the user to start a new session and invoke the coding skill to implement it, while a plan that declares at least one non-root participating repository instead routes to a new session at the workspace root that invokes plan-to-tasks and distributes before implementation, see the 2026-10-08 [workspace session handoff record](../bug-fix/2026-10-08-workspace-session-handoff.md).
 - The planning session creates no implementation state: no worktree, no `implementation.yaml`, no implementation or review dispatch and no commit.
 - The `planning` skill's completion checklist carries the same handoff, so a directly invoked Planning run also ends at the frozen plan instead of starting implementation.
 - `tests/behavior/change-routing.test.ts` guards the shipped `coding` and `planning` text plus the README sentence, so reconnecting Planning to an automatic implementation start fails the suite.
@@ -26,4 +26,4 @@ English | [中文](2026-09-23-planning-coding-session-boundary.zh.md)
 
 - A planned change found inside a coding session now produces a frozen, validated plan and stops there; implementation resumes only in the new session, where the frozen plan is the boundary.
 - [Change routing](./2026-09-22-change-routing.md) still owns the direct, mechanical and planned classification; this record adds only the Planning-to-Coding handoff.
-- [The project contract and Agent Notes record](./2026-09-16-project-contract-and-agent-notes.md) remains current; no active note is superseded.
+- [The project contract and Agent Notes record](./2026-09-16-project-contract-and-agent-notes.md) remains current. The 2026-10-08 [workspace session handoff record](../bug-fix/2026-10-08-workspace-session-handoff.md) partially supersedes this record's unconditional single-session handoff fact; this record keeps its boundary decision and rationale, and its current handoff fact points there.

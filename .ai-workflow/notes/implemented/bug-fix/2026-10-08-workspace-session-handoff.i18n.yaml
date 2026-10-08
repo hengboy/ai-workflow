@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (.ai-workflow/notes/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+# ai-workflow notes pairing --project <project-root> --write .ai-workflow/notes/implemented/bug-fix/2026-10-08-workspace-session-handoff.md
+2026-10-08-workspace-session-handoff.md: 145ae487027c4a16ca03445af1360666b52aff6e
+2026-10-08-workspace-session-handoff.zh.md: 1a3a044c11d7aa90de312a3a36679a22eccd34e8
