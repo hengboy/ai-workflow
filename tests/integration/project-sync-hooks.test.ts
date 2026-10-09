@@ -7,32 +7,35 @@ import type { SyncReport } from '../../src/sync/index.js';
 import type { ProjectGateResult } from '../../src/sync/gate.js';
 import { install } from '../../src/install/index.js';
 import { exists } from '../../src/utils/fs.js';
+import { packagePath } from '../../src/utils/schema.js';
 import { changedPaths, snapshotTree, temporary } from '../helpers.js';
 
 /**
- * Frozen native hook adapter contract for `src/cli.ts` slice 2.3.
+ * Frozen single-start synchronization cadence for `src/cli.ts` / `src/sync/gate.ts` (plan
+ * `20261009-sync-once-at-skill-start`, Step 2).
  *
  * Command:
  *   node src/cli.ts sync-hook --host <claude|codex|opencode> [--phase] [--project <actual-root>]
  * Reads exactly one native JSON object from stdin (unless `--phase` is given).
  *
- * Native stdin fields (Claude/Codex common JSON):
- *   { cwd, session_id, hook_event_name, tool_name?, tool_input?, source?, prompt? }
- *   - hook_event_name: 'PreToolUse' | 'SessionStart' | 'UserPromptSubmit'
- *   - SessionStart carries `source` (e.g. 'resume'); UserPromptSubmit carries `prompt`.
+ * The single automatic trigger is the phase form. It always prints the raw gate JSON
+ * (`decision`, `project`, `context`, optional `authority` and `report`) for every host. Every
+ * native stdin event reads the stored per-actual-root result and issues zero source requests;
+ * a missing stored result is a `allow` without a nested report whose context states that no
+ * check has run. A stored `deny` (conflict) never clears on a native event or on an exemption.
  *
  * Output:
  *   - claude/codex native JSON, always exit 0:
  *       allow  -> { systemMessage?, hookSpecificOutput: { hookEventName, additionalContext? } }
  *       block  -> { hookSpecificOutput: { hookEventName, permissionDecision: 'deny',
  *                                         permissionDecisionReason: <reason> } }
+ *       UserPromptSubmit deny -> { systemMessage, decision: 'block', reason, hookSpecificOutput }
  *     A CLI warning must never surface as an exit 2 denial or a permissionDecision deny.
  *   - opencode -> the raw ProjectGateResult JSON (plugin consumer) with exit 0.
- *   - `--phase --project <root>` -> the raw ProjectGateResult JSON for any host (cooperative
- *     explicit phase-entry bridge); a later same-root native session or child reuses it.
  *
- * The new required field `project` on ProjectGateResult is the normalized actual root; the
- * new optional input field `eventSource` carries `'resume'`.
+ * The OpenCode plugin boundary is driven by the INSTALLED plugin, which spawns the built
+ * `dist/cli.js`; caches there are primed through the same phase form with the same fixture
+ * environment.
  */
 interface HookGateResult extends ProjectGateResult {
   project: string;
@@ -40,6 +43,8 @@ interface HookGateResult extends ProjectGateResult {
 
 interface NativeOutput {
   systemMessage?: string;
+  decision?: string;
+  reason?: string;
   hookSpecificOutput?: {
     hookEventName?: string;
     additionalContext?: string;
@@ -53,14 +58,12 @@ interface HookProcessResult { code: number; stdout: string; stderr: string }
 const repoRoot = process.cwd();
 const tsxLoader = pathToFileURL(join(repoRoot, 'node_modules/tsx/dist/loader.mjs')).href;
 const cliEntry = join(repoRoot, 'src/cli.ts');
+const builtCli = packagePath('dist', 'cli.js');
 
 const A = 'a'.repeat(40);
 const B = 'b'.repeat(40);
 const C = 'c'.repeat(40);
 const D = 'd'.repeat(40);
-const E = 'e'.repeat(40);
-const F = 'f'.repeat(40);
-const G = '1'.repeat(40);
 
 const roots: string[] = [];
 afterEach(async () => {
@@ -150,6 +153,9 @@ globalThis.fetch = async (input) => {
 
 function failingPreload(): string {
   return `
+import { appendFileSync } from 'node:fs';
+const COMMIT = process.env.AI_WORKFLOW_FIXTURE_HEAD || ${JSON.stringify(A)};
+const LOG = process.env.AI_WORKFLOW_FIXTURE_LOG;
 function json(body, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 }
@@ -157,6 +163,7 @@ globalThis.fetch = async (input) => {
   const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
   const parsed = new URL(url);
   if (parsed.pathname === '/repos/hengboy/ai-workflow/branches/simplify') {
+    if (LOG) appendFileSync(LOG, COMMIT + '\\n');
     return json({ message: 'rate limited' }, 403);
   }
   return json({ message: 'source unavailable' }, 503);
@@ -218,6 +225,7 @@ function subprocessEnv(fixture: HookFixtureEnvironment): NodeJS.ProcessEnv {
   };
 }
 
+/** Run the worktree `src/cli.ts` through tsx (source gate). */
 function runHook(preloadPath: string, args: string[], input: unknown, env: NodeJS.ProcessEnv): Promise<HookProcessResult> {
   return new Promise((resolve) => {
     const child = spawn(
@@ -235,6 +243,23 @@ function runHook(preloadPath: string, args: string[], input: unknown, env: NodeJ
       if (input !== undefined) child.stdin.write(typeof input === 'string' ? input : JSON.stringify(input));
       child.stdin.end();
     }
+  });
+}
+
+/**
+ * Run the built `dist/cli.js` the installed OpenCode plugin actually spawns, inheriting the
+ * surrounding fixture environment (`NODE_OPTIONS` preload, `HOME`, `TMPDIR`, fixture HEAD/log).
+ */
+function runBuiltHook(args: string[], env: NodeJS.ProcessEnv = process.env): Promise<HookProcessResult> {
+  return new Promise((resolve) => {
+    const child = spawn(process.execPath, [builtCli, ...args], { cwd: repoRoot, env });
+    let stdout = '';
+    let stderr = '';
+    if (child.stdout) child.stdout.on('data', (chunk: Buffer) => { stdout += chunk.toString('utf8'); });
+    if (child.stderr) child.stderr.on('data', (chunk: Buffer) => { stderr += chunk.toString('utf8'); });
+    child.on('error', () => resolve({ code: 1, stdout, stderr }));
+    child.on('close', (code) => resolve({ code: code ?? 1, stdout, stderr }));
+    if (child.stdin) child.stdin.end();
   });
 }
 
@@ -272,6 +297,20 @@ async function hookFixture(): Promise<{ home: string; temporaryDirectory: string
   return { home, temporaryDirectory, log: join(logDirectory, 'heads.log') };
 }
 
+function expectNoCheck(context: string): void {
+  expect(context, 'the no-check context must state that no check has run').toMatch(/no[\s\S]{0,80}(check|synchroni)/i);
+}
+
+const metadataPaths = ['.ai-workflow/sync.json', '.ai-workflow/project.yml', '.ai-workflow/.sync', '.ai-workflow/phase.json'];
+
+async function expectNoProjectMetadata(root: string): Promise<void> {
+  for (const metadata of metadataPaths) {
+    expect(await exists(join(root, metadata)), `${metadata} must not be created`).toBe(false);
+  }
+}
+
+// --- Host-shape mapping over a primed cache -----------------------------------------
+
 interface MappingCase {
   name: string;
   expectedStatus: SyncReport['status'];
@@ -279,28 +318,30 @@ interface MappingCase {
   target?: Record<string, string>;
   failing?: boolean;
   deny?: boolean;
-  writesNothing?: boolean;
-  contextIncludes?: string[];
+  authority: boolean;
+  contextIncludes: string[];
 }
 
 const mappingCases: MappingCase[] = [
   {
     name: 'synchronized allow with the current updated contract context',
     expectedStatus: 'synchronized',
+    authority: true,
     contextIncludes: ['Managed workflow artifacts are current', 'Fresh shared context.'],
   },
   {
     name: 'unverified warning allows with visible context',
     expectedStatus: 'unverified',
     failing: true,
-    writesNothing: true,
-    contextIncludes: ['unverified'],
+    authority: false,
+    contextIncludes: ['unverified', 'Warning:'],
   },
   {
     name: 'needs_attention warning allows with visible context and fresh authority',
     expectedStatus: 'needs_attention',
     source: attentionSourceFiles,
     target: { 'MEMORY.md': attentionTargetMemory },
+    authority: true,
     contextIncludes: ['needs_attention', 'Fresh shared context.'],
   },
   {
@@ -308,7 +349,8 @@ const mappingCases: MappingCase[] = [
     expectedStatus: 'conflict',
     target: { '.ai-workflow/AGENTS.md': malformedAgents },
     deny: true,
-    writesNothing: true,
+    authority: false,
+    contextIncludes: ['conflict', 'Conflict:'],
   },
 ];
 
@@ -316,34 +358,53 @@ const hosts = ['claude', 'codex', 'opencode'] as const;
 
 describe('project sync hook adapter', () => {
   it.each(hosts.flatMap((host) => mappingCases.map((testCase) => ({ host, ...testCase }))))(
-    'AC-007/AC-012: $host maps $name',
-    async (testCase) => {
+    'AC-007/AC-012: $host maps $name from the primed cache without a source request',
+    async ({ host, ...testCase }) => {
       const project = await adoptedProject(testCase.target);
       const preloadPath = await writePreload(testCase.failing ? failingPreload() : hookPreload(testCase.source ?? baseSourceFiles));
       const fixture = await hookFixture();
-      const before = await snapshotTree(project);
 
-      const result = await runHook(
+      // Prime the actual-root cache through the real phase form at head A. It always prints
+      // the raw gate JSON for every host and is the only event that contacts the source.
+      const prime = await runHook(
         preloadPath,
-        ['sync-hook', '--host', testCase.host],
-        nativeInput('PreToolUse', project, 'map-session'),
+        ['sync-hook', '--host', host, '--phase', '--project', project],
+        undefined,
         subprocessEnv({ ...fixture, head: A, log: fixture.log }),
       );
+      expect(prime.code, prime.stderr).toBe(0);
+      const primed = JSON.parse(prime.stdout) as HookGateResult;
+      expect(primed.decision).toBe(testCase.deny ? 'deny' : 'allow');
+      expect(primed.report?.status).toBe(testCase.expectedStatus);
+      expect(primed.project).toBe(project);
+      for (const text of testCase.contextIncludes) expect(primed.context, 'prime context').toContain(text);
+      expect(await observedHeads(fixture.log), 'only the phase entry may query the source').toEqual([A]);
 
-      // Native hooks convey decisions in JSON; warning and block both exit normally.
-      expect(result.code, `stderr: ${result.stderr}`).toBe(0);
+      const afterPrime = await snapshotTree(project);
 
-      if (testCase.host === 'opencode') {
-        const gate = JSON.parse(result.stdout) as HookGateResult;
+      // The native PreToolUse at head B replays the stored A result; it must never query the
+      // source even though the branch answer would now differ.
+      const native = await runHook(
+        preloadPath,
+        ['sync-hook', '--host', host],
+        nativeInput('PreToolUse', project, 'map-session'),
+        subprocessEnv({ ...fixture, head: B, log: fixture.log }),
+      );
+      expect(native.code, `stderr: ${native.stderr}`).toBe(0);
+
+      if (host === 'opencode') {
+        const gate = JSON.parse(native.stdout) as HookGateResult;
         expect(gate.decision).toBe(testCase.deny ? 'deny' : 'allow');
+        expect(gate.project).toBe(project);
         expect(gate.report?.status).toBe(testCase.expectedStatus);
-        expect(gate.context.length).toBeGreaterThan(0);
-        for (const text of testCase.contextIncludes ?? []) expect(gate.context).toContain(text);
+        for (const text of testCase.contextIncludes) expect(gate.context, 'replayed context').toContain(text);
+        if (testCase.authority) expect(typeof gate.authority).toBe('string');
+        else expect(gate.authority).toBeUndefined();
       } else {
-        const output = JSON.parse(result.stdout) as NativeOutput;
+        const output = JSON.parse(native.stdout) as NativeOutput;
         const context = nativeContext(output);
         expect(context.length).toBeGreaterThan(0);
-        for (const text of testCase.contextIncludes ?? []) expect(context).toContain(text);
+        for (const text of testCase.contextIncludes) expect(context, 'replayed context').toContain(text);
         expect(output.hookSpecificOutput?.hookEventName).toBe('PreToolUse');
         if (testCase.deny) {
           // A blocking report must not become an exit 2 denial: it uses the explicit shape.
@@ -355,90 +416,155 @@ describe('project sync hook adapter', () => {
         }
       }
 
-      if (testCase.writesNothing) {
-        expect(changedPaths(before, await snapshotTree(project)), 'warning/block must not publish').toEqual([]);
+      // The deny case also exercises the UserPromptSubmit block shape (still replaying A).
+      if (testCase.deny) {
+        const prompt = await runHook(
+          preloadPath,
+          ['sync-hook', '--host', host],
+          nativeInput('UserPromptSubmit', project, 'map-session', { prompt: 'continue' }),
+          subprocessEnv({ ...fixture, head: B, log: fixture.log }),
+        );
+        expect(prompt.code, prompt.stderr).toBe(0);
+        if (host === 'opencode') {
+          expect((JSON.parse(prompt.stdout) as HookGateResult).decision).toBe('deny');
+        } else {
+          const promptOutput = JSON.parse(prompt.stdout) as NativeOutput;
+          expect(promptOutput.decision).toBe('block');
+          expect(promptOutput.reason ?? '').not.toBe('');
+          expect(promptOutput.reason ?? '').toContain('conflict');
+          expect(promptOutput.hookSpecificOutput?.permissionDecision).toBeUndefined();
+        }
       }
 
-      for (const metadata of ['.ai-workflow/sync.json', '.ai-workflow/project.yml', '.ai-workflow/.sync']) {
-        expect(await exists(join(project, metadata)), `${metadata} must not be created`).toBe(false);
-      }
+      expect(await observedHeads(fixture.log), 'native replay never queries the source').toEqual([A]);
+      expect(changedPaths(afterPrime, await snapshotTree(project)), 'a native replay must not publish').toEqual([]);
+      await expectNoProjectMetadata(project);
     },
+    60_000,
   );
 
-  it('AC-006: persists one unit across native hook processes and shares an explicit phase bridge result', async () => {
+  it('AC-001/AC-002/AC-004: native events replay the stored result per actual root and never synchronize', async () => {
+    const projectA = await adoptedProject();
+    const projectB = await adoptedProject();
+    const preloadPath = await writePreload(hookPreload(baseSourceFiles));
+    const fixture = await hookFixture();
+    const envFor = (head: string) => subprocessEnv({ ...fixture, head, log: fixture.log });
+    const beforeA = await snapshotTree(projectA);
+
+    // (a) A native PreToolUse with no stored check is an allow with a visible no-check
+    // context, no denial, no source request and no project write, for claude and codex.
+    for (const host of ['claude', 'codex'] as const) {
+      const noCheck = await runHook(preloadPath, ['sync-hook', '--host', host], nativeInput('PreToolUse', projectA, 'no-check'), envFor(B));
+      expect(noCheck.code, noCheck.stderr).toBe(0);
+      const output = JSON.parse(noCheck.stdout) as NativeOutput;
+      expectNoCheck(nativeContext(output));
+      expect(output.hookSpecificOutput?.permissionDecision).toBeUndefined();
+    }
+    expect(await observedHeads(fixture.log), 'a native without a stored check must not query the source').toEqual([]);
+    expect(changedPaths(beforeA, await snapshotTree(projectA)), 'a no-check native must not write the project').toEqual([]);
+
+    // (b) The phase form at head A is the only source request and stores the raw result.
+    const phaseA = await runHook(preloadPath, ['sync-hook', '--host', 'claude', '--phase', '--project', projectA], undefined, envFor(A));
+    expect(phaseA.code, phaseA.stderr).toBe(0);
+    const storedA = JSON.parse(phaseA.stdout) as HookGateResult;
+    expect(storedA.decision).toBe('allow');
+    expect(storedA.project).toBe(projectA);
+    expect(storedA.report?.source.commit).toBe(A);
+    expect(await observedHeads(fixture.log)).toEqual([A]);
+
+    // (c) Every native event at head B reuses A, including a resume SessionStart.
+    const natives: Array<{ event: string; extra?: Record<string, unknown> }> = [
+      { event: 'SessionStart', extra: { source: 'startup' } },
+      { event: 'UserPromptSubmit', extra: { prompt: 'continue' } },
+      { event: 'PreToolUse' },
+      { event: 'SessionStart', extra: { source: 'resume' } },
+    ];
+    for (const native of natives) {
+      const reply = await runHook(preloadPath, ['sync-hook', '--host', 'claude'], nativeInput(native.event, projectA, 'S', native.extra), envFor(B));
+      expect(reply.code, reply.stderr).toBe(0);
+      const context = nativeContext(JSON.parse(reply.stdout) as NativeOutput);
+      expect(context, `${native.event} must replay A`).toContain(A);
+      expect(context, `${native.event} must not observe B`).not.toContain(B);
+    }
+    expect(await observedHeads(fixture.log), 'native events must reuse the stored entry').toEqual([A]);
+
+    // (d) A second phase entry at B replaces the stored entry; natives then replay B.
+    const phaseB = await runHook(preloadPath, ['sync-hook', '--host', 'claude', '--phase', '--project', projectA], undefined, envFor(B));
+    expect(phaseB.code, phaseB.stderr).toBe(0);
+    expect((JSON.parse(phaseB.stdout) as HookGateResult).report?.source.commit).toBe(B);
+    expect(await observedHeads(fixture.log)).toEqual([A, B]);
+
+    const replayB = await runHook(preloadPath, ['sync-hook', '--host', 'claude'], nativeInput('PreToolUse', projectA, 'S'), envFor(C));
+    expect(replayB.code, replayB.stderr).toBe(0);
+    const replayBContext = nativeContext(JSON.parse(replayB.stdout) as NativeOutput);
+    expect(replayBContext).toContain(B);
+    expect(replayBContext).not.toContain(C);
+    expect(await observedHeads(fixture.log), 'the replaced entry must be served with zero requests').toEqual([A, B]);
+
+    // (e) A distinct second actual root has no stored check: native is a no-check allow with
+    // no request, and only its own phase entry synchronizes it.
+    const beforeB = await snapshotTree(projectB);
+    const noCheckB = await runHook(preloadPath, ['sync-hook', '--host', 'claude'], nativeInput('PreToolUse', projectB, 'other-root'), envFor(C));
+    expect(noCheckB.code, noCheckB.stderr).toBe(0);
+    const noCheckBOutput = JSON.parse(noCheckB.stdout) as NativeOutput;
+    expectNoCheck(nativeContext(noCheckBOutput));
+    expect(noCheckBOutput.hookSpecificOutput?.permissionDecision).toBeUndefined();
+    expect(await observedHeads(fixture.log), 'an unprimed root must not query the source').toEqual([A, B]);
+    expect(changedPaths(beforeB, await snapshotTree(projectB)), 'an unprimed root must not replay or write the first root').toEqual([]);
+
+    const phaseC = await runHook(preloadPath, ['sync-hook', '--host', 'claude', '--phase', '--project', projectB], undefined, envFor(C));
+    expect(phaseC.code, phaseC.stderr).toBe(0);
+    expect((JSON.parse(phaseC.stdout) as HookGateResult).report?.source.commit).toBe(C);
+    expect(await observedHeads(fixture.log)).toEqual([A, B, C]);
+
+    const replayA = await runHook(preloadPath, ['sync-hook', '--host', 'claude'], nativeInput('PreToolUse', projectA, 'S'), envFor(D));
+    expect(replayA.code, replayA.stderr).toBe(0);
+    const replayAContext = nativeContext(JSON.parse(replayA.stdout) as NativeOutput);
+    expect(replayAContext, 'the first root still replays its own stored B').toContain(B);
+    expect(replayAContext).not.toContain(D);
+    expect(await observedHeads(fixture.log), 'each actual root keeps its own cache entry').toEqual([A, B, C]);
+
+    // (f) No project-local synchronization metadata anywhere.
+    await expectNoProjectMetadata(projectA);
+    await expectNoProjectMetadata(projectB);
+    // Frozen plan bytes and independently owned data survive.
+    for (const root of [projectA, projectB]) {
+      expect(await readFile(join(root, '.ai-workflow/plans/20260101-custom/spec.md'), 'utf8')).toBe(planSpecBytes);
+    }
+  }, 90_000);
+
+  it('AC-007: manual sync repairs files but never replaces the stored gate decision', async () => {
     const project = await adoptedProject();
     const preloadPath = await writePreload(hookPreload(baseSourceFiles));
     const fixture = await hookFixture();
-    const environmentFor = (head: string) => subprocessEnv({ ...fixture, head, log: fixture.log });
-    const preloadBefore = await snapshotTree(project);
+    const envFor = (head: string) => subprocessEnv({ ...fixture, head, log: fixture.log });
 
-    // A new session begins a unit and synchronizes the current HEAD (A).
-    const sessionStart = await runHook(preloadPath, ['sync-hook', '--host', 'claude'], nativeInput('SessionStart', project, 'S'), environmentFor(A));
-    expect(sessionStart.code, sessionStart.stderr).toBe(0);
-    expect(nativeContext(JSON.parse(sessionStart.stdout) as NativeOutput)).toContain(A);
+    const prime = await runHook(preloadPath, ['sync-hook', '--host', 'opencode', '--phase', '--project', project], undefined, envFor(A));
+    expect(prime.code, prime.stderr).toBe(0);
+    const stored = JSON.parse(prime.stdout) as HookGateResult;
+    expect(stored.report?.source.commit).toBe(A);
     expect(await observedHeads(fixture.log)).toEqual([A]);
 
-    // HEAD advances, but the same unit's tool call reuses A with no external HEAD query.
-    const tool = await runHook(preloadPath, ['sync-hook', '--host', 'claude'], nativeInput('PreToolUse', project, 'S'), environmentFor(B));
-    expect(tool.code, tool.stderr).toBe(0);
-    const toolContext = nativeContext(JSON.parse(tool.stdout) as NativeOutput);
-    expect(toolContext, 'no mid-unit rule change').toContain(A);
-    expect(toolContext).not.toContain(B);
-    expect(await observedHeads(fixture.log), 'a reused unit queries HEAD once').toEqual([A]);
+    // The manual command performs a fresh synchronization at B and prints the SyncReport.
+    const manual = await runHook(preloadPath, ['sync', project], undefined, envFor(B));
+    expect(manual.code, manual.stderr).toBe(0);
+    const manualReport = JSON.parse(manual.stdout) as SyncReport;
+    expect(manualReport.status).toBe('synchronized');
+    expect(manualReport.source.commit).toBe(B);
+    expect(await observedHeads(fixture.log), 'manual sync is a fresh independent query').toEqual([A, B]);
 
-    // A prompt event begins a new unit and picks up B.
-    const prompt = await runHook(preloadPath, ['sync-hook', '--host', 'claude'], nativeInput('UserPromptSubmit', project, 'S', { prompt: 'continue' }), environmentFor(B));
-    expect(prompt.code, prompt.stderr).toBe(0);
-    expect(nativeContext(JSON.parse(prompt.stdout) as NativeOutput)).toContain(B);
-    expect(await observedHeads(fixture.log)).toEqual([A, B]);
-
-    // A resuming SessionStart invalidates the previous result and synchronizes C.
-    const resume = await runHook(preloadPath, ['sync-hook', '--host', 'claude'], nativeInput('SessionStart', project, 'S', { source: 'resume' }), environmentFor(C));
-    expect(resume.code, resume.stderr).toBe(0);
-    expect(nativeContext(JSON.parse(resume.stdout) as NativeOutput)).toContain(C);
-    expect(await observedHeads(fixture.log)).toEqual([A, B, C]);
-
-    // A later tool call still reuses C even though HEAD advanced to D.
-    const afterResume = await runHook(preloadPath, ['sync-hook', '--host', 'claude'], nativeInput('PreToolUse', project, 'S'), environmentFor(D));
-    expect(afterResume.code, afterResume.stderr).toBe(0);
-    const afterResumeContext = nativeContext(JSON.parse(afterResume.stdout) as NativeOutput);
-    expect(afterResumeContext).toContain(C);
-    expect(afterResumeContext).not.toContain(D);
-    expect(await observedHeads(fixture.log)).toEqual([A, B, C]);
-
-    // An explicit phase bridge begins a new unit on E and reports the raw GateResult.
-    const phase = await runHook(preloadPath, ['sync-hook', '--host', 'claude', '--phase', '--project', project], undefined, environmentFor(E));
-    expect(phase.code, phase.stderr).toBe(0);
-    const phaseResult = JSON.parse(phase.stdout) as HookGateResult;
-    expect(phaseResult.decision).toBe('allow');
-    expect(phaseResult.project).toBe(project);
-    expect(phaseResult.report?.source.commit).toBe(E);
-    expect(await observedHeads(fixture.log)).toEqual([A, B, C, E]);
-
-    // A same-root native session (a different session id) reuses the phase snapshot on F.
-    const phaseChild = await runHook(preloadPath, ['sync-hook', '--host', 'claude'], nativeInput('PreToolUse', project, 'S2'), environmentFor(F));
-    expect(phaseChild.code, phaseChild.stderr).toBe(0);
-    const phaseChildContext = nativeContext(JSON.parse(phaseChild.stdout) as NativeOutput);
-    expect(phaseChildContext, 'a same-root current session shares the phase result').toContain(E);
-    expect(phaseChildContext).not.toContain(F);
-    expect(await observedHeads(fixture.log)).toEqual([A, B, C, E]);
-
-    // A second explicit phase entry begins a new unit and synchronizes G.
-    const phaseAgain = await runHook(preloadPath, ['sync-hook', '--host', 'claude', '--phase', '--project', project], undefined, environmentFor(G));
-    expect(phaseAgain.code, phaseAgain.stderr).toBe(0);
-    expect((JSON.parse(phaseAgain.stdout) as HookGateResult).report?.source.commit).toBe(G);
-    expect(await observedHeads(fixture.log)).toEqual([A, B, C, E, G]);
-
-    // No root-local phase record, source baseline or synchronization metadata.
-    for (const metadata of ['.ai-workflow/sync.json', '.ai-workflow/project.yml', '.ai-workflow/.sync', '.ai-workflow/phase.json']) {
-      expect(await exists(join(project, metadata)), `${metadata} must not be created`).toBe(false);
-    }
-    // Managed safe patches are the only project change; no runtime state leaks in.
-    expect(changedPaths(preloadBefore, await snapshotTree(project))).toEqual(['.ai-workflow/AGENTS.md', 'MEMORY.md']);
+    // A following native event still replays the STORED A decision with no new source request.
+    const native = await runHook(preloadPath, ['sync-hook', '--host', 'opencode'], nativeInput('PreToolUse', project, 'manual-session'), envFor(C));
+    expect(native.code, native.stderr).toBe(0);
+    const replayed = JSON.parse(native.stdout) as HookGateResult;
+    expect(replayed.report?.source.commit, 'manual sync must not replace the stored gate decision').toBe(A);
+    expect(replayed.context).toContain(A);
+    expect(replayed.context).not.toContain(B);
+    expect(await observedHeads(fixture.log), 'the native event after manual sync must issue zero requests').toEqual([A, B]);
   }, 60_000);
 });
 
-// --- OpenCode plugin boundary (installed plugin -> real sync-hook CLI) -------------
+// --- OpenCode plugin boundary (installed plugin -> spawned dist CLI) ----------------
 
 interface PluginSessionState { directory: string; parentID?: string }
 interface PluginToast { title?: string; message?: string; variant?: string }
@@ -476,8 +602,10 @@ interface PluginHooks {
   'tool.execute.after': (input: { sessionID: string; tool: string; args: Record<string, unknown> }) => Promise<void>;
 }
 
+const opencodePluginRelative = '.config/opencode/plugins/ai-workflow-sync.js';
+
 async function loadInstalledPlugin(home: string, sdk: PluginSdk, contextDirectory: string): Promise<PluginHooks> {
-  const pluginPath = join(home, '.config/opencode/plugins/ai-workflow-sync.js');
+  const pluginPath = join(home, opencodePluginRelative);
   const module = await import(pathToFileURL(pluginPath).href) as { AiWorkflowSyncPlugin: (input: { client: unknown; directory: string; worktree: string }) => Promise<PluginHooks> };
   return module.AiWorkflowSyncPlugin({ client: sdk.client, directory: contextDirectory, worktree: contextDirectory });
 }
@@ -490,31 +618,106 @@ async function withProcessEnvironment<T>(values: Record<string, string>, body: (
   }
 }
 
-interface PluginBoundaryCase { name: string; kind: 'lifecycle' | 'conflict' | 'warning' }
-
-const pluginBoundaryCases: PluginBoundaryCase[] = [
-  { name: 'injects the fresh contract before tools and an explicit read resolves a pending authority after a root switch', kind: 'lifecycle' },
-  { name: 'blocks an ordinary tool on a malformed target yet permits the exact sync actor through the cached blocker', kind: 'conflict' },
-  { name: 'allows a source warning with visible context and no false freshness', kind: 'warning' },
-];
+/** Prime one actual root through the built phase form the installed plugin shares. */
+async function primeBuilt(project: string, head: string): Promise<HookGateResult> {
+  process.env.AI_WORKFLOW_FIXTURE_HEAD = head;
+  const result = await runBuiltHook(['sync-hook', '--host', 'opencode', '--phase', '--project', project]);
+  expect(result.code, result.stderr).toBe(0);
+  return JSON.parse(result.stdout) as HookGateResult;
+}
 
 describe('opencode plugin boundary', () => {
-  it.each(pluginBoundaryCases)('REQ-004/AC-006/AC-007/AC-008: $name', async (testCase) => {
+  it('REQ-004/AC-003/AC-004: injects the primed contract, serves an unprimed root with a no-check, then requires the primed contract read', async () => {
     const home = await temporary('ai-workflow-plugin-home-');
     const contextDirectory = await temporary('ai-workflow-plugin-context-');
     const fixtureLogDirectory = await temporary('ai-workflow-plugin-log-');
-    const rootA = await adoptedProject(testCase.kind === 'conflict' ? { '.ai-workflow/AGENTS.md': malformedAgents } : {});
-    // A separately adopted root with independently preserved custom contract bytes, so the
-    // authority text genuinely differs when the actual SDK session directory changes.
+    const rootA = await adoptedProject();
     const rootBAgents = `# root B custom preface\n${marker('shared-context', '## Shared context\nOld shared context.')}root B suffix\n`;
     const rootB = await adoptedProject({ '.ai-workflow/AGENTS.md': rootBAgents });
     roots.push(home, contextDirectory, fixtureLogDirectory, rootA, rootB);
     expect(contextDirectory).not.toBe(rootA);
 
-    const preloadPath = await writePreload(testCase.kind === 'warning' ? failingPreload() : hookPreload(baseSourceFiles));
+    const preloadPath = await writePreload(hookPreload(baseSourceFiles));
     const log = join(fixtureLogDirectory, 'heads.log');
     await install(['opencode'], { home, opencodeVersion: 'v1' });
-    const sdk = pluginSdk({ S: { directory: rootA }, P: { directory: rootA }, C: { directory: rootA, parentID: 'P' } });
+    const sdk = pluginSdk({ S: { directory: rootA } });
+    const plugin = await loadInstalledPlugin(home, sdk, contextDirectory);
+    const contextBefore = await snapshotTree(contextDirectory);
+    const contractB = join(rootB, '.ai-workflow/AGENTS.md');
+
+    await withProcessEnvironment({
+      HOME: home,
+      TMPDIR: fixtureLogDirectory,
+      NODE_OPTIONS: `--import ${pathToFileURL(preloadPath).href}`,
+      AI_WORKFLOW_FIXTURE_HEAD: A,
+      AI_WORKFLOW_FIXTURE_LOG: log,
+    }, async () => {
+      // Prime rootA at A. The plugin's first event (a synthesized SessionStart) must reuse it.
+      const primedA = await primeBuilt(rootA, A);
+      expect(primedA.report?.status).toBe('synchronized');
+      expect(await observedHeads(log)).toEqual([A]);
+
+      const injected = { system: [] as string[] };
+      await plugin['experimental.chat.system.transform']({ sessionID: 'S' }, injected);
+      expect(injected.system.join('\n'), 'the primed contract must be injected before ordinary work').toContain('Fresh shared context.');
+      await plugin['tool.execute.before']({ sessionID: 'S', tool: 'bash' }, { args: { command: 'ls' } });
+      expect(await observedHeads(log), 'a primed plugin session must not query the source').toEqual([A]);
+
+      // The SDK session directory moves to an unprimed root: the ordinary tool proceeds with
+      // the no-check context, writes nothing and issues no source request.
+      sdk.sessions.set('S', { directory: rootB });
+      const rootBBefore = await snapshotTree(rootB);
+      const noCheck = { system: [] as string[] };
+      await plugin['experimental.chat.system.transform']({ sessionID: 'S' }, noCheck);
+      expectNoCheck(noCheck.system.join('\n'));
+      await plugin['tool.execute.before']({ sessionID: 'S', tool: 'bash' }, { args: { command: 'ls' } });
+      expect(await observedHeads(log), 'an unprimed root must not query the source').toEqual([A]);
+      expect(changedPaths(rootBBefore, await snapshotTree(rootB)), 'an unprimed root must stay unchanged').toEqual([]);
+
+      // Prime rootB at B externally; the ordinary tool now rejects until rootB's contract is read.
+      const primedB = await primeBuilt(rootB, B);
+      expect(primedB.report?.status).toBe('synchronized');
+      expect(await observedHeads(log)).toEqual([A, B]);
+      process.env.AI_WORKFLOW_FIXTURE_HEAD = C;
+
+      await expect(plugin['tool.execute.before']({ sessionID: 'S', tool: 'bash' }, { args: { command: 'ls' } }))
+        .rejects.toThrow(/before ordinary project work continues/);
+
+      await plugin['tool.execute.before']({ sessionID: 'S', tool: 'read' }, { args: { filePath: contractB } });
+      await plugin['tool.execute.after']({ sessionID: 'S', tool: 'read', args: { filePath: contractB } });
+      await plugin['tool.execute.before']({ sessionID: 'S', tool: 'bash' }, { args: { command: 'ls' } });
+
+      // A child session on the same actual root reuses the stored result with no new HEAD query.
+      sdk.sessions.set('P', { directory: rootB });
+      sdk.sessions.set('C', { directory: rootB, parentID: 'P' });
+      const parentOutput = { system: [] as string[] };
+      await plugin['experimental.chat.system.transform']({ sessionID: 'P' }, parentOutput);
+      expect(parentOutput.system.join('\n')).toContain('Fresh shared context.');
+      const headsBeforeChild = await observedHeads(log);
+      const childOutput = { system: [] as string[] };
+      await plugin['experimental.chat.system.transform']({ sessionID: 'C' }, childOutput);
+      expect(childOutput.system.join('\n'), 'a same-root child reuses the parent result').toBe(parentOutput.system.join('\n'));
+      expect(await observedHeads(log), 'the reused result performs no new HEAD query').toEqual(headsBeforeChild);
+    });
+
+    expect(changedPaths(contextBefore, await snapshotTree(contextDirectory))).toEqual([]);
+    for (const root of [rootA, rootB]) {
+      expect(await readFile(join(root, '.ai-workflow/plans/20260101-custom/spec.md'), 'utf8')).toBe(planSpecBytes);
+      await expectNoProjectMetadata(root);
+    }
+  }, 90_000);
+
+  it('REQ-004/AC-003/AC-007: replays a stored conflict without clearing it on the exact actor and with no HEAD request', async () => {
+    const home = await temporary('ai-workflow-plugin-conflict-home-');
+    const contextDirectory = await temporary('ai-workflow-plugin-conflict-context-');
+    const fixtureLogDirectory = await temporary('ai-workflow-plugin-conflict-log-');
+    const rootA = await adoptedProject({ '.ai-workflow/AGENTS.md': malformedAgents });
+    roots.push(home, contextDirectory, fixtureLogDirectory, rootA);
+
+    const preloadPath = await writePreload(hookPreload(baseSourceFiles));
+    const log = join(fixtureLogDirectory, 'heads.log');
+    await install(['opencode'], { home, opencodeVersion: 'v1' });
+    const sdk = pluginSdk({ S: { directory: rootA } });
     const plugin = await loadInstalledPlugin(home, sdk, contextDirectory);
     const contextBefore = await snapshotTree(contextDirectory);
 
@@ -525,78 +728,79 @@ describe('opencode plugin boundary', () => {
       AI_WORKFLOW_FIXTURE_HEAD: A,
       AI_WORKFLOW_FIXTURE_LOG: log,
     }, async () => {
-      const contractB = join(rootB, '.ai-workflow/AGENTS.md');
+      const primed = await primeBuilt(rootA, A);
+      expect(primed.decision).toBe('deny');
+      expect(primed.report?.status).toBe('conflict');
+      expect(await observedHeads(log)).toEqual([A]);
+      process.env.AI_WORKFLOW_FIXTURE_HEAD = B;
 
-      if (testCase.kind === 'lifecycle') {
-        // system.transform synchronizes and injects the current updated contract before any tool.
-        const injected = { system: [] as string[] };
-        await plugin['experimental.chat.system.transform']({ sessionID: 'S' }, injected);
-        expect(injected.system.join('\n'), 'the fresh contract must be injected before ordinary work').toContain('Fresh shared context.');
+      const injected = { system: [] as string[] };
+      await plugin['experimental.chat.system.transform']({ sessionID: 'S' }, injected);
+      expect(injected.system.join('\n')).toContain('conflict');
+      expect(sdk.toasts.some((toast) => toast.variant === 'error' && (toast.message ?? '').includes('conflict'))).toBe(true);
 
-        // The ordinary tool is allowed from the cached snapshot.
-        await plugin['tool.execute.before']({ sessionID: 'S', tool: 'bash' }, { args: { command: 'ls' } });
+      // A malformed ownership target blocks the ordinary tool.
+      await expect(plugin['tool.execute.before']({ sessionID: 'S', tool: 'bash' }, { args: { command: 'ls' } })).rejects.toThrow(/conflict/);
 
-        // The ACTUAL SDK session directory changes to a separately adopted root: the ordinary
-        // tool triggers a fresh sync and refuses until the authority is reloaded.
-        sdk.sessions.set('S', { directory: rootB });
-        await expect(plugin['tool.execute.before']({ sessionID: 'S', tool: 'bash' }, { args: { command: 'ls' } }))
-          .rejects.toThrow(/before ordinary project work continues/);
+      // The exact sync actor is still permitted through the cached blocker, without clearing it.
+      await plugin['tool.execute.before']({ sessionID: 'S', tool: 'bash' }, { args: { command: `ai-workflow sync ${rootA}` } });
+      await expect(plugin['tool.execute.before']({ sessionID: 'S', tool: 'bash' }, { args: { command: 'ls' } })).rejects.toThrow(/conflict/);
 
-        // The exact authority read of the new root is allowed even through the gate, and
-        // simulating the public after hook records the read, resolving the pending authority.
-        await plugin['tool.execute.before']({ sessionID: 'S', tool: 'read' }, { args: { filePath: contractB } });
-        await plugin['tool.execute.after']({ sessionID: 'S', tool: 'read', args: { filePath: contractB } });
-        await plugin['tool.execute.before']({ sessionID: 'S', tool: 'bash' }, { args: { command: 'ls' } });
+      expect(await observedHeads(log), 'the cached conflict must never query the source').toEqual([A]);
+    });
 
-        // A child on the same actual root reuses the parent snapshot (external HEAD evidence).
-        const parentOutput = { system: [] as string[] };
-        await plugin['experimental.chat.system.transform']({ sessionID: 'P' }, parentOutput);
-        const headsAfterParent = await observedHeads(log);
-        const childOutput = { system: [] as string[] };
-        await plugin['experimental.chat.system.transform']({ sessionID: 'C' }, childOutput);
-        expect(childOutput.system.join('\n'), 'a same-root child reuses the parent snapshot').toBe(parentOutput.system.join('\n'));
-        expect(await observedHeads(log), 'the child reuse performs no new HEAD query').toEqual(headsAfterParent);
-        return;
-      }
+    expect(changedPaths(contextBefore, await snapshotTree(contextDirectory))).toEqual([]);
+    expect(await readFile(join(rootA, '.ai-workflow/plans/20260101-custom/spec.md'), 'utf8')).toBe(planSpecBytes);
+    await expectNoProjectMetadata(rootA);
+  }, 90_000);
 
-      if (testCase.kind === 'conflict') {
-        const injected = { system: [] as string[] };
-        await plugin['experimental.chat.system.transform']({ sessionID: 'S' }, injected);
-        expect(injected.system.join('\n')).toContain('conflict');
-        expect(sdk.toasts.some((toast) => toast.variant === 'error' && (toast.message ?? '').includes('conflict'))).toBe(true);
+  it('REQ-004/AC-007: replays a stored source warning with visible context and no HEAD request', async () => {
+    const home = await temporary('ai-workflow-plugin-warning-home-');
+    const contextDirectory = await temporary('ai-workflow-plugin-warning-context-');
+    const fixtureLogDirectory = await temporary('ai-workflow-plugin-warning-log-');
+    const rootA = await adoptedProject();
+    roots.push(home, contextDirectory, fixtureLogDirectory, rootA);
 
-        // A malformed ownership target blocks the ordinary tool.
-        await expect(plugin['tool.execute.before']({ sessionID: 'S', tool: 'bash' }, { args: { command: 'ls' } })).rejects.toThrow(/conflict/);
+    const preloadPath = await writePreload(failingPreload());
+    const log = join(fixtureLogDirectory, 'heads.log');
+    await install(['opencode'], { home, opencodeVersion: 'v1' });
+    const sdk = pluginSdk({ S: { directory: rootA } });
+    const plugin = await loadInstalledPlugin(home, sdk, contextDirectory);
+    const contextBefore = await snapshotTree(contextDirectory);
 
-        // The exact sync actor is still permitted through the cached blocker, without clearing it.
-        await plugin['tool.execute.before']({ sessionID: 'S', tool: 'bash' }, { args: { command: `ai-workflow sync ${rootA}` } });
-        await expect(plugin['tool.execute.before']({ sessionID: 'S', tool: 'bash' }, { args: { command: 'ls' } })).rejects.toThrow(/conflict/);
-        return;
-      }
+    await withProcessEnvironment({
+      HOME: home,
+      TMPDIR: fixtureLogDirectory,
+      NODE_OPTIONS: `--import ${pathToFileURL(preloadPath).href}`,
+      AI_WORKFLOW_FIXTURE_HEAD: A,
+      AI_WORKFLOW_FIXTURE_LOG: log,
+    }, async () => {
+      const primed = await primeBuilt(rootA, A);
+      expect(primed.decision).toBe('allow');
+      expect(primed.report?.status).toBe('unverified');
+      expect(await observedHeads(log)).toEqual([A]);
+      process.env.AI_WORKFLOW_FIXTURE_HEAD = B;
 
-      // Source warning: allowed with visible context and no false freshness claim.
       const injected = { system: [] as string[] };
       await plugin['experimental.chat.system.transform']({ sessionID: 'S' }, injected);
       const context = injected.system.join('\n');
       expect(context).toContain('unverified');
       expect(context).not.toContain('current at');
       expect(sdk.toasts.some((toast) => toast.variant === 'warning')).toBe(true);
+
+      expect(await observedHeads(log), 'the stored warning must never re-query the source').toEqual([A]);
     });
 
-    // Unrelated context trees and frozen plan bytes stay unchanged in every branch.
     expect(changedPaths(contextBefore, await snapshotTree(contextDirectory))).toEqual([]);
-    for (const root of [rootA, rootB]) {
-      expect(await readFile(join(root, '.ai-workflow/plans/20260101-custom/spec.md'), 'utf8')).toBe(planSpecBytes);
-    }
+    expect(await readFile(join(rootA, '.ai-workflow/plans/20260101-custom/spec.md'), 'utf8')).toBe(planSpecBytes);
+    await expectNoProjectMetadata(rootA);
   }, 90_000);
 
-  it('REQ-003/AC-006: routes an explicit workdir to another adopted root without changing the SDK session directory', async () => {
+  it('REQ-003/AC-006: routes an explicit workdir to another adopted root from its own primed cache without changing the SDK session directory', async () => {
     const home = await temporary('ai-workflow-plugin-route-home-');
     const contextDirectory = await temporary('ai-workflow-plugin-route-context-');
     const fixtureLogDirectory = await temporary('ai-workflow-plugin-route-log-');
     const sessionRoot = await adoptedProject();
-    // A separately adopted root with independently preserved custom bytes; the SDK session
-    // directory stays at sessionRoot for the whole test.
     const operationRootAgents = `# route B custom preface\n${marker('shared-context', '## Shared context\nOld shared context.')}route B suffix\n`;
     const operationRoot = await adoptedProject({ '.ai-workflow/AGENTS.md': operationRootAgents });
     roots.push(home, contextDirectory, fixtureLogDirectory, sessionRoot, operationRoot);
@@ -606,6 +810,7 @@ describe('opencode plugin boundary', () => {
     await install(['opencode'], { home, opencodeVersion: 'v1' });
     const sdk = pluginSdk({ S: { directory: sessionRoot } });
     const plugin = await loadInstalledPlugin(home, sdk, contextDirectory);
+    const contextBefore = await snapshotTree(contextDirectory);
 
     await withProcessEnvironment({
       HOME: home,
@@ -616,28 +821,37 @@ describe('opencode plugin boundary', () => {
     }, async () => {
       const operationContract = join(operationRoot, '.ai-workflow/AGENTS.md');
 
-      // First load of the SDK session root A is allowed and injects A's contract.
+      await primeBuilt(sessionRoot, A);
+      const primedOperation = await primeBuilt(operationRoot, B);
+      expect(primedOperation.report?.status).toBe('synchronized');
+      expect(await observedHeads(log)).toEqual([A, B]);
+      process.env.AI_WORKFLOW_FIXTURE_HEAD = C;
+
+      // The SDK session root injects its own primed contract and is not re-synchronized.
       const injected = { system: [] as string[] };
       await plugin['experimental.chat.system.transform']({ sessionID: 'S' }, injected);
       expect(injected.system.join('\n')).toContain('Fresh shared context.');
       const sessionRootAfterLoad = await snapshotTree(sessionRoot);
 
-      // An ordinary Bash `workdir` targets adopted root B: B synchronizes before the operation
-      // and ordinary work is refused until B's authority is read.
+      // The ordinary Bash `workdir` reaches operationRoot's cached authority and refuses until
+      // that root's contract is read, exactly as the current behavior requires.
       await expect(plugin['tool.execute.before']({ sessionID: 'S', tool: 'bash' }, { args: { command: 'ls', workdir: operationRoot } }))
         .rejects.toThrow(/before ordinary project work continues/);
-      expect(await readFile(operationContract, 'utf8'), 'B must sync before the operation').toContain('Fresh shared context.');
+      expect(await readFile(operationContract, 'utf8'), 'B must be primed before the operation').toContain('Fresh shared context.');
 
-      // The exact contract read of B is allowed even though the SDK session directory is still A,
-      // and the public after hook must approve the current B pending authority.
       await plugin['tool.execute.before']({ sessionID: 'S', tool: 'read' }, { args: { filePath: operationContract } });
       await plugin['tool.execute.after']({ sessionID: 'S', tool: 'read', args: { filePath: operationContract } });
-
-      // The ordinary Bash workdir B now proceeds: no stale A claim and no authority loop.
       await plugin['tool.execute.before']({ sessionID: 'S', tool: 'bash' }, { args: { command: 'ls', workdir: operationRoot } });
 
-      // The routed operation never synchronizes or otherwise changes the SDK session root A.
+      // No plugin event issued a source request, and the SDK session root stayed untouched.
+      expect(await observedHeads(log), 'the plugin must answer from both primed caches').toEqual([A, B]);
       expect(changedPaths(sessionRootAfterLoad, await snapshotTree(sessionRoot)), 'the SDK session root must stay unchanged').toEqual([]);
     });
+
+    expect(changedPaths(contextBefore, await snapshotTree(contextDirectory))).toEqual([]);
+    for (const root of [sessionRoot, operationRoot]) {
+      expect(await readFile(join(root, '.ai-workflow/plans/20260101-custom/spec.md'), 'utf8')).toBe(planSpecBytes);
+      await expectNoProjectMetadata(root);
+    }
   }, 90_000);
 });
