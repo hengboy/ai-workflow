@@ -28,8 +28,8 @@ Before repository context work, directly read `.ai-workflow/AGENTS.md`, `MEMORY.
 
 ## Work-boundary synchronization
 
-Before each planning or execution phase, invoke the shared native synchronization entry for
-the actual project root:
+When this skill session begins, invoke the shared native synchronization entry for the actual
+project root exactly once:
 `ai-workflow sync-hook --host <current-host> --phase --project <actual-root>`.
 It prints the raw gate JSON: the top-level `decision` is `allow`, `deny` or `skip`, the nested
 `report` (absent for `skip` or an actor exemption) carries `status`, `verified` and `proceed`,
@@ -40,10 +40,10 @@ manual `ai-workflow sync [project]` command instead prints a `SyncReport` with `
 `verified` and `proceed` and no `decision`. The installed host entry passes the native JSON
 payload to `ai-workflow sync-hook --host <host>` on stdin and must not be run by hand without it.
 
-- A native session start, user turn, resume or actual-root change begins a new unit and
-  invalidates the previous snapshot; the explicit phase entry above starts one deliberately.
-- One parent snapshot covers the whole unit, so same-root child agents reuse it rather than
-  synchronizing on their own.
+- Later planning steps, execution phases and native host events in this skill session reuse the
+  stored result for the actual root instead of synchronizing again, and a missing, corrupt or
+  unreadable stored check allows with a visible no-freshness context rather than retrieving the
+  source.
 - After a safe patch changes the project contract or owned workflow rules, re-read the updated
   `.ai-workflow/AGENTS.md` before ordinary work continues.
 - Frozen `spec.md`, `plan.md` and task files are never synchronization input; when new authority
