@@ -22,7 +22,8 @@ function parseOwnedSections(contents: string): OwnedSection[] {
   for (const match of contents.matchAll(/<!--\s*ai-workflow:section\b[\s\S]*?(?:-->|$)/g)) {
     const marker = /^<!--[ \t]+ai-workflow:section[ \t]+([^:\s<>]+):(begin|end)[ \t]+-->$/.exec(match[0]);
     if (!marker) throw new OwnershipConflictError('Malformed ownership marker', /ai-workflow:section[ \t]+([^:\s<>]+)/.exec(match[0])?.[1]);
-    const id = marker[1]!;
+    const id = marker[1];
+    if (id === undefined) throw new OwnershipConflictError('Malformed ownership marker');
     if (marker[2] === 'begin') {
       if (open) throw new OwnershipConflictError(`Nested ownership section: ${id}`, id);
       if (seen.has(id)) throw new OwnershipConflictError(`Duplicate ownership section: ${id}`, id);
@@ -53,7 +54,7 @@ export function validateOwnedSections(contents: string, requireSection = false):
 
 function headingSections(contents: string): Array<{ heading: string; start: number; end: number }> {
   const headings = [...contents.matchAll(/^ {0,3}(#{1,6})[ \t]+([^\r\n]+)(?:\r?\n|$)/gm)].map((match) => ({
-    heading: `${match[1]} ${match[2]!.trim().replace(/[ \t]+#+[ \t]*$/, '')}`,
+    heading: `${match[1]} ${(match[2] ?? '').trim().replace(/[ \t]+#+[ \t]*$/, '')}`,
     start: match.index,
   }));
   return headings.map((heading, index) => ({
@@ -91,7 +92,8 @@ export function mergeOwnedSections(target: string, source: string): {
     const heading = sourceHeadings.get(section.id);
     const matches = heading ? legacySections.filter((candidate) => candidate.heading === heading) : [];
     if (matches.length > 0) {
-      const candidate = matches[0]!;
+      const candidate = matches[0];
+      if (candidate === undefined) continue;
       const end = Math.min(candidate.end, targetSections.find((owned) => owned.start > candidate.start)?.start ?? target.length);
       if (matches.length !== 1 || [...sourceHeadings.values()].filter((value) => value === heading).length !== 1
         || target.slice(candidate.start, end) !== body) {

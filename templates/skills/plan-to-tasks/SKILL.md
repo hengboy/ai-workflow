@@ -41,8 +41,8 @@ payload to `ai-workflow sync-hook --host <host>` on stdin and must not be run by
 Later decomposition steps, split phases and native host events in this skill session reuse the
 stored result for the actual root instead of synchronizing again, and a missing, corrupt or
 unreadable stored check allows with a visible no-freshness context rather than retrieving the
-source. After a safe patch changes the project contract or owned workflow rules, re-read the
-updated `.ai-workflow/AGENTS.md` before ordinary work continues; frozen `plan.md` bytes are
+source. After a safe patch changes the project contract or owned workflow rules, read the
+updated `.ai-workflow/AGENTS.md` again before ordinary work continues; frozen `plan.md` bytes are
 immutable and a contradiction stops the split with a bounded support request rather than
 broadening scope.
 
