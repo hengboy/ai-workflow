@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 # ai-workflow notes pairing --project <project-root> --write .ai-workflow/notes/implemented/bug-fix/2026-10-08-workspace-execution-consistency.md
-2026-10-08-workspace-execution-consistency.md: 37b34206e96b7f42d652ef23963ccfc8a064f55b
-2026-10-08-workspace-execution-consistency.zh.md: cea38b0895d543b51500b902338439678c4dcd63
+2026-10-08-workspace-execution-consistency.md: 1fe7732f24f0edf4cc7a2e12e2ba5bb0f2be0c10
+2026-10-08-workspace-execution-consistency.zh.md: 8b2a30dd1b46f4d2ec6b0b9f153f274d076feeb3

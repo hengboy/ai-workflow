@@ -33,3 +33,4 @@ Status: implemented
 - 钉住之后移动子模块 checkout 不在范围内，且 pointer 提交只引用本地可用的交付提交，因此远程操作不在范围内。
 - 既有工作区导航在显式重建之前保持字节不变，没有 `.gitmodules` 的项目保持其发现、校验和命令不变；工作区声明、任务 `repo` 字段、`workspace.yaml` 与两个工作区命令都是附加的。
 - 没有任何活动记录被整体取代：[worktree 政策记录](../process/2026-09-14-project-local-worktree-policy.md) 与 [忽略状态共享记录](../process/2026-09-14-share-ignored-state-into-worktree.md) 保持有效，因为工作区流程在 worktree 内运行且仅以只读方式读取工作区树，而 [任务执行顺序记录](../process/2026-09-25-task-execution-order.md) 与 [实施记录](../process/2026-09-22-plan-implementation-record.md) 按仓库保持其规则；本记录只增加跨仓库层。本记录的 `workspace status` 与定稿细节被 [工作区执行一致性记录](../bug-fix/2026-10-08-workspace-execution-consistency.md) 部分取代，该记录保留边界决定并增加清单校验、冻结顺序报告与单记录 `root_tasks_commit`。
+- 该边界的父侧执行由 [工作区编码编排记录](../feature/2026-10-09-workspace-coding-orchestration.md) 增加，该记录部分取代本记录中逐仓库手动会话的措辞，而本记录保留其边界、分发、状态与定稿决定。

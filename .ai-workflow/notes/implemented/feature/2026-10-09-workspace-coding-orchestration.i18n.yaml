@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (.ai-workflow/notes/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+# ai-workflow notes pairing --project <project-root> --write .ai-workflow/notes/implemented/feature/2026-10-09-workspace-coding-orchestration.md
+2026-10-09-workspace-coding-orchestration.md: 16d7ef04faad6860541b508a99e412e70479b756
+2026-10-09-workspace-coding-orchestration.zh.md: 15da5129969e9b1fc625648d3e0df7ba2e30d801

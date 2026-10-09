@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 # ai-workflow notes pairing --project <project-root> --write .ai-workflow/notes/implemented/bug-fix/2026-10-08-workspace-session-handoff.md
-2026-10-08-workspace-session-handoff.md: a3047cda10dc55a484c411aaaf35638bac704cfa
-2026-10-08-workspace-session-handoff.zh.md: f4c137ce0725422c57a08989a344e82f16a8173c
+2026-10-08-workspace-session-handoff.md: f1207855dc51b9d21a7c4440135678f431ad5716
+2026-10-08-workspace-session-handoff.zh.md: 7d98a018761bc8275399470356e43e6c6094ed0d

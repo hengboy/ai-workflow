@@ -27,3 +27,4 @@ Status: implemented
 - 在 coding 会话中发现的 planned change 现在会产出一份冻结且已校验的计划并停在那里；实施只在新会话中恢复，冻结计划就是边界。
 - [变更分流](./2026-09-22-change-routing.md)仍负责 direct、mechanical 与 planned 的分类；本记录只补上 Planning 到 Coding 的交接。
 - [项目契约与 Agent Notes 记录](./2026-09-16-project-contract-and-agent-notes.md)仍然有效。2026-10-08 [工作区会话交接记录](../bug-fix/2026-10-08-workspace-session-handoff.md)部分取代本记录中无条件的单会话交接事实；本记录保留其边界决定与理由，其当前交接事实指向该记录。
+- [工作区编码编排记录](../feature/2026-10-09-workspace-coding-orchestration.md) 以父会话准备、按仓库 worktree、检查点与定稿分离部分取代本记录的交接事实；本记录保留其边界决定与理由。
