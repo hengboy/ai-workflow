@@ -1,5 +1,5 @@
-import { mkdtemp, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
-import { basename, dirname, join, relative, sep } from 'node:path';
+import { chmod, mkdtemp, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { basename, delimiter, dirname, join, relative, sep } from 'node:path';
 import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { execFile } from 'node:child_process';
@@ -363,4 +363,116 @@ export async function commitFile(repository: string, relativePath: string, conte
   await exec('git', ['commit', '-m', message], { cwd: repository });
   const { stdout } = await exec('git', ['rev-parse', 'HEAD'], { cwd: repository });
   return stdout.trim();
+}
+
+// --- Fake production git source acquisition -----------------------------------------
+
+/** A `runGit`-shaped test double: the production `GitRunner` contract. */
+export type TestGitRunner = (arguments_: string[]) => Promise<{ stdout: string }>;
+
+/** Mutable fake-git state: the immutable head to report and the file bytes to materialize. */
+export interface FakeGitState {
+  commit: string;
+  files: Record<string, string>;
+}
+
+/** A reusable fake production git runner plus the invocations it observed. */
+export interface FakeGit {
+  runGit: TestGitRunner;
+  /** Every invocation's argument vector, in order. */
+  calls: string[][];
+  /** The clone destination (last clone argument) of every clone, in order. */
+  clones: string[];
+  cloneCount: () => number;
+  invocationCount: () => number;
+}
+
+/**
+ * Build a small fake production git runner. On `clone` it records the destination (the last
+ * argument), writes `state.files` beneath it, and returns empty stdout. On `-C <dir> rev-parse
+ * HEAD` it returns `state.commit` newline-terminated. Any other invocation throws, so an
+ * unexpected production call is a test failure rather than a silent pass.
+ */
+export function fakeGit(state: FakeGitState): FakeGit {
+  const calls: string[][] = [];
+  const clones: string[] = [];
+  const runGit = async (arguments_: string[]): Promise<{ stdout: string }> => {
+    calls.push([...arguments_]);
+    if (arguments_[0] === 'clone') {
+      const destination = arguments_[arguments_.length - 1];
+      if (destination === undefined) throw new Error(`Unexpected git clone without a destination: ${arguments_.join(' ')}`);
+      clones.push(destination);
+      for (const [relative, contents] of Object.entries(state.files)) {
+        const target = join(destination, relative);
+        await mkdir(dirname(target), { recursive: true });
+        await writeFile(target, contents);
+      }
+      return { stdout: '' };
+    }
+    if (arguments_[0] === '-C' && arguments_[2] === 'rev-parse' && arguments_[3] === 'HEAD') {
+      return { stdout: `${state.commit}\n` };
+    }
+    throw new Error(`Unexpected git invocation: ${arguments_.join(' ')}`);
+  };
+  return { runGit, calls, clones, cloneCount: () => clones.length, invocationCount: () => calls.length };
+}
+
+/**
+ * The executable `git` shim integration subprocess tests place earlier in `PATH`. It reads the
+ * fixture named by `AI_WORKFLOW_GIT_FIXTURE`, selects the head from `AI_WORKFLOW_FIXTURE_HEAD`,
+ * logs the head to `AI_WORKFLOW_FIXTURE_LOG` on every clone, materializes the fixture files into
+ * the clone destination, answers `-C <dir> rev-parse HEAD`, and can fail a clone after logging.
+ */
+export const GIT_SHIM_SOURCE = `#!/usr/bin/env node
+const { mkdirSync, appendFileSync, writeFileSync, readFileSync } = require('node:fs');
+const { dirname, join } = require('node:path');
+const args = process.argv.slice(2);
+const head = process.env.AI_WORKFLOW_FIXTURE_HEAD || '${'a'.repeat(40)}';
+const log = process.env.AI_WORKFLOW_FIXTURE_LOG;
+if (args[0] === 'clone') {
+  if (log) appendFileSync(log, head + '\\n');
+  const fixturePath = process.env.AI_WORKFLOW_GIT_FIXTURE;
+  const fixture = fixturePath ? JSON.parse(readFileSync(fixturePath, 'utf8')) : { files: {} };
+  if (fixture.fail) { process.stderr.write(String(fixture.fail) + '\\n'); process.exit(1); }
+  for (const [path, contents] of Object.entries(fixture.files || {})) {
+    const target = join(args[args.length - 1], path);
+    mkdirSync(dirname(target), { recursive: true });
+    writeFileSync(target, contents);
+  }
+  process.exit(0);
+}
+if (args[0] === '-C' && args[2] === 'rev-parse' && args[3] === 'HEAD') {
+  process.stdout.write(head + '\\n');
+  process.exit(0);
+}
+process.stderr.write('unexpected git invocation: ' + args.join(' ') + '\\n');
+process.exit(2);
+`;
+
+/** The fixture the `git` shim reads: the source files to materialize, or a clone failure reason. */
+export interface GitShimFixture { files: Record<string, string>; fail?: string }
+
+/** Write the `git` shim into a fresh temp bin directory, executable, for PATH prepending. */
+export async function writeGitShim(): Promise<string> {
+  const directory = await temporary('ai-workflow-git-shim-');
+  const shim = join(directory, 'git');
+  await writeFile(shim, GIT_SHIM_SOURCE);
+  await chmod(shim, 0o755);
+  return directory;
+}
+
+/** Write the JSON fixture the `git` shim reads from `AI_WORKFLOW_GIT_FIXTURE`. */
+export async function writeGitFixture(directory: string, fixture: GitShimFixture, name = 'fixture.json'): Promise<string> {
+  const path = join(directory, name);
+  await writeFile(path, JSON.stringify(fixture));
+  return path;
+}
+
+/** Prepend the shim directory to `PATH` and point the shim at its fixture, keeping the rest of `env`. */
+export function withGitShim(env: NodeJS.ProcessEnv, binDirectory: string, fixturePath: string): NodeJS.ProcessEnv {
+  return {
+    ...env,
+    PATH: `${binDirectory}${delimiter}${env.PATH ?? process.env.PATH ?? ''}`,
+    AI_WORKFLOW_GIT_FIXTURE: fixturePath,
+  };
 }
