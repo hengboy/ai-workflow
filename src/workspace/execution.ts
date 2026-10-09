@@ -361,6 +361,13 @@ export async function checkpointWorkspace(planDirectory: string, repository: str
     const analysis = await analyzeExecution(resolved);
     const successful = (record: WorkspaceExecutionRecord): CheckpointSuccess => ({ valid: true, plan_id: plan.planId, repository, status: record.status, path: recordPath });
 
+    // Repository delivery barrier: a non-root repository may not checkpoint any event while a
+    // declared dependency is not yet delivered. Completed records keep their idempotent success.
+    if (repository !== RESERVED_ROOT && !(existing !== undefined && existing.status === 'completed')) {
+      const pendingDependencies = entry.dependsOn.filter((dependency) => !analysis.delivered.has(dependency));
+      if (pendingDependencies.length > 0) return refuse([`repository "${repository}" cannot checkpoint before its dependencies are delivered: ${pendingDependencies.join(', ')}`]);
+    }
+
     if (event.event === 'start') {
       if (event.purpose === 'finalization' && repository !== RESERVED_ROOT) return refuse(['finalization start is only valid for the reserved workspace root']);
       if (event.purpose === 'finalization') {

@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { execFile, spawn } from 'node:child_process';
-import { readFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { frozenDocumentDigest, frozenPlanDigest } from '../../src/workflow/digest.js';
-import { frozenPlan, temporary, workspacePlanFixture, type WorkspacePlanFixtureSpec } from '../helpers.js';
+import { changedPaths, frozenPlan, gitInit, snapshotTree, temporary, workspacePlanFixture, type WorkspacePlanFixtureSpec } from '../helpers.js';
 
 // Hard single-repository compatibility boundary: an ordinary plan without workspace fields and a
 // root-only workspace plan keep their existing `plan validate` / `workspace status` shapes, and
@@ -86,22 +86,27 @@ function rootOnlySpec(): WorkspacePlanFixtureSpec {
   };
 }
 
+/** The exact golden `plan validate` stdout an ordinary `frozenPlan` fixture must keep producing. */
+async function ordinaryValidateOutput(directory: string): Promise<string> {
+  const specSource = await readFile(join(directory, 'spec.md'), 'utf8');
+  const planSource = await readFile(join(directory, 'plan.md'), 'utf8');
+  return `${JSON.stringify({
+    valid: true,
+    plan_id: '20260831-example',
+    digests: {
+      spec: frozenDocumentDigest(specSource),
+      plan: frozenDocumentDigest(planSource),
+      combined: frozenPlanDigest(specSource, planSource),
+    },
+    execution_order: [['task-001-example']],
+  }, null, 2)}\n`;
+}
+
 describe('single-repository compatibility', () => {
   it('keeps an ordinary plan plan validate output byte-identical with no workspace fields', async () => {
     const root = await temporary('ai-workflow-single-ordinary-');
     const directory = await frozenPlan(root, true);
-    const specSource = await readFile(join(directory, 'spec.md'), 'utf8');
-    const planSource = await readFile(join(directory, 'plan.md'), 'utf8');
-    const expected = `${JSON.stringify({
-      valid: true,
-      plan_id: '20260831-example',
-      digests: {
-        spec: frozenDocumentDigest(specSource),
-        plan: frozenDocumentDigest(planSource),
-        combined: frozenPlanDigest(specSource, planSource),
-      },
-      execution_order: [['task-001-example']],
-    }, null, 2)}\n`;
+    const expected = await ordinaryValidateOutput(directory);
 
     const result = await runCli(['plan', 'validate', '--plan', directory]);
 
@@ -109,6 +114,43 @@ describe('single-repository compatibility', () => {
     expect(result.stdout).toBe(expected);
     expect(result.stdout).not.toContain('repos');
     expect(result.stdout).not.toContain('workspace_finalization');
+  });
+
+  it('keeps an ordinary plan golden output and creates no workspace artifacts in a root with .gitmodules', async () => {
+    const root = await temporary('ai-workflow-single-gitmodules-');
+    const directory = await frozenPlan(root, true);
+    // An unrelated submodule declaration must not activate the workspace route for an ordinary plan.
+    await writeFile(join(root, '.gitmodules'), '[submodule "vendor/tool"]\n\tpath = vendor/tool\n\turl = ./vendor/tool\n');
+    const expected = await ordinaryValidateOutput(directory);
+    const before = await snapshotTree(root);
+
+    const result = await runCli(['plan', 'validate', '--plan', directory]);
+
+    expect(result.code, outputOf(result)).toBe(0);
+    expect(result.stdout).toBe(expected);
+    expect(result.stdout).not.toContain('repos');
+    expect(Object.hasOwn(JSON.parse(result.stdout) as object, 'execution'), 'no workspace execution projection field').toBe(false);
+    expect(result.stdout).not.toContain('workspace_finalization');
+    expect(changedPaths(before, await snapshotTree(root)), 'plan validate creates no workspace artifacts').toEqual([]);
+  });
+
+  it('keeps an ordinary plan golden output and creates no workspace artifacts beside an unrelated nested Git directory', async () => {
+    const root = await temporary('ai-workflow-single-nested-git-');
+    const directory = await frozenPlan(root, true);
+    // An unrelated nested Git checkout must not activate the workspace route for an ordinary plan.
+    await mkdir(join(root, 'unrelated-nested'), { recursive: true });
+    await gitInit(join(root, 'unrelated-nested'));
+    const expected = await ordinaryValidateOutput(directory);
+    const before = await snapshotTree(root);
+
+    const result = await runCli(['plan', 'validate', '--plan', directory]);
+
+    expect(result.code, outputOf(result)).toBe(0);
+    expect(result.stdout).toBe(expected);
+    expect(result.stdout).not.toContain('repos');
+    expect(Object.hasOwn(JSON.parse(result.stdout) as object, 'execution'), 'no workspace execution projection field').toBe(false);
+    expect(result.stdout).not.toContain('workspace_finalization');
+    expect(changedPaths(before, await snapshotTree(root)), 'plan validate creates no workspace artifacts').toEqual([]);
   });
 
   it('refuses workspace checkpoint for an ordinary non-workspace plan', async () => {

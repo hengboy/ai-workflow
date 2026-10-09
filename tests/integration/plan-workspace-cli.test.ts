@@ -506,6 +506,28 @@ describe('plan validate for the workspace_finalization declaration', () => {
     expect(outputOf(result)).toMatch(/read_scope|finalization/i);
   });
 
+  it('rejects a finalization write_scope that enters a participating repository', async () => {
+    const root = await temporary('ai-workflow-plan-finalization-write-scope-');
+    const spec = finalizationSpec({
+      workspaceFinalization: {
+        requirements: [FIN_REQ],
+        acceptanceCriteria: [FIN_AC],
+        readScope: [{ repo: 'app', paths: ['src/app.ts'] }],
+        writeScope: ['packages/lib/doc.md'],
+        testCommands: ['pnpm test'],
+      },
+    });
+    const directory = await workspacePlanFixture(root, spec);
+
+    const result = await runCli(['plan', 'validate', '--plan', directory]);
+
+    expect(result.code, outputOf(result)).not.toBe(0);
+    const output = outputOf(result);
+    expect(output, 'the error names the offending write_scope path').toContain('packages/lib/doc.md');
+    expect(output, 'the error names the participating repository the write_scope enters').toMatch(/repository[^.]*\blib\b/i);
+    expect(output).toMatch(/workspace_finalization|finalization/i);
+  });
+
   it('rejects a participating child repository that owns zero tasks', async () => {
     const root = await temporary('ai-workflow-plan-finalization-zero-tasks-');
     const spec = finalizationSpec({
@@ -542,5 +564,59 @@ describe('plan validate for the workspace_finalization declaration', () => {
     const parsed = JSON.parse(result.stdout) as Record<string, unknown>;
     expect(Object.keys(parsed).sort()).toEqual(['digests', 'execution_order', 'plan_id', 'repos', 'valid']);
     expect(JSON.stringify(parsed)).not.toContain('workspace_finalization');
+  });
+});
+
+/**
+ * A child-participating workspace plan whose `lib` child owns zero tasks, with the remaining tasks
+ * covering the frozen REQ/AC set and NO `workspace_finalization` declaration. AC-002 requires the
+ * zero-task child to be diagnosed regardless of the optional finalization field.
+ */
+function zeroTaskChildNoFinalizationSpec(): WorkspacePlanFixtureSpec {
+  return {
+    planId: WORKSPACE_ID,
+    requirements: ['REQ-001', 'REQ-002'],
+    acceptanceCriteria: ['AC-001', 'AC-002'],
+    workspaceRepos,
+    tasks: [
+      { id: 'task-001-workspace', repo: 'workspace', requirements: ['REQ-001'], acceptanceCriteria: ['AC-001'], writeScope: ['src/workspace.ts'] },
+      { id: 'task-002-app', repo: 'app', requirements: ['REQ-002'], acceptanceCriteria: ['AC-002'], writeScope: ['src/app.ts'] },
+    ],
+    phases: [['task-001-workspace'], ['task-002-app']],
+    manifest: {
+      planId: WORKSPACE_ID,
+      role: 'workspace',
+      repositories: [
+        { name: 'workspace', path: '.', dependsOn: [], requirements: ['REQ-001'], acceptanceCriteria: ['AC-001'] },
+        { name: 'app', path: 'packages/app', dependsOn: [], requirements: ['REQ-002'], acceptanceCriteria: ['AC-002'] },
+        { name: 'lib', path: 'packages/lib', dependsOn: ['app'], requirements: [], acceptanceCriteria: [] },
+      ],
+    },
+  };
+}
+
+describe('plan validate for a zero-task child without a finalization declaration', () => {
+  it('names a zero-task non-root child instead of accepting an unfinishable slice', async () => {
+    const root = await temporary('ai-workflow-plan-zero-task-no-finalization-');
+    const directory = await workspacePlanFixture(root, zeroTaskChildNoFinalizationSpec());
+
+    const result = await runCli(['plan', 'validate', '--plan', directory]);
+
+    expect(result.code, outputOf(result)).not.toBe(0);
+    const output = outputOf(result);
+    expect(output, 'the error names the zero-task child repository').toContain('lib');
+    expect(output, 'the error explains the zero-task defect').toMatch(/zero[\s-]?task/i);
+  });
+
+  it('reports the zero-task non-root child as invalid in workspace status', async () => {
+    const root = await temporary('ai-workflow-plan-zero-task-no-finalization-status-');
+    const directory = await workspacePlanFixture(root, zeroTaskChildNoFinalizationSpec());
+
+    const result = await runCli(['workspace', 'status', '--plan', directory]);
+
+    expect(result.code, outputOf(result)).not.toBe(0);
+    const parsed = JSON.parse(result.stdout) as { valid: boolean; errors?: string[] };
+    expect(parsed.valid, outputOf(result)).toBe(false);
+    expect((parsed.errors ?? []).join('\n'), 'workspace status reports the zero-task child').toContain('lib');
   });
 });

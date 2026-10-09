@@ -18,6 +18,8 @@ Planning 可以冻结一份跨仓库工作区计划，技能也可以指向新�
 - `ai-workflow workspace checkpoint --plan <directory> --repo <name>` 是唯一的写入者。它只接受 stdin 上的恰好一个 JSON 事件——`start`、`task`、`reviewed`、`delivered` 或 `finalized`——在写入前拒绝未知字段、错误类型、错误的计划或仓库、未授权任务 ID、矛盾重复、非法转换与格式错误的完整 SHA，对相同重复事件幂等，并通过共享原子写入器发布，因此拒绝时先前记录保持字节不变。它保持仅文件系统；主会话只在所需的 Git Operator 与评审结果之后调用它，且不引入临时输入文件、中央账本或额外运行记录。
 - 在仓库的最后一个任务阶段之后，主会话为该仓库的任务范围完成其按仓库交付评审与交付门禁；定稿随后运行单独的定稿评审，不重新评审已交付任务。根前缀交付让同一记录保持 `in-progress` 并带 `root_tasks_commit`，直到 pointer 定稿；仅定稿运行执行零个任务。
 - 恢复是有界的：仅在一个干净、已完全检查点的阶段边界或一个已校验的仓库交付边界支持自动继续。肮脏的部分阶段、提交但无检查点的缺口、未知的未来阶段进度、不确定的评审结果、矛盾记录或不相关的目标漂移都会以有界支持或恢复请求停止，而不是重新派发；已记录任务不会被盲目再次派发，丢失的合并完成只在具备确切已评审 head、目标基线、预期合并父提交与已清理证据时被重构。
+- 可选的 `workspace_finalization` frontmatter 在子仓库参与计划上声明根所有的定稿覆盖：`requirements` 与 `acceptance_criteria` 与每个任务 AC 不相交，仓库限定的 `read_scope` 条目，不能进入参与仓库的根相对 `write_scope`，以及 `test_commands`。定稿覆盖永不成为任务，也永不加入执行顺序，因此完整计划覆盖是任务覆盖与定稿覆盖的并集，且清单的根子集等于根任务覆盖加上该声明。
+- 子仓库参与的 `workspace status` 报告新增 `execution` 投影：从 1 开始的当前父 `phase` 或 `null`、该阶段的 `pending_tasks`（含 `task`、`repo` 与绝对 `repository_path`、`plan_path`）、`awaiting_delivery` 仓库、`blockers` 与 `completed`。既有的 `order` 与 `next_repository` 仍然仅供参考。
 
 ## Alternatives considered
 

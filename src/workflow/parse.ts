@@ -4,7 +4,7 @@ import { parseMarkdown } from '../utils/frontmatter.js';
 import { metaPathOf, zhPathOf } from '../notes/pairing.js';
 import { frozenDocumentDigest, frozenPlanDigest } from './digest.js';
 import { enumeratePlanDocuments, validatePlanPair, type PlanDocumentAnchor } from './pairing.js';
-import { normalizeProjectPaths } from './read-scope.js';
+import { normalizeProjectPaths, pathIsWithin } from './read-scope.js';
 import { readWorkspaceManifest } from './workspace.js';
 import type { PlanDocument, TaskDocument, WorkspaceFinalization, WorkspaceFinalizationReadScope, WorkspaceRepo } from './types.js';
 
@@ -78,6 +78,12 @@ function parseWorkspaceFinalization(value: unknown, repos: WorkspaceRepo[] | und
   if (!Array.isArray(record.write_scope) || record.write_scope.some((path) => typeof path !== 'string')) throw new Error('Invalid workspace_finalization write_scope: expected a list of strings');
   const writeScope = normalizeProjectPaths(record.write_scope as string[]);
   if (writeScope.errors.length) throw new Error(`Invalid workspace_finalization write_scope path: ${writeScope.errors.join('; ')}`);
+  for (const path of writeScope.paths) {
+    for (const repo of repos) {
+      if (repo.name === 'workspace') continue;
+      if (pathIsWithin(repo.path, path)) throw new Error(`Invalid workspace_finalization write_scope path "${path}": inside participating repository "${repo.name}"`);
+    }
+  }
   if (record.test_commands !== undefined && (!Array.isArray(record.test_commands) || record.test_commands.some((command) => typeof command !== 'string'))) throw new Error('Invalid workspace_finalization test_commands: expected a list of strings');
   return {
     requirements: record.requirements as string[],

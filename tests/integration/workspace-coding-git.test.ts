@@ -21,7 +21,9 @@ import {
   verifyDeliveryCommits,
   workingTreeStatus,
 } from '../../src/workspace/git.js';
-import { checkpointWorkspace } from '../../src/workspace/execution.js';
+import { checkpointWorkspace, projectWorkspaceExecution } from '../../src/workspace/execution.js';
+import { resolveWorkspacePlan } from '../../src/workspace/distribute.js';
+import { readWorkspaceRecord } from '../../src/workspace/record.js';
 
 // Real-Git integration for the scoped repository lifecycle (REQ-002, REQ-004, REQ-005,
 // REQ-006, REQ-008). These are scripted fixtures that drive only public helpers and real
@@ -297,6 +299,80 @@ describe('delivery batch preverification and final-tree pointers (REQ-008 / AC-0
     } finally {
       await git(['worktree', 'remove', '--force', worktree], root);
       await rm(worktreeParent, { recursive: true, force: true });
+      await rm(root, { recursive: true, force: true });
+    }
+  }, TIMEOUT);
+});
+
+describe('dirty partial-phase interruption evidence (REQ-006 / AC-007 F1)', () => {
+  it('keeps the committed first task checkpointed and the dirty second task pending on resume', async () => {
+    // Scripted fixture, not native host execution: it drives the public checkpoint helper and real
+    // local Git to reproduce the AC-007 F1 interruption cut point after the first checkpoint.
+    // The other AC-007 cut points remain unproven by fixtures: commit-before-checkpoint,
+    // unknown review outcome, merge-after-review-before-record and partial cleanup.
+    const planId = '20261009-workspace-coding-git-f1';
+    const workspaceRepo = { name: 'workspace', path: '.', dependsOn: [] as string[] };
+    const appRepo = { name: 'app', path: 'packages/app', dependsOn: [] as string[] };
+    const libRepo = { name: 'lib', path: 'packages/lib', dependsOn: [] as string[] };
+    const spec: WorkspacePlanFixtureSpec = {
+      planId,
+      requirements: ['REQ-001', 'REQ-002'],
+      acceptanceCriteria: ['AC-001', 'AC-002'],
+      workspaceRepos: [workspaceRepo, appRepo, libRepo],
+      tasks: [
+        { id: 'task-001-app', repo: 'app', requirements: ['REQ-001'], acceptanceCriteria: ['AC-001'], writeScope: ['src/a1.ts'] },
+        { id: 'task-002-lib', repo: 'lib', requirements: ['REQ-002'], acceptanceCriteria: ['AC-002'], writeScope: ['src/lib1.ts'] },
+      ],
+      phases: [['task-001-app', 'task-002-lib']],
+      manifest: {
+        planId,
+        role: 'workspace',
+        repositories: [
+          { ...workspaceRepo, requirements: [], acceptanceCriteria: [] },
+          { ...appRepo, requirements: ['REQ-001'], acceptanceCriteria: ['AC-001'] },
+          { ...libRepo, requirements: ['REQ-002'], acceptanceCriteria: ['AC-002'] },
+        ],
+      },
+    };
+
+    const { root, repos } = await realWorkspaceFixture([
+      { name: 'app', path: 'packages/app' },
+      { name: 'lib', path: 'packages/lib' },
+    ]);
+    const app = repos.find((repo) => repo.name === 'app');
+    const lib = repos.find((repo) => repo.name === 'lib');
+    if (!app || !lib) throw new Error('fixture is missing app or lib');
+    const planDirectory = await workspacePlanFixture(root, spec);
+
+    try {
+      // A1's output is committed and then checkpointed through the checkpoint entry.
+      const appBase = await headOf(app.absolute);
+      const appSha = await commitFile(app.absolute, 'src/a1.ts', 'export const a1 = true;\n', 'A1 output');
+      const appStart = JSON.stringify({
+        event: 'start', purpose: 'tasks', source_root: root, repository: 'app',
+        worktree: join(root, '.worktrees', planId), branch: `ai-workflow/${planId}`, target_branch: 'main', base_commit: appBase,
+      });
+      expect((await checkpointWorkspace(planDirectory, 'app', appStart)).valid, 'app start').toBe(true);
+      expect((await checkpointWorkspace(planDirectory, 'app', JSON.stringify({ event: 'task', task: 'task-001-app', kind: 'commit', commit: appSha }))).valid, 'app task checkpoint').toBe(true);
+
+      // B1's output is written but deliberately left uncommitted.
+      await writeFile(join(lib.absolute, 'src/lib1.ts'), 'export const lib1 = true;\n');
+
+      const dirty = await workingTreeStatus(lib.absolute);
+      expect(dirty?.trim(), 'the uncommitted B1 output is dirty residue').toContain('src/lib1.ts');
+
+      const appRecord = await readWorkspaceRecord(join(app.absolute, '.ai-workflow', 'plans', planId, 'implementation.yaml'), planId);
+      expect(appRecord?.task_checkpoints, 'the committed A1 is checkpointed').toMatchObject({ 'task-001-app': { kind: 'commit', commit: appSha } });
+      expect(await commitExists(app.absolute, appSha), 'the recorded A1 commit exists in Git').toBe(true);
+      expect(await readWorkspaceRecord(join(lib.absolute, '.ai-workflow', 'plans', planId, 'implementation.yaml'), planId), 'B1 has no checkpoint').toBeUndefined();
+
+      const resolved = await resolveWorkspacePlan(planDirectory);
+      const projection = await projectWorkspaceExecution(resolved);
+      expect(projection.phase, 'the current global phase is the phase with the pending B1').toBe(1);
+      expect(projection.pending_tasks.map((entry) => entry.task), 'the recorded task is not redispatched and B1 stays pending').toEqual(['task-002-lib']);
+      expect(projection.pending_tasks.map((entry) => entry.repo), 'the pending task belongs to the dirty repository').toEqual(['lib']);
+      expect(projection.completed, 'the workspace is not completed').toBe(false);
+    } finally {
       await rm(root, { recursive: true, force: true });
     }
   }, TIMEOUT);

@@ -139,11 +139,12 @@ export function validateWorkspaceManifest(manifest: WorkspaceManifest, plan: Pla
     for (const task of tasks) {
       for (const criterion of task.acceptanceCriteria) if (finalization.acceptanceCriteria.includes(criterion)) errors.push(`Finalization acceptance criterion ${criterion} is assigned to task ${task.id}`);
     }
-    if (tasks.length) {
-      for (const repository of manifest.repositories) {
-        if (repository.name === ROOT) continue;
-        if (tasksOf(repository.name).length === 0) errors.push(`Participating child repository "${repository.name}" owns zero tasks`);
-      }
+  }
+
+  if (tasks.length) {
+    for (const repository of manifest.repositories) {
+      if (repository.name === ROOT) continue;
+      if (tasksOf(repository.name).length === 0) errors.push(`Participating child repository "${repository.name}" owns zero tasks`);
     }
   }
 

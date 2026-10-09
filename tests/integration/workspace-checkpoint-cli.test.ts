@@ -69,6 +69,15 @@ async function readRecord(path: string): Promise<ImplementationRecord> {
   return parseYaml(await readFile(path, 'utf8')) as ImplementationRecord;
 }
 
+/** Read a record file as bytes, or the sentinel `<absent>` when it does not exist yet. */
+async function readBytes(path: string): Promise<string> {
+  try {
+    return (await readFile(path)).toString('base64');
+  } catch {
+    return '<absent>';
+  }
+}
+
 /** Run the CLI with a JSON payload on stdin. */
 async function runCliStdin(args: string[], input: string): Promise<CliResult> {
   return await new Promise<CliResult>((resolve) => {
@@ -168,6 +177,59 @@ function rootOnlySpec(): WorkspacePlanFixtureSpec {
       planId: PLAN_ID,
       role: 'workspace',
       repositories: [{ ...WORKSPACE_REPO, requirements: ['REQ-001'], acceptanceCriteria: ['AC-001'] }],
+    },
+  };
+}
+
+const LIB_REPO = { name: 'lib', path: 'packages/lib', dependsOn: ['app'] };
+
+/** A child-participating plan whose `lib` child owns zero tasks and carries NO finalization declaration. */
+function zeroTaskChildNoFinalizationSpec(): WorkspacePlanFixtureSpec {
+  return {
+    planId: PLAN_ID,
+    requirements: ['REQ-001', 'REQ-002'],
+    acceptanceCriteria: ['AC-001', 'AC-002'],
+    workspaceRepos: [WORKSPACE_REPO, APP_REPO, LIB_REPO],
+    tasks: [
+      { id: 'task-001-root', repo: 'workspace', requirements: ['REQ-001'], acceptanceCriteria: ['AC-001'], writeScope: ['src/root.ts'] },
+      { id: 'task-002-app', repo: 'app', requirements: ['REQ-002'], acceptanceCriteria: ['AC-002'], writeScope: ['src/app.ts'] },
+    ],
+    phases: [['task-001-root'], ['task-002-app']],
+    manifest: {
+      planId: PLAN_ID,
+      role: 'workspace',
+      repositories: [
+        { ...WORKSPACE_REPO, requirements: ['REQ-001'], acceptanceCriteria: ['AC-001'] },
+        { ...APP_REPO, requirements: ['REQ-002'], acceptanceCriteria: ['AC-002'] },
+        { ...LIB_REPO, requirements: [], acceptanceCriteria: [] },
+      ],
+    },
+  };
+}
+
+const UPSTREAM_REPO = { name: 'upstream', path: 'packages/upstream', dependsOn: [] as string[] };
+const DOWNSTREAM_REPO = { name: 'downstream', path: 'packages/downstream', dependsOn: ['upstream'] };
+
+/** A two-child workspace where `downstream` depends on `upstream`, split as phases [[upstream],[downstream]]. */
+function dependencySpec(): WorkspacePlanFixtureSpec {
+  return {
+    planId: PLAN_ID,
+    requirements: ['REQ-001', 'REQ-002'],
+    acceptanceCriteria: ['AC-001', 'AC-002'],
+    workspaceRepos: [WORKSPACE_REPO, UPSTREAM_REPO, DOWNSTREAM_REPO],
+    tasks: [
+      { id: 'task-001-upstream', repo: 'upstream', requirements: ['REQ-001'], acceptanceCriteria: ['AC-001'], writeScope: ['src/upstream.ts'] },
+      { id: 'task-002-downstream', repo: 'downstream', requirements: ['REQ-002'], acceptanceCriteria: ['AC-002'], writeScope: ['src/downstream.ts'] },
+    ],
+    phases: [['task-001-upstream'], ['task-002-downstream']],
+    manifest: {
+      planId: PLAN_ID,
+      role: 'workspace',
+      repositories: [
+        { ...WORKSPACE_REPO, requirements: [], acceptanceCriteria: [] },
+        { ...UPSTREAM_REPO, requirements: ['REQ-001'], acceptanceCriteria: ['AC-001'] },
+        { ...DOWNSTREAM_REPO, requirements: ['REQ-002'], acceptanceCriteria: ['AC-002'] },
+      ],
     },
   };
 }
@@ -396,6 +458,17 @@ describe('workspace checkpoint activation refusals', () => {
     expect(result.code, outputOf(result)).toBe(1);
     expect(refusalErrors(result)).toContain('REQ-999');
   }, TIMEOUT);
+
+  it('refuses preflight for a zero-task non-root child without a finalization declaration', async () => {
+    const { root, planDirectory } = await buildWorkspace(zeroTaskChildNoFinalizationSpec());
+
+    const result = await checkpoint(planDirectory, 'app', startEvent(root, 'app'));
+
+    expect(result.code, outputOf(result)).toBe(1);
+    const errors = refusalErrors(result);
+    expect(errors, 'the refusal names the zero-task child repository').toContain('lib');
+    expect(errors, 'the refusal explains the zero-task defect').toMatch(/zero[\s-]?task/i);
+  }, TIMEOUT);
 });
 
 describe('workspace checkpoint event schema refusals', () => {
@@ -548,5 +621,41 @@ describe('workspace checkpoint record refusals', () => {
     expect(result.code, outputOf(result)).toBe(1);
     expect(refusalErrors(result)).toContain('20260101-other');
     expect(await readFile(appRecord)).toEqual(before);
+  }, TIMEOUT);
+});
+
+describe('workspace checkpoint repository delivery barrier', () => {
+  it('refuses every downstream event until the pending upstream repository is delivered', async () => {
+    const { root, planDirectory } = await buildWorkspace(dependencySpec());
+    const downstreamRecord = join(root, 'packages/downstream', '.ai-workflow', 'plans', PLAN_ID, 'implementation.yaml');
+
+    // Upstream A1 is checkpointed but repository `upstream` is not yet delivered.
+    expect((await checkpoint(planDirectory, 'upstream', startEvent(root, 'upstream'))).code).toBe(0);
+    expect((await checkpoint(planDirectory, 'upstream', taskEvent('task-001-upstream', 'commit', SHA_TASK))).code).toBe(0);
+
+    const attempts: Record<string, unknown>[] = [
+      startEvent(root, 'downstream'),
+      taskEvent('task-002-downstream', 'commit', SHA_OTHER),
+      { event: 'reviewed', commit: SHA_REVIEW },
+      { event: 'delivered', commit: SHA_DELIVERY },
+    ];
+    for (const attempt of attempts) {
+      const before = await readBytes(downstreamRecord);
+      const result = await checkpoint(planDirectory, 'downstream', attempt);
+      expect(result.code, `refusal expected for ${JSON.stringify(attempt)}\n${outputOf(result)}`).toBe(1);
+      const errors = refusalErrors(result);
+      expect(errors, `the refusal names the dependent repository for ${JSON.stringify(attempt)}`).toContain('downstream');
+      expect(errors, `the refusal names the pending dependency for ${JSON.stringify(attempt)}`).toContain('upstream');
+      expect(await readBytes(downstreamRecord), `the downstream record stays byte-identical for ${JSON.stringify(attempt)}`).toEqual(before);
+    }
+
+    // Completing upstream's review and delivery releases the downstream repository.
+    expect((await checkpoint(planDirectory, 'upstream', { event: 'reviewed', commit: SHA_REVIEW })).code).toBe(0);
+    expect((await checkpoint(planDirectory, 'upstream', { event: 'delivered', commit: SHA_DELIVERY })).code).toBe(0);
+
+    expect((await checkpoint(planDirectory, 'downstream', startEvent(root, 'downstream'))).code).toBe(0);
+    expect((await checkpoint(planDirectory, 'downstream', taskEvent('task-002-downstream', 'commit', SHA_OTHER))).code).toBe(0);
+    expect((await checkpoint(planDirectory, 'downstream', { event: 'reviewed', commit: SHA_REVIEW })).code).toBe(0);
+    expect((await checkpoint(planDirectory, 'downstream', { event: 'delivered', commit: SHA_DELIVERY })).code).toBe(0);
   }, TIMEOUT);
 });

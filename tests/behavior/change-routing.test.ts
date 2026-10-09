@@ -177,4 +177,35 @@ describe('change routing guidance', () => {
     const planningMetadata = await read('templates/skills/planning/agents/openai.yaml');
     expect(planningMetadata, 'planning metadata names its entry scope').toMatch(/new or ambiguous feature/i);
   });
+
+  it('routes the child-participating handoff to a coding session that prepares and distributes, not a standalone plan-to-tasks session', async () => {
+    const documents = [
+      { label: 'MEMORY.md', text: await read('MEMORY.md') },
+      { label: 'templates/project/MEMORY.md', text: await read('templates/project/MEMORY.md') },
+      { label: 'README.md', text: await read('README.md') },
+    ];
+
+    for (const { label, text } of documents) {
+      const flat = flatten(text);
+      const sessionIndex = flat.search(/new session at (?:the )?workspace root/i);
+      expect(sessionIndex, `${label} states the child-participating handoff as a new session at the workspace root`).toBeGreaterThanOrEqual(0);
+      const handoff = flat.slice(sessionIndex, sessionIndex + 400);
+
+      const codingIndex = handoff.search(/coding skill/i);
+      const planToTasksIndex = handoff.search(/plan-to-tasks/i);
+      expect(codingIndex, `${label} invokes the coding skill at the workspace root for the child-participating handoff`).toBeGreaterThanOrEqual(0);
+      expect(planToTasksIndex, `${label} names plan-to-tasks as the preparation procedure`).toBeGreaterThanOrEqual(0);
+      expect(
+        codingIndex,
+        `${label} does not enter a standalone plan-to-tasks session: the workspace-root session invokes the coding skill before plan-to-tasks`,
+      ).toBeLessThan(planToTasksIndex);
+      expect(handoff, `${label} states plan-to-tasks as the preparation`).toMatch(/preparation/i);
+      expect(handoff, `${label} distributes the slices before implementation`).toMatch(/workspace distribute\b/i);
+      expect(handoff, `${label} distributes the slices before implementation`).toMatch(/before implementation/i);
+
+      // The ordinary and root-only routes stay represented.
+      expect(flat, `${label} keeps the ordinary or root-only route`).toMatch(/ordinary or root-only/i);
+      expect(flat, `${label} keeps the ordinary coding-skill handoff`).toMatch(/invok\w* (?:the )?coding skill/i);
+    }
+  });
 });
