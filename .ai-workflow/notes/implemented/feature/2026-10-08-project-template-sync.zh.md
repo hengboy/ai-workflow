@@ -11,7 +11,7 @@ Status: implemented
 ## Decision
 
 - `ai-workflow sync [project]` 从固定远程来源 `hengboy/ai-workflow` 分支 `simplify` 修补既有采用；省略 project 时默认为当前实际目录并归一到其采用根。`ai-workflow init <project> --upgrade` 则复用随附的本地模板与空来源提交，因此修补受管段落但不作上游新鲜度声明。
-- `src/sync/source.ts` 的 `resolveTemplateSnapshot` 解析分支 HEAD，要求唯一的 40 位十六进制不可变提交，在该提交下列出每个受支持的 `templates/project` 目录与文件，校验清单以及每个文件的身份、编码、大小与结构，并按 `GH_TOKEN` 先于 `GITHUB_TOKEN` 读取为显式 bearer 授权头。获取失败或不完整会在任何目标变更之前返回 `unverified`、`verified: false` 与 `proceed: true`。
+- `src/sync/source.ts` 的 `resolveTemplateSnapshot` 以对固定公共地址 `https://github.com/hengboy/ai-workflow.git` 分支 `simplify` 的浅临时克隆获取模板，钉住唯一的 40 位十六进制不可变提交，在该提交下读取并校验每个受支持的 `templates/project` 文件的身份、编码、大小与结构，移除临时目录，且不读取任何令牌或凭据文件、不使用 GitHub CLI 或 SSH 配置；变更后的获取决策记录在[公共 git 模板来源](../simplification/2026-10-09-public-git-template-source.md)。获取失败或不完整会在任何目标变更之前返回 `unverified`、`verified: false` 与 `proceed: true`。
 - 标记 `<!-- ai-workflow:section <id>:begin -->` 与 `<!-- ai-workflow:section <id>:end -->` 定义了 `src/sync/merge.ts` 中 `mergeOwnedSections` 唯一可替换的段落。begin/end 对必须唯一、不嵌套且格式良好；格式错误、重复、嵌套或未闭合的标记属于结构性冲突，不写入任何内容。
 - `mergeOwnedSections` 只拼接来源中变更、新增或删除的受管段落正文，保留这些段落之外的每个字节（含行尾），保持既有项目自有片段顺序，按来源顺序追加新段落，并对不一致或未知的未标记旧正文给出警告而不是重复它。
 - `src/sync/index.ts` 的 `applyTemplateSnapshot` 执行共享事务。它预检每个受管目标、既有归档清单、notes 结构目录与精确的 `.gitignore` 条目，冲突会在任何写入前阻止整个调用。成功时创建缺失目录、按文件原子发布变更并报告 `created`、`updated` 与 `skipped`。发布失败时恢复调用本地的原始字节并只移除本次调用新建的产物。

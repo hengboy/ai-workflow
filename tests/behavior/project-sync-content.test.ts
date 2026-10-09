@@ -17,10 +17,11 @@ import { temporary } from '../helpers.js';
  *
  * Required semantics asserted here (ordering/decision contracts, not exact constants):
  *   1. The installed entry instructs the native preflight BEFORE reading the project contract.
- *   2. The new safe shared `sync-ai-workflow` skill is shipped: incremental CLI sync, never a
- *      clone/build/whole-file copy, `GH_TOKEN` documented before `GITHUB_TOKEN`, truthful
- *      report handling (freshness requires `verified`, blocking statuses stop), frozen plans
- *      never synchronized.
+ *   2. The new safe shared `sync-ai-workflow` skill is shipped: incremental CLI sync, acquires
+ *      the fixed public HTTPS git source with a shallow temporary clone (never a token,
+ *      credential file, GitHub CLI or SSH configuration, and never a whole-file target copy),
+ *      truthful report handling (freshness requires `verified`, blocking statuses stop), frozen
+ *      plans never synchronized.
  *   3. Planning, coding and plan-to-tasks invoke the phase entry
  *      `ai-workflow sync-hook --host <host> --phase --project <root>` exactly once at skill
  *      start, state that later steps, phases and native events reuse the stored result, and
@@ -72,12 +73,12 @@ describe('project synchronization shipped instructions', () => {
     const syncSkill = await readFile(join(home, sharedSkill('sync-ai-workflow')), 'utf8');
     expect(syncSkill).toMatch(/^name: sync-ai-workflow$/m);
     expect(syncSkill, 'manual synchronization uses the incremental CLI').toMatch(/ai-workflow sync\b/);
-    expect(syncSkill, 'incremental section patching, not a clone/build/whole-file copy').toMatch(/incremental|section|patch/i);
-    expect(syncSkill, 'clone/build are explicitly refused').toMatch(/never[^.\n]{0,80}(?:clone|build)|do(?:es)? not[^.\n]{0,60}(?:clone|build)|without[^.\n]{0,40}(?:clone|build)/i);
+    expect(syncSkill, 'incremental section patching, not a whole-file copy').toMatch(/incremental|section|patch/i);
     expect(syncSkill, 'whole-file template copying is refused').toMatch(/whole[- ]file|complete (?:template|file) copy|copy (?:the )?whole|wholesale/i);
-    expect(syncSkill).toMatch(/GH_TOKEN/);
-    expect(syncSkill).toMatch(/GITHUB_TOKEN/);
-    expect(syncSkill.indexOf('GH_TOKEN'), 'GH_TOKEN must be documented before GITHUB_TOKEN').toBeLessThan(syncSkill.indexOf('GITHUB_TOKEN'));
+    expect(syncSkill, 'the skill names the fixed public git address').toMatch(/https:\/\/github\.com\/hengboy\/ai-workflow\.git/);
+    expect(syncSkill, 'the skill names the fixed branch').toMatch(/\bsimplify\b/);
+    expect(syncSkill, 'the skill describes shallow acquisition').toMatch(/--depth|shallow/i);
+    expect(syncSkill, 'the skill never documents a bearer token').not.toMatch(/GH_TOKEN|GITHUB_TOKEN/);
     expect(syncSkill, 'the report exposes proceed').toMatch(/proceed/);
     expect(syncSkill, 'the report exposes warnings').toMatch(/warnings?/);
     expect(syncSkill, 'a freshness claim requires verified').toMatch(/verified/);
@@ -196,14 +197,12 @@ describe('project synchronization published documentation', () => {
     expect(flat, 'README documents the incremental sync command').toMatch(/ai-workflow sync\b/);
     expect(flat, 'README documents check mode').toMatch(/--check/);
 
-    // 2. Fixed upstream source and explicit bearer credentials (GH_TOKEN before GITHUB_TOKEN).
+    // 2. Fixed public upstream source acquired by a shallow temporary clone, never a token.
     expect(flat, 'README names the fixed source repository').toMatch(/hengboy\/ai-workflow/);
     expect(flat, 'README names the fixed branch').toMatch(/\bsimplify\b/);
-    expect(flat, 'README documents GH_TOKEN').toMatch(/GH_TOKEN/);
-    expect(flat, 'README documents GITHUB_TOKEN').toMatch(/GITHUB_TOKEN/);
-    expect(readme.indexOf('GH_TOKEN'), 'README documents GH_TOKEN before GITHUB_TOKEN').toBeLessThan(
-      readme.indexOf('GITHUB_TOKEN'),
-    );
+    expect(flat, 'README names the fixed public git address').toMatch(/https:\/\/github\.com\/hengboy\/ai-workflow\.git/);
+    expect(flat, 'README documents the shallow temporary clone acquisition').toMatch(/--depth|shallow/i);
+    expect(flat, 'README never documents a bearer token').not.toMatch(/GH_TOKEN|GITHUB_TOKEN/);
 
     // 3. Truthful statuses, verified/proceed, exit codes, and warning continuation with no freshness claim.
     for (const status of ['synchronized', 'unverified', 'needs_attention', 'pending', 'conflict', 'failed']) {

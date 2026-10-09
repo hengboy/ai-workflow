@@ -22,9 +22,10 @@ automatic check from here.
 
 ## Incremental synchronization
 
-Run the installed incremental CLI. It never clones the repository, builds the CLI, or
-replaces a target with a whole-file template copy; a complete template overwrite destroys
-independent project content and is out of scope:
+Run the installed incremental CLI. It never builds the CLI and never replaces a target with a
+whole-file template copy; it acquires the current templates with a shallow temporary clone of
+the fixed public address. A complete template overwrite destroys independent project content
+and is out of scope:
 
 - `ai-workflow sync [project]` applies safe section patches to the managed files and reports
   the result. An omitted project defaults to the actual current directory and is normalized
@@ -40,10 +41,11 @@ synchronization input.
 
 ## Source and credentials
 
-The fixed source is repository `hengboy/ai-workflow`, branch `simplify`. Read `GH_TOKEN`
-first and `GITHUB_TOKEN` second as an explicit bearer authorization header; never search
-credential files, invoke Git, print tokens, or infer authentication from a GitHub CLI or SSH
-configuration.
+The fixed source is `https://github.com/hengboy/ai-workflow.git`, branch `simplify`.
+Acquisition is a shallow temporary clone of that public address; there is no token, credential
+file, GitHub CLI or SSH configuration handling, and the clone reads no secret and stores no
+credential. Never search credential files, invoke a GitHub CLI, or infer authentication from
+SSH configuration.
 
 ## Report and decisions
 
@@ -87,7 +89,8 @@ rely on the process exit code alone, because a warning also exits 2.
 
 - The adoption already existed; this skill initialized no new project, reinstalled no host
   entry and expanded no product scope.
-- The incremental CLI ran (or `--check`) with no clone, build or whole-file copy.
+- The incremental CLI ran (or `--check`) with no CLI build and no whole-file copy; template
+  acquisition used only the shallow temporary clone.
 - The `SyncReport` was parsed and its `status`, `verified` and `proceed` were reported
   truthfully.
 - A freshness claim was made only for a `verified`, `synchronized` result.

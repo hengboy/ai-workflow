@@ -1,30 +1,13 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { constants } from 'node:fs';
 import { access, chmod, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { synchronizeProject, type SyncReport } from '../../src/sync/index.js';
-import { changedPaths, snapshotTree, temporary } from '../helpers.js';
+import { changedPaths, fakeGit, snapshotTree, temporary, type TestGitRunner } from '../helpers.js';
 import { exists } from '../../src/utils/fs.js';
 
 const REPOSITORY = 'hengboy/ai-workflow';
 const BRANCH = 'simplify';
-
-/** The complete supported project-template source set fixed by the specification table. */
-const SOURCE_PATHS = [
-  'templates/project/AGENTS.md',
-  'templates/project/MEMORY.md',
-  'templates/project/navigation.json',
-  'templates/project/navigation.md',
-  'templates/project/notes/AGENTS.md',
-  'templates/project/notes/README.md',
-  'templates/project/notes/implemented/AGENTS.md',
-  'templates/project/notes/archived/AGENTS.md',
-  'templates/project/notes/archived/manifest.json',
-] as const;
-
-const FILE_PATHS = new Set<string>(SOURCE_PATHS);
-const HEAD_PATH = `/repos/${REPOSITORY}/branches/${BRANCH}`;
-const CONTENTS_PREFIX = `/repos/${REPOSITORY}/contents/`;
 
 // The complete notes management structure, listed literally so file-patch tests isolate
 // managed files from directory creation and stay independent of the production helper.
@@ -43,103 +26,32 @@ afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
 
-function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
-}
-
-function requestUrl(input: string | URL | Request): string {
-  if (typeof input === 'string') return input;
-  if (input instanceof URL) return input.href;
-  return input.url;
-}
-
-/** The supported source set every valid contents directory response lists for AC-001/002/003. */
-const SUPPORTED_DIRECTORIES: Record<string, readonly string[]> = {
-  'templates/project': ['AGENTS.md', 'MEMORY.md', 'navigation.json', 'navigation.md', 'notes'],
-  'templates/project/notes': ['AGENTS.md', 'README.md', 'implemented', 'archived'],
-  'templates/project/notes/implemented': ['AGENTS.md'],
-  'templates/project/notes/archived': ['AGENTS.md', 'manifest.json'],
-};
-
-function blobSha(ref: string, repoPath: string): string {
-  return Buffer.from(`${ref}:${repoPath}`).toString('hex').slice(0, 40);
-}
-
-/** One native contents-API directory entry, pinned to the requested immutable `ref`. */
-function contentsEntry(ref: string, repoPath: string, name: string, directories: Record<string, readonly string[]>): Record<string, unknown> {
-  const childPath = `${repoPath}/${name}`;
-  const sha = blobSha(ref, childPath);
-  const isDirectory = childPath in directories;
-  return {
-    type: isDirectory ? 'dir' : 'file',
-    name,
-    path: childPath,
-    sha,
-    ...(isDirectory ? {} : { size: 128 }),
-    url: `https://api.github.com/repos/${REPOSITORY}/contents/${childPath}?ref=${ref}`,
-    git_url: `https://api.github.com/repos/${REPOSITORY}/git/blobs/${sha}`,
-    html_url: `https://github.com/${REPOSITORY}/blob/${ref}/${childPath}`,
-    download_url: isDirectory ? null : `https://raw.githubusercontent.com/${REPOSITORY}/${ref}/${childPath}`,
-  };
-}
-
-/** One native contents-API file response with base64 content pinned to `ref`. */
-function contentsFile(ref: string, repoPath: string, content: string): Response {
-  const sha = blobSha(ref, repoPath);
-  return jsonResponse({
-    type: 'file',
-    name: repoPath.split('/').pop(),
-    path: repoPath,
-    sha,
-    size: Buffer.byteLength(content),
-    url: `https://api.github.com/repos/${REPOSITORY}/contents/${repoPath}?ref=${ref}`,
-    git_url: `https://api.github.com/repos/${REPOSITORY}/git/blobs/${sha}`,
-    html_url: `https://github.com/${REPOSITORY}/blob/${ref}/${repoPath}`,
-    download_url: `https://raw.githubusercontent.com/${REPOSITORY}/${ref}/${repoPath}`,
-    encoding: 'base64',
-    content: Buffer.from(content).toString('base64'),
+// The regression guard: while these suites run, any HTTP request is a failure. Source
+// acquisition must go through the injected git runner only.
+beforeEach(() => {
+  vi.stubGlobal('fetch', () => {
+    throw new Error('source acquisition must use the injected git runner, not HTTP');
   });
+});
+afterEach(() => { vi.unstubAllGlobals(); });
+
+/** A git runner whose clone fails before any commit is known (status/rate-limit/network). */
+function headFailureGit(): TestGitRunner {
+  return async () => { throw new Error('source unavailable: clone failed'); };
 }
 
-function upstreamSectionId(repoPath: string): string {
-  return repoPath.replace(/[^a-z0-9]+/gi, '-').replace(/^-+|-+$/g, '').toLowerCase();
-}
-
-/** Valid upstream content for one member at one immutable ref: marked Markdown, valid JSON. */
-function upstreamFileContents(ref: string, repoPath: string): string {
-  if (repoPath.endsWith('manifest.json')) return '{\n  "version": 1,\n  "files": {}\n}\n';
-  if (repoPath.endsWith('json')) return `${JSON.stringify({ version: 1, ref }, null, 2)}\n`;
-  const id = upstreamSectionId(repoPath);
-  return `# ${repoPath}\n<!-- ai-workflow:section ${id}:begin -->\nimmutable ${ref}\n<!-- ai-workflow:section ${id}:end -->\n`;
-}
-
-/** A branch endpoint that fails, modelling a status/rate-limit/network refusal before any commit is known. */
-function headFailureFetch(status: number): typeof fetch {
-  return async (input: Parameters<typeof fetch>[0]): Promise<Response> => {
-    if (new URL(requestUrl(input)).pathname === HEAD_PATH) return jsonResponse({ message: 'source unavailable' }, status);
-    return jsonResponse({ message: 'unexpected request' }, 500);
-  };
+/** A fixed-HEAD git runner that materializes the given source set for one immutable commit. */
+function fixedHeadGit(commit: string, files: Record<string, string>): TestGitRunner {
+  return fakeGit({ commit, files }).runGit;
 }
 
 /**
- * A branch endpoint that resolves and lists every supported member, but whose contents
- * endpoint cannot return one listed member: retirement (listing absence) is never
- * confused with a failed retrieval (listed member whose content request fails).
+ * A fixed HEAD whose source set still contains every supported member, but one mergeable
+ * Markdown member is structurally invalid: retirement (a missing file) is never confused
+ * with a failed retrieval (a present member whose bytes cannot be validated).
  */
-function memberFailureFetch(commit: string, failingPath: string): typeof fetch {
-  return async (input: Parameters<typeof fetch>[0]): Promise<Response> => {
-    const parsed = new URL(requestUrl(input));
-    if (parsed.pathname === HEAD_PATH) return jsonResponse({ name: BRANCH, commit: { sha: commit } });
-    if (parsed.pathname.startsWith(CONTENTS_PREFIX)) {
-      const repoPath = decodeURIComponent(parsed.pathname.slice(CONTENTS_PREFIX.length));
-      const ref = parsed.searchParams.get('ref') ?? commit;
-      const listing = SUPPORTED_DIRECTORIES[repoPath];
-      if (listing) return jsonResponse(listing.map((name) => contentsEntry(ref, repoPath, name, SUPPORTED_DIRECTORIES)));
-      if (repoPath === failingPath) return jsonResponse({ message: 'Not Found' }, 404);
-      if (FILE_PATHS.has(repoPath)) return contentsFile(ref, repoPath, upstreamFileContents(ref, repoPath));
-    }
-    return jsonResponse({ message: 'unexpected request' }, 404);
-  };
+function memberFailureGit(commit: string, failingPath: string, files: Record<string, string>): TestGitRunner {
+  return fakeGit({ commit, files: { ...files, [failingPath]: '# malformed\n<!-- ai-workflow:section broken:begin -->\nnever closed\n' } }).runGit;
 }
 
 const navigationJson = `${JSON.stringify(
@@ -176,7 +88,7 @@ describe('project template synchronization source failures', () => {
 
     // (a) The branch HEAD query fails: no commit is known, so no source can be trusted.
     const beforeHead = await snapshotTree(root);
-    const headReport = await synchronizeProject({ projectRoot: root, fetch: headFailureFetch(403), env: {} });
+    const headReport = await synchronizeProject({ projectRoot: root, runGit: headFailureGit() });
 
     expect(headReport.project).toBe(root);
     expect(headReport.status).toBe('unverified');
@@ -194,7 +106,7 @@ describe('project template synchronization source failures', () => {
     // snapshot is unverified, no commit is claimed and no target byte changes.
     const failingPath = 'templates/project/notes/README.md';
     const beforeMember = await snapshotTree(root);
-    const memberReport = await synchronizeProject({ projectRoot: root, fetch: memberFailureFetch('c'.repeat(40), failingPath), env: {} });
+    const memberReport = await synchronizeProject({ projectRoot: root, runGit: memberFailureGit('c'.repeat(40), failingPath, sourceFiles) });
 
     expect(memberReport.project).toBe(root);
     expect(memberReport.status).toBe('unverified');
@@ -326,23 +238,6 @@ async function writeAdoptedTarget(root: string): Promise<void> {
   await writeFile(join(root, '.gitignore'), '.ai-workflow/plans/\n.worktrees/\n');
 }
 
-/** A successful fixed-HEAD fixture listing and serving every supported template from one commit. */
-function fixedHeadFetch(commit: string, files: Record<string, string>): typeof fetch {
-  return async (input: Parameters<typeof fetch>[0]): Promise<Response> => {
-    const parsed = new URL(requestUrl(input));
-    if (parsed.pathname === HEAD_PATH) return jsonResponse({ name: BRANCH, commit: { sha: commit } });
-    if (parsed.pathname.startsWith(CONTENTS_PREFIX)) {
-      const repoPath = decodeURIComponent(parsed.pathname.slice(CONTENTS_PREFIX.length));
-      const ref = parsed.searchParams.get('ref') ?? commit;
-      const listing = SUPPORTED_DIRECTORIES[repoPath];
-      if (listing) return jsonResponse(listing.map((name) => contentsEntry(ref, repoPath, name, SUPPORTED_DIRECTORIES)));
-      const content = files[repoPath];
-      if (content !== undefined) return contentsFile(ref, repoPath, content);
-    }
-    return jsonResponse({ message: 'Not Found' }, 404);
-  };
-}
-
 describe('project template owned-section patches', () => {
   it('AC-003 patches only owned section bodies from the latest source and preserves every outside byte', async () => {
     const root = await temporary('ai-workflow-sync-merge-');
@@ -350,7 +245,7 @@ describe('project template owned-section patches', () => {
     await writeAdoptedTarget(root);
     const before = await snapshotTree(root);
 
-    const report = await synchronizeProject({ projectRoot: root, fetch: fixedHeadFetch(mergeCommit, sourceFiles), env: {} });
+    const report = await synchronizeProject({ projectRoot: root, runGit: fixedHeadGit(mergeCommit, sourceFiles) });
 
     expect(report.status).toBe('synchronized');
     expect(report.verified).toBe(true);
@@ -403,13 +298,6 @@ const legacySourceFiles: Record<string, string> = {
   'templates/project/notes/archived/AGENTS.md': marked('archived-governance', 'Archived governance body.'),
   'templates/project/notes/archived/manifest.json': '{\n  "version": 1,\n  "files": {}\n}\n',
   'templates/project/EXTRA.md': 'unsupported extra template\n',
-};
-
-const legacyDirectories: Record<string, readonly string[]> = {
-  'templates/project': ['AGENTS.md', 'MEMORY.md', 'navigation.json', 'navigation.md', 'notes', 'EXTRA.md'],
-  'templates/project/notes': ['AGENTS.md', 'implemented', 'archived'],
-  'templates/project/notes/implemented': ['AGENTS.md'],
-  'templates/project/notes/archived': ['AGENTS.md', 'manifest.json'],
 };
 
 // Legacy target: unmarked same-heading sections plus project-owned bytes and headings.
@@ -474,23 +362,6 @@ async function writeLegacyTarget(root: string): Promise<void> {
   await writeFile(join(root, '.gitignore'), '.ai-workflow/plans/\n.worktrees/\n');
 }
 
-/** A fixed-HEAD fixture that also serves a successful recursive source-set listing. */
-function sourceSetFetch(commit: string, files: Record<string, string>, directories: Record<string, readonly string[]>): typeof fetch {
-  return async (input: Parameters<typeof fetch>[0]): Promise<Response> => {
-    const parsed = new URL(requestUrl(input));
-    if (parsed.pathname === HEAD_PATH) return jsonResponse({ name: BRANCH, commit: { sha: commit } });
-    if (parsed.pathname.startsWith(CONTENTS_PREFIX)) {
-      const repoPath = decodeURIComponent(parsed.pathname.slice(CONTENTS_PREFIX.length));
-      const ref = parsed.searchParams.get('ref') ?? commit;
-      const listing = directories[repoPath];
-      if (listing) return jsonResponse(listing.map((name) => contentsEntry(ref, repoPath, name, directories)));
-      const content = files[repoPath];
-      if (content !== undefined) return contentsFile(ref, repoPath, content);
-    }
-    return jsonResponse({ message: 'Not Found' }, 404);
-  };
-}
-
 describe('project template legacy adoption and retired artifacts', () => {
   it('AC-004/AC-005 adopts exact legacy sections, preserves differing and retired bytes, creates missing artifacts and warns without a baseline', async () => {
     const root = await temporary('ai-workflow-sync-legacy-');
@@ -498,7 +369,7 @@ describe('project template legacy adoption and retired artifacts', () => {
     await writeLegacyTarget(root);
     const before = await snapshotTree(root);
 
-    const report = await synchronizeProject({ projectRoot: root, fetch: sourceSetFetch(legacyCommit, legacySourceFiles, legacyDirectories), env: {} });
+    const report = await synchronizeProject({ projectRoot: root, runGit: fixedHeadGit(legacyCommit, legacySourceFiles) });
 
     expect(report.status).toBe('needs_attention');
     expect(report.verified).toBe(false);
@@ -573,7 +444,7 @@ describe('project template structural conflicts', () => {
     await writeFile(join(root, 'MEMORY.md'), contents);
     const before = await snapshotTree(root);
 
-    const report = await synchronizeProject({ projectRoot: root, fetch: fixedHeadFetch(mergeCommit, sourceFiles), env: {} });
+    const report = await synchronizeProject({ projectRoot: root, runGit: fixedHeadGit(mergeCommit, sourceFiles) });
 
     expect(report.status).toBe('conflict');
     expect(report.verified).toBe(false);
@@ -613,7 +484,7 @@ describe('project template publication recovery', () => {
       if (writable) {
         throw new Error('This environment cannot enforce a read-only project root (likely running as root); AC-010 publication-failure recovery requires an unprivileged process.');
       }
-      report = await synchronizeProject({ projectRoot: root, fetch: fixedHeadFetch(mergeCommit, sourceFiles), env: {} });
+      report = await synchronizeProject({ projectRoot: root, runGit: fixedHeadGit(mergeCommit, sourceFiles) });
     } catch (error) {
       thrown = error;
     } finally {
@@ -688,7 +559,7 @@ describe('project template check mode and repeat synchronization', () => {
     const beforeMtimes = await mtimes(root, targetPaths);
 
     // Check mode: propose the safe changes without touching any byte or mtime.
-    const pending = await synchronizeProject({ projectRoot: root, fetch: fixedHeadFetch(mergeCommit, sourceFiles), env: {}, check: true });
+    const pending = await synchronizeProject({ projectRoot: root, runGit: fixedHeadGit(mergeCommit, sourceFiles), check: true });
     expect(pending.status).toBe('pending');
     expect(pending.verified).toBe(false);
     expect(pending.proceed).toBe(false);
@@ -700,7 +571,7 @@ describe('project template check mode and repeat synchronization', () => {
     expect(await mtimes(root, targetPaths), 'check mode must not touch file mtimes').toEqual(beforeMtimes);
 
     // Apply the same immutable source: the safe changes land.
-    const applied = await synchronizeProject({ projectRoot: root, fetch: fixedHeadFetch(mergeCommit, sourceFiles), env: {} });
+    const applied = await synchronizeProject({ projectRoot: root, runGit: fixedHeadGit(mergeCommit, sourceFiles) });
     expect(applied.status).toBe('synchronized');
     expect(applied.verified).toBe(true);
     expect(applied.proceed).toBe(true);
@@ -722,7 +593,7 @@ describe('project template check mode and repeat synchronization', () => {
     expect(await exists(join(root, '.ai-workflow/sync.json'))).toBe(false);
 
     // Repeat with the same immutable source: nothing changes, nothing duplicates.
-    const repeated = await synchronizeProject({ projectRoot: root, fetch: fixedHeadFetch(mergeCommit, sourceFiles), env: {} });
+    const repeated = await synchronizeProject({ projectRoot: root, runGit: fixedHeadGit(mergeCommit, sourceFiles) });
     expect(repeated.status).toBe('synchronized');
     expect(repeated.verified).toBe(true);
     expect(repeated.proceed).toBe(true);
@@ -756,7 +627,7 @@ describe('project template source validity', () => {
       ...sourceFiles,
       'templates/project/MEMORY.md': '# Memory template\n\nUnmarked upstream body.\n',
     };
-    const report = await synchronizeProject({ projectRoot: root, fetch: fixedHeadFetch(mergeCommit, malformedSourceFiles), env: {} });
+    const report = await synchronizeProject({ projectRoot: root, runGit: fixedHeadGit(mergeCommit, malformedSourceFiles) });
 
     expect(report.status).toBe('unverified');
     expect(report.verified).toBe(false);
@@ -787,7 +658,7 @@ describe('project template unknown legacy prose', () => {
     await writeAdoptedTarget(root);
     await writeFile(join(root, '.ai-workflow/AGENTS.md'), unknownLegacyAgents);
 
-    const report = await synchronizeProject({ projectRoot: root, fetch: fixedHeadFetch(mergeCommit, unknownLegacySourceFiles), env: {} });
+    const report = await synchronizeProject({ projectRoot: root, runGit: fixedHeadGit(mergeCommit, unknownLegacySourceFiles) });
 
     // Unknown unmarked rule prose prevents a full managed-artifact claim.
     expect(report.status).toBe('needs_attention');
@@ -848,7 +719,7 @@ describe('project template owned section evolution', () => {
     await writeAdoptedTarget(root);
     await writeFile(join(root, '.ai-workflow/AGENTS.md'), evolutionTargetAgents);
 
-    const report = await synchronizeProject({ projectRoot: root, fetch: fixedHeadFetch(mergeCommit, evolutionSourceFiles), env: {} });
+    const report = await synchronizeProject({ projectRoot: root, runGit: fixedHeadGit(mergeCommit, evolutionSourceFiles) });
 
     expect(report.updated).toContain('.ai-workflow/AGENTS.md');
     expect(report.conflicts).toEqual([]);

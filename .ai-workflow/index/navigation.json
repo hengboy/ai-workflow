@@ -1102,6 +1102,12 @@
         },
         {
           "file": "src/sync/source.ts",
+          "name": "GitRunner",
+          "kind": "type",
+          "visibility": "public"
+        },
+        {
+          "file": "src/sync/source.ts",
           "name": "resolveTemplateSnapshot",
           "kind": "function",
           "visibility": "public"
@@ -2389,6 +2395,11 @@
         },
         {
           "kind": "imports",
+          "from": "src/sync/index.ts#SynchronizeProjectOptions",
+          "to": "src/sync/source.ts#GitRunner"
+        },
+        {
+          "kind": "imports",
           "from": "src/sync/index.ts#applyTemplateSnapshot",
           "to": "src/sync/merge.ts#OwnershipConflictError"
         },
@@ -2822,6 +2833,30 @@
         },
         {
           "file": "tests/helpers.ts",
+          "name": "FakeGit",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "tests/helpers.ts",
+          "name": "FakeGitState",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "tests/helpers.ts",
+          "name": "GIT_SHIM_SOURCE",
+          "kind": "variable",
+          "visibility": "public"
+        },
+        {
+          "file": "tests/helpers.ts",
+          "name": "GitShimFixture",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "tests/helpers.ts",
           "name": "PlanTripletFiles",
           "kind": "interface",
           "visibility": "public"
@@ -2836,6 +2871,12 @@
           "file": "tests/helpers.ts",
           "name": "RealWorkspaceRepoSpec",
           "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "tests/helpers.ts",
+          "name": "TestGitRunner",
+          "kind": "type",
           "visibility": "public"
         },
         {
@@ -2871,6 +2912,12 @@
         {
           "file": "tests/helpers.ts",
           "name": "changedPaths",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "tests/helpers.ts",
+          "name": "fakeGit",
           "kind": "function",
           "visibility": "public"
         },
@@ -2948,7 +2995,25 @@
         },
         {
           "file": "tests/helpers.ts",
+          "name": "withGitShim",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "tests/helpers.ts",
           "name": "workspacePlanFixture",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "tests/helpers.ts",
+          "name": "writeGitFixture",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "tests/helpers.ts",
+          "name": "writeGitShim",
           "kind": "function",
           "visibility": "public"
         },
@@ -3213,6 +3278,7 @@
         ".ai-workflow/notes/implemented/feature/2026-10-08-project-template-sync.md",
         ".ai-workflow/notes/implemented/feature/2026-10-09-sync-once-at-skill-start.md",
         ".ai-workflow/notes/implemented/process/2026-09-16-project-contract-and-agent-notes.md",
+        ".ai-workflow/notes/implemented/simplification/2026-10-09-public-git-template-source.md",
         "MEMORY.md",
         "src/cli.ts",
         "src/install/hooks.ts",
@@ -3250,6 +3316,7 @@
         ".ai-workflow/notes/implemented/feature/2026-10-08-project-template-sync.md",
         ".ai-workflow/notes/implemented/feature/2026-10-09-sync-once-at-skill-start.md",
         ".ai-workflow/notes/implemented/process/2026-09-16-project-contract-and-agent-notes.md",
+        ".ai-workflow/notes/implemented/simplification/2026-10-09-public-git-template-source.md",
         "MEMORY.md",
         "src/cli.ts",
         "src/install/hooks.ts",

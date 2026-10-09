@@ -1,14 +1,14 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { spawn } from 'node:child_process';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { delimiter, dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import type { SyncReport } from '../../src/sync/index.js';
 import type { ProjectGateResult } from '../../src/sync/gate.js';
 import { install } from '../../src/install/index.js';
 import { exists } from '../../src/utils/fs.js';
 import { packagePath } from '../../src/utils/schema.js';
-import { changedPaths, snapshotTree, temporary } from '../helpers.js';
+import { changedPaths, snapshotTree, temporary, withGitShim, writeGitFixture, writeGitShim } from '../helpers.js';
 
 /**
  * Frozen single-start synchronization cadence for `src/cli.ts` / `src/sync/gate.ts` (plan
@@ -100,13 +100,6 @@ const attentionSourceFiles: Record<string, string> = {
   'templates/project/MEMORY.md': `# Project memory\n${marker('standards', '## Standards\nFresh standards.')}`,
 };
 
-const sourceDirectories: Record<string, readonly string[]> = {
-  'templates/project': ['AGENTS.md', 'MEMORY.md', 'navigation.json', 'navigation.md', 'notes'],
-  'templates/project/notes': ['AGENTS.md', 'README.md', 'implemented', 'archived'],
-  'templates/project/notes/implemented': ['AGENTS.md'],
-  'templates/project/notes/archived': ['AGENTS.md', 'manifest.json'],
-};
-
 // Adopted target: marked sections differ from source; custom bytes and independent data
 // must survive a safe patch.
 const targetAgents = `custom preface\n${marker('shared-context', '## Shared context\nOld shared context.')}custom suffix\n`;
@@ -115,68 +108,15 @@ const attentionTargetMemory = '# Project memory\n\n## Standards\nOld differing s
 const malformedAgents = `${marker('shared-context', 'one')}${marker('shared-context', 'two')}`;
 const planSpecBytes = '# Frozen plan\n\nIndependent frozen plan bytes.\n';
 
-function hookPreload(files: Record<string, string>): string {
-  return `
-import { appendFileSync } from 'node:fs';
-const FILES = ${JSON.stringify(files)};
-const DIRECTORIES = ${JSON.stringify(sourceDirectories)};
-const COMMIT = process.env.AI_WORKFLOW_FIXTURE_HEAD || ${JSON.stringify(A)};
-const LOG = process.env.AI_WORKFLOW_FIXTURE_LOG;
-function json(body, status = 200) {
-  return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
-}
-globalThis.fetch = async (input) => {
-  const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
-  const parsed = new URL(url);
-  if (parsed.pathname === '/repos/hengboy/ai-workflow/branches/simplify') {
-    if (LOG) appendFileSync(LOG, COMMIT + '\\n');
-    return json({ name: 'simplify', commit: { sha: COMMIT } });
-  }
-  const prefix = '/repos/hengboy/ai-workflow/contents/';
-  if (parsed.pathname.startsWith(prefix)) {
-    const repoPath = decodeURIComponent(parsed.pathname.slice(prefix.length));
-    const listing = DIRECTORIES[repoPath];
-    if (listing) {
-      return json(listing.map((name) => {
-        const childPath = repoPath + '/' + name;
-        return { type: childPath in DIRECTORIES ? 'dir' : 'file', name, path: childPath, sha: '0'.repeat(40), size: 10, url };
-      }));
-    }
-    if (FILES[repoPath] !== undefined) {
-      return json({ type: 'file', path: repoPath, sha: '0'.repeat(40), size: Buffer.byteLength(FILES[repoPath]), encoding: 'base64', content: Buffer.from(FILES[repoPath]).toString('base64') });
-    }
-  }
-  return json({ message: 'Not Found' }, 404);
-};
-`;
-}
+interface GitFixture { binDirectory: string; fixturePath: string }
 
-function failingPreload(): string {
-  return `
-import { appendFileSync } from 'node:fs';
-const COMMIT = process.env.AI_WORKFLOW_FIXTURE_HEAD || ${JSON.stringify(A)};
-const LOG = process.env.AI_WORKFLOW_FIXTURE_LOG;
-function json(body, status = 200) {
-  return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
-}
-globalThis.fetch = async (input) => {
-  const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
-  const parsed = new URL(url);
-  if (parsed.pathname === '/repos/hengboy/ai-workflow/branches/simplify') {
-    if (LOG) appendFileSync(LOG, COMMIT + '\\n');
-    return json({ message: 'rate limited' }, 403);
-  }
-  return json({ message: 'source unavailable' }, 503);
-};
-`;
-}
-
-async function writePreload(source: string, name = 'fixture.mjs'): Promise<string> {
-  const directory = await temporary('ai-workflow-sync-hook-fixture-');
-  roots.push(directory);
-  const path = join(directory, name);
-  await writeFile(path, source);
-  return path;
+/** Plant the fake `git` earlier in PATH and the fixture file it reads, for one test run. */
+async function gitFixture(files: Record<string, string>, fail?: string): Promise<GitFixture> {
+  const binDirectory = await writeGitShim();
+  const fixtureDirectory = await temporary('ai-workflow-sync-hook-fixture-');
+  roots.push(binDirectory, fixtureDirectory);
+  const fixturePath = await writeGitFixture(fixtureDirectory, { files, ...(fail === undefined ? {} : { fail }) });
+  return { binDirectory, fixturePath };
 }
 
 async function adoptedProject(overrides: Record<string, string> = {}): Promise<string> {
@@ -215,22 +155,27 @@ interface HookFixtureEnvironment {
   log?: string;
 }
 
-function subprocessEnv(fixture: HookFixtureEnvironment): NodeJS.ProcessEnv {
-  return {
+function subprocessEnv(fixture: HookFixtureEnvironment, git: GitFixture): NodeJS.ProcessEnv {
+  return withGitShim({
     ...process.env,
     HOME: fixture.home,
     TMPDIR: fixture.temporaryDirectory,
     ...(fixture.head === undefined ? {} : { AI_WORKFLOW_FIXTURE_HEAD: fixture.head }),
     ...(fixture.log === undefined ? {} : { AI_WORKFLOW_FIXTURE_LOG: fixture.log }),
-  };
+  }, git.binDirectory, git.fixturePath);
 }
 
-/** Run the worktree `src/cli.ts` through tsx (source gate). */
-function runHook(preloadPath: string, args: string[], input: unknown, env: NodeJS.ProcessEnv): Promise<HookProcessResult> {
+/** The shim `PATH` and fixture entries to place into the process environment for built hooks. */
+function processShimEnv(git: GitFixture): Record<string, string> {
+  return { PATH: `${git.binDirectory}${delimiter}${process.env.PATH ?? ''}`, AI_WORKFLOW_GIT_FIXTURE: git.fixturePath };
+}
+
+/** Run the worktree `src/cli.ts` through tsx (source gate), with the fake `git` on PATH. */
+function runHook(args: string[], input: unknown, env: NodeJS.ProcessEnv): Promise<HookProcessResult> {
   return new Promise((resolve) => {
     const child = spawn(
       process.execPath,
-      ['--import', tsxLoader, '--import', pathToFileURL(preloadPath).href, cliEntry, ...args],
+      ['--import', tsxLoader, cliEntry, ...args],
       { cwd: repoRoot, env },
     );
     let stdout = '';
@@ -248,7 +193,7 @@ function runHook(preloadPath: string, args: string[], input: unknown, env: NodeJ
 
 /**
  * Run the built `dist/cli.js` the installed OpenCode plugin actually spawns, inheriting the
- * surrounding fixture environment (`NODE_OPTIONS` preload, `HOME`, `TMPDIR`, fixture HEAD/log).
+ * surrounding fixture environment (the fake `git` on PATH, `HOME`, `TMPDIR`, fixture HEAD/log).
  */
 function runBuiltHook(args: string[], env: NodeJS.ProcessEnv = process.env): Promise<HookProcessResult> {
   return new Promise((resolve) => {
@@ -361,16 +306,15 @@ describe('project sync hook adapter', () => {
     'AC-007/AC-012: $host maps $name from the primed cache without a source request',
     async ({ host, ...testCase }) => {
       const project = await adoptedProject(testCase.target);
-      const preloadPath = await writePreload(testCase.failing ? failingPreload() : hookPreload(testCase.source ?? baseSourceFiles));
+      const git = await gitFixture(testCase.source ?? baseSourceFiles, testCase.failing ? 'rate limited' : undefined);
       const fixture = await hookFixture();
 
       // Prime the actual-root cache through the real phase form at head A. It always prints
       // the raw gate JSON for every host and is the only event that contacts the source.
       const prime = await runHook(
-        preloadPath,
         ['sync-hook', '--host', host, '--phase', '--project', project],
         undefined,
-        subprocessEnv({ ...fixture, head: A, log: fixture.log }),
+        subprocessEnv({ ...fixture, head: A, log: fixture.log }, git),
       );
       expect(prime.code, prime.stderr).toBe(0);
       const primed = JSON.parse(prime.stdout) as HookGateResult;
@@ -385,10 +329,9 @@ describe('project sync hook adapter', () => {
       // The native PreToolUse at head B replays the stored A result; it must never query the
       // source even though the branch answer would now differ.
       const native = await runHook(
-        preloadPath,
         ['sync-hook', '--host', host],
         nativeInput('PreToolUse', project, 'map-session'),
-        subprocessEnv({ ...fixture, head: B, log: fixture.log }),
+        subprocessEnv({ ...fixture, head: B, log: fixture.log }, git),
       );
       expect(native.code, `stderr: ${native.stderr}`).toBe(0);
 
@@ -419,10 +362,9 @@ describe('project sync hook adapter', () => {
       // The deny case also exercises the UserPromptSubmit block shape (still replaying A).
       if (testCase.deny) {
         const prompt = await runHook(
-          preloadPath,
           ['sync-hook', '--host', host],
           nativeInput('UserPromptSubmit', project, 'map-session', { prompt: 'continue' }),
-          subprocessEnv({ ...fixture, head: B, log: fixture.log }),
+          subprocessEnv({ ...fixture, head: B, log: fixture.log }, git),
         );
         expect(prompt.code, prompt.stderr).toBe(0);
         if (host === 'opencode') {
@@ -446,15 +388,15 @@ describe('project sync hook adapter', () => {
   it('AC-001/AC-002/AC-004: native events replay the stored result per actual root and never synchronize', async () => {
     const projectA = await adoptedProject();
     const projectB = await adoptedProject();
-    const preloadPath = await writePreload(hookPreload(baseSourceFiles));
+    const git = await gitFixture(baseSourceFiles);
     const fixture = await hookFixture();
-    const envFor = (head: string) => subprocessEnv({ ...fixture, head, log: fixture.log });
+    const envFor = (head: string) => subprocessEnv({ ...fixture, head, log: fixture.log }, git);
     const beforeA = await snapshotTree(projectA);
 
     // (a) A native PreToolUse with no stored check is an allow with a visible no-check
     // context, no denial, no source request and no project write, for claude and codex.
     for (const host of ['claude', 'codex'] as const) {
-      const noCheck = await runHook(preloadPath, ['sync-hook', '--host', host], nativeInput('PreToolUse', projectA, 'no-check'), envFor(B));
+      const noCheck = await runHook(['sync-hook', '--host', host], nativeInput('PreToolUse', projectA, 'no-check'), envFor(B));
       expect(noCheck.code, noCheck.stderr).toBe(0);
       const output = JSON.parse(noCheck.stdout) as NativeOutput;
       expectNoCheck(nativeContext(output));
@@ -464,7 +406,7 @@ describe('project sync hook adapter', () => {
     expect(changedPaths(beforeA, await snapshotTree(projectA)), 'a no-check native must not write the project').toEqual([]);
 
     // (b) The phase form at head A is the only source request and stores the raw result.
-    const phaseA = await runHook(preloadPath, ['sync-hook', '--host', 'claude', '--phase', '--project', projectA], undefined, envFor(A));
+    const phaseA = await runHook(['sync-hook', '--host', 'claude', '--phase', '--project', projectA], undefined, envFor(A));
     expect(phaseA.code, phaseA.stderr).toBe(0);
     const storedA = JSON.parse(phaseA.stdout) as HookGateResult;
     expect(storedA.decision).toBe('allow');
@@ -480,7 +422,7 @@ describe('project sync hook adapter', () => {
       { event: 'SessionStart', extra: { source: 'resume' } },
     ];
     for (const native of natives) {
-      const reply = await runHook(preloadPath, ['sync-hook', '--host', 'claude'], nativeInput(native.event, projectA, 'S', native.extra), envFor(B));
+      const reply = await runHook(['sync-hook', '--host', 'claude'], nativeInput(native.event, projectA, 'S', native.extra), envFor(B));
       expect(reply.code, reply.stderr).toBe(0);
       const context = nativeContext(JSON.parse(reply.stdout) as NativeOutput);
       expect(context, `${native.event} must replay A`).toContain(A);
@@ -489,12 +431,12 @@ describe('project sync hook adapter', () => {
     expect(await observedHeads(fixture.log), 'native events must reuse the stored entry').toEqual([A]);
 
     // (d) A second phase entry at B replaces the stored entry; natives then replay B.
-    const phaseB = await runHook(preloadPath, ['sync-hook', '--host', 'claude', '--phase', '--project', projectA], undefined, envFor(B));
+    const phaseB = await runHook(['sync-hook', '--host', 'claude', '--phase', '--project', projectA], undefined, envFor(B));
     expect(phaseB.code, phaseB.stderr).toBe(0);
     expect((JSON.parse(phaseB.stdout) as HookGateResult).report?.source.commit).toBe(B);
     expect(await observedHeads(fixture.log)).toEqual([A, B]);
 
-    const replayB = await runHook(preloadPath, ['sync-hook', '--host', 'claude'], nativeInput('PreToolUse', projectA, 'S'), envFor(C));
+    const replayB = await runHook(['sync-hook', '--host', 'claude'], nativeInput('PreToolUse', projectA, 'S'), envFor(C));
     expect(replayB.code, replayB.stderr).toBe(0);
     const replayBContext = nativeContext(JSON.parse(replayB.stdout) as NativeOutput);
     expect(replayBContext).toContain(B);
@@ -504,7 +446,7 @@ describe('project sync hook adapter', () => {
     // (e) A distinct second actual root has no stored check: native is a no-check allow with
     // no request, and only its own phase entry synchronizes it.
     const beforeB = await snapshotTree(projectB);
-    const noCheckB = await runHook(preloadPath, ['sync-hook', '--host', 'claude'], nativeInput('PreToolUse', projectB, 'other-root'), envFor(C));
+    const noCheckB = await runHook(['sync-hook', '--host', 'claude'], nativeInput('PreToolUse', projectB, 'other-root'), envFor(C));
     expect(noCheckB.code, noCheckB.stderr).toBe(0);
     const noCheckBOutput = JSON.parse(noCheckB.stdout) as NativeOutput;
     expectNoCheck(nativeContext(noCheckBOutput));
@@ -512,12 +454,12 @@ describe('project sync hook adapter', () => {
     expect(await observedHeads(fixture.log), 'an unprimed root must not query the source').toEqual([A, B]);
     expect(changedPaths(beforeB, await snapshotTree(projectB)), 'an unprimed root must not replay or write the first root').toEqual([]);
 
-    const phaseC = await runHook(preloadPath, ['sync-hook', '--host', 'claude', '--phase', '--project', projectB], undefined, envFor(C));
+    const phaseC = await runHook(['sync-hook', '--host', 'claude', '--phase', '--project', projectB], undefined, envFor(C));
     expect(phaseC.code, phaseC.stderr).toBe(0);
     expect((JSON.parse(phaseC.stdout) as HookGateResult).report?.source.commit).toBe(C);
     expect(await observedHeads(fixture.log)).toEqual([A, B, C]);
 
-    const replayA = await runHook(preloadPath, ['sync-hook', '--host', 'claude'], nativeInput('PreToolUse', projectA, 'S'), envFor(D));
+    const replayA = await runHook(['sync-hook', '--host', 'claude'], nativeInput('PreToolUse', projectA, 'S'), envFor(D));
     expect(replayA.code, replayA.stderr).toBe(0);
     const replayAContext = nativeContext(JSON.parse(replayA.stdout) as NativeOutput);
     expect(replayAContext, 'the first root still replays its own stored B').toContain(B);
@@ -535,18 +477,18 @@ describe('project sync hook adapter', () => {
 
   it('AC-007: manual sync repairs files but never replaces the stored gate decision', async () => {
     const project = await adoptedProject();
-    const preloadPath = await writePreload(hookPreload(baseSourceFiles));
+    const git = await gitFixture(baseSourceFiles);
     const fixture = await hookFixture();
-    const envFor = (head: string) => subprocessEnv({ ...fixture, head, log: fixture.log });
+    const envFor = (head: string) => subprocessEnv({ ...fixture, head, log: fixture.log }, git);
 
-    const prime = await runHook(preloadPath, ['sync-hook', '--host', 'opencode', '--phase', '--project', project], undefined, envFor(A));
+    const prime = await runHook(['sync-hook', '--host', 'opencode', '--phase', '--project', project], undefined, envFor(A));
     expect(prime.code, prime.stderr).toBe(0);
     const stored = JSON.parse(prime.stdout) as HookGateResult;
     expect(stored.report?.source.commit).toBe(A);
     expect(await observedHeads(fixture.log)).toEqual([A]);
 
     // The manual command performs a fresh synchronization at B and prints the SyncReport.
-    const manual = await runHook(preloadPath, ['sync', project], undefined, envFor(B));
+    const manual = await runHook(['sync', project], undefined, envFor(B));
     expect(manual.code, manual.stderr).toBe(0);
     const manualReport = JSON.parse(manual.stdout) as SyncReport;
     expect(manualReport.status).toBe('synchronized');
@@ -554,7 +496,7 @@ describe('project sync hook adapter', () => {
     expect(await observedHeads(fixture.log), 'manual sync is a fresh independent query').toEqual([A, B]);
 
     // A following native event still replays the STORED A decision with no new source request.
-    const native = await runHook(preloadPath, ['sync-hook', '--host', 'opencode'], nativeInput('PreToolUse', project, 'manual-session'), envFor(C));
+    const native = await runHook(['sync-hook', '--host', 'opencode'], nativeInput('PreToolUse', project, 'manual-session'), envFor(C));
     expect(native.code, native.stderr).toBe(0);
     const replayed = JSON.parse(native.stdout) as HookGateResult;
     expect(replayed.report?.source.commit, 'manual sync must not replace the stored gate decision').toBe(A);
@@ -637,7 +579,7 @@ describe('opencode plugin boundary', () => {
     roots.push(home, contextDirectory, fixtureLogDirectory, rootA, rootB);
     expect(contextDirectory).not.toBe(rootA);
 
-    const preloadPath = await writePreload(hookPreload(baseSourceFiles));
+    const git = await gitFixture(baseSourceFiles);
     const log = join(fixtureLogDirectory, 'heads.log');
     await install(['opencode'], { home, opencodeVersion: 'v1' });
     const sdk = pluginSdk({ S: { directory: rootA } });
@@ -648,7 +590,7 @@ describe('opencode plugin boundary', () => {
     await withProcessEnvironment({
       HOME: home,
       TMPDIR: fixtureLogDirectory,
-      NODE_OPTIONS: `--import ${pathToFileURL(preloadPath).href}`,
+      ...processShimEnv(git),
       AI_WORKFLOW_FIXTURE_HEAD: A,
       AI_WORKFLOW_FIXTURE_LOG: log,
     }, async () => {
@@ -714,7 +656,7 @@ describe('opencode plugin boundary', () => {
     const rootA = await adoptedProject({ '.ai-workflow/AGENTS.md': malformedAgents });
     roots.push(home, contextDirectory, fixtureLogDirectory, rootA);
 
-    const preloadPath = await writePreload(hookPreload(baseSourceFiles));
+    const git = await gitFixture(baseSourceFiles);
     const log = join(fixtureLogDirectory, 'heads.log');
     await install(['opencode'], { home, opencodeVersion: 'v1' });
     const sdk = pluginSdk({ S: { directory: rootA } });
@@ -724,7 +666,7 @@ describe('opencode plugin boundary', () => {
     await withProcessEnvironment({
       HOME: home,
       TMPDIR: fixtureLogDirectory,
-      NODE_OPTIONS: `--import ${pathToFileURL(preloadPath).href}`,
+      ...processShimEnv(git),
       AI_WORKFLOW_FIXTURE_HEAD: A,
       AI_WORKFLOW_FIXTURE_LOG: log,
     }, async () => {
@@ -761,7 +703,7 @@ describe('opencode plugin boundary', () => {
     const rootA = await adoptedProject();
     roots.push(home, contextDirectory, fixtureLogDirectory, rootA);
 
-    const preloadPath = await writePreload(failingPreload());
+    const git = await gitFixture({}, 'rate limited');
     const log = join(fixtureLogDirectory, 'heads.log');
     await install(['opencode'], { home, opencodeVersion: 'v1' });
     const sdk = pluginSdk({ S: { directory: rootA } });
@@ -771,7 +713,7 @@ describe('opencode plugin boundary', () => {
     await withProcessEnvironment({
       HOME: home,
       TMPDIR: fixtureLogDirectory,
-      NODE_OPTIONS: `--import ${pathToFileURL(preloadPath).href}`,
+      ...processShimEnv(git),
       AI_WORKFLOW_FIXTURE_HEAD: A,
       AI_WORKFLOW_FIXTURE_LOG: log,
     }, async () => {
@@ -805,7 +747,7 @@ describe('opencode plugin boundary', () => {
     const operationRoot = await adoptedProject({ '.ai-workflow/AGENTS.md': operationRootAgents });
     roots.push(home, contextDirectory, fixtureLogDirectory, sessionRoot, operationRoot);
 
-    const preloadPath = await writePreload(hookPreload(baseSourceFiles));
+    const git = await gitFixture(baseSourceFiles);
     const log = join(fixtureLogDirectory, 'heads.log');
     await install(['opencode'], { home, opencodeVersion: 'v1' });
     const sdk = pluginSdk({ S: { directory: sessionRoot } });
@@ -815,7 +757,7 @@ describe('opencode plugin boundary', () => {
     await withProcessEnvironment({
       HOME: home,
       TMPDIR: fixtureLogDirectory,
-      NODE_OPTIONS: `--import ${pathToFileURL(preloadPath).href}`,
+      ...processShimEnv(git),
       AI_WORKFLOW_FIXTURE_HEAD: A,
       AI_WORKFLOW_FIXTURE_LOG: log,
     }, async () => {
