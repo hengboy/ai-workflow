@@ -1,8 +1,11 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { resolveTemplateSnapshot } from '../../src/sync/source.js';
+import { exists } from '../../src/utils/fs.js';
+import { fakeGit, type TestGitRunner } from '../helpers.js';
 
 const REPOSITORY = 'hengboy/ai-workflow';
 const BRANCH = 'simplify';
+const PUBLIC_URL = 'https://github.com/hengboy/ai-workflow.git';
 
 /** The complete supported project-template source set fixed by the specification table. */
 const SOURCE_PATHS = [
@@ -17,177 +20,143 @@ const SOURCE_PATHS = [
   'templates/project/notes/archived/manifest.json',
 ] as const;
 
-/** Directory listings returned by the contents API, keyed by repository-relative path. */
-const DIRECTORIES: Record<string, readonly string[]> = {
-  'templates/project': ['AGENTS.md', 'MEMORY.md', 'navigation.json', 'navigation.md', 'notes'],
-  'templates/project/notes': ['AGENTS.md', 'README.md', 'implemented', 'archived'],
-  'templates/project/notes/implemented': ['AGENTS.md'],
-  'templates/project/notes/archived': ['AGENTS.md', 'manifest.json'],
-};
-
-const FILE_PATHS = new Set<string>(SOURCE_PATHS);
-
-function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
-}
-
-function requestUrl(input: string | URL | Request): string {
-  if (typeof input === 'string') return input;
-  if (input instanceof URL) return input.href;
-  return input.url;
-}
-
-function blobSha(ref: string, repoPath: string): string {
-  return Buffer.from(`${ref}:${repoPath}`).toString('hex').slice(0, 40);
-}
-
-/** One native contents-API directory entry, pinned to the requested immutable `ref`. */
-function contentsEntry(ref: string, repoPath: string, name: string): Record<string, unknown> {
-  const childPath = `${repoPath}/${name}`;
-  const sha = blobSha(ref, childPath);
-  const isDirectory = childPath in DIRECTORIES;
-  return {
-    type: isDirectory ? 'dir' : 'file',
-    name,
-    path: childPath,
-    sha,
-    ...(isDirectory ? {} : { size: 128 }),
-    url: `https://api.github.com/repos/${REPOSITORY}/contents/${childPath}?ref=${ref}`,
-    git_url: `https://api.github.com/repos/${REPOSITORY}/git/blobs/${sha}`,
-    html_url: `https://github.com/${REPOSITORY}/blob/${ref}/${childPath}`,
-    download_url: isDirectory ? null : `https://raw.githubusercontent.com/${REPOSITORY}/${ref}/${childPath}`,
-  };
-}
-
-/** One native contents-API file response with base64 content pinned to `ref`. */
-function contentsFile(ref: string, repoPath: string, content: string): Response {
-  const sha = blobSha(ref, repoPath);
-  return jsonResponse({
-    type: 'file',
-    name: repoPath.split('/').pop(),
-    path: repoPath,
-    sha,
-    size: Buffer.byteLength(content),
-    url: `https://api.github.com/repos/${REPOSITORY}/contents/${repoPath}?ref=${ref}`,
-    git_url: `https://api.github.com/repos/${REPOSITORY}/git/blobs/${sha}`,
-    html_url: `https://github.com/${REPOSITORY}/blob/${ref}/${repoPath}`,
-    download_url: `https://raw.githubusercontent.com/${REPOSITORY}/${ref}/${repoPath}`,
-    encoding: 'base64',
-    content: Buffer.from(content).toString('base64'),
-  });
-}
-
 function upstreamSectionId(repoPath: string): string {
   return repoPath.replace(/[^a-z0-9]+/gi, '-').replace(/^-+|-+$/g, '').toLowerCase();
 }
 
 /**
- * Independent expected upstream content for one immutable ref: the six Markdown
- * templates carry a valid owned section, and the preserved JSON data stays valid JSON.
+ * Independent expected upstream content for one immutable commit: the mergeable Markdown
+ * templates carry a valid owned section, and the preserved JSON data stays valid.
  */
-function upstreamFileContents(ref: string, repoPath: string): string {
+function upstreamFileContents(commit: string, repoPath: string): string {
   if (repoPath.endsWith('manifest.json')) return '{\n  "version": 1,\n  "files": {}\n}\n';
-  if (repoPath.endsWith('json')) return `${JSON.stringify({ version: 1, ref }, null, 2)}\n`;
+  if (repoPath.endsWith('json')) return `${JSON.stringify({ version: 1, commit }, null, 2)}\n`;
   const id = upstreamSectionId(repoPath);
-  return `# ${repoPath}\n<!-- ai-workflow:section ${id}:begin -->\nimmutable ${ref}\n<!-- ai-workflow:section ${id}:end -->\n`;
+  return `# ${repoPath}\n<!-- ai-workflow:section ${id}:begin -->\nimmutable ${commit}\n<!-- ai-workflow:section ${id}:end -->\n`;
 }
 
-/**
- * Contents-API fixture. The branch endpoint returns each supplied HEAD in order; every
- * directory listing and file read is served at the request's immutable `ref`, so any
- * cross-commit reuse shows up in the returned bytes.
- */
-function sourceFetch(heads: readonly string[], log: string[]): typeof fetch {
-  let headIndex = 0;
-  return async (input: Parameters<typeof fetch>[0]): Promise<Response> => {
-    const url = requestUrl(input);
-    log.push(url);
-    const parsed = new URL(url);
-    if (parsed.pathname === `/repos/${REPOSITORY}/branches/${BRANCH}`) {
-      const commit = heads[Math.min(headIndex, heads.length - 1)];
-      headIndex += 1;
-      return jsonResponse({ name: BRANCH, commit: { sha: commit } });
-    }
-    const contentsPrefix = `/repos/${REPOSITORY}/contents/`;
-    if (parsed.pathname.startsWith(contentsPrefix)) {
-      const repoPath = decodeURIComponent(parsed.pathname.slice(contentsPrefix.length));
-      const ref = parsed.searchParams.get('ref') ?? '';
-      const listing = DIRECTORIES[repoPath];
-      if (listing) return jsonResponse(listing.map((name) => contentsEntry(ref, repoPath, name)));
-      if (FILE_PATHS.has(repoPath)) return contentsFile(ref, repoPath, upstreamFileContents(ref, repoPath));
-    }
-    return jsonResponse({ message: `Unexpected request ${url}` }, 404);
-  };
+/** The full valid source set at one commit, keyed by repository-relative path. */
+function sourceFiles(commit: string): Record<string, string> {
+  const files: Record<string, string> = {};
+  for (const path of SOURCE_PATHS) files[path] = upstreamFileContents(commit, path);
+  return files;
 }
 
-/** Every `ref` seen on a contents request, so a test can prove reads stayed on one commit. */
-function requestedRefs(log: readonly string[]): Set<string> {
-  const refs = new Set<string>();
-  for (const url of log) {
-    const parsed = new URL(url);
-    if (!parsed.pathname.includes('/contents/')) continue;
-    const ref = parsed.searchParams.get('ref');
-    if (ref) refs.add(ref);
-  }
-  return refs;
-}
+// The regression guard: while these suites run, any HTTP request is a failure. Source
+// acquisition must go through the injected git runner only.
+let fetchCalls = 0;
+beforeEach(() => {
+  fetchCalls = 0;
+  vi.stubGlobal('fetch', () => {
+    fetchCalls += 1;
+    throw new Error('source acquisition must use the injected git runner, not HTTP');
+  });
+});
+afterEach(() => { vi.unstubAllGlobals(); });
 
 describe('project template source', () => {
-  it('pins every supported template read to the single HEAD resolved for each trigger', async () => {
-    const commitA = 'a'.repeat(40);
-    const commitB = 'b'.repeat(40);
-    const log: string[] = [];
-    const fetch = sourceFetch([commitA, commitB], log);
+  it('shallow-clones the fixed public source and reads every supported template, never HTTP', async () => {
+    const commit = 'a'.repeat(40);
+    const fake = fakeGit({ commit, files: sourceFiles(commit) });
 
-    const first = await resolveTemplateSnapshot({ fetch, env: {} });
-    expect(first.source).toEqual({ repository: REPOSITORY, branch: BRANCH, commit: commitA });
-    expect(Object.keys(first.files).sort()).toEqual([...SOURCE_PATHS].sort());
-    for (const path of SOURCE_PATHS) expect(first.files[path]).toBe(upstreamFileContents(commitA, path));
-    expect(requestedRefs(log)).toEqual(new Set([commitA]));
+    const snapshot = await resolveTemplateSnapshot({ runGit: fake.runGit });
 
-    // A later trigger observes a new HEAD; it must read only the new commit and reuse nothing.
-    log.length = 0;
-    const second = await resolveTemplateSnapshot({ fetch, env: {} });
-    expect(second.source).toEqual({ repository: REPOSITORY, branch: BRANCH, commit: commitB });
-    for (const path of SOURCE_PATHS) expect(second.files[path]).toBe(upstreamFileContents(commitB, path));
-    expect(requestedRefs(log)).toEqual(new Set([commitB]));
-    expect(second.files).not.toEqual(first.files);
+    expect(snapshot.source).toEqual({ repository: REPOSITORY, branch: BRANCH, commit });
+    expect(Object.keys(snapshot.files).sort()).toEqual([...SOURCE_PATHS].sort());
+    for (const path of SOURCE_PATHS) expect(snapshot.files[path]).toBe(upstreamFileContents(commit, path));
+
+    // The exact production sequence: one shallow clone of the fixed public address into the
+    // already-created destination, then a rev-parse of that clone's HEAD.
+    expect(fake.cloneCount()).toBe(1);
+    const destination = fake.clones[0]!;
+    expect(fake.calls[0]).toEqual(['clone', '--depth', '1', '--branch', BRANCH, PUBLIC_URL, destination]);
+    expect(fake.calls[1]).toEqual(['-C', destination, 'rev-parse', 'HEAD']);
+
+    // No HTTP at all, even though global fetch would now throw if touched.
+    expect(fetchCalls).toBe(0);
   });
 
-  it('sends GH_TOKEN before GITHUB_TOKEN as a bearer header and never prints the token', async () => {
+  it('clones once per trigger with fresh state, so a later head returns the new commit and bytes', async () => {
+    const commitA = 'a'.repeat(40);
+    const commitB = 'b'.repeat(40);
+    const state = { commit: commitA, files: sourceFiles(commitA) };
+    const fake = fakeGit(state);
+
+    const first = await resolveTemplateSnapshot({ runGit: fake.runGit });
+    expect(first.source).toEqual({ repository: REPOSITORY, branch: BRANCH, commit: commitA });
+    for (const path of SOURCE_PATHS) expect(first.files[path]).toBe(upstreamFileContents(commitA, path));
+
+    // A later trigger observes a new HEAD; it must read only the new commit and reuse nothing.
+    state.commit = commitB;
+    state.files = sourceFiles(commitB);
+    const second = await resolveTemplateSnapshot({ runGit: fake.runGit });
+    expect(second.source).toEqual({ repository: REPOSITORY, branch: BRANCH, commit: commitB });
+    for (const path of SOURCE_PATHS) expect(second.files[path]).toBe(upstreamFileContents(commitB, path));
+    expect(second.files).not.toEqual(first.files);
+    expect(fake.cloneCount()).toBe(2);
+    expect(fake.calls.filter((arguments_) => arguments_[0] === 'clone')).toHaveLength(2);
+  });
+
+  it('removes the temporary clone directory after a successful acquisition', async () => {
     const commit = 'c'.repeat(40);
-    const seen: Array<Record<string, string>> = [];
-    const base = sourceFetch([commit], []);
-    const fetch: typeof globalThis.fetch = async (input, init) => {
-      seen.push({ ...((init?.headers as Record<string, string> | undefined) ?? {}) });
-      return base(input, init);
+    const fake = fakeGit({ commit, files: sourceFiles(commit) });
+
+    await resolveTemplateSnapshot({ runGit: fake.runGit });
+
+    const destination = fake.clones[0]!;
+    expect(await exists(destination), 'the temporary clone must be removed').toBe(false);
+  });
+
+  it('rejects with a useful message when the clone itself fails', async () => {
+    const runGit: TestGitRunner = async () => {
+      throw new Error('git clone: fatal: repository not found');
     };
-    const spies = [
-      vi.spyOn(console, 'log').mockImplementation(() => {}),
-      vi.spyOn(console, 'error').mockImplementation(() => {}),
-      vi.spyOn(console, 'warn').mockImplementation(() => {}),
-    ];
 
-    try {
-      await resolveTemplateSnapshot({ fetch, env: { GH_TOKEN: 'gh-token-value', GITHUB_TOKEN: 'github-token-value' } });
-      expect(seen.length).toBeGreaterThan(0);
-      expect(seen.every((headers) => headers.Authorization === 'Bearer gh-token-value')).toBe(true);
-      expect(seen.some((headers) => headers.Authorization === 'Bearer github-token-value')).toBe(false);
+    await expect(resolveTemplateSnapshot({ runGit })).rejects.toThrow(/repository not found/);
+    expect(fetchCalls).toBe(0);
+  });
 
-      seen.length = 0;
-      await resolveTemplateSnapshot({ fetch, env: { GITHUB_TOKEN: 'github-token-value' } });
-      expect(seen.every((headers) => headers.Authorization === 'Bearer github-token-value')).toBe(true);
+  it('rejects an ambiguous branch head that is not an immutable 40-hex commit', async () => {
+    const fake = fakeGit({ commit: 'deadbeef', files: sourceFiles('a'.repeat(40)) });
 
-      seen.length = 0;
-      await resolveTemplateSnapshot({ fetch, env: {} });
-      expect(seen.length).toBeGreaterThan(0);
-      expect(seen.every((headers) => headers.Authorization === undefined)).toBe(true);
-    } finally {
-      for (const spy of spies) spy.mockRestore();
-    }
+    await expect(resolveTemplateSnapshot({ runGit: fake.runGit })).rejects.toThrow(/Template source branch has no immutable commit: simplify/);
+  });
 
-    const printed = spies.flatMap((spy) => spy.mock.calls.flat()).join(' ');
-    expect(printed).not.toContain('gh-token-value');
-    expect(printed).not.toContain('github-token-value');
+  it('rejects a clone that lacks the templates/project directory', async () => {
+    const fake = fakeGit({ commit: 'e'.repeat(40), files: {} });
+
+    await expect(resolveTemplateSnapshot({ runGit: fake.runGit })).rejects.toThrow(/Template source directory is unavailable: templates\/project/);
+    expect(fetchCalls).toBe(0);
+  });
+});
+
+describe('project template source structure validation', () => {
+  const malformedCases: Array<{ name: string; path: string; contents: string; reason: RegExp }> = [
+    {
+      name: 'an unclosed owned-section marker',
+      path: 'templates/project/MEMORY.md',
+      contents: '# Project memory\n\n<!-- ai-workflow:section standards:begin -->\nnever closed\n',
+      reason: /Template source structure is invalid: templates\/project\/MEMORY\.md/,
+    },
+    {
+      name: 'a JSON template with invalid syntax',
+      path: 'templates/project/navigation.json',
+      contents: '{ this is not valid json\n',
+      reason: /Template source structure is invalid: templates\/project\/navigation\.json/,
+    },
+    {
+      name: 'an archive manifest that is not version 1 with a files object',
+      path: 'templates/project/notes/archived/manifest.json',
+      contents: '{\n  "version": 2,\n  "files": {}\n}\n',
+      reason: /Template source structure is invalid: templates\/project\/notes\/archived\/manifest\.json/,
+    },
+  ];
+
+  it.each(malformedCases)('rejects $name before any target is touched', async ({ path, contents, reason }) => {
+    const commit = 'd'.repeat(40);
+    const fake = fakeGit({ commit, files: { ...sourceFiles(commit), [path]: contents } });
+
+    await expect(resolveTemplateSnapshot({ runGit: fake.runGit })).rejects.toThrow(reason);
+    expect(fetchCalls).toBe(0);
   });
 });

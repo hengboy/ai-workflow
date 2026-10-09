@@ -2,7 +2,7 @@ import { mkdir, readFile, rm, rmdir, stat } from 'node:fs/promises';
 import { dirname, join, relative, resolve } from 'node:path';
 import { atomicWrite } from '../utils/fs.js';
 import { noteClasses, noteLifecycles } from '../notes/index.js';
-import { resolveTemplateSnapshot } from './source.js';
+import { resolveTemplateSnapshot, type GitRunner } from './source.js';
 import { mergeOwnedSections, OwnershipConflictError, validateOwnedSections } from './merge.js';
 
 export type SyncStatus = 'synchronized' | 'unverified' | 'needs_attention' | 'pending' | 'conflict' | 'failed';
@@ -30,8 +30,7 @@ export interface SyncReport {
 export interface SynchronizeProjectOptions {
   projectRoot: string;
   check?: boolean;
-  fetch?: typeof fetch;
-  env?: NodeJS.ProcessEnv;
+  runGit?: GitRunner;
 }
 
 export function notesStructureDirectories(): string[] {
@@ -126,8 +125,7 @@ export async function synchronizeProject(options: SynchronizeProjectOptions): Pr
   let snapshot: Awaited<ReturnType<typeof resolveTemplateSnapshot>>;
   try {
     snapshot = await resolveTemplateSnapshot({
-      ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
-      ...(options.env === undefined ? {} : { env: options.env }),
+      ...(options.runGit === undefined ? {} : { runGit: options.runGit }),
     });
   } catch (error) {
     const reason = (error instanceof Error ? error.message : String(error)) || 'Template source acquisition failed';

@@ -15,7 +15,7 @@ export interface ProjectGateInput {
   toolInput?: unknown;
 }
 
-export interface ProjectGateOptions extends Pick<SynchronizeProjectOptions, 'fetch' | 'env'> {
+export interface ProjectGateOptions extends Pick<SynchronizeProjectOptions, 'runGit'> {
   runtimeDirectory?: string;
 }
 
@@ -176,8 +176,7 @@ export async function runProjectGate(input: ProjectGateInput, options: ProjectGa
     }
     report = await synchronizeProject({
       projectRoot,
-      ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
-      ...(options.env === undefined ? {} : { env: options.env }),
+      ...(options.runGit === undefined ? {} : { runGit: options.runGit }),
     });
     if (report.proceed && [...report.created, ...report.updated].some((path) => authorityPaths.has(path))) {
       authority = await readFile(join(report.project, '.ai-workflow/AGENTS.md'), 'utf8');

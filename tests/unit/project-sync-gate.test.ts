@@ -1,17 +1,13 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { constants } from 'node:fs';
 import { access, chmod, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { runProjectGate, type ProjectGateInput, type ProjectGateResult } from '../../src/sync/gate.js';
 import type { SyncStatus } from '../../src/sync/index.js';
-import { changedPaths, snapshotTree, temporary } from '../helpers.js';
+import { changedPaths, fakeGit, snapshotTree, temporary, type TestGitRunner } from '../helpers.js';
 import { exists } from '../../src/utils/fs.js';
 
-const REPOSITORY = 'hengboy/ai-workflow';
-const BRANCH = 'simplify';
 const COMMIT = 'a'.repeat(40);
-const HEAD_PATH = `/repos/${REPOSITORY}/branches/${BRANCH}`;
-const CONTENTS_PREFIX = `/repos/${REPOSITORY}/contents/`;
 
 /** The complete supported project-template source set fixed by the specification table. */
 const SOURCE_PATHS = [
@@ -25,8 +21,6 @@ const SOURCE_PATHS = [
   'templates/project/notes/archived/AGENTS.md',
   'templates/project/notes/archived/manifest.json',
 ] as const;
-
-const FILE_PATHS = new Set<string>(SOURCE_PATHS);
 
 /** The six mergeable Markdown templates that carry ownership markers in this fixture. */
 const MERGEABLE_MARKDOWN = new Set<string>([
@@ -60,27 +54,19 @@ const NOTES_DIRECTORIES = [
   ...NOTE_LIFECYCLES.flatMap((lifecycle) => [`.ai-workflow/notes/${lifecycle}`, ...NOTE_CLASSES.map((noteClass) => `.ai-workflow/notes/${lifecycle}/${noteClass}`)]),
 ];
 
-const SUPPORTED_DIRECTORIES: Record<string, readonly string[]> = {
-  'templates/project': ['AGENTS.md', 'MEMORY.md', 'navigation.json', 'navigation.md', 'notes'],
-  'templates/project/notes': ['AGENTS.md', 'README.md', 'implemented', 'archived'],
-  'templates/project/notes/implemented': ['AGENTS.md'],
-  'templates/project/notes/archived': ['AGENTS.md', 'manifest.json'],
-};
-
 const roots: string[] = [];
 afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
 
-function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
-}
-
-function requestUrl(input: string | URL | Request): string {
-  if (typeof input === 'string') return input;
-  if (input instanceof URL) return input.href;
-  return input.url;
-}
+// The regression guard: while these suites run, any HTTP request is a failure. Source
+// acquisition must go through the injected git runner only.
+beforeEach(() => {
+  vi.stubGlobal('fetch', () => {
+    throw new Error('source acquisition must use the injected git runner, not HTTP');
+  });
+});
+afterEach(() => { vi.unstubAllGlobals(); });
 
 function upstreamSectionId(repoPath: string): string {
   return repoPath.replace(/[^a-z0-9]+/gi, '-').replace(/^-+|-+$/g, '').toLowerCase();
@@ -88,46 +74,6 @@ function upstreamSectionId(repoPath: string): string {
 
 function marked(id: string, body: string): string {
   return `<!-- ai-workflow:section ${id}:begin -->\n${body}\n<!-- ai-workflow:section ${id}:end -->\n`;
-}
-
-function blobSha(ref: string, repoPath: string): string {
-  return Buffer.from(`${ref}:${repoPath}`).toString('hex').slice(0, 40);
-}
-
-/** One native contents-API directory entry, pinned to the requested immutable `ref`. */
-function contentsEntry(ref: string, repoPath: string, name: string): Record<string, unknown> {
-  const childPath = `${repoPath}/${name}`;
-  const sha = blobSha(ref, childPath);
-  const isDirectory = childPath in SUPPORTED_DIRECTORIES;
-  return {
-    type: isDirectory ? 'dir' : 'file',
-    name,
-    path: childPath,
-    sha,
-    ...(isDirectory ? {} : { size: 128 }),
-    url: `https://api.github.com/repos/${REPOSITORY}/contents/${childPath}?ref=${ref}`,
-    git_url: `https://api.github.com/repos/${REPOSITORY}/git/blobs/${sha}`,
-    html_url: `https://github.com/${REPOSITORY}/blob/${ref}/${childPath}`,
-    download_url: isDirectory ? null : `https://raw.githubusercontent.com/${REPOSITORY}/${ref}/${childPath}`,
-  };
-}
-
-/** One native contents-API file response with base64 content pinned to `ref`. */
-function contentsFile(ref: string, repoPath: string, content: string): Response {
-  const sha = blobSha(ref, repoPath);
-  return jsonResponse({
-    type: 'file',
-    name: repoPath.split('/').pop(),
-    path: repoPath,
-    sha,
-    size: Buffer.byteLength(content),
-    url: `https://api.github.com/repos/${REPOSITORY}/contents/${repoPath}?ref=${ref}`,
-    git_url: `https://api.github.com/repos/${REPOSITORY}/git/blobs/${sha}`,
-    html_url: `https://github.com/${REPOSITORY}/blob/${ref}/${repoPath}`,
-    download_url: `https://raw.githubusercontent.com/${REPOSITORY}/${ref}/${repoPath}`,
-    encoding: 'base64',
-    content: Buffer.from(content).toString('base64'),
-  });
 }
 
 /**
@@ -159,62 +105,14 @@ function targetFileContents(commit: string, sourcePath: string): string {
   return `# ${sourcePath}\n<!-- ai-workflow:section ${upstreamSectionId(sourcePath)}:begin -->\nold ${upstreamSectionId(sourcePath)} body\n<!-- ai-workflow:section ${upstreamSectionId(sourcePath)}:end -->\n`;
 }
 
-/** A native fixture listing the mandatory set and serving each member at one HEAD. */
-function fixedHeadFetch(commit: string, files: Record<string, string>): typeof fetch {
-  return async (input: Parameters<typeof fetch>[0]): Promise<Response> => {
-    const parsed = new URL(requestUrl(input));
-    if (parsed.pathname === HEAD_PATH) return jsonResponse({ name: BRANCH, commit: { sha: commit } });
-    if (parsed.pathname.startsWith(CONTENTS_PREFIX)) {
-      const repoPath = decodeURIComponent(parsed.pathname.slice(CONTENTS_PREFIX.length));
-      const ref = parsed.searchParams.get('ref') ?? commit;
-      const listing = SUPPORTED_DIRECTORIES[repoPath];
-      if (listing) return jsonResponse(listing.map((name) => contentsEntry(ref, repoPath, name)));
-      const content = files[repoPath];
-      if (content !== undefined) return contentsFile(ref, repoPath, content);
-    }
-    return jsonResponse({ message: 'Not Found' }, 404);
-  };
+/** A fixed-HEAD git runner that materializes the given source set for one immutable commit. */
+function fixedHeadGit(commit: string, files: Record<string, string>): TestGitRunner {
+  return fakeGit({ commit, files }).runGit;
 }
 
-/** A branch endpoint that fails before any commit is known (status/rate-limit/network). */
-function headFailureFetch(status: number): typeof fetch {
-  return async (input: Parameters<typeof fetch>[0]): Promise<Response> => {
-    if (new URL(requestUrl(input)).pathname === HEAD_PATH) return jsonResponse({ message: 'source unavailable' }, status);
-    return jsonResponse({ message: 'unexpected request' }, 500);
-  };
-}
-
-interface ScriptedSourceState {
-  /** The HEAD the branch endpoint currently advertises; the test advances it between triggers. */
-  head: string;
-  /** How many branch/HEAD requests the gate actually issued externally. */
-  branchCalls: number;
-  /** Every external HTTP request, to prove a cache hit performs no retrieval at all. */
-  httpCalls: number;
-}
-
-/**
- * A native fixture whose HEAD the test advances between triggers. Every contents request
- * is served at the requested immutable ref with stable headings plus that ref's SHA, so a
- * unit that reuses an earlier snapshot is distinguishable from one that re-queries HEAD.
- */
-function scriptedHeadFetch(state: ScriptedSourceState): typeof fetch {
-  return async (input: Parameters<typeof fetch>[0]): Promise<Response> => {
-    state.httpCalls += 1;
-    const parsed = new URL(requestUrl(input));
-    if (parsed.pathname === HEAD_PATH) {
-      state.branchCalls += 1;
-      return jsonResponse({ name: BRANCH, commit: { sha: state.head } });
-    }
-    if (parsed.pathname.startsWith(CONTENTS_PREFIX)) {
-      const repoPath = decodeURIComponent(parsed.pathname.slice(CONTENTS_PREFIX.length));
-      const ref = parsed.searchParams.get('ref') ?? state.head;
-      const listing = SUPPORTED_DIRECTORIES[repoPath];
-      if (listing) return jsonResponse(listing.map((name) => contentsEntry(ref, repoPath, name)));
-      if (FILE_PATHS.has(repoPath)) return contentsFile(ref, repoPath, upstreamFileContents(ref, repoPath));
-    }
-    return jsonResponse({ message: 'Not Found' }, 404);
-  };
+/** A git runner whose clone fails before any commit is known (status/rate-limit/network). */
+function headFailureGit(): TestGitRunner {
+  return async () => { throw new Error('source unavailable: clone failed'); };
 }
 
 /** A minimal valid adoption: every managed target present with an older marked body. */
@@ -274,8 +172,8 @@ const MALFORMED_AGENTS = '# Contract\n\n<!-- ai-workflow:section broken:begin --
 interface SeverityCase {
   name: string;
   host: 'claude' | 'codex' | 'opencode';
-  /** Write the adopted target and return the injectable source fixture. */
-  setup: (root: string, commit: string) => Promise<typeof fetch>;
+  /** Write the adopted target and return the injectable git runner. */
+  setup: (root: string, commit: string) => Promise<TestGitRunner>;
   expected: {
     decision: 'allow' | 'deny';
     status: SyncStatus;
@@ -297,7 +195,7 @@ const severityCases: SeverityCase[] = [
     host: 'claude',
     setup: async (root, commit) => {
       await writeAdoptedTarget(root, commit);
-      return fixedHeadFetch(commit, sourceFiles(commit));
+      return fixedHeadGit(commit, sourceFiles(commit));
     },
     expected: { decision: 'allow', status: 'synchronized', verified: true, proceed: true, authority: true, updatedContains: ['.ai-workflow/AGENTS.md'] },
   },
@@ -306,7 +204,7 @@ const severityCases: SeverityCase[] = [
     host: 'codex',
     setup: async (root, commit) => {
       await writeAdoptedTarget(root, commit);
-      return headFailureFetch(403);
+      return headFailureGit();
     },
     expected: { decision: 'allow', status: 'unverified', verified: false, proceed: true, authority: false },
   },
@@ -315,7 +213,7 @@ const severityCases: SeverityCase[] = [
     host: 'opencode',
     setup: async (root, commit) => {
       await writeAdoptedTarget(root, commit, { 'MEMORY.md': DIFFERING_LEGACY_MEMORY });
-      return fixedHeadFetch(commit, { ...sourceFiles(commit), 'templates/project/MEMORY.md': DIFFERING_LEGACY_SOURCE_MEMORY });
+      return fixedHeadGit(commit, { ...sourceFiles(commit), 'templates/project/MEMORY.md': DIFFERING_LEGACY_SOURCE_MEMORY });
     },
     expected: { decision: 'allow', status: 'needs_attention', verified: false, proceed: true, authority: true, updatedContains: ['.ai-workflow/AGENTS.md'] },
   },
@@ -324,7 +222,7 @@ const severityCases: SeverityCase[] = [
     host: 'claude',
     setup: async (root, commit) => {
       await writeAdoptedTarget(root, commit, { '.ai-workflow/AGENTS.md': MALFORMED_AGENTS });
-      return fixedHeadFetch(commit, sourceFiles(commit));
+      return fixedHeadGit(commit, sourceFiles(commit));
     },
     expected: { decision: 'deny', status: 'conflict', verified: false, proceed: false, authority: false },
   },
@@ -334,7 +232,7 @@ const severityCases: SeverityCase[] = [
     readOnlyProjectRoot: true,
     setup: async (root, commit) => {
       await writeAdoptedTarget(root, commit);
-      return fixedHeadFetch(commit, sourceFiles(commit));
+      return fixedHeadGit(commit, sourceFiles(commit));
     },
     expected: { decision: 'deny', status: 'failed', verified: false, proceed: false, authority: false },
   },
@@ -345,7 +243,7 @@ describe('project sync gate phase-entry report mapping (AC-001/AC-003)', () => {
     const root = await temporary('ai-workflow-gate-');
     const runtimeDirectory = await temporary('ai-workflow-gate-runtime-');
     roots.push(root, runtimeDirectory);
-    const http = await testCase.setup(root, COMMIT);
+    const runGit = await testCase.setup(root, COMMIT);
 
     let result: ProjectGateResult | undefined;
     let thrown: unknown;
@@ -357,7 +255,7 @@ describe('project sync gate phase-entry report mapping (AC-001/AC-003)', () => {
       }
       result = await runProjectGate(
         { host: testCase.host, event: 'PhaseEntry', sessionId: 'session-1', cwd: root, toolName: 'Bash', toolInput: { command: 'ls' } },
-        { fetch: http, env: {}, runtimeDirectory },
+        { runGit, runtimeDirectory },
       );
     } catch (error) {
       thrown = error;
@@ -417,18 +315,18 @@ describe('project sync gate native event cache reuse (AC-002/AC-003)', () => {
     const runtimeDirectory = await temporary('ai-workflow-gate-replay-runtime-');
     roots.push(root, runtimeDirectory);
     await writeAdoptedTarget(root, COMMIT);
-    const state: ScriptedSourceState = { head: 'a'.repeat(40), branchCalls: 0, httpCalls: 0 };
-    const http = scriptedHeadFetch(state);
-    const options = { fetch: http, env: {}, runtimeDirectory };
+    const source = { commit: 'a'.repeat(40), files: sourceFiles('a'.repeat(40)) };
+    const fake = fakeGit(source);
+    const options = { runGit: fake.runGit, runtimeDirectory };
     const invoke = (input: Omit<ProjectGateInput, 'host'>): Promise<ProjectGateResult> =>
       runProjectGate({ host: 'claude', toolName: 'Bash', toolInput: { command: 'ls' }, ...input }, options);
 
     const stored = await invoke({ event: 'PhaseEntry', sessionId: 'session-1', cwd: root });
     expect(stored.decision).toBe('allow');
-    expect(stored.report?.source.commit).toBe(state.head);
+    expect(stored.report?.source.commit).toBe(source.commit);
     expect(stored.authority, 'a safe contract update must store the authority payload').toBeDefined();
-    const branchAfterPhase = state.branchCalls;
-    const httpAfterPhase = state.httpCalls;
+    const cloneAfterPhase = fake.cloneCount();
+    const gitAfterPhase = fake.invocationCount();
     const runtimeAfterPhase = await snapshotTree(runtimeDirectory);
     const rootAfterPhase = await snapshotTree(root);
 
@@ -444,11 +342,11 @@ describe('project sync gate native event cache reuse (AC-002/AC-003)', () => {
       const replay = await invoke(native);
       expect(replay, `${native.event} must return the stored result verbatim`).toEqual(stored);
       expect(replay.decision, native.event).toBe('allow');
-      expect(replay.report?.source.commit, native.event).toBe(state.head);
+      expect(replay.report?.source.commit, native.event).toBe(source.commit);
     }
 
-    expect(state.branchCalls, 'native events must never query HEAD').toBe(branchAfterPhase);
-    expect(state.httpCalls, 'native events must issue zero source requests').toBe(httpAfterPhase);
+    expect(fake.cloneCount(), 'native events must never clone the source').toBe(cloneAfterPhase);
+    expect(fake.invocationCount(), 'native events must issue zero git invocations').toBe(gitAfterPhase);
     expect(changedPaths(runtimeAfterPhase, await snapshotTree(runtimeDirectory)), 'native events must not rewrite the stored entry').toEqual([]);
     expect(changedPaths(rootAfterPhase, await snapshotTree(root)), 'native events must not touch the project tree').toEqual([]);
   });
@@ -458,15 +356,14 @@ describe('project sync gate native event cache reuse (AC-002/AC-003)', () => {
     const runtimeDirectory = await temporary('ai-workflow-gate-deny-runtime-');
     roots.push(root, runtimeDirectory);
     await writeAdoptedTarget(root, COMMIT, { '.ai-workflow/AGENTS.md': MALFORMED_AGENTS });
-    const state: ScriptedSourceState = { head: COMMIT, branchCalls: 0, httpCalls: 0 };
-    const http = scriptedHeadFetch(state);
-    const options = { fetch: http, env: {}, runtimeDirectory };
+    const fake = fakeGit({ commit: COMMIT, files: sourceFiles(COMMIT) });
+    const options = { runGit: fake.runGit, runtimeDirectory };
 
     const stored = await runProjectGate({ host: 'claude', event: 'PhaseEntry', sessionId: 'deny-session', cwd: root }, options);
     expect(stored.decision).toBe('deny');
     expect(stored.report?.status).toBe('conflict');
-    const branchAfterPhase = state.branchCalls;
-    const httpAfterPhase = state.httpCalls;
+    const cloneAfterPhase = fake.cloneCount();
+    const gitAfterPhase = fake.invocationCount();
 
     const toolReplay = await runProjectGate(
       { host: 'claude', event: 'PreToolUse', sessionId: 'other-session', cwd: root, toolName: 'Bash', toolInput: { command: 'ls' } },
@@ -478,8 +375,8 @@ describe('project sync gate native event cache reuse (AC-002/AC-003)', () => {
     const turnReplay = await runProjectGate({ host: 'claude', event: 'UserPromptSubmit', sessionId: 'other-session', cwd: root }, options);
     expect(turnReplay, 'a user turn must replay the stored deny').toEqual(stored);
 
-    expect(state.branchCalls, 'replaying a stored deny must not query HEAD').toBe(branchAfterPhase);
-    expect(state.httpCalls, 'replaying a stored deny must issue zero source requests').toBe(httpAfterPhase);
+    expect(fake.cloneCount(), 'replaying a stored deny must not clone the source').toBe(cloneAfterPhase);
+    expect(fake.invocationCount(), 'replaying a stored deny must issue zero git invocations').toBe(gitAfterPhase);
   });
 });
 
@@ -497,19 +394,18 @@ describe('project sync gate no stored result (AC-004)', () => {
     const runtimeDirectory = await temporary('ai-workflow-gate-nocheck-runtime-');
     roots.push(root, runtimeDirectory);
     await writeAdoptedTarget(root, COMMIT);
-    const state: ScriptedSourceState = { head: COMMIT, branchCalls: 0, httpCalls: 0 };
-    const http = scriptedHeadFetch(state);
+    const fake = fakeGit({ commit: COMMIT, files: sourceFiles(COMMIT) });
     const runtimeBefore = await snapshotTree(runtimeDirectory);
     const rootBefore = await snapshotTree(root);
 
     const result = await runProjectGate(
       { host: 'claude', event: 'PreToolUse', sessionId: 'no-check', cwd: root, toolName: 'Bash', toolInput: { command: 'ls' } },
-      { fetch: http, env: {}, runtimeDirectory },
+      { runGit: fake.runGit, runtimeDirectory },
     );
 
     expectNoCheck(result);
-    expect(state.branchCalls, 'a no-check native event must not query HEAD').toBe(0);
-    expect(state.httpCalls, 'a no-check native event must issue zero source requests').toBe(0);
+    expect(fake.cloneCount(), 'a no-check native event must not clone the source').toBe(0);
+    expect(fake.invocationCount(), 'a no-check native event must issue zero git invocations').toBe(0);
     expect(changedPaths(runtimeBefore, await snapshotTree(runtimeDirectory)), 'a no-check native event must write no runtime entry').toEqual([]);
     expect(changedPaths(rootBefore, await snapshotTree(root)), 'a no-check native event must not touch the project').toEqual([]);
   });
@@ -520,9 +416,8 @@ describe('project sync gate no stored result (AC-004)', () => {
       const runtimeDirectory = await temporary('ai-workflow-gate-corrupt-runtime-');
       roots.push(root, runtimeDirectory);
       await writeAdoptedTarget(root, COMMIT);
-      const state: ScriptedSourceState = { head: COMMIT, branchCalls: 0, httpCalls: 0 };
-      const http = scriptedHeadFetch(state);
-      const options = { fetch: http, env: {}, runtimeDirectory };
+      const fake = fakeGit({ commit: COMMIT, files: sourceFiles(COMMIT) });
+      const options = { runGit: fake.runGit, runtimeDirectory };
 
       const primed = await runProjectGate({ host: 'claude', event: 'PhaseEntry', sessionId: 'prime', cwd: root }, options);
       expect(primed.report?.status).toBe('synchronized');
@@ -533,8 +428,8 @@ describe('project sync gate no stored result (AC-004)', () => {
         const valid = await readFile(cacheFile, 'utf8');
         await writeFile(cacheFile, valid.slice(0, Math.max(1, Math.floor(valid.length / 2))));
       }
-      const branchAfterPrime = state.branchCalls;
-      const httpAfterPrime = state.httpCalls;
+      const cloneAfterPrime = fake.cloneCount();
+      const gitAfterPrime = fake.invocationCount();
       const runtimeBefore = await snapshotTree(runtimeDirectory);
 
       const result = await runProjectGate(
@@ -542,8 +437,8 @@ describe('project sync gate no stored result (AC-004)', () => {
         options,
       );
       expectNoCheck(result);
-      expect(state.branchCalls, `${mode}: a corrupt cache must not trigger HEAD`).toBe(branchAfterPrime);
-      expect(state.httpCalls, `${mode}: a corrupt cache must not trigger a source request`).toBe(httpAfterPrime);
+      expect(fake.cloneCount(), `${mode}: a corrupt cache must not clone the source`).toBe(cloneAfterPrime);
+      expect(fake.invocationCount(), `${mode}: a corrupt cache must not issue a git invocation`).toBe(gitAfterPrime);
       expect(changedPaths(runtimeBefore, await snapshotTree(runtimeDirectory)), `${mode}: a corrupt cache must not be rewritten`).toEqual([]);
     }
   });
@@ -553,9 +448,8 @@ describe('project sync gate no stored result (AC-004)', () => {
     const runtimeDirectory = await temporary('ai-workflow-gate-unreadable-runtime-');
     roots.push(root, runtimeDirectory);
     await writeAdoptedTarget(root, COMMIT);
-    const state: ScriptedSourceState = { head: COMMIT, branchCalls: 0, httpCalls: 0 };
-    const http = scriptedHeadFetch(state);
-    const options = { fetch: http, env: {}, runtimeDirectory };
+    const fake = fakeGit({ commit: COMMIT, files: sourceFiles(COMMIT) });
+    const options = { runGit: fake.runGit, runtimeDirectory };
 
     const primed = await runProjectGate({ host: 'claude', event: 'PhaseEntry', sessionId: 'prime', cwd: root }, options);
     expect(primed.report?.status).toBe('synchronized');
@@ -564,8 +458,8 @@ describe('project sync gate no stored result (AC-004)', () => {
     const cacheFile = await singleRuntimeFile(runtimeDirectory);
     await rm(cacheFile, { force: true });
     await mkdir(cacheFile);
-    const branchAfterPrime = state.branchCalls;
-    const httpAfterPrime = state.httpCalls;
+    const cloneAfterPrime = fake.cloneCount();
+    const gitAfterPrime = fake.invocationCount();
     const runtimeBefore = await snapshotTree(runtimeDirectory);
 
     const result = await runProjectGate(
@@ -573,8 +467,8 @@ describe('project sync gate no stored result (AC-004)', () => {
       options,
     );
     expectNoCheck(result);
-    expect(state.branchCalls, 'an unreadable cache must not trigger HEAD').toBe(branchAfterPrime);
-    expect(state.httpCalls, 'an unreadable cache must not trigger a source request').toBe(httpAfterPrime);
+    expect(fake.cloneCount(), 'an unreadable cache must not clone the source').toBe(cloneAfterPrime);
+    expect(fake.invocationCount(), 'an unreadable cache must not issue a git invocation').toBe(gitAfterPrime);
     expect(changedPaths(runtimeBefore, await snapshotTree(runtimeDirectory)), 'an unreadable cache must not be rewritten').toEqual([]);
   });
 });
@@ -593,18 +487,17 @@ describe('project sync gate unadopted project (AC-005)', () => {
       { event: 'tool.execute.before', sessionId: 's', toolName: 'Bash', toolInput: { command: 'ls' } },
     ];
     for (const event of events) {
-      const state: ScriptedSourceState = { head: COMMIT, branchCalls: 0, httpCalls: 0 };
-      const http = scriptedHeadFetch(state);
+      const fake = fakeGit({ commit: COMMIT, files: sourceFiles(COMMIT) });
       const runtimeBefore = await snapshotTree(runtimeDirectory);
       const rootBefore = await snapshotTree(root);
 
-      const gate = await runProjectGate({ host: 'codex', cwd: root, ...event }, { fetch: http, env: {}, runtimeDirectory });
+      const gate = await runProjectGate({ host: 'codex', cwd: root, ...event }, { runGit: fake.runGit, runtimeDirectory });
 
       expect(gate.decision, event.event).toBe('skip');
       expect(gate.authority, event.event).toBeUndefined();
       expect(gate.report, `${event.event}: a skip must not fabricate a report`).toBeUndefined();
-      expect(state.branchCalls, `${event.event}: an unadopted project must not query HEAD`).toBe(0);
-      expect(state.httpCalls, `${event.event}: an unadopted project must issue zero source requests`).toBe(0);
+      expect(fake.cloneCount(), `${event.event}: an unadopted project must not clone the source`).toBe(0);
+      expect(fake.invocationCount(), `${event.event}: an unadopted project must issue zero git invocations`).toBe(0);
       expect(changedPaths(runtimeBefore, await snapshotTree(runtimeDirectory)), `${event.event}: an unadopted project must write no runtime entry`).toEqual([]);
       expect(changedPaths(rootBefore, await snapshotTree(root)), `${event.event}: an unadopted project must stay unchanged`).toEqual([]);
     }
@@ -622,26 +515,27 @@ describe('project sync gate single-start lifecycle (AC-001/AC-002)', () => {
     await writeAdoptedTarget(parentRoot, COMMIT);
     await writeAdoptedTarget(worktreeRoot, COMMIT);
 
-    const state: ScriptedSourceState = { head: 'a'.repeat(40), branchCalls: 0, httpCalls: 0 };
-    const http = scriptedHeadFetch(state);
-    const options = { fetch: http, env: {}, runtimeDirectory };
+    const source = { commit: 'a'.repeat(40), files: sourceFiles('a'.repeat(40)) };
+    const fake = fakeGit(source);
+    const options = { runGit: fake.runGit, runtimeDirectory };
     const invoke = (input: Omit<ProjectGateInput, 'host'>): Promise<ProjectGateResult> =>
       runProjectGate({ host: 'claude', toolName: 'Bash', toolInput: { command: 'ls' }, ...input }, options);
 
     // One phase entry resolves the source for the actual root.
-    const A = state.head;
+    const A = source.commit;
     const first = await invoke({ event: 'PhaseEntry', sessionId: 'parent', cwd: parentRoot });
     expect(first.decision).toBe('allow');
     expect(first.project).toBe(parentRoot);
     expect(first.report?.source.commit).toBe(A);
-    expect(state.branchCalls).toBe(1);
-    const httpAfterFirst = state.httpCalls;
+    expect(fake.cloneCount()).toBe(1);
+    const gitAfterFirst = fake.invocationCount();
     expect(await readFile(join(parentRoot, '.ai-workflow/AGENTS.md'), 'utf8')).toContain(`immutable ${A}`);
     expect(await runtimeFiles(runtimeDirectory)).toHaveLength(1);
 
     // Upstream advances, but no native event may observe it or re-synchronize. This is the
     // key cadence difference from today's per-boundary invalidation.
-    state.head = 'b'.repeat(40);
+    source.commit = 'b'.repeat(40);
+    source.files = sourceFiles('b'.repeat(40));
     const runtimeAfterFirst = await snapshotTree(runtimeDirectory);
     const parentAfterFirst = await snapshotTree(parentRoot);
     const natives: Array<Omit<ProjectGateInput, 'host'>> = [
@@ -657,35 +551,36 @@ describe('project sync gate single-start lifecycle (AC-001/AC-002)', () => {
       expect(replay.decision, native.event).toBe('allow');
       expect(replay.report?.source.commit, `${native.event} must replay the stored commit`).toBe(A);
     }
-    expect(state.branchCalls, 'no native event may re-synchronize the parent root').toBe(1);
-    expect(state.httpCalls, 'no native event may issue a source request').toBe(httpAfterFirst);
+    expect(fake.cloneCount(), 'no native event may re-synchronize the parent root').toBe(1);
+    expect(fake.invocationCount(), 'no native event may issue a git invocation').toBe(gitAfterFirst);
     expect(changedPaths(runtimeAfterFirst, await snapshotTree(runtimeDirectory)), 'native events must not rewrite the cache').toEqual([]);
     expect(changedPaths(parentAfterFirst, await snapshotTree(parentRoot)), 'native events must not edit the contract').toEqual([]);
     expect(await readFile(join(parentRoot, '.ai-workflow/AGENTS.md'), 'utf8')).toContain(`immutable ${A}`);
 
     // A second phase entry replaces the stored entry rather than adding one, and picks up B.
-    const B = state.head;
+    const B = source.commit;
     const second = await invoke({ event: 'PhaseEntry', sessionId: 'parent', cwd: parentRoot });
     expect(second.report?.source.commit).toBe(B);
-    expect(state.branchCalls).toBe(2);
+    expect(fake.cloneCount()).toBe(2);
     expect(await runtimeFiles(runtimeDirectory), 'a second phase entry must replace the stored entry').toHaveLength(1);
     expect(await readFile(join(parentRoot, '.ai-workflow/AGENTS.md'), 'utf8')).toContain(`immutable ${B}`);
-    const httpAfterSecond = state.httpCalls;
+    const gitAfterSecond = fake.invocationCount();
     const replayB = await invoke({ event: 'PreToolUse', sessionId: 'parent', cwd: parentRoot });
     expect(replayB.report?.source.commit).toBe(B);
-    expect(state.httpCalls, 'the replaced entry must be served with zero requests').toBe(httpAfterSecond);
+    expect(fake.invocationCount(), 'the replaced entry must be served with zero git invocations').toBe(gitAfterSecond);
 
     // A distinct actual root with its own `.ai-workflow/` has no stored check: no-check allow,
     // zero requests, and it never replays the parent root's decision or authority.
-    state.head = 'c'.repeat(40);
-    const C = state.head;
+    source.commit = 'c'.repeat(40);
+    source.files = sourceFiles('c'.repeat(40));
+    const C = source.commit;
     const worktreeBefore = await snapshotTree(worktreeRoot);
     const worktreeNative = await invoke({ event: 'PreToolUse', sessionId: 'parent', cwd: worktreeRoot });
     expect(worktreeNative.decision).toBe('allow');
     expect(worktreeNative.project).toBe(worktreeRoot);
     expect(worktreeNative.report, 'an unprimed worktree must not replay the parent report').toBeUndefined();
     expect(worktreeNative.authority, 'an unprimed worktree must not replay the parent authority').toBeUndefined();
-    expect(state.branchCalls, 'an unprimed worktree native event must not query the source').toBe(2);
+    expect(fake.cloneCount(), 'an unprimed worktree native event must not clone the source').toBe(2);
     expect(changedPaths(worktreeBefore, await snapshotTree(worktreeRoot)), 'an unprimed worktree must not be edited').toEqual([]);
     expect(await runtimeFiles(runtimeDirectory)).toHaveLength(1);
 
@@ -693,15 +588,15 @@ describe('project sync gate single-start lifecycle (AC-001/AC-002)', () => {
     const worktreePhase = await invoke({ event: 'PhaseEntry', sessionId: 'parent', cwd: worktreeRoot });
     expect(worktreePhase.project).toBe(worktreeRoot);
     expect(worktreePhase.report?.source.commit).toBe(C);
-    expect(state.branchCalls).toBe(3);
+    expect(fake.cloneCount()).toBe(3);
     expect(await runtimeFiles(runtimeDirectory), 'each actual root keeps its own cache entry').toHaveLength(2);
     expect(await readFile(join(worktreeRoot, '.ai-workflow/AGENTS.md'), 'utf8')).toContain(`immutable ${C}`);
     expect(await readFile(join(parentRoot, '.ai-workflow/AGENTS.md'), 'utf8'), 'syncing the worktree must not edit the parent').toContain(`immutable ${B}`);
 
-    const httpAfterWorktree = state.httpCalls;
+    const gitAfterWorktree = fake.invocationCount();
     const worktreeReplay = await invoke({ event: 'UserPromptSubmit', sessionId: 'child', cwd: worktreeRoot });
     expect(worktreeReplay.report?.source.commit).toBe(C);
-    expect(state.httpCalls, 'the worktree entry must be served with zero requests').toBe(httpAfterWorktree);
+    expect(fake.invocationCount(), 'the worktree entry must be served with zero git invocations').toBe(gitAfterWorktree);
 
     // No project-local synchronization metadata is created in either root.
     for (const metadata of ['.ai-workflow/sync.json', '.ai-workflow/project.yml', '.ai-workflow/.sync']) {
@@ -722,9 +617,8 @@ describe('project sync gate actor and authority exemptions (AC-003)', () => {
     const runtimeDirectory = await temporary('ai-workflow-gate-exempt-runtime-');
     roots.push(root, runtimeDirectory);
     await writeAdoptedTarget(root, COMMIT, { '.ai-workflow/AGENTS.md': MALFORMED_AGENTS });
-    const state: ScriptedSourceState = { head: COMMIT, branchCalls: 0, httpCalls: 0 };
-    const http = scriptedHeadFetch(state);
-    const options = { fetch: http, env: {}, runtimeDirectory };
+    const fake = fakeGit({ commit: COMMIT, files: sourceFiles(COMMIT) });
+    const options = { runGit: fake.runGit, runtimeDirectory };
     const invoke = (toolName: string, toolInput: unknown): Promise<ProjectGateResult> =>
       runProjectGate({ host: 'opencode', event: 'PreToolUse', sessionId: 'exempt-session', cwd: root, toolName, toolInput }, options);
 
@@ -737,8 +631,8 @@ describe('project sync gate actor and authority exemptions (AC-003)', () => {
     expect(primed.decision).toBe('deny');
     expect(primed.report?.status).toBe('conflict');
     expect(primed.report?.verified).toBe(false);
-    const httpAfterPrime = state.httpCalls;
-    const branchAfterPrime = state.branchCalls;
+    const gitAfterPrime = fake.invocationCount();
+    const cloneAfterPrime = fake.cloneCount();
     const runtimeAfterPrime = await snapshotTree(runtimeDirectory);
     expect(await runtimeFiles(runtimeDirectory)).toHaveLength(1);
 
@@ -780,8 +674,8 @@ describe('project sync gate actor and authority exemptions (AC-003)', () => {
     const unrelatedFile = await invoke('read', { filePath: join(root, 'MEMORY.md') });
     expect(unrelatedFile.decision).toBe('deny');
 
-    expect(state.branchCalls, 'exemptions and native replays must not query HEAD').toBe(branchAfterPrime);
-    expect(state.httpCalls, 'exemptions and native replays must issue zero source requests').toBe(httpAfterPrime);
+    expect(fake.cloneCount(), 'exemptions and native replays must not clone the source').toBe(cloneAfterPrime);
+    expect(fake.invocationCount(), 'exemptions and native replays must issue zero git invocations').toBe(gitAfterPrime);
     expect(changedPaths(runtimeAfterPrime, await snapshotTree(runtimeDirectory)), 'native events must not rewrite the stored deny').toEqual([]);
     expect(changedPaths(before, await snapshotTree(root)), 'permitting a tool must not write the project').toEqual([]);
     expect(await readFile(contractPath, 'utf8')).toBe(contract);
@@ -794,9 +688,8 @@ describe('project sync gate concurrent phase entries (AC-001/AC-002)', () => {
     const runtimeDirectory = await temporary('ai-workflow-gate-concurrent-runtime-');
     roots.push(root, runtimeDirectory);
     await writeAdoptedTarget(root, COMMIT);
-    const state: ScriptedSourceState = { head: COMMIT, branchCalls: 0, httpCalls: 0 };
-    const http = scriptedHeadFetch(state);
-    const options = { fetch: http, env: {}, runtimeDirectory };
+    const fake = fakeGit({ commit: COMMIT, files: sourceFiles(COMMIT) });
+    const options = { runGit: fake.runGit, runtimeDirectory };
 
     const [first, second] = await Promise.all([
       runProjectGate({ host: 'claude', event: 'PhaseEntry', sessionId: 'concurrent-1', cwd: root }, options),
@@ -809,14 +702,14 @@ describe('project sync gate concurrent phase entries (AC-001/AC-002)', () => {
     expect(files, 'concurrent phase entries must leave exactly one cache entry').toHaveLength(1);
     expect(await parseRuntimeFile(files[0]!), 'the surviving entry must be complete and parsable').toBeTruthy();
 
-    const httpAfterPhases = state.httpCalls;
+    const gitAfterPhases = fake.invocationCount();
     const replay = await runProjectGate(
       { host: 'claude', event: 'PreToolUse', sessionId: 'after', cwd: root, toolName: 'Bash', toolInput: { command: 'ls' } },
       options,
     );
     expect(replay.decision).toBe('allow');
     expect(replay.report, 'the following native event must replay a complete stored result').toBeDefined();
-    expect(state.httpCalls, 'the replay must issue zero source requests').toBe(httpAfterPhases);
+    expect(fake.invocationCount(), 'the replay must issue zero git invocations').toBe(gitAfterPhases);
   });
 });
 
@@ -830,9 +723,8 @@ describe('project sync gate supported project path routing (AC-002/AC-003)', () 
     await writeAdoptedTarget(operationRoot, COMMIT);
     await mkdir(join(operationRoot, 'src'), { recursive: true });
     await writeFile(join(operationRoot, 'src/file.ts'), 'export const routed = true;\n');
-    const state: ScriptedSourceState = { head: COMMIT, branchCalls: 0, httpCalls: 0 };
-    const http = scriptedHeadFetch(state);
-    const options = { fetch: http, env: {}, runtimeDirectory };
+    const fake = fakeGit({ commit: COMMIT, files: sourceFiles(COMMIT) });
+    const options = { runGit: fake.runGit, runtimeDirectory };
     const invoke = (input: Omit<ProjectGateInput, 'host'>): Promise<ProjectGateResult> =>
       runProjectGate({ host: 'claude', toolName: 'Bash', toolInput: { command: 'ls' }, ...input }, options);
 
@@ -843,15 +735,15 @@ describe('project sync gate supported project path routing (AC-002/AC-003)', () 
     const primed = await invoke({ event: 'PhaseEntry', sessionId: 'route-session', cwd: sessionRoot });
     expect(primed.project).toBe(sessionRoot);
     expect(primed.report?.status).toBe('synchronized');
-    const branchAfterPrime = state.branchCalls;
-    const httpAfterPrime = state.httpCalls;
+    const cloneAfterPrime = fake.cloneCount();
+    const gitAfterPrime = fake.invocationCount();
     const sessionRootAfterPrime = await snapshotTree(sessionRoot);
 
     // A native event at the session root answers from that root's cache with no request.
     const sessionNative = await invoke({ event: 'PreToolUse', sessionId: 'route-session', cwd: sessionRoot });
     expect(sessionNative.project).toBe(sessionRoot);
     expect(sessionNative.report?.project).toBe(sessionRoot);
-    expect(state.httpCalls, 'a primed native event must issue no request').toBe(httpAfterPrime);
+    expect(fake.invocationCount(), 'a primed native event must issue no git invocation').toBe(gitAfterPrime);
 
     // A Bash `workdir` targeting another adopted root has no stored check: no-check allow, no
     // request and no write, and it must not reuse the session root's cached result.
@@ -860,7 +752,7 @@ describe('project sync gate supported project path routing (AC-002/AC-003)', () 
     expect(routedBash.project).toBe(operationRoot);
     expect(routedBash.decision).toBe('allow');
     expect(routedBash.report, 'an unprimed routed root must not synchronize').toBeUndefined();
-    expect(state.branchCalls, 'routing to an unprimed root must not query the source').toBe(branchAfterPrime);
+    expect(fake.cloneCount(), 'routing to an unprimed root must not clone the source').toBe(cloneAfterPrime);
     expect(changedPaths(operationBefore, await snapshotTree(operationRoot)), 'the routed no-check must not edit that root').toEqual([]);
     expect(await readFile(operationAgents, 'utf8')).not.toContain(`immutable ${COMMIT}`);
 
@@ -870,27 +762,27 @@ describe('project sync gate supported project path routing (AC-002/AC-003)', () 
     expect(operationPhase.report?.project).toBe(operationRoot);
     expect(operationPhase.report?.status).toBe('synchronized');
     expect(operationPhase.report?.source.commit).toBe(COMMIT);
-    expect(state.branchCalls).toBe(branchAfterPrime + 1);
+    expect(fake.cloneCount()).toBe(cloneAfterPrime + 1);
     expect(await readFile(operationAgents, 'utf8'), 'the phase entry must sync the routed root').toContain(`immutable ${COMMIT}`);
     expect(changedPaths(sessionRootAfterPrime, await snapshotTree(sessionRoot)), 'the session root must not be touched by a routed operation').toEqual([]);
 
     // Now native routed operations replay the routed root's cached result with no request.
-    const httpAfterOperation = state.httpCalls;
+    const gitAfterOperation = fake.invocationCount();
     const routedRead = await invoke({ event: 'PreToolUse', sessionId: 'route-session', cwd: sessionRoot, toolName: 'read', toolInput: { filePath: join(operationRoot, 'src/file.ts') } });
     expect(routedRead.project).toBe(operationRoot);
     expect(routedRead.report?.project).toBe(operationRoot);
-    expect(state.httpCalls, 'a routed read must answer from the routed root cache').toBe(httpAfterOperation);
+    expect(fake.invocationCount(), 'a routed read must answer from the routed root cache').toBe(gitAfterOperation);
 
     const routedBashReplay = await invoke({ event: 'PreToolUse', sessionId: 'route-session', cwd: sessionRoot, toolName: 'Bash', toolInput: { command: 'ls', workdir: operationRoot } });
     expect(routedBashReplay.project).toBe(operationRoot);
     expect(routedBashReplay.report?.project).toBe(operationRoot);
-    expect(state.httpCalls).toBe(httpAfterOperation);
+    expect(fake.invocationCount()).toBe(gitAfterOperation);
 
     // A relative tool path resolves against the session cwd, never by guessing a parent root.
     const relativeRead = await invoke({ event: 'PreToolUse', sessionId: 'route-session', cwd: sessionRoot, toolName: 'read', toolInput: { filePath: 'src/file.ts' } });
     expect(relativeRead.project).toBe(sessionRoot);
     expect(relativeRead.report?.project).toBe(sessionRoot);
     expect(changedPaths(sessionRootAfterPrime, await snapshotTree(sessionRoot)), 'a relative path must not reroute the operation').toEqual([]);
-    expect(state.httpCalls).toBe(httpAfterOperation);
+    expect(fake.invocationCount()).toBe(gitAfterOperation);
   });
 });
