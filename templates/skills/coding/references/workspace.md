@@ -18,6 +18,22 @@ that cannot be matched is a refusal, not a fallback to running its tasks in the 
 Clarifications may reuse shared leaf handling, but no ordinary packet is burdened
 with workspace-only fields.
 
+## Approved preparation
+
+When the parent Coding session enters with a frozen child-participating workspace
+plan and no task set, it invokes `plan-to-tasks` as its `preparation procedure`
+for the `approved preparation`. That procedure shows the full approval preview,
+obtains `approval`, writes and validates the complete task triplets, the schedule
+and the manifest, runs `ai-workflow workspace distribute --plan <directory>`
+against the absolute parent plan directory, and `returns control` to the same
+parent Coding session; the preparation never launches a child host process, a
+nested splitter or a sibling session, and distribution still precedes any
+implementation state. Valid existing split artifacts are reused `byte-unchanged`.
+A `partial` or invalid task set or a `divergent` slice stops with a `repair
+request`; the preparation does not regenerate them. Declining approval creates no
+tasks, no slices, no worktrees and no implementation records. A `standalone`
+plan-to-tasks invocation still ends after its own handoff.
+
 ## Phase dispatch and delivery barriers
 
 The original parent `tasks/execution-order.yaml` is the only global task schedule.

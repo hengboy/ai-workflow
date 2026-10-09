@@ -68,7 +68,7 @@ The workflow `stops before freezing` when a participating child `is not an initi
 
 Planning `schedules each repository's note` and `MEMORY.md` work `in that repository`, through that repository's own notes and memory rather than the workspace root. Planning `hands off` the split and the repository distribution step to plan-to-tasks, which runs `ai-workflow workspace distribute --plan <directory>` after the frozen plan is split into tasks; planning never distributes or writes a slice itself.
 
-A workspace plan that declares at least one non-root participating repository must be split by plan-to-tasks before implementation, and that split session owns distribution. A workspace plan whose `workspace_repos` declares only the reserved workspace root entry may be implemented unsplit. Planning itself never distributes or writes a slice.
+A workspace plan that declares at least one non-root participating repository must be split by plan-to-tasks before implementation; that split is the `approved preparation` the fresh parent Coding session runs before any implementation state, ending with `ai-workflow workspace distribute --plan <directory>`. A workspace plan whose `workspace_repos` declares only the reserved workspace root entry may be implemented unsplit. Planning itself never distributes or writes a slice.
 
 ## Clarification loop
 
@@ -180,11 +180,11 @@ Both frontmatters contain `plan_id`, `status: frozen`, `created_at`, nullable `s
 - The pair is recorded in `spec.i18n.yaml` and `plan.i18n.yaml`, and `ai-workflow plan validate --plan <directory>` passes.
 - Digests match the frozen English bytes.
 - Planning ends at the frozen plan and never starts implementation: report the absolute project or workspace root, the frozen plan directory and the `plan validate` result, then route by `workspace_repos`.
-  - When the plan declares at least one non-root participating repository, report each participant's name, path and `depends_on` order and tell the user to start a new session at `<workspace-root>`, invoke plan-to-tasks with the absolute frozen plan directory to split the plan, and run `ai-workflow workspace distribute --plan <directory>` after split validation and before implementation; do not invoke coding yet.
+  - When the plan declares at least one non-root participating repository, report each participant's name, path and `depends_on` order and tell the user to start a new session at <workspace-root> and invoke the coding skill with the absolute frozen plan directory. That parent Coding session runs the `approved preparation` (split + distribution) before implementation: it invokes plan-to-tasks as its `preparation procedure`, and after the task triplets, schedule and manifest validate it runs `ai-workflow workspace distribute --plan <directory>`, then continues implementation in the same session. The planning session itself creates no task, slice, worktree, implementation record or commit.
   - For an ordinary plan or a root-only workspace plan whose `workspace_repos` declares only the reserved workspace root entry, tell the user to start a new session and invoke the coding skill to implement it.
-  - Provide a concise copyable prompt in a text fence, written in the user's language and naming the actual absolute project or workspace root and frozen plan directory with no illustrative placeholders, for example:
+  - Provide a concise copyable prompt in a text fence, written in the user's language and naming the actual absolute project or workspace root and frozen plan directory with no illustrative placeholders; for a child-participating workspace plan, for example:
     ```text
-    Start a new session at <workspace-root> and run plan-to-tasks with the frozen plan directory <absolute plan directory>; after it validates and splits, run ai-workflow workspace distribute --plan <absolute plan directory> before implementation.
+    Start a new session at <workspace-root> and invoke the coding skill with the frozen plan directory <absolute plan directory>. Run the approved preparation: split and validate the task set, then run ai-workflow workspace distribute --plan <absolute plan directory> before implementation.
     ```
 - No Git commit was created for `spec.md` or `plan.md`; both remain gitignored local artifacts under `.ai-workflow/plans/<planId>/`.
 - No task, workflow, run or code file was created.

@@ -22,20 +22,22 @@ When a planned change has no frozen plan, run Planning first, then stop: freeze
 and validate `spec.md` and `plan.md` as the `planning` skill requires. When the
 plan declares at least one non-root participating repository, report the absolute
 workspace root, the frozen plan directory and the `plan validate` result, and
-tell the user to start a new session at that workspace root and invoke the
-plan-to-tasks skill with the absolute frozen plan directory to split the plan;
-the split then runs `ai-workflow workspace distribute --plan <directory>` after
-validation and before implementation. For an ordinary plan or a root-only
-workspace plan whose `workspace_repos` declares only the reserved workspace root
-entry, tell the user to start a new session and invoke the coding skill to
-implement it. Do not start implementation in that planning session: no worktree,
-no implementation record, no implementation or review dispatch, and no commit.
-Implementation resumes only in the new session, where the frozen plan is the
-boundary. The `planning` skill's `## Completion checklist` owns the full handoff
-report — the absolute project or workspace root, the frozen plan directory, the
-`plan validate` result, each participant's name, path and `depends_on` order, and
-the copyable prompt — so this paragraph defers to that checklist instead of
-improvising a partial independent handoff.
+tell the user to start a new session at that workspace root and invoke the coding
+skill with the absolute frozen plan directory. That coding session runs the
+`approved preparation` when the task set is absent — invoking `plan-to-tasks` as
+its `preparation procedure` — and runs `ai-workflow workspace distribute --plan
+<directory>` before any implementation state, then continues implementation in
+the same session. For an ordinary plan or a root-only workspace plan whose
+`workspace_repos` declares only the reserved workspace root entry, tell the user
+to start a new session and invoke the coding skill to implement it. Do not start
+implementation in that planning session: no worktree, no implementation record,
+no implementation or review dispatch, and no commit. Implementation resumes only
+in the new session, where the frozen plan is the boundary. The `planning` skill's
+`## Completion checklist` owns the full handoff report — the absolute project or
+workspace root, the frozen plan directory, the `plan validate` result, each
+participant's name, path and `depends_on` order, and the copyable prompt — so
+this paragraph defers to that checklist instead of improvising a partial
+independent handoff.
 
 Never run Planning to restate a request with clear, bounded intent, and never
 label a change direct to skip required checks or evidence. Ask the user only
@@ -333,10 +335,19 @@ process and no sibling session, so the one already-running primary drives every
 participating repository. No splitter sub-agent, scheduler service or remote
 executor substitutes for it.
 
-Before any implementation state, the primary runs the approved preparation and
+Before any implementation state, the primary runs the `approved preparation` and
 `ai-workflow workspace distribute --plan <directory>` against the absolute parent
 plan directory; distribution writes each participant's slice only after its
-read-only preconditions pass. Capture the original parent
+read-only preconditions pass. The approved preparation invokes `plan-to-tasks` as
+a `preparation procedure`: it shows the full approval preview, obtains `approval`,
+writes and validates the complete task triplets, the schedule and the manifest,
+then runs the distribution command and `returns control` to the same parent
+Coding session, which continues with implementation. A declined approval creates
+no tasks, no slices, no worktrees and no implementation records. Valid
+existing split artifacts are reused `byte-unchanged`; a partial or invalid task
+set or a divergent slice stops with a `repair request` instead of regeneration.
+This route never requires a manual child session, a separate child host process
+or a sibling session. Capture the original parent
 `tasks/execution-order.yaml` as the only global task schedule, process its phases
 in file order, dispatch the independent tasks of the current phase concurrently,
 and keep the whole phase awaited and verified before task commits are performed

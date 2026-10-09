@@ -24,6 +24,10 @@ phases:
 
 Coding keeps Git commits serial: after a phase is verified, each task's write scope is committed through Git Operator one commit at a time.
 
+## Finalization coverage
+
+The schedule stays `task-only`: root finalization coverage is not a task phase, so `finalization` criteria never appear in `phases` and never add phases or parallel tasks. Reserved root-entry tasks are scheduled normally; finalization-only coverage stays outside the task DAG.
+
 ## Validation
 
 `ai-workflow plan validate --plan <directory>` validates the schedule whenever the plan directory contains task documents. A missing or invalid order fails validation and blocks the split: report the named defect instead of writing a schedule that does not match the approved preview.

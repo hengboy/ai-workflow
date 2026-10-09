@@ -42,6 +42,10 @@ Task read and write scopes are `repository-relative`: they resolve inside that r
 
 A task never declares a `cross-repository` `depends_on`: every dependency names a task in the same repository. Repository ordering comes from the plan's declared repository order, not from task `depends_on`.
 
+## Finalization coverage
+
+Root finalization criteria declared by the plan's `workspace_finalization` `never become` tasks: they stay root-owned and are not assigned to any repository. A task must not claim a `finalization-only` AC; finalization coverage is validated separately from the task DAG.
+
 ## Implementation notes
 
 - Record only decisions justified by the frozen plan.
