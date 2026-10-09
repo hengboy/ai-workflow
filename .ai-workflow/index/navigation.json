@@ -90,6 +90,7 @@
         "src/generated/project.schema.d.ts",
         "src/generated/review-repair-resolution.schema.d.ts",
         "src/generated/settings.schema.d.ts",
+        "src/install/hooks.ts",
         "src/install/index.ts",
         "src/install/opencode-version.ts",
         "src/install/render.ts",
@@ -100,6 +101,7 @@
         "src/notes/validate.ts",
         "src/profile/index.ts",
         "src/settings/index.ts",
+        "src/sync/gate.ts",
         "src/sync/index.ts",
         "src/sync/merge.ts",
         "src/sync/source.ts",
@@ -117,9 +119,7 @@
         "src/workflow/workspace.ts",
         "src/workspace/distribute.ts",
         "src/workspace/git.ts",
-        "src/workspace/status.ts",
-        "src/install/hooks.ts",
-        "src/sync/gate.ts"
+        "src/workspace/status.ts"
       ],
       "symbols": [
         {
@@ -639,6 +639,42 @@
           "visibility": "public"
         },
         {
+          "file": "src/install/hooks.ts",
+          "name": "SynchronizationDeployment",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/install/hooks.ts",
+          "name": "SynchronizationOwnership",
+          "kind": "type",
+          "visibility": "public"
+        },
+        {
+          "file": "src/install/hooks.ts",
+          "name": "SynchronizationRecords",
+          "kind": "type",
+          "visibility": "public"
+        },
+        {
+          "file": "src/install/hooks.ts",
+          "name": "installSynchronization",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/install/hooks.ts",
+          "name": "synchronizationPath",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/install/hooks.ts",
+          "name": "uninstallSynchronization",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
           "file": "src/install/index.ts",
           "name": "AgentInstallation",
           "kind": "interface",
@@ -975,6 +1011,36 @@
           "visibility": "public"
         },
         {
+          "file": "src/sync/gate.ts",
+          "name": "ProjectGateInput",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/sync/gate.ts",
+          "name": "ProjectGateOptions",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/sync/gate.ts",
+          "name": "ProjectGateResult",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/sync/gate.ts",
+          "name": "runProjectGate",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/sync/index.ts",
+          "name": "SyncReport",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
           "file": "src/sync/index.ts",
           "name": "SyncStatus",
           "kind": "type",
@@ -988,14 +1054,14 @@
         },
         {
           "file": "src/sync/index.ts",
-          "name": "SyncReport",
+          "name": "SynchronizeProjectOptions",
           "kind": "interface",
           "visibility": "public"
         },
         {
           "file": "src/sync/index.ts",
-          "name": "SynchronizeProjectOptions",
-          "kind": "interface",
+          "name": "applyTemplateSnapshot",
+          "kind": "function",
           "visibility": "public"
         },
         {
@@ -1013,12 +1079,6 @@
         {
           "file": "src/sync/index.ts",
           "name": "synchronizeProject",
-          "kind": "function",
-          "visibility": "public"
-        },
-        {
-          "file": "src/sync/index.ts",
-          "name": "applyTemplateSnapshot",
           "kind": "function",
           "visibility": "public"
         },
@@ -1489,66 +1549,6 @@
           "name": "workspaceStatus",
           "kind": "function",
           "visibility": "public"
-        },
-        {
-          "file": "src/install/hooks.ts",
-          "name": "SynchronizationDeployment",
-          "kind": "interface",
-          "visibility": "public"
-        },
-        {
-          "file": "src/install/hooks.ts",
-          "name": "SynchronizationOwnership",
-          "kind": "type",
-          "visibility": "public"
-        },
-        {
-          "file": "src/install/hooks.ts",
-          "name": "SynchronizationRecords",
-          "kind": "type",
-          "visibility": "public"
-        },
-        {
-          "file": "src/install/hooks.ts",
-          "name": "installSynchronization",
-          "kind": "function",
-          "visibility": "public"
-        },
-        {
-          "file": "src/install/hooks.ts",
-          "name": "synchronizationPath",
-          "kind": "function",
-          "visibility": "public"
-        },
-        {
-          "file": "src/install/hooks.ts",
-          "name": "uninstallSynchronization",
-          "kind": "function",
-          "visibility": "public"
-        },
-        {
-          "file": "src/sync/gate.ts",
-          "name": "ProjectGateInput",
-          "kind": "interface",
-          "visibility": "public"
-        },
-        {
-          "file": "src/sync/gate.ts",
-          "name": "ProjectGateOptions",
-          "kind": "interface",
-          "visibility": "public"
-        },
-        {
-          "file": "src/sync/gate.ts",
-          "name": "ProjectGateResult",
-          "kind": "interface",
-          "visibility": "public"
-        },
-        {
-          "file": "src/sync/gate.ts",
-          "name": "runProjectGate",
-          "kind": "function",
-          "visibility": "public"
         }
       ],
       "related_files": [
@@ -1879,6 +1879,71 @@
         },
         {
           "kind": "imports",
+          "from": "src/install/hooks.ts#SynchronizationDeployment",
+          "to": "src/workflow/types.ts#Host"
+        },
+        {
+          "kind": "imports",
+          "from": "src/install/hooks.ts#SynchronizationRecords",
+          "to": "src/workflow/types.ts#Host"
+        },
+        {
+          "kind": "imports",
+          "from": "src/install/hooks.ts#installSynchronization",
+          "to": "src/utils/fs.ts#atomicWrite"
+        },
+        {
+          "kind": "imports",
+          "from": "src/install/hooks.ts#installSynchronization",
+          "to": "src/utils/fs.ts#exists"
+        },
+        {
+          "kind": "imports",
+          "from": "src/install/hooks.ts#installSynchronization",
+          "to": "src/utils/fs.ts#writeJson"
+        },
+        {
+          "kind": "imports",
+          "from": "src/install/hooks.ts#installSynchronization",
+          "to": "src/utils/hash.ts#sha256"
+        },
+        {
+          "kind": "imports",
+          "from": "src/install/hooks.ts#installSynchronization",
+          "to": "src/utils/schema.ts#packagePath"
+        },
+        {
+          "kind": "imports",
+          "from": "src/install/hooks.ts#installSynchronization",
+          "to": "src/workflow/types.ts#Host"
+        },
+        {
+          "kind": "imports",
+          "from": "src/install/hooks.ts#synchronizationPath",
+          "to": "src/workflow/types.ts#Host"
+        },
+        {
+          "kind": "imports",
+          "from": "src/install/hooks.ts#uninstallSynchronization",
+          "to": "src/utils/fs.ts#exists"
+        },
+        {
+          "kind": "imports",
+          "from": "src/install/hooks.ts#uninstallSynchronization",
+          "to": "src/utils/fs.ts#writeJson"
+        },
+        {
+          "kind": "imports",
+          "from": "src/install/hooks.ts#uninstallSynchronization",
+          "to": "src/utils/hash.ts#sha256"
+        },
+        {
+          "kind": "imports",
+          "from": "src/install/hooks.ts#uninstallSynchronization",
+          "to": "src/workflow/types.ts#Host"
+        },
+        {
+          "kind": "imports",
           "from": "src/install/index.ts#HostInstallation",
           "to": "src/workflow/types.ts#Host"
         },
@@ -1965,6 +2030,16 @@
         {
           "kind": "imports",
           "from": "src/install/index.ts#initializeProject",
+          "to": "src/sync/index.ts#notesStructureDirectories"
+        },
+        {
+          "kind": "imports",
+          "from": "src/install/index.ts#initializeProject",
+          "to": "src/sync/index.ts#reconcileIgnoreFile"
+        },
+        {
+          "kind": "imports",
+          "from": "src/install/index.ts#initializeProject",
           "to": "src/utils/fs.ts#atomicWrite"
         },
         {
@@ -1974,13 +2049,8 @@
         },
         {
           "kind": "imports",
-          "from": "src/install/index.ts#initializeProject",
-          "to": "src/sync/index.ts#notesStructureDirectories"
-        },
-        {
-          "kind": "imports",
-          "from": "src/install/index.ts#initializeProject",
-          "to": "src/sync/index.ts#reconcileIgnoreFile"
+          "from": "src/install/index.ts#install",
+          "to": "src/install/hooks.ts#synchronizationPath"
         },
         {
           "kind": "imports",
@@ -1996,6 +2066,11 @@
           "kind": "imports",
           "from": "src/install/index.ts#install",
           "to": "src/workflow/types.ts#Host"
+        },
+        {
+          "kind": "imports",
+          "from": "src/install/index.ts#uninstall",
+          "to": "src/install/hooks.ts#uninstallSynchronization"
         },
         {
           "kind": "imports",
@@ -2286,6 +2361,71 @@
           "kind": "imports",
           "from": "src/settings/index.ts#writeActiveProfile",
           "to": "src/utils/fs.ts#atomicWrite"
+        },
+        {
+          "kind": "imports",
+          "from": "src/sync/gate.ts#ProjectGateOptions",
+          "to": "src/sync/index.ts#SynchronizeProjectOptions"
+        },
+        {
+          "kind": "imports",
+          "from": "src/sync/gate.ts#ProjectGateResult",
+          "to": "src/sync/index.ts#SyncReport"
+        },
+        {
+          "kind": "imports",
+          "from": "src/sync/gate.ts#runProjectGate",
+          "to": "src/sync/index.ts#SyncReport"
+        },
+        {
+          "kind": "imports",
+          "from": "src/sync/gate.ts#runProjectGate",
+          "to": "src/sync/index.ts#synchronizeProject"
+        },
+        {
+          "kind": "imports",
+          "from": "src/sync/gate.ts#runProjectGate",
+          "to": "src/utils/fs.ts#atomicWrite"
+        },
+        {
+          "kind": "imports",
+          "from": "src/sync/index.ts#applyTemplateSnapshot",
+          "to": "src/sync/merge.ts#OwnershipConflictError"
+        },
+        {
+          "kind": "imports",
+          "from": "src/sync/index.ts#applyTemplateSnapshot",
+          "to": "src/sync/merge.ts#mergeOwnedSections"
+        },
+        {
+          "kind": "imports",
+          "from": "src/sync/index.ts#applyTemplateSnapshot",
+          "to": "src/sync/merge.ts#validateOwnedSections"
+        },
+        {
+          "kind": "imports",
+          "from": "src/sync/index.ts#applyTemplateSnapshot",
+          "to": "src/utils/fs.ts#atomicWrite"
+        },
+        {
+          "kind": "imports",
+          "from": "src/sync/index.ts#notesStructureDirectories",
+          "to": "src/notes/index.ts#noteClasses"
+        },
+        {
+          "kind": "imports",
+          "from": "src/sync/index.ts#notesStructureDirectories",
+          "to": "src/notes/index.ts#noteLifecycles"
+        },
+        {
+          "kind": "imports",
+          "from": "src/sync/index.ts#synchronizeProject",
+          "to": "src/sync/source.ts#resolveTemplateSnapshot"
+        },
+        {
+          "kind": "imports",
+          "from": "src/sync/source.ts#resolveTemplateSnapshot",
+          "to": "src/sync/merge.ts#validateOwnedSections"
         },
         {
           "kind": "imports",
@@ -2585,6 +2725,11 @@
         {
           "kind": "imports",
           "from": "src/workspace/status.ts#workspaceStatus",
+          "to": "src/workflow/workspace.ts#validateWorkspaceManifest"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workspace/status.ts#workspaceStatus",
           "to": "src/workspace/distribute.ts#ResolvedWorkspacePlan"
         },
         {
@@ -2601,151 +2746,6 @@
           "kind": "imports",
           "from": "src/workspace/status.ts#workspaceStatus",
           "to": "src/workspace/distribute.ts#resolveWorkspacePlan"
-        },
-        {
-          "kind": "imports",
-          "from": "src/workspace/status.ts#workspaceStatus",
-          "to": "src/workflow/workspace.ts#validateWorkspaceManifest"
-        },
-        {
-          "kind": "imports",
-          "from": "src/sync/source.ts#resolveTemplateSnapshot",
-          "to": "src/sync/merge.ts#validateOwnedSections"
-        },
-        {
-          "kind": "imports",
-          "from": "src/sync/index.ts#applyTemplateSnapshot",
-          "to": "src/sync/merge.ts#mergeOwnedSections"
-        },
-        {
-          "kind": "imports",
-          "from": "src/sync/index.ts#applyTemplateSnapshot",
-          "to": "src/sync/merge.ts#OwnershipConflictError"
-        },
-        {
-          "kind": "imports",
-          "from": "src/sync/index.ts#applyTemplateSnapshot",
-          "to": "src/sync/merge.ts#validateOwnedSections"
-        },
-        {
-          "kind": "imports",
-          "from": "src/sync/index.ts#applyTemplateSnapshot",
-          "to": "src/utils/fs.ts#atomicWrite"
-        },
-        {
-          "kind": "imports",
-          "from": "src/sync/index.ts#notesStructureDirectories",
-          "to": "src/notes/index.ts#noteClasses"
-        },
-        {
-          "kind": "imports",
-          "from": "src/sync/index.ts#notesStructureDirectories",
-          "to": "src/notes/index.ts#noteLifecycles"
-        },
-        {
-          "kind": "imports",
-          "from": "src/sync/index.ts#synchronizeProject",
-          "to": "src/sync/source.ts#resolveTemplateSnapshot"
-        },
-        {
-          "kind": "imports",
-          "from": "src/install/hooks.ts#SynchronizationDeployment",
-          "to": "src/workflow/types.ts#Host"
-        },
-        {
-          "kind": "imports",
-          "from": "src/install/hooks.ts#SynchronizationRecords",
-          "to": "src/workflow/types.ts#Host"
-        },
-        {
-          "kind": "imports",
-          "from": "src/install/hooks.ts#synchronizationPath",
-          "to": "src/workflow/types.ts#Host"
-        },
-        {
-          "kind": "imports",
-          "from": "src/install/hooks.ts#installSynchronization",
-          "to": "src/workflow/types.ts#Host"
-        },
-        {
-          "kind": "imports",
-          "from": "src/install/hooks.ts#installSynchronization",
-          "to": "src/utils/fs.ts#exists"
-        },
-        {
-          "kind": "imports",
-          "from": "src/install/hooks.ts#installSynchronization",
-          "to": "src/utils/hash.ts#sha256"
-        },
-        {
-          "kind": "imports",
-          "from": "src/install/hooks.ts#installSynchronization",
-          "to": "src/utils/schema.ts#packagePath"
-        },
-        {
-          "kind": "imports",
-          "from": "src/install/hooks.ts#installSynchronization",
-          "to": "src/utils/fs.ts#atomicWrite"
-        },
-        {
-          "kind": "imports",
-          "from": "src/install/hooks.ts#installSynchronization",
-          "to": "src/utils/fs.ts#writeJson"
-        },
-        {
-          "kind": "imports",
-          "from": "src/install/hooks.ts#uninstallSynchronization",
-          "to": "src/workflow/types.ts#Host"
-        },
-        {
-          "kind": "imports",
-          "from": "src/install/hooks.ts#uninstallSynchronization",
-          "to": "src/utils/fs.ts#exists"
-        },
-        {
-          "kind": "imports",
-          "from": "src/install/hooks.ts#uninstallSynchronization",
-          "to": "src/utils/hash.ts#sha256"
-        },
-        {
-          "kind": "imports",
-          "from": "src/install/hooks.ts#uninstallSynchronization",
-          "to": "src/utils/fs.ts#writeJson"
-        },
-        {
-          "kind": "imports",
-          "from": "src/install/index.ts#install",
-          "to": "src/install/hooks.ts#synchronizationPath"
-        },
-        {
-          "kind": "imports",
-          "from": "src/install/index.ts#uninstall",
-          "to": "src/install/hooks.ts#uninstallSynchronization"
-        },
-        {
-          "kind": "imports",
-          "from": "src/sync/gate.ts#ProjectGateOptions",
-          "to": "src/sync/index.ts#SynchronizeProjectOptions"
-        },
-        {
-          "kind": "imports",
-          "from": "src/sync/gate.ts#ProjectGateResult",
-          "to": "src/sync/index.ts#SyncReport"
-        },
-        {
-          "kind": "imports",
-          "from": "src/sync/gate.ts#runProjectGate",
-          "to": "src/sync/index.ts#SyncReport"
-        },
-        {
-          "kind": "imports",
-          "from": "src/sync/gate.ts#runProjectGate",
-          "to": "src/utils/fs.ts#atomicWrite"
-        },
-        {
-          "kind": "imports",
-          "from": "src/sync/gate.ts#runProjectGate",
-          "to": "src/sync/index.ts#synchronizeProject"
         }
       ],
       "owner_role": "shared",
@@ -2772,6 +2772,7 @@
         "src/generated/project.schema.d.ts",
         "src/generated/review-repair-resolution.schema.d.ts",
         "src/generated/settings.schema.d.ts",
+        "src/install/hooks.ts",
         "src/install/index.ts",
         "src/install/opencode-version.ts",
         "src/install/render.ts",
@@ -2782,6 +2783,7 @@
         "src/notes/validate.ts",
         "src/profile/index.ts",
         "src/settings/index.ts",
+        "src/sync/gate.ts",
         "src/sync/index.ts",
         "src/sync/merge.ts",
         "src/sync/source.ts",
@@ -2799,9 +2801,7 @@
         "src/workflow/workspace.ts",
         "src/workspace/distribute.ts",
         "src/workspace/git.ts",
-        "src/workspace/status.ts",
-        "src/install/hooks.ts",
-        "src/sync/gate.ts"
+        "src/workspace/status.ts"
       ],
       "shared_entry": false
     },
@@ -3208,23 +3208,24 @@
       ],
       "symbols": [],
       "related_files": [
+        ".ai-workflow/AGENTS.md",
+        ".ai-workflow/notes/implemented/architecture/2026-09-14-user-level-agent-contract.md",
         ".ai-workflow/notes/implemented/feature/2026-10-08-project-template-sync.md",
+        ".ai-workflow/notes/implemented/feature/2026-10-09-sync-once-at-skill-start.md",
         ".ai-workflow/notes/implemented/process/2026-09-16-project-contract-and-agent-notes.md",
         "MEMORY.md",
         "src/cli.ts",
+        "src/install/hooks.ts",
         "src/install/index.ts",
+        "src/sync/gate.ts",
         "src/sync/index.ts",
         "src/sync/merge.ts",
         "src/sync/source.ts",
-        ".ai-workflow/AGENTS.md",
-        ".ai-workflow/notes/implemented/architecture/2026-09-14-user-level-agent-contract.md",
-        "src/install/hooks.ts",
-        "src/sync/gate.ts",
         "templates/contract/AGENTS.md",
         "templates/hooks/opencode.js",
         "templates/skills/coding/SKILL.md",
-        "templates/skills/planning/SKILL.md",
         "templates/skills/plan-to-tasks/SKILL.md",
+        "templates/skills/planning/SKILL.md",
         "templates/skills/setup-ai-workflow/SKILL.md",
         "templates/skills/sync-ai-workflow/SKILL.md",
         "templates/skills/sync-ai-workflow/agents/openai.yaml"
@@ -3242,11 +3243,12 @@
       "depends_on": [],
       "relations": [],
       "owner_role": "shared",
-      "responsibility": "Latest-source project template synchronization for adopted projects: fixed branch HEAD retrieval at one immutable commit, owned-section patches, warning continuation, transactional publication, and the additive native host entries and phase bridge that invoke the shared gate",
+      "responsibility": "Delivered single-skill-start project template synchronization: one automatic synchronization at each planning, coding or plan-to-tasks skill start, stored per actual root in the host runtime cache, native events served from the stored result with zero source requests and a no-check allow when absent, plus the unchanged manual command and host entries",
       "read_scope": [
         ".ai-workflow/AGENTS.md",
         ".ai-workflow/notes/implemented/architecture/2026-09-14-user-level-agent-contract.md",
         ".ai-workflow/notes/implemented/feature/2026-10-08-project-template-sync.md",
+        ".ai-workflow/notes/implemented/feature/2026-10-09-sync-once-at-skill-start.md",
         ".ai-workflow/notes/implemented/process/2026-09-16-project-contract-and-agent-notes.md",
         "MEMORY.md",
         "src/cli.ts",

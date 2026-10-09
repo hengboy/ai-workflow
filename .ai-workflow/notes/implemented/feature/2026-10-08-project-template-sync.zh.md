@@ -45,3 +45,4 @@ Status: implemented
 - `.gitignore` 的精确调和与 notes 管理结构补齐复用了[旧式 .gitignore 迁移记录](../process/2026-09-29-migrate-legacy-gitignore-on-init.md) 确立的旧条目迁移；该记录的理由不变，仅其当前共享助手位置就地更正为 `src/sync/index.ts`，且只保留 `.ai-workflow/plans/` 与 `.worktrees/` 被忽略。
 - 上游 `hengboy/ai-workflow` 分支 `simplify` 尚未带有所有权标记，因此实时尝试无法作出完整的管理新鲜性声明；观测到的真实运行报告 `unverified` 且 `created` 与 `updated` 均为空，完整声明须等待带标记模板发布到上游，而本计划未授权该发布。
 - `uninstallSynchronization` 通过 `Reflect.deleteProperty` 从调用方的 `sync_hooks` 记录中移除每个被卸载宿主的自有条目，`uninstall` 持久化缩减后的 manifest，因此被卸载宿主不会留下过时所有权，之后重装可为新的用户组干净地重新注册原生条目；公共 API 不变。
+- 上文门禁生命周期 Decision 条目与技能的按步骤及按阶段条目中的按边界节奏事实已被[技能启动时单次同步](2026-10-09-sync-once-at-skill-start.md)部分取代：自动同步现在按实际根在每次 planning、coding 或 plan-to-tasks 技能启动时运行一次，而本记录的检索、合并与报告契约仍然有效。
