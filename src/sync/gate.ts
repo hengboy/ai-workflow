@@ -1,4 +1,4 @@
-import { readFile, rm, stat } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { tmpdir } from 'node:os';
@@ -9,10 +9,8 @@ import { synchronizeProject, type SyncReport, type SynchronizeProjectOptions } f
 export interface ProjectGateInput {
   host: 'opencode' | 'claude' | 'codex';
   event: string;
-  eventSource?: string;
   sessionId: string;
   cwd: string;
-  parentSessionId?: string;
   toolName?: string;
   toolInput?: unknown;
 }
@@ -78,7 +76,7 @@ function toolExemption(input: ProjectGateInput, projectRoot: string): ProjectGat
 interface ProjectGateUnit {
   version: 1;
   unit: string;
-  phase?: true;
+  phase: true;
   result: ProjectGateResult;
 }
 
@@ -92,20 +90,27 @@ async function readUnit(path: string): Promise<ProjectGateUnit | undefined> {
     } | null;
     const result = state?.result;
     if (state?.version !== 1 || typeof state.unit !== 'string' || !result
-      || (state.phase !== undefined && state.phase !== true)
+      || state.phase !== true
       || typeof result.project !== 'string' || typeof result.context !== 'string'
       || !['allow', 'deny', 'skip'].includes(result.decision)
       || (result.authority !== undefined && typeof result.authority !== 'string')) return undefined;
     if (result.decision === 'skip') {
       if (result.report !== undefined || result.authority !== undefined) return undefined;
-    } else if (!result.report || result.report.project !== result.project
-      || typeof result.report.verified !== 'boolean' || result.report.proceed !== (result.decision === 'allow')
-      || !['synchronized', 'unverified', 'needs_attention', 'pending', 'conflict', 'failed'].includes(result.report.status)) return undefined;
+    } else {
+      const report = result.report;
+      if (!report || report.project !== result.project
+        || typeof report.verified !== 'boolean' || report.proceed !== (result.decision === 'allow')
+        || !['synchronized', 'unverified', 'needs_attention', 'pending', 'conflict', 'failed'].includes(report.status)
+        || typeof report.check !== 'boolean' || !report.source
+        || typeof report.source.repository !== 'string' || typeof report.source.branch !== 'string'
+        || (report.source.commit !== null && typeof report.source.commit !== 'string')
+        || ![report.created, report.updated, report.skipped].every((paths) => Array.isArray(paths) && paths.every((path) => typeof path === 'string'))
+        || ![report.warnings, report.conflicts].every((entries) => Array.isArray(entries) && entries.every((entry) => entry !== null && typeof entry === 'object'
+          && typeof entry.reason === 'string' && (entry.path === undefined || typeof entry.path === 'string')
+          && (entry.section === undefined || typeof entry.section === 'string')))) return undefined;
+    }
     return state as ProjectGateUnit;
-  } catch (error) {
-    if (error instanceof SyntaxError || (error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
-    throw error;
-  }
+  } catch { return undefined; }
 }
 
 function reportResult(report: SyncReport, authority?: string): ProjectGateResult {
@@ -141,7 +146,10 @@ export async function runProjectGate(input: ProjectGateInput, options: ProjectGa
       }
       projectRoot = parent;
     }
-    const exemption = adopted ? toolExemption(input, projectRoot) : undefined;
+    if (!adopted) {
+      return { decision: 'skip', project: projectRoot, context: `ai-workflow sync skipped: no adoption found for ${projectRoot}; no freshness claim is made.` };
+    }
+    const exemption = toolExemption(input, projectRoot);
     if (exemption !== undefined) {
       return {
         decision: 'allow',
@@ -153,47 +161,29 @@ export async function runProjectGate(input: ProjectGateInput, options: ProjectGa
     const runtimeDirectory = resolve(options.runtimeDirectory ?? join(tmpdir(), 'ai-workflow', 'project-gate'));
     const hostRuntimeDirectory = join(runtimeDirectory, input.host);
     const runtimeLocation = relative(projectRoot, hostRuntimeDirectory);
-    if (adopted && (runtimeLocation === '' || (!isAbsolute(runtimeLocation) && runtimeLocation !== '..' && !runtimeLocation.startsWith(`..${sep}`)))) {
+    if (runtimeLocation === '' || (!isAbsolute(runtimeLocation) && runtimeLocation !== '..' && !runtimeLocation.startsWith(`..${sep}`))) {
       throw new Error('The gate runtime directory must be outside the adopted project');
     }
-    const sessionPath = (sessionId: string): string => join(hostRuntimeDirectory, `session-${Buffer.from(sessionId).toString('base64url')}.json`);
-    const phasePath = (project: string): string => join(hostRuntimeDirectory, `phase-${Buffer.from(project).toString('base64url')}.json`);
-    const phaseEntry = input.event === 'PhaseEntry';
-    const path = phaseEntry ? phasePath(projectRoot) : sessionPath(input.sessionId);
-    const ownUnit = phaseEntry ? undefined : await readUnit(path);
-    const parentUnit = input.parentSessionId === undefined ? undefined : await readUnit(sessionPath(input.parentSessionId));
-    const parentAtRoot = adopted && parentUnit?.result.project === projectRoot && parentUnit.result.decision !== 'skip';
-    const boundary = ['SessionStart', 'UserPromptSubmit'].includes(input.event);
-    const rootChanged = !parentAtRoot && ownUnit !== undefined && ownUnit.result.project !== projectRoot;
-    const resetPhase = phaseEntry || (!parentAtRoot && (boundary || rootChanged));
-    if (resetPhase) {
-      await rm(phasePath(projectRoot), { force: true });
-      if (rootChanged && ownUnit) await rm(phasePath(ownUnit.result.project), { force: true });
+    const path = join(hostRuntimeDirectory, `phase-${Buffer.from(projectRoot).toString('base64url')}.json`);
+    if (input.event !== 'PhaseEntry') {
+      const previous = await readUnit(path);
+      if (previous?.result.project === projectRoot) return previous.result;
+      return {
+        decision: 'allow',
+        project: projectRoot,
+        context: `ai-workflow sync: no synchronization check has run for ${projectRoot}. Managed workflow freshness is not verified. A check runs when planning, coding or plan-to-tasks starts via ai-workflow sync-hook --host ${input.host} --phase --project ${doubleQuoted(projectRoot)}.`,
+      };
     }
-    const phaseUnit = !resetPhase && adopted ? await readUnit(phasePath(projectRoot)) : undefined;
-    const currentPhase = phaseUnit?.phase && phaseUnit.result.project === projectRoot && phaseUnit.result.decision !== 'skip' ? phaseUnit : undefined;
-    const inherited = parentAtRoot && (!parentUnit.phase || parentUnit.unit === currentPhase?.unit);
-    const previous = phaseEntry ? undefined : currentPhase ?? (inherited ? parentUnit : boundary || rootChanged || ownUnit?.phase ? undefined : ownUnit);
-    if (previous?.result.project === projectRoot && (previous.result.decision === 'skip') === !adopted) {
-      if (inherited || currentPhase) await atomicWrite(path, `${JSON.stringify(previous)}\n`);
-      return previous.result;
+    report = await synchronizeProject({
+      projectRoot,
+      ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
+      ...(options.env === undefined ? {} : { env: options.env }),
+    });
+    if (report.proceed && [...report.created, ...report.updated].some((path) => authorityPaths.has(path))) {
+      authority = await readFile(join(report.project, '.ai-workflow/AGENTS.md'), 'utf8');
     }
-    await rm(path, { force: true });
-    let result: ProjectGateResult;
-    if (!adopted) {
-      result = { decision: 'skip', project: projectRoot, context: `ai-workflow sync skipped: no adoption found for ${projectRoot}; no freshness claim is made.` };
-    } else {
-      report = await synchronizeProject({
-        projectRoot,
-        ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
-        ...(options.env === undefined ? {} : { env: options.env }),
-      });
-      if (report.proceed && [...report.created, ...report.updated].some((path) => authorityPaths.has(path))) {
-        authority = await readFile(join(report.project, '.ai-workflow/AGENTS.md'), 'utf8');
-      }
-      result = reportResult(report, authority);
-    }
-    const unit: ProjectGateUnit = { version: 1, unit: randomUUID(), ...(phaseEntry ? { phase: true as const } : {}), result };
+    const result = reportResult(report, authority);
+    const unit: ProjectGateUnit = { version: 1, unit: randomUUID(), phase: true, result };
     await atomicWrite(path, `${JSON.stringify(unit)}\n`);
     return result;
   } catch (error) {

@@ -99,8 +99,8 @@ installed role, fail before execution and request clarification.
 
 ## Work-boundary synchronization
 
-Before a coding phase begins, invoke the shared native synchronization entry for the actual
-project root:
+When this skill session begins, invoke the shared native synchronization entry for the actual
+project root exactly once:
 `ai-workflow sync-hook --host <current-host> --phase --project <actual-root>`.
 It prints the raw gate JSON: the top-level `decision` is `allow`, `deny` or `skip`, the nested
 `report` (absent for `skip` or an actor exemption) carries `status`, `verified` and `proceed`,
@@ -111,12 +111,10 @@ with visible context but no freshness claim, and `skip` means no adoption was fo
 `proceed` and no `decision`. The installed host entry passes the native JSON payload to
 `ai-workflow sync-hook --host <host>` on stdin and must not be run by hand without it.
 
-- For an unsplit plan, invoke it before each implementation step; for a split plan, invoke it
-  before each frozen `tasks/execution-order.yaml` phase. One parent snapshot covers the whole
-  unit, so same-root child agents reuse that snapshot instead of synchronizing independently.
-- A native session start, user turn, resume or actual-root change begins a new unit and
-  invalidates the previous snapshot; an explicit phase entry starts one deliberately at a
-  phase boundary.
+- Later implementation steps, frozen execution-order phases and native host events in this skill
+  session reuse the stored result for the actual root instead of synchronizing again, and a
+  missing, corrupt or unreadable stored check allows with a visible no-freshness context rather
+  than retrieving the source.
 - After a safe patch changes the project contract or owned workflow rules, re-read the updated
   `.ai-workflow/AGENTS.md` (or inject the returned authority) before ordinary work continues.
 - Frozen `spec.md`, `plan.md`, task files and their declared write scopes are never changed;

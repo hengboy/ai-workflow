@@ -80,7 +80,6 @@ program.command('sync-hook').requiredOption('--host <host>').option('--phase', '
     event: input.hook_event_name,
     sessionId: input.session_id,
     cwd: input.cwd,
-    ...(input.source === undefined ? {} : { eventSource: input.source }),
     ...(input.tool_name === undefined ? {} : { toolName: input.tool_name }),
     ...(input.tool_input === undefined ? {} : { toolInput: input.tool_input }),
   });

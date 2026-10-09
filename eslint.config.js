@@ -2,7 +2,7 @@ import eslint from '@eslint/js';
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
-  { ignores: ['dist/', 'src/generated/', '.worktrees/', 'eslint.config.js', 'tests/behavior/', 'tests/integration/', 'tests/unit/'] },
+  { ignores: ['dist/', 'src/generated/', '.worktrees/', 'eslint.config.js', 'tests/behavior/', 'tests/integration/', 'tests/unit/', 'tests/install/', 'templates/hooks/opencode.js'] },
   eslint.configs.recommended,
   ...tseslint.configs.strictTypeChecked,
   {

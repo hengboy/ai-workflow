@@ -13,6 +13,13 @@ project that already contains `.ai-workflow/`, and only on an explicit user requ
 adoption, installer setup, host reinstallation and a repo-wide upgrade stay with the
 setup-ai-workflow skill.
 
+Automatic synchronization is a different, passive path: it runs once at each planning, coding or
+plan-to-tasks skill start, stores the complete result for the actual root outside the project,
+and serves every native host event afterward from that stored per-root result with no source
+request. This skill instead performs its own fresh, cache-independent synchronization on the
+user's explicit request, and it never replaces the stored gate decision. Do not start that
+automatic check from here.
+
 ## Incremental synchronization
 
 Run the installed incremental CLI. It never clones the repository, builds the CLI, or
@@ -51,7 +58,7 @@ gates instead emit host-native output (`systemMessage`; `hookSpecificOutput` wit
 `PreToolUse` deny, while a `UserPromptSubmit` block carries a top-level `decision` of `block`
 with `reason`) and never expose the raw `allow`/`deny`/`skip` decision. Never run `sync-hook --host <host>` by hand without the host payload on stdin; every
 handled form exits 0 even on a deny, so the host follows its protocol rather than the exit code,
-and a cooperative boundary uses `--phase --project <actual-root>`.
+and the planning, coding and plan-to-tasks skills use the `--phase --project <actual-root>` form once when their skill session starts.
 
 | Status | Exit | Proceed | Action |
 | --- | --- | --- | --- |

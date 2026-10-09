@@ -242,7 +242,12 @@ export async function applyTemplateSnapshot(
       updated: [],
       skipped: skipped.sort(),
       warnings,
-      conflicts: conflicts.sort((left, right) => left.path! < right.path! ? -1 : left.path! > right.path! ? 1 : 0),
+      conflicts: conflicts.sort((left, right) => {
+        const a = left.path;
+        const b = right.path;
+        if (a === undefined || b === undefined) return 0;
+        return a < b ? -1 : a > b ? 1 : 0;
+      }),
     };
   }
   const createdDirectories: string[] = [];
