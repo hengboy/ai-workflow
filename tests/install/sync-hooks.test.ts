@@ -376,3 +376,91 @@ describe('native synchronization deployment lifecycle', () => {
     expect(await exists(join(home, '.agents'))).toBe(false);
   });
 });
+
+type ManifestView = Awaited<ReturnType<typeof uninstall>> & { sync_hooks?: Partial<Record<Host, unknown>> };
+
+interface OwnershipClearCase {
+  host: Host;
+  kind: 'config' | 'plugin';
+  expectedStatus: 'installed' | 'trust_required' | 'restart_required';
+}
+
+const ownershipClearCases: OwnershipClearCase[] = [
+  { host: 'claude', kind: 'config', expectedStatus: 'installed' },
+  { host: 'codex', kind: 'config', expectedStatus: 'trust_required' },
+  { host: 'opencode', kind: 'plugin', expectedStatus: 'restart_required' },
+];
+
+function nativeConfigRelative(host: Host): string {
+  if (host === 'claude') return claudeSettingsRelative;
+  if (host === 'codex') return codexHooksRelative;
+  return opencodePluginRelative;
+}
+
+function insertedUserGroup(host: Host): HookGroup {
+  return { matcher: 'Write', hooks: [{ type: 'command', command: `echo user-inserted-${host}` }] };
+}
+
+describe('native synchronization deployment ownership lifecycle', () => {
+  it.each(ownershipClearCases)('AC-012: $host uninstall clears native ownership so a later install is not a ghost ($kind)', async (testCase) => {
+    const home = await homeWithSpace();
+    if (testCase.host === 'claude') await writeAt(home, claudeSettingsRelative, `${JSON.stringify(claudeUserSettings, null, 2)}\n`);
+    else if (testCase.host === 'codex') await writeAt(home, codexHooksRelative, `${JSON.stringify(codexUserHooks, null, 2)}\n`);
+    else await writeAt(home, opencodeUserPluginRelative, userPluginBytes);
+
+    await install([testCase.host], { home, opencodeVersion: 'v1' });
+
+    // Public positions of the owned groups, read from the installed native config.
+    const oldPositions: Record<string, number> = {};
+    if (testCase.kind === 'config') {
+      const installed = await readJsonFile<HookConfig>(join(home, nativeConfigRelative(testCase.host)));
+      for (const event of events) oldPositions[event] = (installed.hooks?.[event] ?? []).findIndex((group) => isOwnedGroup(group, testCase.host));
+    }
+
+    const uninstalled = await uninstall([testCase.host], { home }) as ManifestView;
+
+    // The public returned ownership metadata must be clear after uninstall: no ghost record
+    // that a later install could mistake for a still-owned (possibly modified) registration.
+    expect(uninstalled.sync_hooks?.[testCase.host], `${testCase.host} ownership must be cleared on uninstall`).toBeUndefined();
+
+    if (testCase.kind === 'config') {
+      // The user inserts a NEW unrelated group at the OLD owned position in every event.
+      const config = await readJsonFile<HookConfig>(join(home, nativeConfigRelative(testCase.host)));
+      for (const event of events) {
+        const groups = config.hooks?.[event] ?? [];
+        const at = Math.min(Math.max(oldPositions[event] ?? 0, 0), groups.length);
+        groups.splice(at, 0, insertedUserGroup(testCase.host));
+        config.hooks = { ...(config.hooks ?? {}), [event]: groups };
+      }
+      await writeFile(join(home, nativeConfigRelative(testCase.host)), `${JSON.stringify(config, null, 2)}\n`);
+
+      // With ownership cleared, the reinstall is a clean fresh adoption, not a ghost resurrection.
+      const reinstalled = await install([testCase.host], { home, opencodeVersion: 'v1' }) as InstallResult;
+      const report = (reinstalled.synchronization ?? []).find((entry) => entry.host === testCase.host);
+      expect(report?.status, `${testCase.host} reinstall must not be a ghost attention result`).toBe(testCase.expectedStatus);
+      expect(report?.active).toBe(false);
+
+      const after = await readJsonFile<HookConfig>(join(home, nativeConfigRelative(testCase.host)));
+      for (const event of events) {
+        expect(ownedCommands(after, testCase.host).filter((item) => item.event === event).length, `${testCase.host} ${event}`).toBe(1);
+        expect(after.hooks?.[event] ?? []).toEqual(expect.arrayContaining([insertedUserGroup(testCase.host)]));
+      }
+      if (testCase.host === 'claude') {
+        expect(after.model).toBe('opus');
+        expect(after.permissions).toEqual({ allow: ['Bash'] });
+        expect(after.hooks?.PreToolUse ?? []).toEqual(expect.arrayContaining([userClaudeGroup]));
+      } else {
+        expect(after.hooks?.PreToolUse ?? []).toEqual(expect.arrayContaining([userCodexGroup]));
+      }
+    } else {
+      // OpenCode: the owned plugin was removed, and the reinstall recreates it cleanly.
+      expect(await exists(join(home, opencodePluginRelative))).toBe(false);
+      const reinstalled = await install([testCase.host], { home, opencodeVersion: 'v1' }) as InstallResult;
+      const report = (reinstalled.synchronization ?? []).find((entry) => entry.host === testCase.host);
+      expect(report?.status).toBe(testCase.expectedStatus);
+      expect(report?.active).toBe(false);
+      expect(await exists(join(home, opencodePluginRelative))).toBe(true);
+      expect(await readFile(join(home, opencodeUserPluginRelative), 'utf8')).toBe(userPluginBytes);
+    }
+  });
+});

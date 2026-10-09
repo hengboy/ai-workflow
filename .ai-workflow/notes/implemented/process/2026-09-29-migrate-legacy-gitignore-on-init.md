@@ -10,7 +10,7 @@ Earlier ai-workflow versions wrote a whole-tree `.ai-workflow/` entry plus `*.lo
 
 ## Decision
 
-- `initializeProject` and `upgradeProject` reconcile the project `.gitignore` through one helper, `reconcileIgnoreFile` in `src/install/index.ts`: the exact legacy lines `.ai-workflow`, `.ai-workflow/` and `MEMORY.md` are removed, then `.ai-workflow/plans/` and `.worktrees/` are appended only when absent.
+- `initializeProject` and `upgradeProject` reconcile the project `.gitignore` through one helper, `reconcileIgnoreFile` in `src/sync/index.ts` (imported by `src/install/index.ts`): the exact legacy lines `.ai-workflow`, `.ai-workflow/` and `MEMORY.md` are removed, then `.ai-workflow/plans/` and `.worktrees/` are appended only when absent.
 - Every other line, `*.log` included, is preserved byte for byte; `*.log` and similar entries are generic ignores that ai-workflow does not own.
 - The file is written only when the reconciled content differs, so a repeat upgrade reports an empty `created`, and a failed run still restores the original `.gitignore` bytes through the existing transaction recovery.
 - `tests/integration/project-cli.test.ts` and `tests/integration/project-upgrade.test.ts` cover the migration and `README.md` states it; `.worktrees/` stays ignored because [the ignored-state sharing record](./2026-09-14-share-ignored-state-into-worktree.md) requires it.

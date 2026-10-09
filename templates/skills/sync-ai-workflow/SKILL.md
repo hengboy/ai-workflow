@@ -42,12 +42,16 @@ configuration.
 
 The manual `ai-workflow sync [project]` command prints a `SyncReport` with `status`, `verified`,
 `proceed`, `check`, `created`, `updated`, `skipped`, `warnings` and `conflicts`, and no
-`decision` field. The native `ai-workflow sync-hook` gate used by installed host entries prints
-a different shape: a top-level `decision` of `allow`, `deny` or `skip`, `project`, `context` and
-optional `authority`, with the `SyncReport` nested under `report` (absent for `skip` or an actor
-exemption). Never run `sync-hook --host <host>` by hand without the host payload on stdin; a
-cooperative boundary uses `--phase --project <actual-root>` and the exit code stays 0 even when
-`decision` is `deny`, so follow `decision` rather than the exit code.
+`decision` field. The native `ai-workflow sync-hook` entry has two output shapes. The `--phase`
+form on every host, and the OpenCode stdin gate, print the raw gate JSON: a top-level `decision`
+of `allow`, `deny` or `skip`, `project`, `context`, optional `authority`, and the `SyncReport`
+nested under `report` (absent for `skip` or an actor exemption). The Claude Code and Codex stdin
+gates instead emit host-native output (`systemMessage`; `hookSpecificOutput` with
+`hookEventName`, `additionalContext` and `permissionDecision`/`permissionDecisionReason` on a
+`PreToolUse` deny, while a `UserPromptSubmit` block carries a top-level `decision` of `block`
+with `reason`) and never expose the raw `allow`/`deny`/`skip` decision. Never run `sync-hook --host <host>` by hand without the host payload on stdin; every
+handled form exits 0 even on a deny, so the host follows its protocol rather than the exit code,
+and a cooperative boundary uses `--phase --project <actual-root>`.
 
 | Status | Exit | Proceed | Action |
 | --- | --- | --- | --- |
@@ -60,8 +64,9 @@ cooperative boundary uses `--phase --project <actual-root>` and the exit code st
 
 Only a `synchronized` result with `verified: true` means the managed artifacts are current; a
 warning result proceeds but makes no freshness claim. A blocking `conflict` or `failed` status
-stops ordinary work and reports the affected paths. Parse the JSON `decision`, `proceed` and
-`status` rather than the process exit code alone, because a warning also exits 2.
+stops ordinary work and reports the affected paths. Read a raw gate's top-level `decision` and
+its nested `report`, and read a manual `SyncReport` by `status`, `verified` and `proceed`; never
+rely on the process exit code alone, because a warning also exits 2.
 
 ## Enablement
 

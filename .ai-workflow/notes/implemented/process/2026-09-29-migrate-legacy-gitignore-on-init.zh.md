@@ -10,7 +10,7 @@ Status: implemented
 
 ## Decision
 
-- `initializeProject` 与 `upgradeProject` 通过 `src/install/index.ts` 中的单一助手 `reconcileIgnoreFile` 原地整理项目 `.gitignore`：删除完全等于 `.ai-workflow`、`.ai-workflow/` 与 `MEMORY.md` 的遗留行，然后仅在缺失时追加 `.ai-workflow/plans/` 与 `.worktrees/`。
+- `initializeProject` 与 `upgradeProject` 通过 `src/sync/index.ts` 中的单一助手 `reconcileIgnoreFile`（由 `src/install/index.ts` 导入）原地整理项目 `.gitignore`：删除完全等于 `.ai-workflow`、`.ai-workflow/` 与 `MEMORY.md` 的遗留行，然后仅在缺失时追加 `.ai-workflow/plans/` 与 `.worktrees/`。
 - 其余每一行（包括 `*.log`）都逐字节保留；`*.log` 及同类条目是 ai-workflow 不拥有的通用排除。
 - 仅当整理后的内容不同才写入文件，因此重复升级返回空的 `created`，而失败运行仍通过既有事务回收机制恢复原始 `.gitignore` 字节。
 - `tests/integration/project-cli.test.ts` 与 `tests/integration/project-upgrade.test.ts` 覆盖该迁移，`README.md` 也作说明；`.worktrees/` 保持被忽略，因为[忽略状态共享记录](./2026-09-14-share-ignored-state-into-worktree.md)要求如此。

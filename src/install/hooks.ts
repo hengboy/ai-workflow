@@ -163,11 +163,11 @@ export async function uninstallSynchronization(home: string, host: Host, records
   const relativePath = nativePaths[host];
   if (record.path !== relativePath) throw new Error(`Unexpected native synchronization ownership path: ${record.path}`);
   const path = join(home, relativePath);
-  if (!(await exists(path))) { records = withoutHostRecord(records, host); return; }
+  if (!(await exists(path))) { Reflect.deleteProperty(records, host); return; }
   if (record.kind === 'plugin') {
     if (sha256(await readFile(path)) !== record.digest) { skipped.push(relativePath); return; }
     await rm(path);
-    records = withoutHostRecord(records, host);
+    Reflect.deleteProperty(records, host);
     return;
   }
   const config = await nativeConfig(path);
@@ -189,5 +189,5 @@ export async function uninstallSynchronization(home: string, host: Host, records
     await writeJson(path, config);
   }
   if (retained.length) records[host] = { ...record, entries: retained };
-  else records = withoutHostRecord(records, host);
+  else Reflect.deleteProperty(records, host);
 }
