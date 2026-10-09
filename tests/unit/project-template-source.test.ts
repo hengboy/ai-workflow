@@ -4,7 +4,7 @@ import { exists } from '../../src/utils/fs.js';
 import { fakeGit, type TestGitRunner } from '../helpers.js';
 
 const REPOSITORY = 'hengboy/ai-workflow';
-const BRANCH = 'simplify';
+const BRANCH = 'main';
 const PUBLIC_URL = 'https://github.com/hengboy/ai-workflow.git';
 
 /** The complete supported project-template source set fixed by the specification table. */
@@ -119,7 +119,7 @@ describe('project template source', () => {
   it('rejects an ambiguous branch head that is not an immutable 40-hex commit', async () => {
     const fake = fakeGit({ commit: 'deadbeef', files: sourceFiles('a'.repeat(40)) });
 
-    await expect(resolveTemplateSnapshot({ runGit: fake.runGit })).rejects.toThrow(/Template source branch has no immutable commit: simplify/);
+    await expect(resolveTemplateSnapshot({ runGit: fake.runGit })).rejects.toThrow(/Template source branch has no immutable commit: main/);
   });
 
   it('rejects a clone that lacks the templates/project directory', async () => {

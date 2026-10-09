@@ -190,7 +190,7 @@ export async function runProjectGate(input: ProjectGateInput, options: ProjectGa
     report = {
       ...(report ?? {
         project: projectRoot,
-        source: { repository: 'hengboy/ai-workflow', branch: 'simplify', commit: null },
+        source: { repository: 'hengboy/ai-workflow', branch: 'main', commit: null },
         check: false,
         created: [],
         updated: [],

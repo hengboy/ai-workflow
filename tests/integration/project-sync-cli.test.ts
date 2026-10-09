@@ -130,7 +130,7 @@ describe('project sync CLI', () => {
     expect(pending.proceed).toBe(false);
     expect(pending.check).toBe(true);
     expect(await realpath(pending.project)).toBe(await realpath(project));
-    expect(pending.source).toEqual({ repository: 'hengboy/ai-workflow', branch: 'simplify', commit });
+    expect(pending.source).toEqual({ repository: 'hengboy/ai-workflow', branch: 'main', commit });
     expect([...pending.updated].sort()).toEqual(['.ai-workflow/AGENTS.md', 'MEMORY.md']);
     expect(changedPaths(before, await snapshotTree(project)), 'check mode must write nothing').toEqual([]);
 

@@ -76,7 +76,7 @@ describe('project synchronization shipped instructions', () => {
     expect(syncSkill, 'incremental section patching, not a whole-file copy').toMatch(/incremental|section|patch/i);
     expect(syncSkill, 'whole-file template copying is refused').toMatch(/whole[- ]file|complete (?:template|file) copy|copy (?:the )?whole|wholesale/i);
     expect(syncSkill, 'the skill names the fixed public git address').toMatch(/https:\/\/github\.com\/hengboy\/ai-workflow\.git/);
-    expect(syncSkill, 'the skill names the fixed branch').toMatch(/\bsimplify\b/);
+    expect(syncSkill, 'the skill names the fixed branch').toMatch(/\bmain\b/);
     expect(syncSkill, 'the skill describes shallow acquisition').toMatch(/--depth|shallow/i);
     expect(syncSkill, 'the skill never documents a bearer token').not.toMatch(/GH_TOKEN|GITHUB_TOKEN/);
     expect(syncSkill, 'the report exposes proceed').toMatch(/proceed/);
@@ -199,7 +199,7 @@ describe('project synchronization published documentation', () => {
 
     // 2. Fixed public upstream source acquired by a shallow temporary clone, never a token.
     expect(flat, 'README names the fixed source repository').toMatch(/hengboy\/ai-workflow/);
-    expect(flat, 'README names the fixed branch').toMatch(/\bsimplify\b/);
+    expect(flat, 'README names the fixed branch').toMatch(/\bmain\b/);
     expect(flat, 'README names the fixed public git address').toMatch(/https:\/\/github\.com\/hengboy\/ai-workflow\.git/);
     expect(flat, 'README documents the shallow temporary clone acquisition').toMatch(/--depth|shallow/i);
     expect(flat, 'README never documents a bearer token').not.toMatch(/GH_TOKEN|GITHUB_TOKEN/);

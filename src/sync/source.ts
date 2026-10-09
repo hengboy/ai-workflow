@@ -6,7 +6,7 @@ import { promisify } from 'node:util';
 import { validateOwnedSections } from './merge.js';
 
 const repository = 'hengboy/ai-workflow';
-const branch = 'simplify';
+const branch = 'main';
 const sourceUrl = 'https://github.com/hengboy/ai-workflow.git';
 const sourcePaths = [
   'templates/project/AGENTS.md',

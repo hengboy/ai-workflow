@@ -110,7 +110,7 @@ export async function synchronizeProject(options: SynchronizeProjectOptions): Pr
   if (prerequisiteConflicts.length) {
     return {
       project: projectRoot,
-      source: { repository: 'hengboy/ai-workflow', branch: 'simplify', commit: null },
+      source: { repository: 'hengboy/ai-workflow', branch: 'main', commit: null },
       status: 'conflict',
       verified: false,
       proceed: false,
@@ -132,7 +132,7 @@ export async function synchronizeProject(options: SynchronizeProjectOptions): Pr
     const path = reason.match(/templates\/project\/[^\s?]+/)?.[0];
     return {
       project: options.projectRoot,
-      source: { repository: 'hengboy/ai-workflow', branch: 'simplify', commit: null },
+      source: { repository: 'hengboy/ai-workflow', branch: 'main', commit: null },
       status: 'unverified',
       verified: false,
       proceed: true,

@@ -423,7 +423,7 @@ export async function upgradeProject(project: string): Promise<ProjectUpgradeRep
       conflicts.push({ path, reason: 'Upgrade prerequisite is missing; no files written' });
     }
   }
-  const source = { repository: 'hengboy/ai-workflow', branch: 'simplify', commit: null };
+  const source = { repository: 'hengboy/ai-workflow', branch: 'main', commit: null };
   if (!conflicts.length) {
     // Rule files only: never read or convert `.ai-workflow/adr/` history.
     for (const file of ['MEMORY.md', '.ai-workflow/AGENTS.md']) {

@@ -7,7 +7,7 @@ import { changedPaths, fakeGit, snapshotTree, temporary, type TestGitRunner } fr
 import { exists } from '../../src/utils/fs.js';
 
 const REPOSITORY = 'hengboy/ai-workflow';
-const BRANCH = 'simplify';
+const BRANCH = 'main';
 
 // The complete notes management structure, listed literally so file-patch tests isolate
 // managed files from directory creation and stay independent of the production helper.

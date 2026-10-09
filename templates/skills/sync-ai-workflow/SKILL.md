@@ -41,7 +41,7 @@ synchronization input.
 
 ## Source and credentials
 
-The fixed source is `https://github.com/hengboy/ai-workflow.git`, branch `simplify`.
+The fixed source is `https://github.com/hengboy/ai-workflow.git`, branch `main`.
 Acquisition is a shallow temporary clone of that public address; there is no token, credential
 file, GitHub CLI or SSH configuration handling, and the clone reads no secret and stores no
 credential. Never search credential files, invoke a GitHub CLI, or infer authentication from
