@@ -433,11 +433,11 @@ describe('project sync gate native event cache reuse (AC-002/AC-003)', () => {
     const rootAfterPhase = await snapshotTree(root);
 
     const natives: Array<Omit<ProjectGateInput, 'host'>> = [
-      { event: 'SessionStart', sessionId: 'session-1', cwd: root, eventSource: 'startup' },
-      { event: 'SessionStart', sessionId: 'child', cwd: root, parentSessionId: 'session-1', eventSource: 'resume' },
+      { event: 'SessionStart', sessionId: 'session-1', cwd: root },
+      { event: 'SessionStart', sessionId: 'child', cwd: root },
       { event: 'UserPromptSubmit', sessionId: 'session-1', cwd: root },
       { event: 'PreToolUse', sessionId: 'session-1', cwd: root, toolName: 'Bash', toolInput: { command: 'ls' } },
-      { event: 'PreToolUse', sessionId: 'child', cwd: root, parentSessionId: 'session-1', toolName: 'Bash', toolInput: { command: 'pwd' } },
+      { event: 'PreToolUse', sessionId: 'child', cwd: root, toolName: 'Bash', toolInput: { command: 'pwd' } },
       { event: 'tool.execute.before', sessionId: 'session-1', cwd: root, toolName: 'Bash', toolInput: { command: 'echo hi' } },
     ];
     for (const native of natives) {
@@ -646,9 +646,9 @@ describe('project sync gate single-start lifecycle (AC-001/AC-002)', () => {
     const parentAfterFirst = await snapshotTree(parentRoot);
     const natives: Array<Omit<ProjectGateInput, 'host'>> = [
       { event: 'PreToolUse', sessionId: 'parent', cwd: parentRoot, toolName: 'Bash', toolInput: { command: 'ls' } },
-      { event: 'PreToolUse', sessionId: 'child', cwd: parentRoot, parentSessionId: 'parent', toolName: 'Bash', toolInput: { command: 'pwd' } },
-      { event: 'SessionStart', sessionId: 'child', cwd: parentRoot, parentSessionId: 'parent', eventSource: 'resume' },
-      { event: 'SessionStart', sessionId: 'parent', cwd: parentRoot, eventSource: 'startup' },
+      { event: 'PreToolUse', sessionId: 'child', cwd: parentRoot, toolName: 'Bash', toolInput: { command: 'pwd' } },
+      { event: 'SessionStart', sessionId: 'child', cwd: parentRoot },
+      { event: 'SessionStart', sessionId: 'parent', cwd: parentRoot },
       { event: 'UserPromptSubmit', sessionId: 'parent', cwd: parentRoot },
       { event: 'tool.execute.before', sessionId: 'parent', cwd: parentRoot, toolName: 'Bash', toolInput: { command: 'echo hi' } },
     ];
@@ -699,7 +699,7 @@ describe('project sync gate single-start lifecycle (AC-001/AC-002)', () => {
     expect(await readFile(join(parentRoot, '.ai-workflow/AGENTS.md'), 'utf8'), 'syncing the worktree must not edit the parent').toContain(`immutable ${B}`);
 
     const httpAfterWorktree = state.httpCalls;
-    const worktreeReplay = await invoke({ event: 'UserPromptSubmit', sessionId: 'child', cwd: worktreeRoot, parentSessionId: 'parent' });
+    const worktreeReplay = await invoke({ event: 'UserPromptSubmit', sessionId: 'child', cwd: worktreeRoot });
     expect(worktreeReplay.report?.source.commit).toBe(C);
     expect(state.httpCalls, 'the worktree entry must be served with zero requests').toBe(httpAfterWorktree);
 

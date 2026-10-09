@@ -9,10 +9,8 @@ import { synchronizeProject, type SyncReport, type SynchronizeProjectOptions } f
 export interface ProjectGateInput {
   host: 'opencode' | 'claude' | 'codex';
   event: string;
-  eventSource?: string;
   sessionId: string;
   cwd: string;
-  parentSessionId?: string;
   toolName?: string;
   toolInput?: unknown;
 }
