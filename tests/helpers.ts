@@ -147,6 +147,18 @@ export interface WorkspaceManifestRepoFixture { name: string; path: string; depe
 /** The `workspace.yaml` manifest payload a workspace or slice plan fixture carries. */
 export interface WorkspaceManifestFixture { planId: string; role: 'workspace' | 'slice'; repositories: WorkspaceManifestRepoFixture[] }
 
+/** One repository-qualified `read_scope` entry of a `workspace_finalization` declaration. */
+export interface WorkspaceFinalizationReadScopeFixture { repo: string; paths: string[] }
+
+/** The optional `workspace_finalization` plan.md frontmatter declaration. */
+export interface WorkspaceFinalizationFixture {
+  requirements: string[];
+  acceptanceCriteria: string[];
+  readScope: WorkspaceFinalizationReadScopeFixture[];
+  writeScope: string[];
+  testCommands?: string[];
+}
+
 /** A complete workspace plan fixture: frozen pair, task triplets, schedule and optional manifest. */
 export interface WorkspacePlanFixtureSpec {
   planId: string;
@@ -156,6 +168,9 @@ export interface WorkspacePlanFixtureSpec {
   tasks: WorkspaceTaskFixture[];
   phases: string[][];
   manifest?: WorkspaceManifestFixture;
+  workspaceFinalization?: WorkspaceFinalizationFixture;
+  /** A raw `workspace_finalization` value, used to exercise malformed declarations. */
+  workspaceFinalizationRaw?: unknown;
 }
 
 function workspaceSpecBody(requirements: string[], acceptanceCriteria: string[], prose: (id: string) => string): string {
@@ -215,9 +230,16 @@ export async function workspacePlanFixture(root: string, spec: WorkspacePlanFixt
     acceptance_criteria_count: spec.acceptanceCriteria.length,
     digest: 'sha256:placeholder',
   };
-  const planAttributes: Record<string, unknown> = spec.workspaceRepos
-    ? { ...baseAttributes, workspace_repos: spec.workspaceRepos.map((repo) => ({ name: repo.name, path: repo.path, depends_on: repo.dependsOn })) }
-    : { ...baseAttributes };
+  const planAttributes: Record<string, unknown> = { ...baseAttributes };
+  if (spec.workspaceRepos) planAttributes.workspace_repos = spec.workspaceRepos.map((repo) => ({ name: repo.name, path: repo.path, depends_on: repo.dependsOn }));
+  if (spec.workspaceFinalization) planAttributes.workspace_finalization = {
+    requirements: spec.workspaceFinalization.requirements,
+    acceptance_criteria: spec.workspaceFinalization.acceptanceCriteria,
+    read_scope: spec.workspaceFinalization.readScope.map((entry) => ({ repo: entry.repo, paths: entry.paths })),
+    write_scope: spec.workspaceFinalization.writeScope,
+    test_commands: spec.workspaceFinalization.testCommands ?? [],
+  };
+  if (spec.workspaceFinalizationRaw !== undefined) planAttributes.workspace_finalization = spec.workspaceFinalizationRaw;
   await writePlanTriplet(
     directory,
     'spec.md',

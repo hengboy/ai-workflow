@@ -52,6 +52,14 @@ interface StatusWorkspaceRootEntry {
   tasks_delivered: boolean;
   delivery_commit: string | null;
 }
+interface ExecutionPendingTask { task: string; repo: string; repository_path: string; plan_path: string }
+interface ExecutionProjection {
+  phase: number | null;
+  pending_tasks: ExecutionPendingTask[];
+  awaiting_delivery: string[];
+  blockers: string[];
+  completed: boolean;
+}
 interface StatusOutput {
   valid: boolean;
   plan_id: string;
@@ -61,6 +69,7 @@ interface StatusOutput {
   workspace_root_entry: StatusWorkspaceRootEntry;
   next_repository: string | null;
   ready_for_finalization: boolean;
+  execution?: ExecutionProjection;
 }
 interface StatusFailure {
   valid: boolean;
@@ -137,6 +146,23 @@ function rootlessSpec(): WorkspacePlanFixtureSpec {
         { ...APP_REPO, requirements: ['REQ-001'], acceptanceCriteria: ['AC-001'] },
         { ...LIB_REPO, requirements: ['REQ-002'], acceptanceCriteria: ['AC-002'] },
       ],
+    },
+  };
+}
+
+/** A workspace plan whose `workspace_repos` declares only the reserved root entry. */
+function rootOnlySpec(): WorkspacePlanFixtureSpec {
+  return {
+    planId: PLAN_ID,
+    requirements: ['REQ-001'],
+    acceptanceCriteria: ['AC-001'],
+    workspaceRepos: [WORKSPACE_REPO],
+    tasks: [{ id: 'task-001-workspace', repo: 'workspace', requirements: ['REQ-001'], acceptanceCriteria: ['AC-001'], writeScope: ['src/workspace.ts'] }],
+    phases: [['task-001-workspace']],
+    manifest: {
+      planId: PLAN_ID,
+      role: 'workspace',
+      repositories: [{ ...WORKSPACE_REPO, requirements: ['REQ-001'], acceptanceCriteria: ['AC-001'] }],
     },
   };
 }
@@ -433,5 +459,42 @@ describe('workspace status', () => {
     expect(output.workspace_root_entry).toEqual({ name: 'workspace', path: '.', record: 'completed', tasks_delivered: false, delivery_commit: null });
     expect(output.next_repository).toBe('workspace');
     expect(output.ready_for_finalization).toBe(false);
+  }, TIMEOUT);
+
+  it('reports the workspace execution projection for a child-participating plan', async () => {
+    const { root, directory } = await buildWorkspace();
+    const resolved = await realpath(root);
+    const resolvedDirectory = await realpath(directory);
+    await writeRecord(root, 'in-progress');
+
+    const output = await runStatus(root, directory);
+
+    expect(output.execution).toBeDefined();
+    expect(output.execution?.phase).toBe(1);
+    expect(output.execution?.awaiting_delivery).toEqual([]);
+    expect(output.execution?.blockers).toEqual([]);
+    expect(output.execution?.completed).toBe(false);
+    expect(output.execution?.pending_tasks).toHaveLength(1);
+    const pending = output.execution?.pending_tasks[0];
+    expect(pending?.task).toBe('task-001-workspace');
+    expect(pending?.repo).toBe('workspace');
+    expect([root, resolved]).toContain(pending?.repository_path ?? '');
+    expect([directory, resolvedDirectory]).toContain(pending?.plan_path ?? '');
+    // The advisory order and next_repository keep their existing meaning.
+    expect(output.order).toEqual(['workspace', 'app', 'lib']);
+    expect(output.next_repository).toBe('workspace');
+  }, TIMEOUT);
+
+  it('keeps the existing output shape without an execution key for a root-only workspace plan', async () => {
+    const { root, directory } = await buildWorkspace(rootOnlySpec());
+    await writeRecord(root, 'in-progress');
+
+    const output = await runStatus(root, directory);
+
+    expect(output.valid).toBe(true);
+    expect(Object.hasOwn(output, 'execution')).toBe(false);
+    expect(output.order).toEqual(['workspace']);
+    expect(output.repositories).toEqual([]);
+    expect(output.workspace_root_entry).toEqual({ name: 'workspace', path: '.', record: 'in-progress', tasks_delivered: false, delivery_commit: null });
   }, TIMEOUT);
 });

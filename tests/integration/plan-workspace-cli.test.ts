@@ -308,3 +308,239 @@ describe('plan validate for slice manifests', () => {
     expect(output).toContain('REQ-002');
   });
 });
+
+const FIN_REQ = 'REQ-100';
+const FIN_AC = 'AC-100';
+
+/** A valid child-participating workspace plan carrying the optional `workspace_finalization` declaration. */
+function finalizationSpec(overrides: Partial<WorkspacePlanFixtureSpec> = {}): WorkspacePlanFixtureSpec {
+  const base: WorkspacePlanFixtureSpec = {
+    planId: WORKSPACE_ID,
+    requirements: ['REQ-001', 'REQ-002', 'REQ-003', FIN_REQ],
+    acceptanceCriteria: ['AC-001', 'AC-002', 'AC-003', FIN_AC],
+    workspaceRepos,
+    tasks: [
+      { id: 'task-001-workspace', repo: 'workspace', requirements: ['REQ-001'], acceptanceCriteria: ['AC-001'], writeScope: ['src/workspace.ts'] },
+      { id: 'task-002-app', repo: 'app', requirements: ['REQ-002'], acceptanceCriteria: ['AC-002'], writeScope: ['src/app.ts'] },
+      { id: 'task-003-lib', repo: 'lib', requirements: ['REQ-003'], acceptanceCriteria: ['AC-003'], writeScope: ['src/lib.ts'] },
+    ],
+    phases: [['task-001-workspace'], ['task-002-app'], ['task-003-lib']],
+    workspaceFinalization: {
+      requirements: [FIN_REQ],
+      acceptanceCriteria: [FIN_AC],
+      readScope: [{ repo: 'app', paths: ['src/app.ts'] }],
+      writeScope: ['README.md'],
+      testCommands: ['pnpm test'],
+    },
+    manifest: {
+      planId: WORKSPACE_ID,
+      role: 'workspace',
+      repositories: [
+        { name: 'workspace', path: '.', dependsOn: [], requirements: ['REQ-001', FIN_REQ], acceptanceCriteria: ['AC-001', FIN_AC] },
+        { name: 'app', path: 'packages/app', dependsOn: [], requirements: ['REQ-002'], acceptanceCriteria: ['AC-002'] },
+        { name: 'lib', path: 'packages/lib', dependsOn: ['app'], requirements: ['REQ-003'], acceptanceCriteria: ['AC-003'] },
+      ],
+    },
+  };
+  return { ...base, ...overrides };
+}
+
+describe('plan validate for the workspace_finalization declaration', () => {
+  it('accepts a valid finalization declaration for a child-participating workspace plan', async () => {
+    const root = await temporary('ai-workflow-plan-finalization-ok-');
+    const directory = await workspacePlanFixture(root, finalizationSpec());
+
+    const result = await runCli(['plan', 'validate', '--plan', directory]);
+
+    expect(result.code, outputOf(result)).toBe(0);
+    expect((JSON.parse(result.stdout) as { valid: boolean }).valid).toBe(true);
+  });
+
+  it('rejects a finalization declaration with no participating non-root repository', async () => {
+    const root = await temporary('ai-workflow-plan-finalization-root-only-');
+    const spec = finalizationSpec({
+      workspaceRepos: [{ name: 'workspace', path: '.', dependsOn: [] }],
+      tasks: [{ id: 'task-001-workspace', repo: 'workspace', requirements: ['REQ-001'], acceptanceCriteria: ['AC-001'], writeScope: ['src/workspace.ts'] }],
+      phases: [['task-001-workspace']],
+      manifest: {
+        planId: WORKSPACE_ID,
+        role: 'workspace',
+        repositories: [{ name: 'workspace', path: '.', dependsOn: [], requirements: ['REQ-001', FIN_REQ], acceptanceCriteria: ['AC-001', FIN_AC] }],
+      },
+    });
+    const directory = await workspacePlanFixture(root, spec);
+
+    const result = await runCli(['plan', 'validate', '--plan', directory]);
+
+    expect(result.code).not.toBe(0);
+    expect(outputOf(result)).toMatch(/workspace_finalization|non-root/i);
+  });
+
+  it('rejects a finalization requirement that is not in the frozen plan', async () => {
+    const root = await temporary('ai-workflow-plan-finalization-unknown-');
+    const spec = finalizationSpec({
+      requirements: ['REQ-001', 'REQ-002', 'REQ-003'],
+      acceptanceCriteria: ['AC-001', 'AC-002', 'AC-003'],
+      workspaceFinalization: { requirements: ['REQ-999'], acceptanceCriteria: [FIN_AC], readScope: [{ repo: 'app', paths: ['src/app.ts'] }], writeScope: ['README.md'] },
+      manifest: {
+        planId: WORKSPACE_ID,
+        role: 'workspace',
+        repositories: [
+          { name: 'workspace', path: '.', dependsOn: [], requirements: ['REQ-001'], acceptanceCriteria: ['AC-001'] },
+          { name: 'app', path: 'packages/app', dependsOn: [], requirements: ['REQ-002'], acceptanceCriteria: ['AC-002'] },
+          { name: 'lib', path: 'packages/lib', dependsOn: ['app'], requirements: ['REQ-003'], acceptanceCriteria: ['AC-003'] },
+        ],
+      },
+    });
+    const directory = await workspacePlanFixture(root, spec);
+
+    const result = await runCli(['plan', 'validate', '--plan', directory]);
+
+    expect(result.code).not.toBe(0);
+    expect(outputOf(result)).toContain('REQ-999');
+  });
+
+  it('rejects a finalization acceptance criterion assigned to a task', async () => {
+    const root = await temporary('ai-workflow-plan-finalization-assigned-');
+    const spec = finalizationSpec({
+      requirements: ['REQ-001', 'REQ-002', 'REQ-003'],
+      acceptanceCriteria: ['AC-001', 'AC-002', 'AC-003', FIN_AC],
+      workspaceFinalization: {
+        requirements: [],
+        acceptanceCriteria: [FIN_AC],
+        readScope: [{ repo: 'app', paths: ['src/app.ts'] }],
+        writeScope: ['README.md'],
+      },
+      tasks: [
+        { id: 'task-001-workspace', repo: 'workspace', requirements: ['REQ-001'], acceptanceCriteria: ['AC-001', FIN_AC], writeScope: ['src/workspace.ts'] },
+        { id: 'task-002-app', repo: 'app', requirements: ['REQ-002'], acceptanceCriteria: ['AC-002'], writeScope: ['src/app.ts'] },
+        { id: 'task-003-lib', repo: 'lib', requirements: ['REQ-003'], acceptanceCriteria: ['AC-003'], writeScope: ['src/lib.ts'] },
+      ],
+      manifest: {
+        planId: WORKSPACE_ID,
+        role: 'workspace',
+        repositories: [
+          { name: 'workspace', path: '.', dependsOn: [], requirements: ['REQ-001'], acceptanceCriteria: ['AC-001', FIN_AC] },
+          { name: 'app', path: 'packages/app', dependsOn: [], requirements: ['REQ-002'], acceptanceCriteria: ['AC-002'] },
+          { name: 'lib', path: 'packages/lib', dependsOn: ['app'], requirements: ['REQ-003'], acceptanceCriteria: ['AC-003'] },
+        ],
+      },
+    });
+    const directory = await workspacePlanFixture(root, spec);
+
+    const result = await runCli(['plan', 'validate', '--plan', directory]);
+
+    expect(result.code).not.toBe(0);
+    expect(outputOf(result)).toContain(FIN_AC);
+  });
+
+  it('rejects incomplete coverage against the task and finalization union', async () => {
+    const root = await temporary('ai-workflow-plan-finalization-coverage-');
+    const spec = finalizationSpec({ requirements: ['REQ-001', 'REQ-002', 'REQ-003', FIN_REQ, 'REQ-004'], acceptanceCriteria: ['AC-001', 'AC-002', 'AC-003', FIN_AC] });
+    const directory = await workspacePlanFixture(root, spec);
+
+    const result = await runCli(['plan', 'validate', '--plan', directory]);
+
+    expect(result.code).not.toBe(0);
+    expect(outputOf(result)).toContain('REQ-004');
+  });
+
+  it('rejects a manifest root subset that omits the finalization coverage', async () => {
+    const root = await temporary('ai-workflow-plan-finalization-root-subset-');
+    const spec = finalizationSpec({
+      manifest: {
+        planId: WORKSPACE_ID,
+        role: 'workspace',
+        repositories: [
+          { name: 'workspace', path: '.', dependsOn: [], requirements: ['REQ-001'], acceptanceCriteria: ['AC-001'] },
+          { name: 'app', path: 'packages/app', dependsOn: [], requirements: ['REQ-002'], acceptanceCriteria: ['AC-002'] },
+          { name: 'lib', path: 'packages/lib', dependsOn: ['app'], requirements: ['REQ-003'], acceptanceCriteria: ['AC-003'] },
+        ],
+      },
+    });
+    const directory = await workspacePlanFixture(root, spec);
+
+    const result = await runCli(['plan', 'validate', '--plan', directory]);
+
+    expect(result.code).not.toBe(0);
+    expect(outputOf(result)).toContain(FIN_REQ);
+  });
+
+  it('rejects a slice manifest that carries finalization criteria', async () => {
+    const root = await temporary('ai-workflow-plan-finalization-slice-');
+    const spec: WorkspacePlanFixtureSpec = {
+      planId: SLICE_ID,
+      requirements: ['REQ-001', 'REQ-002', FIN_REQ],
+      acceptanceCriteria: ['AC-001', 'AC-002', FIN_AC],
+      workspaceRepos: [
+        { name: 'workspace', path: '.', dependsOn: [] },
+        { name: 'app', path: 'packages/app', dependsOn: [] },
+      ],
+      tasks: [{ id: 'task-001-app', repo: 'app', requirements: ['REQ-002'], acceptanceCriteria: ['AC-002'], writeScope: ['src/app.ts'] }],
+      phases: [['task-001-app']],
+      workspaceFinalization: { requirements: [FIN_REQ], acceptanceCriteria: [FIN_AC], readScope: [{ repo: 'app', paths: ['src/app.ts'] }], writeScope: ['README.md'] },
+      manifest: {
+        planId: SLICE_ID,
+        role: 'slice',
+        repositories: [{ name: 'app', path: 'packages/app', dependsOn: [], requirements: ['REQ-002', FIN_REQ], acceptanceCriteria: ['AC-002', FIN_AC] }],
+      },
+    };
+    const directory = await workspacePlanFixture(root, spec);
+
+    const result = await runCli(['plan', 'validate', '--plan', directory]);
+
+    expect(result.code).not.toBe(0);
+    expect(outputOf(result)).toMatch(/finalization/i);
+  });
+
+  it('rejects a malformed finalization read_scope entry', async () => {
+    const root = await temporary('ai-workflow-plan-finalization-scope-');
+    const spec = finalizationSpec({
+      workspaceFinalizationRaw: { requirements: [FIN_REQ], acceptance_criteria: [FIN_AC], read_scope: 'not-a-list', write_scope: ['README.md'], test_commands: [] },
+    });
+    const directory = await workspacePlanFixture(root, spec);
+
+    const result = await runCli(['plan', 'validate', '--plan', directory]);
+
+    expect(result.code).not.toBe(0);
+    expect(outputOf(result)).toMatch(/read_scope|finalization/i);
+  });
+
+  it('rejects a participating child repository that owns zero tasks', async () => {
+    const root = await temporary('ai-workflow-plan-finalization-zero-tasks-');
+    const spec = finalizationSpec({
+      tasks: [
+        { id: 'task-001-workspace', repo: 'workspace', requirements: ['REQ-001'], acceptanceCriteria: ['AC-001'], writeScope: ['src/workspace.ts'] },
+        { id: 'task-002-app', repo: 'app', requirements: ['REQ-002'], acceptanceCriteria: ['AC-002'], writeScope: ['src/app.ts'] },
+      ],
+      phases: [['task-001-workspace'], ['task-002-app']],
+      manifest: {
+        planId: WORKSPACE_ID,
+        role: 'workspace',
+        repositories: [
+          { name: 'workspace', path: '.', dependsOn: [], requirements: ['REQ-001', FIN_REQ], acceptanceCriteria: ['AC-001', FIN_AC] },
+          { name: 'app', path: 'packages/app', dependsOn: [], requirements: ['REQ-002'], acceptanceCriteria: ['AC-002'] },
+          { name: 'lib', path: 'packages/lib', dependsOn: ['app'], requirements: [], acceptanceCriteria: [] },
+        ],
+      },
+    });
+    const directory = await workspacePlanFixture(root, spec);
+
+    const result = await runCli(['plan', 'validate', '--plan', directory]);
+
+    expect(result.code).not.toBe(0);
+    expect(outputOf(result)).toContain('lib');
+  });
+
+  it('keeps the exact output shape for a workspace plan without a finalization declaration', async () => {
+    const root = await temporary('ai-workflow-plan-no-finalization-');
+    const directory = await workspacePlanFixture(root, validWorkspaceSpec());
+
+    const result = await runCli(['plan', 'validate', '--plan', directory]);
+
+    expect(result.code, outputOf(result)).toBe(0);
+    const parsed = JSON.parse(result.stdout) as Record<string, unknown>;
+    expect(Object.keys(parsed).sort()).toEqual(['digests', 'execution_order', 'plan_id', 'repos', 'valid']);
+    expect(JSON.stringify(parsed)).not.toContain('workspace_finalization');
+  });
+});

@@ -6,7 +6,7 @@ import { frozenDocumentDigest, frozenPlanDigest } from './digest.js';
 import { enumeratePlanDocuments, validatePlanPair, type PlanDocumentAnchor } from './pairing.js';
 import { normalizeProjectPaths } from './read-scope.js';
 import { readWorkspaceManifest } from './workspace.js';
-import type { PlanDocument, TaskDocument, WorkspaceRepo } from './types.js';
+import type { PlanDocument, TaskDocument, WorkspaceFinalization, WorkspaceFinalizationReadScope, WorkspaceRepo } from './types.js';
 
 function listStrings(value: unknown): string[] { return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []; }
 function stringValue(value: unknown, fallback = ''): string { return typeof value === 'string' ? value : fallback; }
@@ -52,6 +52,42 @@ function parseWorkspaceRepos(value: unknown): WorkspaceRepo[] | undefined {
   return repos;
 }
 
+/**
+ * Parse the optional `workspace_finalization` frontmatter declaration. It is valid only for a
+ * child-participating workspace plan; every read/write scope must be a non-escaping project path.
+ */
+function parseWorkspaceFinalization(value: unknown, repos: WorkspaceRepo[] | undefined): WorkspaceFinalization | undefined {
+  if (value === undefined) return undefined;
+  if (repos === undefined || repos.every((repo) => repo.name === 'workspace')) throw new Error('workspace_finalization requires at least one participating non-root repository');
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) throw new Error('Invalid workspace_finalization: expected an object');
+  const record = value as Record<string, unknown>;
+  if (!Array.isArray(record.requirements) || record.requirements.some((item) => typeof item !== 'string')) throw new Error('Invalid workspace_finalization requirements: expected a list of strings');
+  if (!Array.isArray(record.acceptance_criteria) || record.acceptance_criteria.some((item) => typeof item !== 'string')) throw new Error('Invalid workspace_finalization acceptance_criteria: expected a list of strings');
+  if (!Array.isArray(record.read_scope)) throw new Error('Invalid workspace_finalization read_scope: expected a list of repository-qualified entries');
+  const declaredNames = new Set(repos.map((repo) => repo.name));
+  const readScope: WorkspaceFinalizationReadScope[] = record.read_scope.map((raw) => {
+    if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('Invalid workspace_finalization read_scope entry: expected { repo, paths }');
+    const entry = raw as Record<string, unknown>;
+    if (typeof entry.repo !== 'string' || entry.repo.length === 0) throw new Error('Invalid workspace_finalization read_scope entry: missing repo');
+    if (!declaredNames.has(entry.repo)) throw new Error(`workspace_finalization read_scope references unknown repository: ${entry.repo}`);
+    if (!Array.isArray(entry.paths) || entry.paths.some((path) => typeof path !== 'string')) throw new Error('Invalid workspace_finalization read_scope paths: expected a list of strings');
+    const normalized = normalizeProjectPaths(entry.paths as string[]);
+    if (normalized.errors.length) throw new Error(`Invalid workspace_finalization read_scope path: ${normalized.errors.join('; ')}`);
+    return { repo: entry.repo, paths: normalized.paths };
+  });
+  if (!Array.isArray(record.write_scope) || record.write_scope.some((path) => typeof path !== 'string')) throw new Error('Invalid workspace_finalization write_scope: expected a list of strings');
+  const writeScope = normalizeProjectPaths(record.write_scope as string[]);
+  if (writeScope.errors.length) throw new Error(`Invalid workspace_finalization write_scope path: ${writeScope.errors.join('; ')}`);
+  if (record.test_commands !== undefined && (!Array.isArray(record.test_commands) || record.test_commands.some((command) => typeof command !== 'string'))) throw new Error('Invalid workspace_finalization test_commands: expected a list of strings');
+  return {
+    requirements: record.requirements as string[],
+    acceptanceCriteria: record.acceptance_criteria as string[],
+    readScope,
+    writeScope: writeScope.paths,
+    testCommands: record.test_commands === undefined ? [] : record.test_commands as string[],
+  };
+}
+
 export async function readPlan(directory: string): Promise<PlanDocument> {
   const [spec, plan] = await Promise.all([readFile(join(directory, 'spec.md'), 'utf8'), readFile(join(directory, 'plan.md'), 'utf8')]);
   const specDoc = parseMarkdown(spec); const planDoc = parseMarkdown(plan);
@@ -70,8 +106,10 @@ export async function readPlan(directory: string): Promise<PlanDocument> {
   await validatePlanPair(planAnchor(directory, 'plan.md'), pairErrors);
   if (pairErrors.length) throw new Error(pairErrors.join('\n'));
   const workspaceRepos = parseWorkspaceRepos(planDoc.attributes.workspace_repos);
+  const workspaceFinalization = parseWorkspaceFinalization(planDoc.attributes.workspace_finalization, workspaceRepos);
   const document: PlanDocument = { planId, status: 'frozen', requirements, acceptanceCriteria, specDigest, planDigest, digest: frozenPlanDigest(spec, plan), directory };
   if (workspaceRepos) document.workspaceRepos = workspaceRepos;
+  if (workspaceFinalization) document.workspaceFinalization = workspaceFinalization;
   return document;
 }
 
