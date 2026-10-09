@@ -3349,6 +3349,257 @@
         "tests/unit/project-template-source.test.ts"
       ],
       "shared_entry": false
+    },
+    {
+      "id": "workspace-coding-orchestration",
+      "name": "workspace-coding-orchestration",
+      "aliases": [
+        "workspace coding orchestration"
+      ],
+      "module_root": "root",
+      "entries": [
+        "src/workspace/execution.ts",
+        "src/workspace/record.ts",
+        "tests/unit/workspace-execution.test.ts",
+        "tests/integration/workspace-checkpoint-cli.test.ts",
+        "tests/integration/workspace-coding-git.test.ts",
+        "tests/integration/workspace-single-repo-compatibility.test.ts"
+      ],
+      "symbols": [
+        {
+          "file": "src/workspace/execution.ts",
+          "name": "ExecutionPendingTask",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workspace/execution.ts",
+          "name": "ExecutionProjection",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workspace/execution.ts",
+          "name": "CheckpointSuccess",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workspace/execution.ts",
+          "name": "CheckpointRefusal",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workspace/execution.ts",
+          "name": "CheckpointResult",
+          "kind": "type",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workspace/execution.ts",
+          "name": "projectWorkspaceExecution",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workspace/execution.ts",
+          "name": "checkpointWorkspace",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workspace/record.ts",
+          "name": "RESERVED_ROOT",
+          "kind": "variable",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workspace/record.ts",
+          "name": "isFullSha",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workspace/record.ts",
+          "name": "ExecutionAnchor",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workspace/record.ts",
+          "name": "TaskCheckpoint",
+          "kind": "type",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workspace/record.ts",
+          "name": "WorkspaceExecutionRecord",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workspace/record.ts",
+          "name": "parseWorkspaceRecord",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workspace/record.ts",
+          "name": "readWorkspaceRecord",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workspace/record.ts",
+          "name": "renderWorkspaceRecord",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workspace/record.ts",
+          "name": "writeWorkspaceRecord",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workspace/record.ts",
+          "name": "implementationRecordPath",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workspace/record.ts",
+          "name": "nowCst",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workspace/git.ts",
+          "name": "CommitChange",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workspace/git.ts",
+          "name": "TreeEntry",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workspace/git.ts",
+          "name": "gitCommonDirectory",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workspace/git.ts",
+          "name": "commitExists",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workspace/git.ts",
+          "name": "commitParents",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workspace/git.ts",
+          "name": "commitChanges",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workspace/git.ts",
+          "name": "scopeViolations",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workspace/git.ts",
+          "name": "treeEntries",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workspace/git.ts",
+          "name": "verifyDeliveryCommits",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workflow/types.ts",
+          "name": "WorkspaceFinalizationReadScope",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workflow/types.ts",
+          "name": "WorkspaceFinalization",
+          "kind": "interface",
+          "visibility": "public"
+        }
+      ],
+      "related_files": [
+        "src/cli.ts",
+        "src/workspace/git.ts",
+        "src/workflow/types.ts",
+        "src/workflow/workspace.ts",
+        "templates/skills/coding/SKILL.md",
+        "templates/skills/coding/references/workspace.md",
+        "templates/project/MEMORY.md",
+        "README.md",
+        "MEMORY.md",
+        ".ai-workflow/notes/implemented/feature/2026-10-09-workspace-coding-orchestration.md",
+        ".ai-workflow/notes/implemented/architecture/2026-09-30-submodule-workspace.md",
+        ".ai-workflow/notes/implemented/process/2026-09-23-planning-coding-session-boundary.md",
+        ".ai-workflow/notes/implemented/process/2026-10-02-workspace-distribute-handoff.md",
+        ".ai-workflow/notes/implemented/bug-fix/2026-10-08-workspace-session-handoff.md",
+        ".ai-workflow/notes/implemented/bug-fix/2026-10-08-workspace-execution-consistency.md"
+      ],
+      "tests": [
+        "tests/behavior/change-routing.test.ts",
+        "tests/behavior/workspace-planning-content.test.ts",
+        "tests/behavior/workspace-workflow-content.test.ts",
+        "tests/integration/plan-workspace-cli.test.ts",
+        "tests/integration/workspace-finalization-git.test.ts",
+        "tests/integration/workspace-status-cli.test.ts"
+      ],
+      "depends_on": [],
+      "relations": [],
+      "owner_role": "shared",
+      "responsibility": "Delivered parent workspace coding orchestration: exact .gitmodules-matched child-plan activation, one primary session with an approved plan-to-tasks preparation that returns control, one run-owned worktree per active repository, the original parent phases with delivery barriers, the filesystem-only workspace checkpoint single-record protocol, per-repository delivery review versus a separate finalization review, bounded recovery and unchanged ordinary/root-only routes, with the three-host native smoke an outstanding reported gap",
+      "read_scope": [
+        "src/workspace/execution.ts",
+        "src/workspace/record.ts",
+        "tests/unit/workspace-execution.test.ts",
+        "tests/integration/workspace-checkpoint-cli.test.ts",
+        "tests/integration/workspace-coding-git.test.ts",
+        "tests/integration/workspace-single-repo-compatibility.test.ts",
+        "src/cli.ts",
+        "src/workspace/git.ts",
+        "src/workflow/types.ts",
+        "src/workflow/workspace.ts",
+        "templates/skills/coding/SKILL.md",
+        "templates/skills/coding/references/workspace.md",
+        "templates/project/MEMORY.md",
+        "README.md",
+        "MEMORY.md",
+        ".ai-workflow/notes/implemented/feature/2026-10-09-workspace-coding-orchestration.md",
+        ".ai-workflow/notes/implemented/architecture/2026-09-30-submodule-workspace.md",
+        ".ai-workflow/notes/implemented/process/2026-09-23-planning-coding-session-boundary.md",
+        ".ai-workflow/notes/implemented/process/2026-10-02-workspace-distribute-handoff.md",
+        ".ai-workflow/notes/implemented/bug-fix/2026-10-08-workspace-session-handoff.md",
+        ".ai-workflow/notes/implemented/bug-fix/2026-10-08-workspace-execution-consistency.md",
+        "tests/behavior/change-routing.test.ts",
+        "tests/behavior/workspace-planning-content.test.ts",
+        "tests/behavior/workspace-workflow-content.test.ts",
+        "tests/integration/plan-workspace-cli.test.ts",
+        "tests/integration/workspace-finalization-git.test.ts",
+        "tests/integration/workspace-status-cli.test.ts"
+      ],
+      "shared_entry": false
     }
   ]
 }

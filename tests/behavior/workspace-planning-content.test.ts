@@ -301,7 +301,7 @@ describe('plan-to-tasks execution-order reference orders repositories (REQ-004 /
 });
 
 describe('planning owns the workspace split handoff and exempts a root-only plan (REQ-004 / AC-007)', () => {
-  it('requires splitting a cross-repository workspace plan before implementation and keeps distribution in the split session', async () => {
+  it('requires splitting a cross-repository workspace plan before implementation and never hands distribution to a separate split session', async () => {
     const text = await readShipped(PLANNING_SKILL);
     expect(text, 'the planning skill is shipped').not.toBeNull();
     const workspace = section(text ?? '', '## Workspace planning');
@@ -313,11 +313,14 @@ describe('planning owns the workspace split handoff and exempts a root-only plan
         'at least one non-root participating repository',
         'plan-to-tasks',
         'before implementation',
-        'split session owns distribution',
         'never distributes or writes a slice'
       ],
       'the planning workspace split handoff'
     );
+    expect(
+      flatten(workspace),
+      'Planning no longer hands distribution to a separate split session',
+    ).not.toContain('split session owns distribution');
   });
 
   it('exempts a workspace plan that declares only the reserved workspace root entry', async () => {
@@ -332,26 +335,35 @@ describe('planning owns the workspace split handoff and exempts a root-only plan
   });
 });
 
-describe('planning completion routes a workspace plan to plan-to-tasks and a root-only plan to coding (REQ-004 / AC-007)', () => {
-  it('ends a cross-repository workspace plan with a new session at the workspace root that runs plan-to-tasks and distributes before coding', async () => {
+describe('planning completion routes a workspace plan to a parent Coding session and a root-only plan to coding (REQ-004 / AC-007)', () => {
+  it('ends a cross-repository workspace plan with a new session at the workspace root that invokes coding to run the approved preparation', async () => {
     const text = await readShipped(PLANNING_SKILL);
     expect(text, 'the planning skill is shipped').not.toBeNull();
     const completion = section(text ?? '', '## Completion checklist');
     expect(completion, 'the Completion checklist section exists').not.toBe('');
+    const flat = flatten(completion);
 
     expectFragments(
-      flatten(completion),
+      flat,
       [
         'at least one non-root participating repository',
         'new session',
         '<workspace-root>',
-        'plan-to-tasks',
+        'invoke the coding skill',
         'frozen plan directory',
+        'approved preparation',
         'ai-workflow workspace distribute --plan <directory>',
-        'do not invoke coding'
+        'name',
+        'path',
+        'depends_on'
       ],
       'the workspace planning completion handoff'
     );
+    expect(flat, 'the superseded do-not-invoke-coding instruction is removed').not.toMatch(/do not invoke coding/i);
+    expect(
+      flat,
+      'Planning no longer routes the new session to plan-to-tasks as its skill',
+    ).not.toMatch(/invoke plan-to-tasks with the absolute frozen plan directory/i);
   });
 
   it('preserves the root-only or ordinary route to a coding session', async () => {
@@ -362,6 +374,32 @@ describe('planning completion routes a workspace plan to plan-to-tasks and a roo
       flatten(completion),
       ['root-only', 'invoke the coding skill'],
       'the root-only planning completion handoff'
+    );
+  });
+});
+
+describe('planning plan reference documents workspace_finalization as separate coverage (REQ-007 / AC-009)', () => {
+  it('declares root-owned frozen finalization coverage disjoint from the task DAG', async () => {
+    const text = await readShipped(PLANNING_PLAN_REFERENCE);
+    expect(text, 'the planning plan reference is shipped').not.toBeNull();
+    const reference = flatten(text ?? '');
+
+    expectFragments(
+      reference,
+      [
+        'workspace_finalization',
+        'requirements',
+        'acceptance_criteria',
+        'read_scope',
+        'write_scope',
+        'test_commands',
+        'disjoint',
+        'never becomes a task',
+        'never joins the execution order',
+        'not sliced',
+        'union'
+      ],
+      'the workspace finalization coverage'
     );
   });
 });

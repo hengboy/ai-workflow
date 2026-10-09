@@ -6,6 +6,8 @@ const CODING_SKILL = ['templates', 'skills', 'coding', 'SKILL.md'];
 const PLAN_TO_TASKS_SKILL = ['templates', 'skills', 'plan-to-tasks', 'SKILL.md'];
 const GIT_OPERATOR = ['templates', 'agents', 'git-operator.md'];
 const PROJECT_CONTRACT = ['templates', 'project', 'AGENTS.md'];
+const TASK_REFERENCE = ['templates', 'skills', 'plan-to-tasks', 'references', 'task.md'];
+const EXECUTION_ORDER_REFERENCE = ['templates', 'skills', 'plan-to-tasks', 'references', 'execution-order.md'];
 
 /** Read a shipped template without importing it, so a missing file is an assertion, not a crash. */
 async function readShipped(parts: string[]): Promise<string | null> {
@@ -121,15 +123,19 @@ describe('workspace finalization pins delivery commits through Git Operator (REQ
     );
   });
 
-  it('tells the user to check ready_for_finalization and start a new root session for finalization', async () => {
+  it('reports finalization readiness and finalizes in the already-running parent session without reopening it', async () => {
     const finalization = section((await readShipped(CODING_SKILL)) ?? '', '## Workspace finalization');
     expect(finalization, 'the Workspace finalization section exists').not.toBe('');
 
     expectFragments(
       flatten(finalization),
-      ['ready_for_finalization', 'ai-workflow workspace status --plan <directory>', 'new root session'],
+      ['ready_for_finalization', 'ai-workflow workspace status --plan <directory>', 'already'],
       'the workspace finalization readiness handoff'
     );
+    expect(
+      flatten(finalization),
+      'the already-running parent session performs finalization rather than reopening itself',
+    ).toMatch(/already[- ]running[^.]{0,80}(?:parent|root)[^.]{0,80}(?:session|finalization)|does not emit an instruction to reopen itself/i);
 
     const prompts = textFences(finalization);
     expect(prompts.length, 'the Workspace finalization ships at least one ```text example').toBeGreaterThan(0);
@@ -434,5 +440,288 @@ describe('plan-to-tasks reports the next repository including root-owned tasks',
     expect(flat, 'the Workspace split names next_repository').toMatch(/next_repository/i);
     expect(flat, 'the reported next repository includes root-owned tasks').toMatch(/root-owned/i);
     expect(flat, 'the next repository must not stay a child-only advisory').not.toMatch(/child-only/i);
+  });
+});
+
+describe('plan-to-tasks supports a preparation invocation that returns to the parent Coding session (REQ-001 / AC-001)', () => {
+  it('distinguishes a standalone handoff from the parent-invoked preparation procedure', async () => {
+    const text = await readShipped(PLAN_TO_TASKS_SKILL);
+    expect(text, 'the plan-to-tasks skill is shipped').not.toBeNull();
+    const skill = flatten(text ?? '');
+
+    expectFragments(
+      skill,
+      [
+        'preparation procedure',
+        'parent Coding session',
+        'returns control',
+        'standalone',
+        'ai-workflow workspace distribute --plan <directory>'
+      ],
+      'the dual invocation semantics'
+    );
+    expect(skill, 'the preparation returns control to the same parent Coding session').toMatch(
+      /same parent Coding session/i,
+    );
+    expect(skill, 'the preparation shows the existing approval preview').toMatch(/approval preview/i);
+  });
+
+  it('declining the approval creates no tasks, slices, worktrees or implementation records', async () => {
+    const skill = flatten((await readShipped(PLAN_TO_TASKS_SKILL)) ?? '');
+
+    expectFragments(
+      skill,
+      ['declin', 'tasks', 'slices', 'worktrees', 'implementation record'],
+      'the declined-approval refusal'
+    );
+    expect(skill, 'managed synchronization changes are reported separately').toMatch(
+      /managed[\s-]*(?:sync|synchroni[sz]ation)[^.]{0,80}separat/i,
+    );
+  });
+
+  it('reuses valid existing split artifacts and refuses partial or divergent ones without regeneration', async () => {
+    const skill = flatten((await readShipped(PLAN_TO_TASKS_SKILL)) ?? '');
+
+    expectFragments(
+      skill,
+      ['byte-unchanged', 'partial', 'divergent', 'repair request', 'regenerat'],
+      'the artifact reuse and refusal'
+    );
+  });
+});
+
+describe('finalization coverage stays out of the task DAG (REQ-007 / AC-009)', () => {
+  it('states in the task reference that finalization ACs never become tasks', async () => {
+    const text = await readShipped(TASK_REFERENCE);
+    expect(text, 'the task reference is shipped').not.toBeNull();
+    const reference = flatten(text ?? '');
+
+    expectFragments(reference, ['finalization', 'never become', 'finalization-only'], 'the task reference finalization rule');
+  });
+
+  it('states in the execution-order reference that the schedule stays task-only', async () => {
+    const text = await readShipped(EXECUTION_ORDER_REFERENCE);
+    expect(text, 'the execution-order reference is shipped').not.toBeNull();
+    const reference = flatten(text ?? '');
+
+    expectFragments(reference, ['task-only', 'finalization'], 'the task-only schedule');
+  });
+});
+
+describe('coding defines the approved preparation returned by plan-to-tasks (REQ-001 / AC-001)', () => {
+  it('defines the approved preparation that returns control without starting another session', async () => {
+    const text = await readShipped(CODING_SKILL);
+    expect(text, 'the coding skill is shipped').not.toBeNull();
+    const parent = section(text ?? '', '## Parent workspace execution');
+    expect(parent, 'the Parent workspace execution section exists').not.toBe('');
+    const flat = flatten(parent);
+
+    expectFragments(
+      flat,
+      [
+        'approved preparation',
+        'plan-to-tasks',
+        'preparation procedure',
+        'returns control',
+        'approval',
+        'ai-workflow workspace distribute --plan <directory>',
+        'no child host process',
+        'no sibling session'
+      ],
+      'the approved preparation definition'
+    );
+    expect(flat, 'the parent route keeps the original global schedule').toMatch(/global (?:task )?schedule/i);
+  });
+
+  it('reuses valid split artifacts, refuses divergent ones and keeps distribution before implementation', async () => {
+    const parent = flatten(section((await readShipped(CODING_SKILL)) ?? '', '## Parent workspace execution'));
+    expect(parent, 'the Parent workspace execution section exists').not.toBe('');
+
+    expectFragments(
+      parent,
+      ['reuse', 'declin', 'no tasks', 'repair request', 'implementation state'],
+      'the parent preparation refusal boundary'
+    );
+    expect(parent, 'the parent route drops the manual child-session permission handoff').toMatch(
+      /(?:no|not|never|without)[^.]{0,60}?manual[^.]{0,40}?child[- ]?session/i,
+    );
+  });
+});
+
+const WORKSPACE_REFERENCE = ['templates', 'skills', 'coding', 'references', 'workspace.md'];
+const ROLE_TEMPLATES = [
+  'backend',
+  'frontend',
+  'test',
+  'file-explorer',
+  'documentation-maintainer',
+  'spec-review',
+  'standards-review',
+  'researcher',
+  'git-operator',
+] as const;
+const CONTRACTS: string[][] = [
+  ['templates', 'project', 'AGENTS.md'],
+  ['.ai-workflow', 'AGENTS.md'],
+];
+
+describe('the parent workspace reference carries the detailed procedure (REQ-001..REQ-008)', () => {
+  it('ships the linked reference file', async () => {
+    const text = await readShipped(WORKSPACE_REFERENCE);
+    expect(text, 'templates/skills/coding/references/workspace.md is shipped').not.toBeNull();
+    expect((text ?? '').length).toBeGreaterThan(0);
+  });
+
+  it('covers activation and preflight plus phase dispatch and delivery barriers', async () => {
+    const reference = flatten((await readShipped(WORKSPACE_REFERENCE)) ?? '');
+    expectFragments(reference, ['.gitmodules', 'activation', 'preflight', 'phase', 'delivery barrier'], 'the reference activation and phase dispatch');
+    expect(reference, 'a whole phase is awaited and verified').toMatch(/whole phase[^.]{0,80}(?:await|verif)|(?:await|verif)[^.]{0,80}whole phase/i);
+  });
+
+  it('covers repository worktrees, commits and the packet contract', async () => {
+    const reference = flatten((await readShipped(WORKSPACE_REFERENCE)) ?? '');
+    expectFragments(
+      reference,
+      ['<source-root>/.worktrees/<planId>', 'ai-workflow/<planId>', 'packet', 'workdir', 'absolute path'],
+      'the reference worktree and packet contract'
+    );
+    expect(reference, 'task commits are checked for exact parentage').toMatch(/parentage/i);
+    expect(reference, 'rename endpoints are part of the commit scope').toMatch(/rename/i);
+  });
+
+  it('covers per-repository delivery review, a separate finalization review and checkpoint/recovery rules', async () => {
+    const reference = flatten((await readShipped(WORKSPACE_REFERENCE)) ?? '');
+    expectFragments(
+      reference,
+      ['per-repository delivery review', 'finalization review', 'checkpoint', 'recovery', 'clean, fully checkpointed phase boundary'],
+      'the reference review and recovery rules'
+    );
+    expect(reference, 'residue stops with bounded support').toMatch(/bounded support/i);
+  });
+
+  it('states same-parent finalization after all children are delivered', async () => {
+    const reference = flatten((await readShipped(WORKSPACE_REFERENCE)) ?? '');
+    expect(reference, 'the parent session finalizes itself').toMatch(/same[- ]parent/i);
+    expect(reference, 'finalization follows every child delivery').toMatch(/all children (?:are )?delivered|after (?:all )?children delivery/i);
+  });
+
+  it('states the non-goals: no nested coordinator, no remote sessions and no child-in-root fallback', async () => {
+    const reference = flatten((await readShipped(WORKSPACE_REFERENCE)) ?? '');
+    expectFragments(reference, ['no nested coordinator', 'no remote sessions'], 'the reference non-goals');
+    expect(reference, 'child tasks never fall back into the root').toMatch(/no fallback[^.]{0,90}root|fallback[^.]{0,60}child tasks[^.]{0,40}root/i);
+  });
+
+  it('documents the approved preparation procedure and the standalone-versus-preparation semantics', async () => {
+    const reference = flatten((await readShipped(WORKSPACE_REFERENCE)) ?? '');
+    expectFragments(
+      reference,
+      [
+        'approved preparation',
+        'plan-to-tasks',
+        'preparation procedure',
+        'approval',
+        'ai-workflow workspace distribute --plan <directory>',
+        'returns control'
+      ],
+      'the reference preparation procedure'
+    );
+  });
+
+  it('requires reuse of valid split artifacts and refuses partial or divergent ones', async () => {
+    const reference = flatten((await readShipped(WORKSPACE_REFERENCE)) ?? '');
+    expectFragments(
+      reference,
+      ['reuse', 'byte-unchanged', 'partial', 'divergent', 'repair request'],
+      'the reference artifact reuse and refusal'
+    );
+  });
+});
+
+describe('the nine role templates handle packets without imposing workspace-only fields (REQ-004)', () => {
+  it('states exact absolute paths and an explicit per-command workdir', async () => {
+    for (const role of ROLE_TEMPLATES) {
+      const template = flatten((await readShipped(['templates', 'agents', `${role}.md`])) ?? '');
+      expect(template, `${role} is shipped`).not.toBe('');
+      expect(template, `${role} states exact absolute paths`).toMatch(/absolute path/i);
+      expect(template, `${role} states a per-command workdir`).toMatch(/workdir|working directory/i);
+    }
+  });
+
+  it('explicitly reads the child repository contract, MEMORY and navigation inside a child repository', async () => {
+    for (const role of ROLE_TEMPLATES) {
+      const template = flatten((await readShipped(['templates', 'agents', `${role}.md`])) ?? '');
+      expect(template, `${role} reads the child project contract`).toContain('.ai-workflow/AGENTS.md');
+      expect(template, `${role} reads the child MEMORY`).toContain('MEMORY');
+      expect(template, `${role} reads the child navigation`).toContain('navigation');
+      expect(template, `${role} names a child repository`).toMatch(/child repository/i);
+    }
+  });
+
+  it('keeps unchanged leaf permissions and prohibits nested dispatch', async () => {
+    for (const role of ROLE_TEMPLATES) {
+      const template = flatten((await readShipped(['templates', 'agents', `${role}.md`])) ?? '');
+      expect(template, `${role} prohibits nested dispatch`).toMatch(/no nested dispatch|nested dispatch|never dispatch|does not dispatch/i);
+    }
+  });
+});
+
+describe('both contracts state the workspace execution boundary (REQ-009)', () => {
+  it('activates the route only for a child-participating frozen plan matched to .gitmodules', async () => {
+    for (const parts of CONTRACTS) {
+      const text = flatten((await readShipped(parts)) ?? '');
+      expect(text, `${parts.join('/')} is shipped`).not.toBe('');
+      expect(text, `${parts.join('/')} names .gitmodules`).toContain('.gitmodules');
+      expect(text, `${parts.join('/')} requires a frozen plan`).toMatch(/frozen plan/i);
+      expect(text, `${parts.join('/')} requires a non-root participant`).toMatch(/at least one (?:participating )?non-root/i);
+    }
+  });
+
+  it('states parent-only native orchestration, one run-owned worktree per repository and Git Operator exclusivity', async () => {
+    for (const parts of CONTRACTS) {
+      const text = flatten((await readShipped(parts)) ?? '');
+      expect(text, `${parts.join('/')} keeps orchestration in the parent`).toMatch(/native orchestration|primary parent|parent-only/i);
+      expect(text, `${parts.join('/')} owns one worktree per repository`).toMatch(/one run-owned worktree per (?:active )?repository|run-owned worktree per repository/i);
+      expect(text, `${parts.join('/')} names Git Operator`).toMatch(/Git Operator/i);
+      expect(text, `${parts.join('/')} keeps Git Operator exclusive`).toMatch(/only role allowed to run Git|Git operations? (?:are allowed )?only through Git Operator|all Git/i);
+    }
+  });
+
+  it('states the single checkpoint CLI record rule and the separated delivery and finalization reviews', async () => {
+    for (const parts of CONTRACTS) {
+      const text = flatten((await readShipped(parts)) ?? '');
+      expect(text, `${parts.join('/')} names the checkpoint command`).toContain('ai-workflow workspace checkpoint --plan <directory> --repo <name>');
+      expect(text, `${parts.join('/')} names the single record`).toContain('implementation.yaml');
+      expect(text, `${parts.join('/')} scopes the delivery review`).toMatch(/per-repository delivery review|repository delivery review/i);
+      expect(text, `${parts.join('/')} scopes finalization separately`).toMatch(/separate finalization review|finalization review/i);
+    }
+  });
+
+  it('states bounded recovery and keeps ordinary and root-only behavior unchanged', async () => {
+    for (const parts of CONTRACTS) {
+      const text = flatten((await readShipped(parts)) ?? '');
+      expect(text, `${parts.join('/')} bounds recovery`).toMatch(/bounded (?:support|recovery)/i);
+      expect(text, `${parts.join('/')} preserves the ordinary route`).toMatch(/ordinary|root-only/i);
+    }
+  });
+});
+
+describe('the Git Operator owns the repository worktree and delivery lifecycle (REQ-005, REQ-008)', () => {
+  it('documents per-repository worktree identity, scoped commits and non-fast-forward delivery', async () => {
+    const operator = flatten((await readShipped(GIT_OPERATOR)) ?? '');
+    expect(operator, 'the common-directory identity check is documented').toContain('--git-common-dir');
+    expect(operator, 'the per-repository worktree path is documented').toContain('<source-root>/.worktrees/<planId>');
+    expect(operator, 'the per-repository branch is documented').toContain('ai-workflow/<planId>');
+    expect(operator, 'task commits are checked for exact parentage').toMatch(/parentage/i);
+    expect(operator, 'both rename endpoints are checked').toMatch(/rename/i);
+    expect(operator, 'delivery integration is non-fast-forward').toMatch(/non-fast-forward/i);
+    expect(operator, 'cleanup is owned').toMatch(/owned cleanup|run-owned/i);
+  });
+
+  it('documents finalization batch preverification and exact final-tree pointer updates', async () => {
+    const operator = flatten((await readShipped(GIT_OPERATOR)) ?? '');
+    expect(operator).toMatch(/entire authorized batch/i);
+    expect(operator).toMatch(/before any index mutation/i);
+    expect(operator).toContain('git update-index --cacheinfo 160000,<sha>,<path>');
+    expect(operator, 'the pointer update names the exact final tree').toMatch(/final[- ]tree/i);
   });
 });

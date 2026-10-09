@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 # ai-workflow notes pairing --project <project-root> --write .ai-workflow/notes/implemented/process/2026-09-23-planning-coding-session-boundary.md
-2026-09-23-planning-coding-session-boundary.md: 1631b60a1b40a7c11f3c8d049685bb8d77a4b567
-2026-09-23-planning-coding-session-boundary.zh.md: 11f0a3de49b5b42600bbef405e00cd6e9902de1b
+2026-09-23-planning-coding-session-boundary.md: 43910985f79c9637f74d915000d799882f5b3c38
+2026-09-23-planning-coding-session-boundary.zh.md: 52fb1ebdeade1cbb0428830cb81848956f08d85d

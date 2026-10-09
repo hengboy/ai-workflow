@@ -99,6 +99,7 @@ export function validateWorkspaceRepositoryOrder(repositories: { name: string; d
 
 export function validateWorkspaceManifest(manifest: WorkspaceManifest, plan: PlanDocument, tasks: TaskDocument[], schedule: TaskSchedule): string[] {
   const errors: string[] = [];
+  const ROOT = 'workspace';
   if (manifest.planId !== plan.planId) errors.push(`Workspace manifest plan_id mismatch: ${manifest.planId}, expected ${plan.planId}`);
   const tasksOf = (name: string): TaskDocument[] => tasks.filter((task) => task.repo === name);
   const coveredRequirements = (name: string): string[] => tasksOf(name).flatMap((task) => task.requirements);
@@ -113,6 +114,11 @@ export function validateWorkspaceManifest(manifest: WorkspaceManifest, plan: Pla
     for (const requirement of repository.requirements) if (!plan.requirements.includes(requirement)) errors.push(`Slice subset references unknown requirement: ${requirement}`);
     for (const criterion of repository.acceptanceCriteria) if (!plan.acceptanceCriteria.includes(criterion)) errors.push(`Slice subset references unknown acceptance criterion: ${criterion}`);
     for (const task of tasks) if (task.repo !== repository.name) errors.push(`Slice task ${task.id} belongs to repository "${task.repo}", expected "${repository.name}"`);
+    const finalization = plan.workspaceFinalization;
+    if (finalization) {
+      const carries = [...repository.requirements, ...repository.acceptanceCriteria].some((id) => finalization.requirements.includes(id) || finalization.acceptanceCriteria.includes(id));
+      if (carries) errors.push('Slice manifest must not carry workspace_finalization criteria');
+    }
     errors.push(...subsetErrors('Slice requirements do not match the declared subset', repository.requirements, coveredRequirements(repository.name)));
     errors.push(...subsetErrors('Slice acceptance criteria do not match the declared subset', repository.acceptanceCriteria, coveredAcceptanceCriteria(repository.name)));
     return errors;
@@ -123,13 +129,37 @@ export function validateWorkspaceManifest(manifest: WorkspaceManifest, plan: Pla
   if (declared.length !== manifest.repositories.length || declaredSignatures.join('\n') !== repositorySignatures(manifest.repositories).join('\n')) {
     errors.push('Workspace manifest repositories do not match the plan declaration');
   }
+
+  const finalization = plan.workspaceFinalization;
+  const finalizationRequirements = finalization?.requirements ?? [];
+  const finalizationCriteria = finalization?.acceptanceCriteria ?? [];
+  if (finalization) {
+    for (const requirement of finalization.requirements) if (!plan.requirements.includes(requirement)) errors.push(`workspace_finalization references unknown requirement: ${requirement}`);
+    for (const criterion of finalization.acceptanceCriteria) if (!plan.acceptanceCriteria.includes(criterion)) errors.push(`workspace_finalization references unknown acceptance criterion: ${criterion}`);
+    for (const task of tasks) {
+      for (const criterion of task.acceptanceCriteria) if (finalization.acceptanceCriteria.includes(criterion)) errors.push(`Finalization acceptance criterion ${criterion} is assigned to task ${task.id}`);
+    }
+  }
+
+  if (tasks.length) {
+    for (const repository of manifest.repositories) {
+      if (repository.name === ROOT) continue;
+      if (tasksOf(repository.name).length === 0) errors.push(`Participating child repository "${repository.name}" owns zero tasks`);
+    }
+  }
+
   for (const repository of manifest.repositories) {
-    errors.push(...subsetErrors(`Repository "${repository.name}" requirements do not match its tasks`, repository.requirements, coveredRequirements(repository.name)));
-    errors.push(...subsetErrors(`Repository "${repository.name}" acceptance criteria do not match its tasks`, repository.acceptanceCriteria, coveredAcceptanceCriteria(repository.name)));
+    const isRoot = repository.name === ROOT;
+    const expectedRequirements = [...coveredRequirements(repository.name), ...(isRoot ? finalizationRequirements : [])];
+    const expectedCriteria = [...coveredAcceptanceCriteria(repository.name), ...(isRoot ? finalizationCriteria : [])];
+    errors.push(...subsetErrors(`Repository "${repository.name}" requirements do not match its tasks`, repository.requirements, expectedRequirements));
+    errors.push(...subsetErrors(`Repository "${repository.name}" acceptance criteria do not match its tasks`, repository.acceptanceCriteria, expectedCriteria));
   }
   if (tasks.length) {
-    const reqMissing = plan.requirements.filter((requirement) => !tasks.some((task) => task.requirements.includes(requirement)));
-    const acMissing = plan.acceptanceCriteria.filter((criterion) => !tasks.some((task) => task.acceptanceCriteria.includes(criterion)));
+    const coverageRequirements = new Set([...tasks.flatMap((task) => task.requirements), ...finalizationRequirements]);
+    const coverageCriteria = new Set([...tasks.flatMap((task) => task.acceptanceCriteria), ...finalizationCriteria]);
+    const reqMissing = plan.requirements.filter((requirement) => !coverageRequirements.has(requirement));
+    const acMissing = plan.acceptanceCriteria.filter((criterion) => !coverageCriteria.has(criterion));
     if (reqMissing.length || acMissing.length) errors.push(`Frozen plan coverage is incomplete: missing ${[...reqMissing, ...acMissing].join(', ')}`);
   }
   errors.push(...validateWorkspaceRepositoryOrder(manifest.repositories, tasks, schedule));

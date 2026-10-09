@@ -64,3 +64,20 @@ describe('mandatory project-local temporary worktree policy', () => {
     expect(operator, 'the task-commit merge instruction is gone').not.toContain('Merge task commits into the plan worktree');
   });
 });
+
+describe('per-repository workspace worktree policy (REQ-002, REQ-004)', () => {
+  it('requires one run-owned worktree per active repository on the plan branch with common-directory identity', async () => {
+    const operator = normalize(await readFile(packagePath('templates', 'agents', 'git-operator.md'), 'utf8'));
+
+    expect(operator, 'the per-repository worktree path is documented').toContain('<source-root>/.worktrees/<planId>');
+    expect(operator, 'the per-repository branch is documented').toContain('ai-workflow/<planId>');
+    expect(operator, 'each active repository owns one worktree').toMatch(/one run-owned worktree per (?:active )?repository|run-owned worktree per repository/i);
+    expect(operator, 'the child common directory is verified').toMatch(/git rev-parse --git-common-dir|--git-common-dir/);
+  });
+
+  it('requires an explicit workdir for every workspace command', async () => {
+    const coding = normalize(await readFile(packagePath('templates', 'skills', 'coding', 'SKILL.md'), 'utf8'));
+
+    expect(coding, 'every command carries an explicit workdir').toMatch(/every command uses an explicit workdir/i);
+  });
+});

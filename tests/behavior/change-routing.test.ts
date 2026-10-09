@@ -118,7 +118,7 @@ describe('change routing guidance', () => {
     );
   });
 
-  it('stops a coding session after Planning and delegates the handoff to the workspace-aware Planning route', async () => {
+  it('stops a coding session after Planning and routes a child-participating workspace plan to a parent Coding session', async () => {
     const codingText = await read('templates/skills/coding/SKILL.md');
     const routing = flatten(section(codingText, '## Change routing'));
 
@@ -126,8 +126,15 @@ describe('change routing guidance', () => {
       /planned change has no frozen plan[^.]*run Planning first/i,
     );
     expect(routing, 'the no-frozen-plan handoff is workspace-aware').toMatch(/workspace/i);
-    expect(routing, 'the no-frozen-plan handoff routes a workspace plan through plan-to-tasks').toMatch(
+    expect(routing, 'the child-participating workspace handoff starts a new session at the workspace root').toMatch(
+      /new session at (?:that )?workspace root/i,
+    );
+    expect(routing, 'the new session invokes the coding skill').toMatch(/invoke (?:the )?coding\b/i);
+    expect(routing, 'plan-to-tasks remains the preparation procedure invoked by the parent session').toMatch(
       /plan-to-tasks/i,
+    );
+    expect(routing, 'the superseded plan-to-tasks session entry is replaced').not.toMatch(
+      /start a new session at (?:that )?workspace root and invoke the plan-to-tasks skill/i,
     );
     expect(routing, 'the ordinary or root-only handoff to a coding session stays represented').toMatch(
       /root-only|coding skill/i,
@@ -137,6 +144,10 @@ describe('change routing guidance', () => {
     );
 
     const coding = flatten(codingText);
+    expect(coding, 'the coding session performs the approved preparation').toMatch(/approved preparation/i);
+    expect(coding, 'distribution still precedes implementation').toContain(
+      'ai-workflow workspace distribute --plan <directory>',
+    );
     expect(coding, 'the completion checklist records the handoff').toMatch(
       /A planned change without a frozen plan ended the session after Planning/i,
     );
@@ -144,6 +155,12 @@ describe('change routing guidance', () => {
     const planning = flatten(await read('templates/skills/planning/SKILL.md'));
     expect(planning, 'Planning keeps the ordinary new-session coding handoff').toMatch(
       /tell the user to start a new session and invoke the coding skill/i,
+    );
+    expect(planning, 'Planning routes the child-participating workspace plan to a coding session at the workspace root').toMatch(
+      /new session at <workspace-root>[\s\S]{0,160}?invoke (?:the )?coding\b/i,
+    );
+    expect(planning, 'Planning no longer designates plan-to-tasks as the new session skill').not.toMatch(
+      /invoke plan-to-tasks with the absolute frozen plan directory/i,
     );
 
     const readme = await read('README.md');
@@ -159,5 +176,36 @@ describe('change routing guidance', () => {
 
     const planningMetadata = await read('templates/skills/planning/agents/openai.yaml');
     expect(planningMetadata, 'planning metadata names its entry scope').toMatch(/new or ambiguous feature/i);
+  });
+
+  it('routes the child-participating handoff to a coding session that prepares and distributes, not a standalone plan-to-tasks session', async () => {
+    const documents = [
+      { label: 'MEMORY.md', text: await read('MEMORY.md') },
+      { label: 'templates/project/MEMORY.md', text: await read('templates/project/MEMORY.md') },
+      { label: 'README.md', text: await read('README.md') },
+    ];
+
+    for (const { label, text } of documents) {
+      const flat = flatten(text);
+      const sessionIndex = flat.search(/new session at (?:the )?workspace root/i);
+      expect(sessionIndex, `${label} states the child-participating handoff as a new session at the workspace root`).toBeGreaterThanOrEqual(0);
+      const handoff = flat.slice(sessionIndex, sessionIndex + 400);
+
+      const codingIndex = handoff.search(/coding skill/i);
+      const planToTasksIndex = handoff.search(/plan-to-tasks/i);
+      expect(codingIndex, `${label} invokes the coding skill at the workspace root for the child-participating handoff`).toBeGreaterThanOrEqual(0);
+      expect(planToTasksIndex, `${label} names plan-to-tasks as the preparation procedure`).toBeGreaterThanOrEqual(0);
+      expect(
+        codingIndex,
+        `${label} does not enter a standalone plan-to-tasks session: the workspace-root session invokes the coding skill before plan-to-tasks`,
+      ).toBeLessThan(planToTasksIndex);
+      expect(handoff, `${label} states plan-to-tasks as the preparation`).toMatch(/preparation/i);
+      expect(handoff, `${label} distributes the slices before implementation`).toMatch(/workspace distribute\b/i);
+      expect(handoff, `${label} distributes the slices before implementation`).toMatch(/before implementation/i);
+
+      // The ordinary and root-only routes stay represented.
+      expect(flat, `${label} keeps the ordinary or root-only route`).toMatch(/ordinary or root-only/i);
+      expect(flat, `${label} keeps the ordinary coding-skill handoff`).toMatch(/invok\w* (?:the )?coding skill/i);
+    }
   });
 });

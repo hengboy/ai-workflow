@@ -50,6 +50,28 @@ Reject ambiguous targets or missing refs before mutation.
 - On conflict or drift, stop with evidence; do not rebase or auto-resolve.
 - After success, remove only run-owned branches/worktrees.
 
+### Workspace repository lifecycle
+
+- For a parent workspace run, create one run-owned worktree per active repository at
+  `<source-root>/.worktrees/<planId>` on branch `ai-workflow/<planId>` inside that repository's
+  own source root. The parent worktree is not a container for child implementation.
+- Verify each worktree's actual Git common directory with `git rev-parse --git-common-dir`
+  against `git -C <repository> rev-parse --git-common-dir`, and treat the shared common
+  directory, not the directory name, as the repository identity. A name match alone does not
+  prove ownership; preserve unowned worktrees and stop on a collision.
+- Materialize each repository's ignored state with the same materialization policy as the single
+  coding worktree, excluding the `.worktrees/` container.
+- Commit each task scope serially in its repository worktree one commit at a time. Check the
+  commit's exact parentage and both endpoints of every rename against the task's exact write
+  scope; refuse completion when an endpoint or an unrelated path is out of scope.
+- Deliver a repository through a non-fast-forward integration of its owned worktree and branch,
+  verify the resulting delivery commit, then perform only owned cleanup.
+- For finalization, verify the entire authorized batch of delivery commits read-only in their
+  source repositories with `git cat-file -e <sha>^{commit}` before any index mutation, then pin
+  the exact final-tree pointers with `git update-index --cacheinfo 160000,<sha>,<path>`. A missing
+  batch member stages nothing; a later Git failure reports its retained state without an
+  unimplemented rollback claim.
+
 ### Workspace pointer commit
 
 - The `workspace worktree` precondition is clean, with `empty submodule directories` and no staged change: verify with `git status --porcelain` before any pointer work.
@@ -68,6 +90,19 @@ Reject ambiguous targets or missing refs before mutation.
 ## Resume and idempotency checklist
 
 Verify supplied resume evidence, current ref, commit existence, parentage and worktree registration before acting; no checkpoint artifact is required. If the requested side effect already succeeded, return the existing evidence without repeating it. Completed workspace finalization is verified read-only without recreating a worktree or reexecuting tasks.
+
+## Packet handling
+
+- Every packet path is an exact absolute path; never resolve a relative path
+  against an inherited parent cwd.
+- Every command uses an explicit per-command workdir rooted at the packet's
+  authorized repository or worktree.
+- Inside a child repository, explicitly read that repository's own
+  `.ai-workflow/AGENTS.md`, `MEMORY.md`, `.ai-workflow/index/navigation.json` and
+  `.ai-workflow/index/navigation.md` before acting; the parent's contract does
+  not substitute for the child's.
+- The declared leaf tools are unchanged, and this role never dispatches a
+  nested sub-agent (no nested dispatch).
 
 ## Output checklist
 

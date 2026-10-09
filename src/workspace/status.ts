@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { parse as parseYaml } from 'yaml';
 import { validateWorkspaceManifest } from '../workflow/workspace.js';
 import { classifySlice, computeSliceFiles, resolveWorkspacePlan, type ResolvedWorkspacePlan, type SliceFileState } from './distribute.js';
+import { projectWorkspaceExecution, type ExecutionProjection } from './execution.js';
 
 const RESERVED_ROOT = 'workspace';
 
@@ -34,6 +35,7 @@ export interface StatusResult {
   workspace_root_entry?: StatusWorkspaceRootEntry;
   next_repository?: string | null;
   ready_for_finalization?: boolean;
+  execution?: ExecutionProjection;
   errors?: string[];
 }
 
@@ -135,7 +137,7 @@ export async function workspaceStatus(planDirectory: string): Promise<StatusResu
     .filter((repository) => repository.slice === 'present' && repository.record === 'completed' && repository.delivery_commit !== null)
     .map((repository) => repository.name));
   const nextRepository = order.find((name) => name === RESERVED_ROOT ? !rootTasksDelivered : !delivered.has(name)) ?? null;
-  return {
+  const result: StatusResult = {
     valid: true,
     plan_id: plan.planId,
     workspace_root: root,
@@ -151,4 +153,6 @@ export async function workspaceStatus(planDirectory: string): Promise<StatusResu
     next_repository: nextRepository,
     ready_for_finalization: rootTasksDelivered && delivered.size === repositories.length,
   };
+  if (manifest.repositories.some((repository) => repository.name !== RESERVED_ROOT)) result.execution = await projectWorkspaceExecution(resolved);
+  return result;
 }

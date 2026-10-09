@@ -16,6 +16,7 @@ import { readWorkspaceManifest, validateWorkspaceManifest, validateWorkspaceRepo
 import { listPlanPairs, recordPlanPairs, verifyPlanPairs } from './workflow/pairing.js';
 import { distributeWorkspace } from './workspace/distribute.js';
 import { workspaceStatus } from './workspace/status.js';
+import { checkpointWorkspace } from './workspace/execution.js';
 import { listNotes } from './notes/index.js';
 import { validateNotes } from './notes/validate.js';
 import { sealArchive } from './notes/archive.js';
@@ -47,6 +48,14 @@ async function nativeHookInput(): Promise<NativeHookInput> {
     || (data.source !== undefined && typeof data.source !== 'string')
     || (data.tool_name !== undefined && typeof data.tool_name !== 'string')) throw new Error('Native hook input has invalid event, cwd or session fields');
   return data as unknown as NativeHookInput;
+}
+
+/** Read the whole standard input stream, used for the single checkpoint event. */
+async function readStdin(): Promise<string> {
+  process.stdin.setEncoding('utf8');
+  let contents = '';
+  for await (const chunk of process.stdin as AsyncIterable<string>) contents += chunk;
+  return contents;
 }
 
 const program = new Command().name('ai-workflow').description('Native-host planning and task workflow').version('0.1.0');
@@ -204,6 +213,11 @@ workspace.command('distribute').requiredOption('--plan <directory>').action(asyn
 });
 workspace.command('status').requiredOption('--plan <directory>').action(async ({ plan: directory }: { plan: string }) => {
   const result = await workspaceStatus(directory);
+  print(result);
+  if (!result.valid) process.exitCode = 1;
+});
+workspace.command('checkpoint').requiredOption('--plan <directory>').requiredOption('--repo <name>').action(async ({ plan: directory, repo }: { plan: string; repo: string }) => {
+  const result = await checkpointWorkspace(directory, repo, await readStdin());
   print(result);
   if (!result.valid) process.exitCode = 1;
 });

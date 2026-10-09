@@ -34,5 +34,6 @@ Status: implemented
 - `workspace status` 保持仅文件系统，并且现在对分歧的清单采取失败关闭，因此不匹配的 `workspace.yaml` 不再可能看起来就绪。
 - `root_tasks_commit` 是完整的小写 40 或 64 位十六进制 SHA，只出现在根 `implementation.yaml` 中，只有根工作区会话写入它，并且优先于已完成的根 `commit` 作为根交付证据；子记录保持现有形态，而保留根的 `workspace_root_entry` 新增 `tasks_delivered` 与 `delivery_commit`。
 - 本记录部分取代 [工作区会话交接记录](./2026-10-08-workspace-session-handoff.md) 中仅针对子仓库的就绪与仅作参考的 `next_repository` 事实、[工作区拆分分发交接记录](../process/2026-10-02-workspace-distribute-handoff.md) 中的当前 `workspace status` 事实，以及 [子模块工作区交付记录](../architecture/2026-09-30-submodule-workspace.md) 中的 `workspace status` 与根交付事实，并为 [计划实施记录](../process/2026-09-22-plan-implementation-record.md) 增加根交付阶段；每份记录都保留其决定、理由与历史，且其当前事实指向本记录。
+- [工作区编码编排记录](../feature/2026-10-09-workspace-coding-orchestration.md) 以已交付的父编排、`workspace checkpoint` 命令、按仓库 worktree 与有界恢复部分取代本记录的执行交接与恢复措辞；本记录保留其状态、就绪判定与根交付决定。
 - 执行由 `tests/integration/workspace-status-cli.test.ts`、`tests/integration/workspace-finalization-git.test.ts`、`tests/integration/plan-workspace-cli.test.ts`、`tests/behavior/worktree-policy.test.ts` 与 `tests/behavior/implementation-record.test.ts` 守护；证据范围是已发布文本、CLI 状态用例与定稿 Git 守卫，而不是真实运行的 agent 工作流。
 

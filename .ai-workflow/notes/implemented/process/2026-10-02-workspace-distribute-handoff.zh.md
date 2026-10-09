@@ -32,3 +32,4 @@ Status: implemented
 - 仅根条目和非工作区计划不变：仅根条目的工作区计划可以免拆分实现，而没有 `workspace_repos` 的计划保持其普通的单仓库流程。
 - 没有任何活动记录被整体取代。[子模块工作区交付记录](../architecture/2026-09-30-submodule-workspace.md) 保留其分发、状态与定稿决定，且未被移动或归档；2026-10-08 [工作区执行一致性记录](../bug-fix/2026-10-08-workspace-execution-consistency.md)后来更新了它的 `workspace status` 与根交付当前事实，因此那些事实指向该记录，而本记录及其边界决定保持有效。
 - 下一次会话路由由 2026-10-08 [工作区会话交接记录](../bug-fix/2026-10-08-workspace-session-handoff.md) 更详细地陈述，它涵盖父工作区根会话、绝对父计划目录、切片完成交接与 `ready_for_finalization` 定稿步骤，并部分取代本记录的通用交接措辞，而本记录保留分发行为。
+- [工作区编码编排记录](../feature/2026-10-09-workspace-coding-orchestration.md) 以已交付的父编排、按仓库 worktree、检查点命令与有界恢复部分取代本记录的通用交接措辞；此处的分发行为与决定保持有效。

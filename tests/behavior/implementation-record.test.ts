@@ -218,3 +218,75 @@ describe('implementation record guidance', () => {
     });
   });
 });
+
+/**
+ * REQ-006: the workspace execution record reuses the single `implementation.yaml` per
+ * repository and adds a purpose-scoped execution anchor, typed task checkpoints and a
+ * purpose-scoped reviewed commit. The contract text may live in the coding skill or its
+ * detailed workspace reference, so both are combined.
+ */
+describe('workspace execution record contract', () => {
+  async function workspaceRecordText(): Promise<string> {
+    const coding = await codingSkill();
+    let reference = '';
+    try {
+      reference = await readFile(packagePath('templates', 'skills', 'coding', 'references', 'workspace.md'), 'utf8');
+    } catch {
+      reference = '';
+    }
+    return flatten(`${coding}\n${reference}`);
+  }
+
+  it('keeps the single implementation.yaml as the only workspace run record', async () => {
+    const text = await workspaceRecordText();
+
+    expect(text).toContain(RECORD_PATH);
+    expect(text).toMatch(/single|one|only/i);
+    expect(text).toMatch(/no (?:extra|other|additional)[^.]{0,40}(?:run record|ledger|manifest)/i);
+  });
+
+  it('documents the execution anchor with purpose, repository, worktree, branches and base commit', async () => {
+    const text = await workspaceRecordText();
+
+    for (const field of ['execution', 'purpose', 'source_root', 'repository', 'worktree', 'branch', 'target_branch', 'base_commit']) {
+      expect(text, `the workspace execution record documents "${field}"`).toContain(field);
+    }
+    expect(text, 'the anchor purpose distinguishes tasks from finalization').toMatch(/tasks[^.]{0,40}finalization|finalization[^.]{0,40}tasks/i);
+  });
+
+  it('documents typed task checkpoints for committed changes and verified no-change outcomes', async () => {
+    const text = await workspaceRecordText();
+
+    expect(text).toContain('task_checkpoints');
+    expect(text).toMatch(/kind: commit/i);
+    expect(text).toMatch(/kind: no-change/i);
+    expect(text, 'a writing task records its commit SHA').toMatch(/commit[^.]{0,60}(?:SHA|hash|full)/i);
+    expect(text, 'an unchanged task records its exact HEAD').toMatch(/head[^.]{0,60}(?:SHA|hash|exact)/i);
+  });
+
+  it('documents a purpose-scoped reviewed_commit that cannot be reused for other material', async () => {
+    const text = await workspaceRecordText();
+
+    expect(text).toContain('reviewed_commit');
+    expect(text, 'the review marker is scoped to the current purpose').toMatch(/purpose[- ]scoped|current purpose/i);
+    expect(text, 'a different purpose or HEAD cannot reuse the review').toMatch(/cannot[^.]{0,80}(?:reuse|authorize)|not[^.]{0,80}(?:reuse|authorize)/i);
+  });
+
+  it('writes checkpoints only through the workspace checkpoint CLI after Git evidence', async () => {
+    const text = await workspaceRecordText();
+
+    expect(text).toContain('ai-workflow workspace checkpoint --plan <directory> --repo <name>');
+    expect(text, 'checkpointing follows Git evidence').toMatch(/after[^.]{0,60}Git evidence/i);
+    expect(text, 'the checkpoint command is filesystem-only').toMatch(/filesystem-only|filesystem only/i);
+  });
+
+  it('keeps only in-progress and completed statuses for the workspace execution record', async () => {
+    const text = await workspaceRecordText();
+
+    expect(text).toMatch(/\bin-progress\b/);
+    expect(text).toMatch(/\bcompleted\b/);
+    expect(text, 'the record must not define a failure-like status value').not.toMatch(
+      /\bstatus\s*[:=]?\s*(?:failed|failure|abandoned|blocked|cancelled|canceled)\b/i,
+    );
+  });
+});

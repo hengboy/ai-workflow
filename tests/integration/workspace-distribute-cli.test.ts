@@ -89,6 +89,38 @@ function baseSpec(): WorkspacePlanFixtureSpec {
   };
 }
 
+/** A child-participating workspace plan with the optional `workspace_finalization` declaration. */
+function finalizationSpec(): WorkspacePlanFixtureSpec {
+  return {
+    planId: PLAN_ID,
+    requirements: ['REQ-001', 'REQ-002', 'REQ-003', 'REQ-100'],
+    acceptanceCriteria: ['AC-001', 'AC-002', 'AC-003', 'AC-100'],
+    workspaceRepos: [WORKSPACE_REPO, APP_REPO, LIB_REPO],
+    tasks: [
+      { id: 'task-001-workspace', repo: 'workspace', requirements: ['REQ-001'], acceptanceCriteria: ['AC-001'], writeScope: ['src/workspace.ts'] },
+      { id: 'task-002-app', repo: 'app', requirements: ['REQ-002'], acceptanceCriteria: ['AC-002'], writeScope: ['src/app.ts'] },
+      { id: 'task-003-lib', repo: 'lib', requirements: ['REQ-003'], acceptanceCriteria: ['AC-003'], writeScope: ['src/lib.ts'] },
+    ],
+    phases: [['task-001-workspace'], ['task-002-app'], ['task-003-lib']],
+    workspaceFinalization: {
+      requirements: ['REQ-100'],
+      acceptanceCriteria: ['AC-100'],
+      readScope: [{ repo: 'app', paths: ['src/app.ts'] }],
+      writeScope: ['README.md'],
+      testCommands: ['pnpm test'],
+    },
+    manifest: {
+      planId: PLAN_ID,
+      role: 'workspace',
+      repositories: [
+        { ...WORKSPACE_REPO, requirements: ['REQ-001', 'REQ-100'], acceptanceCriteria: ['AC-001', 'AC-100'] },
+        { ...APP_REPO, requirements: ['REQ-002'], acceptanceCriteria: ['AC-002'] },
+        { ...LIB_REPO, requirements: ['REQ-003'], acceptanceCriteria: ['AC-003'] },
+      ],
+    },
+  };
+}
+
 interface Workspace { root: string; directory: string; app: string; lib: string }
 
 async function buildWorkspace(
@@ -388,5 +420,31 @@ describe('workspace distribute', () => {
     expect(result.code, outputOf(result)).toBe(1);
     expect(refusalErrors(result)).toContain(`Repository "lib" working tree is missing at ${lib}; run git submodule update --init`);
     expect(changedPaths(before, await snapshotTree(root))).toEqual([]);
+  }, TIMEOUT);
+
+  it('distributes a finalization-declaring workspace without leaking finalization criteria into child slices', async () => {
+    const { directory, app } = await buildWorkspace(finalizationSpec());
+
+    const parentValidated = await runCli(['plan', 'validate', '--plan', directory]);
+    expect(parentValidated.code, outputOf(parentValidated)).toBe(0);
+
+    const result = await runCli(['workspace', 'distribute', '--plan', directory]);
+
+    expect(result.code, outputOf(result)).toBe(0);
+    const output = parseJson<DistributeOutput>(result);
+    expect(output.valid).toBe(true);
+    expect(output.slices).toEqual([
+      { name: 'app', path: 'packages/app', state: 'written' },
+      { name: 'lib', path: 'packages/lib', state: 'written' },
+    ]);
+
+    const appManifest = await readWorkspaceManifest(join(app, '.ai-workflow/plans', PLAN_ID));
+    expect(appManifest?.role).toBe('slice');
+    const appCriteria = (appManifest?.repositories ?? []).flatMap((repository) => [...repository.requirements, ...repository.acceptanceCriteria]);
+    expect(appCriteria).not.toContain('REQ-100');
+    expect(appCriteria).not.toContain('AC-100');
+
+    const validated = await runCli(['plan', 'validate', '--plan', join(app, '.ai-workflow/plans', PLAN_ID)]);
+    expect(validated.code, outputOf(validated)).toBe(0);
   }, TIMEOUT);
 });

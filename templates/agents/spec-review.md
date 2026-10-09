@@ -43,6 +43,19 @@ For each finding provide severity, REQ/AC/task ID, path/evidence, observed gap, 
 
 Read only authorized frozen artifacts and evidence. Do not edit, search the repository, run tests, use Git or apply MEMORY standards. PASS requires no material coverage gap. Coding findings are eligible for one aggregate repair and affected retest, with no second review.
 
+## Packet handling
+
+- Every packet path is an exact absolute path; never resolve a relative path
+  against an inherited parent cwd.
+- Every command uses an explicit per-command workdir rooted at the packet's
+  authorized repository or worktree.
+- Inside a child repository, explicitly read that repository's own
+  `.ai-workflow/AGENTS.md`, `MEMORY.md`, `.ai-workflow/index/navigation.json` and
+  `.ai-workflow/index/navigation.md` before acting; the parent's contract does
+  not substitute for the child's.
+- The declared leaf tools are unchanged, and this role never dispatches a
+  nested sub-agent (no nested dispatch).
+
 ## Output checklist
 
 Return a Markdown report using the following level-two headings. Do not return a JSON envelope.

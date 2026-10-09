@@ -90,3 +90,109 @@ describe('v2 coding guidance', () => {
     expect(coding).not.toMatch(/ai-workflow\s+adr\b|\.ai-workflow\/adr\b/i);
   });
 });
+
+/** Whitespace-normalized coding skill text so fragments match across source wrapping. */
+async function codingSkillFlattened(): Promise<string> {
+  return (await readFile(packagePath('templates', 'skills', 'coding', 'SKILL.md'), 'utf8')).replace(/\s+/g, ' ');
+}
+
+/**
+ * REQ-003..REQ-008: the shipped parent workspace execution route. Activation requires a
+ * frozen plan declaring at least one participating non-root repository matched to the
+ * current root's `.gitmodules`; ordinary and root-only routes stay as they are.
+ */
+describe('parent workspace execution route', () => {
+  it('activates only for a child-participating frozen plan matched to .gitmodules and distributes before implementation state', async () => {
+    const coding = await codingSkillFlattened();
+
+    expect(coding).toContain('.gitmodules');
+    expect(coding).toMatch(/at least one participating non-root repository|at least one non-root participating repository/i);
+    expect(coding).toMatch(/frozen plan/i);
+    expect(coding).toContain('ai-workflow workspace distribute --plan <directory>');
+    expect(coding).toMatch(/before any implementation state/i);
+  });
+
+  it('keeps the primary parent session as the only dispatcher with no nested coordinator, child host process or sibling session', async () => {
+    const coding = await codingSkillFlattened();
+
+    expect(coding).toMatch(/primary parent session/i);
+    expect(coding).toMatch(/directly dispatches native leaf agents/i);
+    expect(coding).toMatch(/no nested coordinator/i);
+    expect(coding).toMatch(/no child host process/i);
+    expect(coding).toMatch(/no sibling session/i);
+  });
+
+  it('creates one run-owned worktree per active repository and never treats the parent worktree as a child container', async () => {
+    const coding = await codingSkillFlattened();
+
+    expect(coding).toContain('<source-root>/.worktrees/<planId>');
+    expect(coding).toContain('ai-workflow/<planId>');
+    expect(coding).toMatch(/one run-owned worktree per active repository/i);
+    expect(coding).toMatch(/parent worktree is not a container for child implementation/i);
+  });
+
+  it('keeps the parent execution order as the only global schedule with a whole-phase barrier before serial task commits', async () => {
+    const coding = await codingSkillFlattened();
+
+    expect(coding).toContain('tasks/execution-order.yaml');
+    expect(coding).toMatch(/only global (?:task )?schedule/i);
+    expect(coding).toMatch(/whole phase/i);
+    expect(coding).toMatch(/awaited and verified/i);
+    expect(coding).toMatch(/serial task commits|serially/i);
+  });
+
+  it('delivers a repository at its last task phase before dependent repositories advance', async () => {
+    const coding = await codingSkillFlattened();
+
+    expect(coding).toMatch(/last task phase/i);
+    expect(coding).toMatch(/review\/delivery gate|review and delivery gate|delivery gate/i);
+    expect(coding).toMatch(/before dependent repositories advance|dependent repositories? (?:advance|are dispatched)/i);
+  });
+
+  it('requires absolute packet paths, scopes, commands, output paths and upstream delivery evidence', async () => {
+    const coding = await codingSkillFlattened();
+
+    for (const fragment of [
+      'absolute parent plan',
+      'source repository',
+      'local slice plan',
+      'coding worktree',
+      'phase/task',
+      'REQ/AC',
+      'permitted commands',
+      'output paths',
+      'upstream delivery evidence',
+      'explicit workdir',
+      'native permission denial is a blocker',
+    ]) {
+      expect(coding, `the parent packet contract must state "${fragment}"`).toContain(fragment);
+    }
+    expect(coding).toMatch(/relative and resolved[^.]{0,24}read\/write scope/i);
+  });
+
+  it('separates per-repository delivery review from a distinct finalization review and checkpoints only after Git evidence', async () => {
+    const coding = await codingSkillFlattened();
+
+    expect(coding).toMatch(/per-repository delivery review|repository delivery review/i);
+    expect(coding).toMatch(/separate finalization review|finalization review/i);
+    expect(coding).toContain('ai-workflow workspace checkpoint --plan <directory> --repo <name>');
+    expect(coding).toMatch(/only after[^.]{0,40}Git evidence|after Git evidence/i);
+  });
+
+  it('resumes only at clean checkpointed phase or verified delivery boundaries and stops on partial-phase residue', async () => {
+    const coding = await codingSkillFlattened();
+    const lowered = coding.toLowerCase();
+
+    expect(coding).toMatch(/clean, fully checkpointed phase boundar/i);
+    expect(coding).toMatch(/verified repository delivery boundar/i);
+    for (const fragment of ['dirty partial-phase', 'commit-without-checkpoint', 'unknown future-phase progress', 'uncertain review results', 'bounded support']) {
+      expect(lowered, `the recovery rule must name "${fragment}"`).toContain(fragment);
+    }
+    expect(coding).toMatch(/instead of redispatch|rather than redispatch|not redispatch/i);
+  });
+
+  it('links the detailed parent workspace reference file', async () => {
+    const coding = await readFile(packagePath('templates', 'skills', 'coding', 'SKILL.md'), 'utf8');
+    expect(coding).toContain('references/workspace.md');
+  });
+});
