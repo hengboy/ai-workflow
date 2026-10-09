@@ -111,3 +111,20 @@ describe('opencode v1 role agent frontmatter', () => {
     expect(headOf('researcher')).toContain('  websearch: allow');
   });
 });
+
+describe('role template packet handling (REQ-004)', () => {
+  it('requires exact absolute paths and an explicit per-command workdir for every role', async () => {
+    const root = packagePath('templates', 'agents');
+    for (const role of Object.keys(expectedActions)) {
+      const template = await readFile(join(root, `${role}.md`), 'utf8');
+      expect(template, `${role} states exact absolute paths`).toMatch(/absolute path/i);
+      expect(template, `${role} states a per-command workdir`).toMatch(/workdir|working directory/i);
+    }
+  });
+
+  it('records the per-repository worktree requirement for the Git Operator', async () => {
+    const template = await readFile(join(packagePath('templates', 'agents'), 'git-operator.md'), 'utf8');
+    expect(template).toContain('<source-root>/.worktrees/<planId>');
+    expect(template).toContain('ai-workflow/<planId>');
+  });
+});

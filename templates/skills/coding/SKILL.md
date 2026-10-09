@@ -316,6 +316,68 @@ recorded final commit and its delivery/pointer evidence read-only, then report t
 existing result without recreating a worktree, rewriting the record or reexecuting
 tasks. Invalid or unavailable evidence stops with a bounded support request.
 
+## Parent workspace execution
+
+Activate this route only when the frozen plan declares at least one participating
+non-root repository that is matched to the current root's `.gitmodules`. An
+ordinary plan, a root-only workspace plan whose `workspace_repos` declares only
+the reserved workspace root entry, and a project whose `.gitmodules` has no
+matching participant all keep the ordinary or root-only route above and gain no
+workspace prerequisites. A claimed workspace with absent, mismatched or escaped
+declarations is refused, not silently run as a single-repository task set. The
+detailed procedure lives in `references/workspace.md`.
+
+The primary parent session is the only dispatcher: it directly dispatches native
+leaf agents for the active repositories with no nested coordinator, no child host
+process and no sibling session, so the one already-running primary drives every
+participating repository. No splitter sub-agent, scheduler service or remote
+executor substitutes for it.
+
+Before any implementation state, the primary runs the approved preparation and
+`ai-workflow workspace distribute --plan <directory>` against the absolute parent
+plan directory; distribution writes each participant's slice only after its
+read-only preconditions pass. Capture the original parent
+`tasks/execution-order.yaml` as the only global task schedule, process its phases
+in file order, dispatch the independent tasks of the current phase concurrently,
+and keep the whole phase awaited and verified before task commits are performed
+serially through Git Operator one commit at a time in the phase's listed order.
+Never recompute the schedule from a slice's filtered phases or `depends_on`.
+
+Each active repository owns exactly one run-owned worktree per active repository
+at `<source-root>/.worktrees/<planId>` on branch `ai-workflow/<planId>`; the
+parent worktree is not a container for child implementation, so its submodule
+directories stay empty while a child's source edits happen only in that child's
+own worktree.
+
+Every dispatched packet carries the exact absolute parent plan/root, the source
+repository, the local slice plan, the coding worktree, the phase/task identifier,
+the assigned REQ/AC, the relative and resolved read/write scope, the permitted
+commands, the output paths and the upstream delivery evidence, and every command
+uses an explicit workdir. A native permission denial is a blocker, not permission
+to bypass the host or create a different worktree.
+
+After a repository's last task phase, complete its per-repository delivery review
+and repository delivery gate before dependent repositories advance; capture the
+delivery commit and release the dependents. Root-prefix delivery keeps the same
+in-progress record with `root_tasks_commit`. Finalization has its own separate
+finalization review and does not re-review delivered tasks.
+
+Checkpoints use only
+`ai-workflow workspace checkpoint --plan <directory> --repo <name>` after Git
+evidence: commit a task's exact scope through Git Operator, verify the commit
+parentage and both rename endpoints, then record `kind: commit` with its full
+SHA; record `kind: no-change` with the exact verified HEAD for a genuinely
+unchanged task and create no empty commit. The command is filesystem-only and
+writes only that repository's existing `implementation.yaml`; create no extra run
+record.
+
+Automatic resume is allowed only at a clean, fully checkpointed phase boundary or
+a verified repository delivery boundary. A dirty partial-phase residue, a
+commit-without-checkpoint gap, unknown future-phase progress, uncertain review
+results or a contradictory record stops with bounded support instead of
+redispatch. Already recorded tasks are identified and never blindly dispatched
+again, and no fallback runs child tasks in the root.
+
 ## Slice sessions
 
 A workspace plan can hand this repository its own slice through a `slice manifest`.
@@ -379,16 +441,15 @@ acceptance checks read-only; do not automatically check out submodules or publis
 Keep the same root implementation record in-progress throughout finalization, preserving
 `root_tasks_commit` and `started_at` on interruption. Only after final merge and owned cleanup
 write `status: completed`, `completed_at` and the final workspace commit SHA, retaining the root
-delivery evidence. A child or other
-repository session that is not already running the correct parent finalization reports the copyable
-next-root prompt; a session already running the correct parent coding finalization performs it here
-and does not emit an instruction to reopen itself. Before showing the prompt, replace every
-placeholder with the actual absolute workspace root and plan directory, quote any path argument
-that contains spaces (including in the command), and write it in the user's language. The child or
-other session reports:
+delivery evidence. The already-running parent/root session performs finalization directly and
+does not emit an instruction to reopen itself; only a child or other repository session that is
+not the already-running parent reports the bounded request below to the user. Before showing the
+prompt, replace every placeholder with the actual absolute workspace root and plan directory,
+quote any path argument that contains spaces (including in the command), and write it in the
+user's language. The child or other session reports:
 
 ```text
-Start a new root session at <workspace-root> and invoke the coding skill for finalization-only of the parent workspace plan <workspace-plan-directory>. Run ai-workflow workspace status --plan <workspace-plan-directory> against the original parent plan, require valid true with present and completed child slices, ready_for_finalization and workspace_root_entry.tasks_delivered true. Execute zero tasks, skip delivered root tasks and siblings, preserve root_tasks_commit and started_at, and verify the entire delivery-commit batch read-only before Git Operator pins any pointer.
+Finalize the parent workspace plan <workspace-plan-directory> in the already-running parent session at <workspace-root>: invoke the coding skill for finalization-only, run ai-workflow workspace status --plan <workspace-plan-directory> against the original parent plan, require valid true with present and completed child slices, ready_for_finalization and workspace_root_entry.tasks_delivered true. Execute zero tasks, skip delivered root tasks and siblings, preserve root_tasks_commit and started_at, and verify the entire delivery-commit batch read-only before Git Operator pins any pointer.
 ```
 
 ## Note ownership

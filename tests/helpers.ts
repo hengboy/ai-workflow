@@ -1,5 +1,5 @@
 import { mkdtemp, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
-import { basename, join, relative, sep } from 'node:path';
+import { basename, dirname, join, relative, sep } from 'node:path';
 import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { execFile } from 'node:child_process';
@@ -348,4 +348,19 @@ export async function realWorkspaceFixture(repos: RealWorkspaceRepoSpec[]): Prom
   for (const repo of initialized) await gitCommitAll(join(root, repo.path), 'initialize project');
 
   return { root, repos: repos.map((repo) => ({ name: repo.name, path: repo.path, absolute: join(root, repo.path) })) };
+}
+
+/**
+ * Write a file inside an existing repository, stage exactly that path and commit it.
+ * Returns the full 40-hex commit SHA. Used by the real-Git lifecycle fixtures to create
+ * commit-local, dependency-free delivery commits.
+ */
+export async function commitFile(repository: string, relativePath: string, contents: string, message: string): Promise<string> {
+  const absolute = join(repository, relativePath);
+  await mkdir(dirname(absolute), { recursive: true });
+  await writeFile(absolute, contents);
+  await exec('git', ['add', '--', relativePath], { cwd: repository });
+  await exec('git', ['commit', '-m', message], { cwd: repository });
+  const { stdout } = await exec('git', ['rev-parse', 'HEAD'], { cwd: repository });
+  return stdout.trim();
 }

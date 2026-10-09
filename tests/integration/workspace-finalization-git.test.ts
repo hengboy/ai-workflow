@@ -188,3 +188,14 @@ describe('workspace finalization pins delivery commits with real Git (REQ-009 / 
     }
   }, TIMEOUT);
 });
+
+describe('workspace repository lifecycle is documented for finalization (REQ-002, REQ-005)', () => {
+  it('documents per-repository worktree identity and non-fast-forward delivery integration', async () => {
+    const operator = await readFile(packagePath('templates', 'agents', 'git-operator.md'), 'utf8');
+
+    expect(operator, 'the per-repository worktree path is documented').toContain('<source-root>/.worktrees/<planId>');
+    expect(operator, 'the per-repository branch is documented').toContain('ai-workflow/<planId>');
+    expect(operator, 'the common-directory identity check is documented').toContain('--git-common-dir');
+    expect(operator, 'delivery integration is non-fast-forward').toMatch(/non-fast-forward/i);
+  });
+});
