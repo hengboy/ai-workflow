@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { constants } from 'node:fs';
-import { access, chmod, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { access, chmod, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import { runProjectGate, type ProjectGateResult } from '../../src/sync/gate.js';
+import { runProjectGate, type ProjectGateInput, type ProjectGateResult } from '../../src/sync/gate.js';
 import type { SyncStatus } from '../../src/sync/index.js';
 import { changedPaths, snapshotTree, temporary } from '../helpers.js';
 import { exists } from '../../src/utils/fs.js';
@@ -189,7 +189,7 @@ interface ScriptedSourceState {
   head: string;
   /** How many branch/HEAD requests the gate actually issued externally. */
   branchCalls: number;
-  /** Every external HTTP request, to prove a reused unit performs no retrieval at all. */
+  /** Every external HTTP request, to prove a cache hit performs no retrieval at all. */
   httpCalls: number;
 }
 
@@ -230,6 +230,39 @@ async function writeAdoptedTarget(root: string, commit: string, overrides: Recor
   await writeFile(join(root, '.gitignore'), '.ai-workflow/plans/\n.worktrees/\n');
 }
 
+/** Every regular file the gate wrote under the opaque runtime directory, recursively sorted. */
+async function runtimeFiles(runtimeDirectory: string): Promise<string[]> {
+  const files: string[] = [];
+  async function walk(directory: string): Promise<void> {
+    let entries;
+    try {
+      entries = await readdir(directory, { withFileTypes: true });
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
+      throw error;
+    }
+    for (const entry of entries) {
+      const absolute = join(directory, entry.name);
+      if (entry.isDirectory()) await walk(absolute);
+      else files.push(absolute);
+    }
+  }
+  await walk(runtimeDirectory);
+  return files.sort();
+}
+
+/** The one root-keyed cache file the gate is expected to have written; located by enumeration. */
+async function singleRuntimeFile(runtimeDirectory: string): Promise<string> {
+  const files = await runtimeFiles(runtimeDirectory);
+  expect(files, 'exactly one runtime cache entry is expected').toHaveLength(1);
+  return files[0]!;
+}
+
+/** Parse a cache file to prove the stored entry is complete and structurally valid JSON. */
+async function parseRuntimeFile(path: string): Promise<unknown> {
+  return JSON.parse(await readFile(path, 'utf8')) as unknown;
+}
+
 // A differing unmarked same-heading legacy rule: the source MEMORY.md owns a
 // `## Standards` section, while the target keeps an unmarked `## Standards` body that
 // differs. The merge preserves the target bytes and records a needs_attention warning,
@@ -241,7 +274,6 @@ const MALFORMED_AGENTS = '# Contract\n\n<!-- ai-workflow:section broken:begin --
 interface SeverityCase {
   name: string;
   host: 'claude' | 'codex' | 'opencode';
-  event: string;
   /** Write the adopted target and return the injectable source fixture. */
   setup: (root: string, commit: string) => Promise<typeof fetch>;
   expected: {
@@ -257,11 +289,12 @@ interface SeverityCase {
   readOnlyProjectRoot?: boolean;
 }
 
+// Every case now runs through the one automatic trigger, `PhaseEntry`; its report mapping
+// is preserved as a regression guard while the trigger cadence changes.
 const severityCases: SeverityCase[] = [
   {
-    name: 'a marked project with a safe update allows and exposes the fresh contract authority',
+    name: 'a phase entry on a marked project with a safe update allows and exposes the fresh contract authority',
     host: 'claude',
-    event: 'PreToolUse',
     setup: async (root, commit) => {
       await writeAdoptedTarget(root, commit);
       return fixedHeadFetch(commit, sourceFiles(commit));
@@ -271,7 +304,6 @@ const severityCases: SeverityCase[] = [
   {
     name: 'a failed source branch allows warning continuation instead of a host denial',
     host: 'codex',
-    event: 'SessionStart',
     setup: async (root, commit) => {
       await writeAdoptedTarget(root, commit);
       return headFailureFetch(403);
@@ -281,7 +313,6 @@ const severityCases: SeverityCase[] = [
   {
     name: 'a safe contract update with unresolved differing legacy content still exposes the fresh contract authority',
     host: 'opencode',
-    event: 'tool.execute.before',
     setup: async (root, commit) => {
       await writeAdoptedTarget(root, commit, { 'MEMORY.md': DIFFERING_LEGACY_MEMORY });
       return fixedHeadFetch(commit, { ...sourceFiles(commit), 'templates/project/MEMORY.md': DIFFERING_LEGACY_SOURCE_MEMORY });
@@ -291,7 +322,6 @@ const severityCases: SeverityCase[] = [
   {
     name: 'a malformed target marker denies with a visible reason',
     host: 'claude',
-    event: 'PreToolUse',
     setup: async (root, commit) => {
       await writeAdoptedTarget(root, commit, { '.ai-workflow/AGENTS.md': MALFORMED_AGENTS });
       return fixedHeadFetch(commit, sourceFiles(commit));
@@ -301,7 +331,6 @@ const severityCases: SeverityCase[] = [
   {
     name: 'an ordinary filesystem failure denies with a visible reason',
     host: 'codex',
-    event: 'PreToolUse',
     readOnlyProjectRoot: true,
     setup: async (root, commit) => {
       await writeAdoptedTarget(root, commit);
@@ -311,8 +340,8 @@ const severityCases: SeverityCase[] = [
   },
 ];
 
-describe('project sync gate decision and authority', () => {
-  it.each(severityCases)('AC-007/AC-008: $name', async (testCase) => {
+describe('project sync gate phase-entry report mapping (AC-001/AC-003)', () => {
+  it.each(severityCases)('AC-001/AC-003: $name', async (testCase) => {
     const root = await temporary('ai-workflow-gate-');
     const runtimeDirectory = await temporary('ai-workflow-gate-runtime-');
     roots.push(root, runtimeDirectory);
@@ -327,7 +356,7 @@ describe('project sync gate decision and authority', () => {
         if (writable) throw new Error('This environment cannot enforce a read-only project root (likely running as root); the filesystem-failure gate case requires an unprivileged process.');
       }
       result = await runProjectGate(
-        { host: testCase.host, event: testCase.event, sessionId: 'session-1', cwd: root, toolName: 'Bash', toolInput: { command: 'ls' } },
+        { host: testCase.host, event: 'PhaseEntry', sessionId: 'session-1', cwd: root, toolName: 'Bash', toolInput: { command: 'ls' } },
         { fetch: http, env: {}, runtimeDirectory },
       );
     } catch (error) {
@@ -375,148 +404,309 @@ describe('project sync gate decision and authority', () => {
       expect(gate.authority, 'the current contract must be exposed for re-read').toBe(contract);
       expect(gate.authority).toContain(`immutable ${COMMIT}`);
     }
-  });
 
-  it('skips the updater outside an adoption without creating or claiming freshness', async () => {
-    const root = await temporary('ai-workflow-gate-skip-');
-    const runtimeDirectory = await temporary('ai-workflow-gate-runtime-');
-    roots.push(root, runtimeDirectory);
-    const before = await snapshotTree(root);
-
-    // The skip boundary is the absent `.ai-workflow` adoption root, not a missing
-    // AGENTS.md: a valid MEMORY/navigation with a missing managed contract is safe
-    // managed creation, while a partial adoption missing MEMORY or navigation is a
-    // conflict. This fixture carries no adoption at all.
-    const gate = await runProjectGate(
-      { host: 'codex', event: 'SessionStart', sessionId: 'session-2', cwd: root },
-      { fetch: fixedHeadFetch(COMMIT, sourceFiles(COMMIT)), env: {}, runtimeDirectory },
-    );
-
-    expect(gate.decision).toBe('skip');
-    expect(gate.authority).toBeUndefined();
-    expect(gate.report?.verified ?? false).toBe(false);
-    expect(await exists(join(root, '.ai-workflow')), 'an unadopted project must not be initialized by the updater').toBe(false);
-    expect(changedPaths(before, await snapshotTree(root)), 'skipping must write nothing').toEqual([]);
+    // AC-001: a phase entry stores exactly one complete, parsable root-keyed cache entry.
+    const cacheFile = await singleRuntimeFile(runtimeDirectory);
+    expect(await parseRuntimeFile(cacheFile), 'the stored cache entry must be a complete JSON object').toBeTruthy();
   });
 });
 
-describe('project sync gate execution-unit lifecycle', () => {
-  it('AC-006: shares one source snapshot across a unit, refreshes at each boundary and never inherits a stale root claim', async () => {
-    const parentRoot = await temporary('ai-workflow-gate-parent-');
-    const childRoot = await temporary('ai-workflow-gate-child-');
-    const worktreeRoot = await temporary('ai-workflow-gate-worktree-');
-    const runtimeDirectory = await temporary('ai-workflow-gate-runtime-');
-    roots.push(parentRoot, childRoot, worktreeRoot, runtimeDirectory);
-    for (const root of [parentRoot, childRoot, worktreeRoot]) await writeAdoptedTarget(root, COMMIT);
+describe('project sync gate native event cache reuse (AC-002/AC-003)', () => {
+  it('AC-002/AC-003: replays the stored phase result verbatim across native events with zero source requests', async () => {
+    const root = await temporary('ai-workflow-gate-replay-');
+    const runtimeDirectory = await temporary('ai-workflow-gate-replay-runtime-');
+    roots.push(root, runtimeDirectory);
+    await writeAdoptedTarget(root, COMMIT);
+    const state: ScriptedSourceState = { head: 'a'.repeat(40), branchCalls: 0, httpCalls: 0 };
+    const http = scriptedHeadFetch(state);
+    const options = { fetch: http, env: {}, runtimeDirectory };
+    const invoke = (input: Omit<ProjectGateInput, 'host'>): Promise<ProjectGateResult> =>
+      runProjectGate({ host: 'claude', toolName: 'Bash', toolInput: { command: 'ls' }, ...input }, options);
 
-    // The transient unit store lives outside every synchronization target.
-    for (const root of [parentRoot, childRoot, worktreeRoot]) expect(runtimeDirectory.startsWith(root)).toBe(false);
+    const stored = await invoke({ event: 'PhaseEntry', sessionId: 'session-1', cwd: root });
+    expect(stored.decision).toBe('allow');
+    expect(stored.report?.source.commit).toBe(state.head);
+    expect(stored.authority, 'a safe contract update must store the authority payload').toBeDefined();
+    const branchAfterPhase = state.branchCalls;
+    const httpAfterPhase = state.httpCalls;
+    const runtimeAfterPhase = await snapshotTree(runtimeDirectory);
+    const rootAfterPhase = await snapshotTree(root);
+
+    const natives: Array<Omit<ProjectGateInput, 'host'>> = [
+      { event: 'SessionStart', sessionId: 'session-1', cwd: root, eventSource: 'startup' },
+      { event: 'SessionStart', sessionId: 'child', cwd: root, parentSessionId: 'session-1', eventSource: 'resume' },
+      { event: 'UserPromptSubmit', sessionId: 'session-1', cwd: root },
+      { event: 'PreToolUse', sessionId: 'session-1', cwd: root, toolName: 'Bash', toolInput: { command: 'ls' } },
+      { event: 'PreToolUse', sessionId: 'child', cwd: root, parentSessionId: 'session-1', toolName: 'Bash', toolInput: { command: 'pwd' } },
+      { event: 'tool.execute.before', sessionId: 'session-1', cwd: root, toolName: 'Bash', toolInput: { command: 'echo hi' } },
+    ];
+    for (const native of natives) {
+      const replay = await invoke(native);
+      expect(replay, `${native.event} must return the stored result verbatim`).toEqual(stored);
+      expect(replay.decision, native.event).toBe('allow');
+      expect(replay.report?.source.commit, native.event).toBe(state.head);
+    }
+
+    expect(state.branchCalls, 'native events must never query HEAD').toBe(branchAfterPhase);
+    expect(state.httpCalls, 'native events must issue zero source requests').toBe(httpAfterPhase);
+    expect(changedPaths(runtimeAfterPhase, await snapshotTree(runtimeDirectory)), 'native events must not rewrite the stored entry').toEqual([]);
+    expect(changedPaths(rootAfterPhase, await snapshotTree(root)), 'native events must not touch the project tree').toEqual([]);
+  });
+
+  it('AC-003: replays a stored deny to native events without clearing it or querying the source', async () => {
+    const root = await temporary('ai-workflow-gate-deny-');
+    const runtimeDirectory = await temporary('ai-workflow-gate-deny-runtime-');
+    roots.push(root, runtimeDirectory);
+    await writeAdoptedTarget(root, COMMIT, { '.ai-workflow/AGENTS.md': MALFORMED_AGENTS });
+    const state: ScriptedSourceState = { head: COMMIT, branchCalls: 0, httpCalls: 0 };
+    const http = scriptedHeadFetch(state);
+    const options = { fetch: http, env: {}, runtimeDirectory };
+
+    const stored = await runProjectGate({ host: 'claude', event: 'PhaseEntry', sessionId: 'deny-session', cwd: root }, options);
+    expect(stored.decision).toBe('deny');
+    expect(stored.report?.status).toBe('conflict');
+    const branchAfterPhase = state.branchCalls;
+    const httpAfterPhase = state.httpCalls;
+
+    const toolReplay = await runProjectGate(
+      { host: 'claude', event: 'PreToolUse', sessionId: 'other-session', cwd: root, toolName: 'Bash', toolInput: { command: 'ls' } },
+      options,
+    );
+    expect(toolReplay, 'an ordinary tool call must be blocked by the stored deny').toEqual(stored);
+    expect(toolReplay.decision).toBe('deny');
+
+    const turnReplay = await runProjectGate({ host: 'claude', event: 'UserPromptSubmit', sessionId: 'other-session', cwd: root }, options);
+    expect(turnReplay, 'a user turn must replay the stored deny').toEqual(stored);
+
+    expect(state.branchCalls, 'replaying a stored deny must not query HEAD').toBe(branchAfterPhase);
+    expect(state.httpCalls, 'replaying a stored deny must issue zero source requests').toBe(httpAfterPhase);
+  });
+});
+
+describe('project sync gate no stored result (AC-004)', () => {
+  function expectNoCheck(result: ProjectGateResult): void {
+    expect(result.decision).toBe('allow');
+    expect(result.report, 'a missing check must not fabricate a report').toBeUndefined();
+    expect(result.authority, 'a missing check must not fabricate authority').toBeUndefined();
+    expect(result.context.length).toBeGreaterThan(0);
+    expect(result.context, 'the no-check context must state that no check has run').toMatch(/no[\s\S]{0,80}(check|synchroni)/i);
+  }
+
+  it('AC-004: allows an adopted native event without a report, any source request or any write', async () => {
+    const root = await temporary('ai-workflow-gate-nocheck-');
+    const runtimeDirectory = await temporary('ai-workflow-gate-nocheck-runtime-');
+    roots.push(root, runtimeDirectory);
+    await writeAdoptedTarget(root, COMMIT);
+    const state: ScriptedSourceState = { head: COMMIT, branchCalls: 0, httpCalls: 0 };
+    const http = scriptedHeadFetch(state);
+    const runtimeBefore = await snapshotTree(runtimeDirectory);
+    const rootBefore = await snapshotTree(root);
+
+    const result = await runProjectGate(
+      { host: 'claude', event: 'PreToolUse', sessionId: 'no-check', cwd: root, toolName: 'Bash', toolInput: { command: 'ls' } },
+      { fetch: http, env: {}, runtimeDirectory },
+    );
+
+    expectNoCheck(result);
+    expect(state.branchCalls, 'a no-check native event must not query HEAD').toBe(0);
+    expect(state.httpCalls, 'a no-check native event must issue zero source requests').toBe(0);
+    expect(changedPaths(runtimeBefore, await snapshotTree(runtimeDirectory)), 'a no-check native event must write no runtime entry').toEqual([]);
+    expect(changedPaths(rootBefore, await snapshotTree(root)), 'a no-check native event must not touch the project').toEqual([]);
+  });
+
+  it('AC-004: treats a corrupt or truncated cache entry as no check without any source request', async () => {
+    for (const mode of ['invalid-json', 'truncated'] as const) {
+      const root = await temporary('ai-workflow-gate-corrupt-');
+      const runtimeDirectory = await temporary('ai-workflow-gate-corrupt-runtime-');
+      roots.push(root, runtimeDirectory);
+      await writeAdoptedTarget(root, COMMIT);
+      const state: ScriptedSourceState = { head: COMMIT, branchCalls: 0, httpCalls: 0 };
+      const http = scriptedHeadFetch(state);
+      const options = { fetch: http, env: {}, runtimeDirectory };
+
+      const primed = await runProjectGate({ host: 'claude', event: 'PhaseEntry', sessionId: 'prime', cwd: root }, options);
+      expect(primed.report?.status).toBe('synchronized');
+      const cacheFile = await singleRuntimeFile(runtimeDirectory);
+      if (mode === 'invalid-json') {
+        await writeFile(cacheFile, '{ this is not valid json');
+      } else {
+        const valid = await readFile(cacheFile, 'utf8');
+        await writeFile(cacheFile, valid.slice(0, Math.max(1, Math.floor(valid.length / 2))));
+      }
+      const branchAfterPrime = state.branchCalls;
+      const httpAfterPrime = state.httpCalls;
+      const runtimeBefore = await snapshotTree(runtimeDirectory);
+
+      const result = await runProjectGate(
+        { host: 'claude', event: 'PreToolUse', sessionId: 'after-corrupt', cwd: root, toolName: 'Bash', toolInput: { command: 'ls' } },
+        options,
+      );
+      expectNoCheck(result);
+      expect(state.branchCalls, `${mode}: a corrupt cache must not trigger HEAD`).toBe(branchAfterPrime);
+      expect(state.httpCalls, `${mode}: a corrupt cache must not trigger a source request`).toBe(httpAfterPrime);
+      expect(changedPaths(runtimeBefore, await snapshotTree(runtimeDirectory)), `${mode}: a corrupt cache must not be rewritten`).toEqual([]);
+    }
+  });
+
+  it('AC-004: treats an unreadable cache entry as no check without any source request', async () => {
+    const root = await temporary('ai-workflow-gate-unreadable-');
+    const runtimeDirectory = await temporary('ai-workflow-gate-unreadable-runtime-');
+    roots.push(root, runtimeDirectory);
+    await writeAdoptedTarget(root, COMMIT);
+    const state: ScriptedSourceState = { head: COMMIT, branchCalls: 0, httpCalls: 0 };
+    const http = scriptedHeadFetch(state);
+    const options = { fetch: http, env: {}, runtimeDirectory };
+
+    const primed = await runProjectGate({ host: 'claude', event: 'PhaseEntry', sessionId: 'prime', cwd: root }, options);
+    expect(primed.report?.status).toBe('synchronized');
+
+    // Force a read error at the exact cache path the gate wrote, by occupying it with a directory.
+    const cacheFile = await singleRuntimeFile(runtimeDirectory);
+    await rm(cacheFile, { force: true });
+    await mkdir(cacheFile);
+    const branchAfterPrime = state.branchCalls;
+    const httpAfterPrime = state.httpCalls;
+    const runtimeBefore = await snapshotTree(runtimeDirectory);
+
+    const result = await runProjectGate(
+      { host: 'claude', event: 'PreToolUse', sessionId: 'after-unreadable', cwd: root, toolName: 'Bash', toolInput: { command: 'ls' } },
+      options,
+    );
+    expectNoCheck(result);
+    expect(state.branchCalls, 'an unreadable cache must not trigger HEAD').toBe(branchAfterPrime);
+    expect(state.httpCalls, 'an unreadable cache must not trigger a source request').toBe(httpAfterPrime);
+    expect(changedPaths(runtimeBefore, await snapshotTree(runtimeDirectory)), 'an unreadable cache must not be rewritten').toEqual([]);
+  });
+});
+
+describe('project sync gate unadopted project (AC-005)', () => {
+  it('AC-005: skips every event form in a directory without an adoption and writes nothing', async () => {
+    const root = await temporary('ai-workflow-gate-unadopted-');
+    const runtimeDirectory = await temporary('ai-workflow-gate-unadopted-runtime-');
+    roots.push(root, runtimeDirectory);
+
+    const events: Array<Omit<ProjectGateInput, 'host' | 'cwd'>> = [
+      { event: 'PhaseEntry', sessionId: 's' },
+      { event: 'SessionStart', sessionId: 's' },
+      { event: 'UserPromptSubmit', sessionId: 's' },
+      { event: 'PreToolUse', sessionId: 's', toolName: 'Bash', toolInput: { command: 'ls' } },
+      { event: 'tool.execute.before', sessionId: 's', toolName: 'Bash', toolInput: { command: 'ls' } },
+    ];
+    for (const event of events) {
+      const state: ScriptedSourceState = { head: COMMIT, branchCalls: 0, httpCalls: 0 };
+      const http = scriptedHeadFetch(state);
+      const runtimeBefore = await snapshotTree(runtimeDirectory);
+      const rootBefore = await snapshotTree(root);
+
+      const gate = await runProjectGate({ host: 'codex', cwd: root, ...event }, { fetch: http, env: {}, runtimeDirectory });
+
+      expect(gate.decision, event.event).toBe('skip');
+      expect(gate.authority, event.event).toBeUndefined();
+      expect(gate.report, `${event.event}: a skip must not fabricate a report`).toBeUndefined();
+      expect(state.branchCalls, `${event.event}: an unadopted project must not query HEAD`).toBe(0);
+      expect(state.httpCalls, `${event.event}: an unadopted project must issue zero source requests`).toBe(0);
+      expect(changedPaths(runtimeBefore, await snapshotTree(runtimeDirectory)), `${event.event}: an unadopted project must write no runtime entry`).toEqual([]);
+      expect(changedPaths(rootBefore, await snapshotTree(root)), `${event.event}: an unadopted project must stay unchanged`).toEqual([]);
+    }
+    expect(await exists(join(root, '.ai-workflow')), 'an unadopted project must not be initialized by the gate').toBe(false);
+    expect(await runtimeFiles(runtimeDirectory), 'an unadopted project must leave the runtime tree empty').toEqual([]);
+  });
+});
+
+describe('project sync gate single-start lifecycle (AC-001/AC-002)', () => {
+  it('AC-001/AC-002: synchronizes once per phase entry, never at a later native event, and keeps each actual root separate', async () => {
+    const parentRoot = await temporary('ai-workflow-gate-parent-');
+    const worktreeRoot = await temporary('ai-workflow-gate-worktree-');
+    const runtimeDirectory = await temporary('ai-workflow-gate-lifecycle-runtime-');
+    roots.push(parentRoot, worktreeRoot, runtimeDirectory);
+    await writeAdoptedTarget(parentRoot, COMMIT);
+    await writeAdoptedTarget(worktreeRoot, COMMIT);
 
     const state: ScriptedSourceState = { head: 'a'.repeat(40), branchCalls: 0, httpCalls: 0 };
     const http = scriptedHeadFetch(state);
+    const options = { fetch: http, env: {}, runtimeDirectory };
+    const invoke = (input: Omit<ProjectGateInput, 'host'>): Promise<ProjectGateResult> =>
+      runProjectGate({ host: 'claude', toolName: 'Bash', toolInput: { command: 'ls' }, ...input }, options);
 
-    const invoke = (input: { event: string; sessionId: string; cwd: string; parentSessionId?: string; eventSource?: string }): Promise<ProjectGateResult> =>
-      runProjectGate(
-        {
-          host: 'claude',
-          event: input.event,
-          sessionId: input.sessionId,
-          cwd: input.cwd,
-          toolName: 'Bash',
-          toolInput: { command: 'ls' },
-          ...(input.parentSessionId === undefined ? {} : { parentSessionId: input.parentSessionId }),
-          ...(input.eventSource === undefined ? {} : { eventSource: input.eventSource }),
-        },
-        { fetch: http, env: {}, runtimeDirectory },
-      );
-
+    // One phase entry resolves the source for the actual root.
     const A = state.head;
-    const first = await invoke({ event: 'PreToolUse', sessionId: 'parent', cwd: parentRoot });
+    const first = await invoke({ event: 'PhaseEntry', sessionId: 'parent', cwd: parentRoot });
     expect(first.decision).toBe('allow');
     expect(first.project).toBe(parentRoot);
     expect(first.report?.source.commit).toBe(A);
     expect(state.branchCalls).toBe(1);
-    const httpCallsAfterFirst = state.httpCalls;
+    const httpAfterFirst = state.httpCalls;
+    expect(await readFile(join(parentRoot, '.ai-workflow/AGENTS.md'), 'utf8')).toContain(`immutable ${A}`);
+    expect(await runtimeFiles(runtimeDirectory)).toHaveLength(1);
+
+    // Upstream advances, but no native event may observe it or re-synchronize. This is the
+    // key cadence difference from today's per-boundary invalidation.
+    state.head = 'b'.repeat(40);
+    const runtimeAfterFirst = await snapshotTree(runtimeDirectory);
+    const parentAfterFirst = await snapshotTree(parentRoot);
+    const natives: Array<Omit<ProjectGateInput, 'host'>> = [
+      { event: 'PreToolUse', sessionId: 'parent', cwd: parentRoot, toolName: 'Bash', toolInput: { command: 'ls' } },
+      { event: 'PreToolUse', sessionId: 'child', cwd: parentRoot, parentSessionId: 'parent', toolName: 'Bash', toolInput: { command: 'pwd' } },
+      { event: 'SessionStart', sessionId: 'child', cwd: parentRoot, parentSessionId: 'parent', eventSource: 'resume' },
+      { event: 'SessionStart', sessionId: 'parent', cwd: parentRoot, eventSource: 'startup' },
+      { event: 'UserPromptSubmit', sessionId: 'parent', cwd: parentRoot },
+      { event: 'tool.execute.before', sessionId: 'parent', cwd: parentRoot, toolName: 'Bash', toolInput: { command: 'echo hi' } },
+    ];
+    for (const native of natives) {
+      const replay = await invoke(native);
+      expect(replay.decision, native.event).toBe('allow');
+      expect(replay.report?.source.commit, `${native.event} must replay the stored commit`).toBe(A);
+    }
+    expect(state.branchCalls, 'no native event may re-synchronize the parent root').toBe(1);
+    expect(state.httpCalls, 'no native event may issue a source request').toBe(httpAfterFirst);
+    expect(changedPaths(runtimeAfterFirst, await snapshotTree(runtimeDirectory)), 'native events must not rewrite the cache').toEqual([]);
+    expect(changedPaths(parentAfterFirst, await snapshotTree(parentRoot)), 'native events must not edit the contract').toEqual([]);
     expect(await readFile(join(parentRoot, '.ai-workflow/AGENTS.md'), 'utf8')).toContain(`immutable ${A}`);
 
-    // Upstream advances mid-unit: no trigger inside the same unit may observe B.
-    state.head = 'b'.repeat(40);
+    // A second phase entry replaces the stored entry rather than adding one, and picks up B.
     const B = state.head;
-    const second = await invoke({ event: 'PreToolUse', sessionId: 'parent', cwd: parentRoot });
-    expect(second.report?.source.commit).toBe(A);
-    const childTool = await invoke({ event: 'PreToolUse', sessionId: 'child', cwd: parentRoot, parentSessionId: 'parent' });
-    expect(childTool.report?.source.commit).toBe(A);
-    const childStart = await invoke({ event: 'SessionStart', sessionId: 'child', cwd: parentRoot, parentSessionId: 'parent' });
-    expect(childStart.report?.source.commit).toBe(A);
-    const parentAfterChild = await invoke({ event: 'PreToolUse', sessionId: 'parent', cwd: parentRoot });
-    expect(parentAfterChild.report?.source.commit).toBe(A);
-    expect(await readFile(join(parentRoot, '.ai-workflow/AGENTS.md'), 'utf8'), 'a mid-unit trigger must not rewrite the contract').toContain(`immutable ${A}`);
-    expect(state.branchCalls, 'one unit queries HEAD once; child boundaries must not invalidate the parent unit').toBe(1);
-    expect(state.httpCalls, 'a reused unit performs no external HTTP retrieval').toBe(httpCallsAfterFirst);
-
-    // A prompt event begins a new unit and picks up the advanced HEAD (B).
-    const prompt = await invoke({ event: 'UserPromptSubmit', sessionId: 'parent', cwd: parentRoot });
-    expect(prompt.report?.source.commit).toBe(B);
+    const second = await invoke({ event: 'PhaseEntry', sessionId: 'parent', cwd: parentRoot });
+    expect(second.report?.source.commit).toBe(B);
     expect(state.branchCalls).toBe(2);
+    expect(await runtimeFiles(runtimeDirectory), 'a second phase entry must replace the stored entry').toHaveLength(1);
     expect(await readFile(join(parentRoot, '.ai-workflow/AGENTS.md'), 'utf8')).toContain(`immutable ${B}`);
-    const promptTool = await invoke({ event: 'PreToolUse', sessionId: 'parent', cwd: parentRoot });
-    expect(promptTool.report?.source.commit).toBe(B);
-    expect(state.branchCalls).toBe(2);
+    const httpAfterSecond = state.httpCalls;
+    const replayB = await invoke({ event: 'PreToolUse', sessionId: 'parent', cwd: parentRoot });
+    expect(replayB.report?.source.commit).toBe(B);
+    expect(state.httpCalls, 'the replaced entry must be served with zero requests').toBe(httpAfterSecond);
 
-    // A resume SessionStart invalidates the previous result and syncs the new HEAD (C).
+    // A distinct actual root with its own `.ai-workflow/` has no stored check: no-check allow,
+    // zero requests, and it never replays the parent root's decision or authority.
     state.head = 'c'.repeat(40);
     const C = state.head;
-    const resume = await invoke({ event: 'SessionStart', sessionId: 'parent', cwd: parentRoot, eventSource: 'resume' });
-    expect(resume.report?.source.commit).toBe(C);
+    const worktreeBefore = await snapshotTree(worktreeRoot);
+    const worktreeNative = await invoke({ event: 'PreToolUse', sessionId: 'parent', cwd: worktreeRoot });
+    expect(worktreeNative.decision).toBe('allow');
+    expect(worktreeNative.project).toBe(worktreeRoot);
+    expect(worktreeNative.report, 'an unprimed worktree must not replay the parent report').toBeUndefined();
+    expect(worktreeNative.authority, 'an unprimed worktree must not replay the parent authority').toBeUndefined();
+    expect(state.branchCalls, 'an unprimed worktree native event must not query the source').toBe(2);
+    expect(changedPaths(worktreeBefore, await snapshotTree(worktreeRoot)), 'an unprimed worktree must not be edited').toEqual([]);
+    expect(await runtimeFiles(runtimeDirectory)).toHaveLength(1);
+
+    // Only a phase entry in the second root synchronizes it into its own entry.
+    const worktreePhase = await invoke({ event: 'PhaseEntry', sessionId: 'parent', cwd: worktreeRoot });
+    expect(worktreePhase.project).toBe(worktreeRoot);
+    expect(worktreePhase.report?.source.commit).toBe(C);
     expect(state.branchCalls).toBe(3);
+    expect(await runtimeFiles(runtimeDirectory), 'each actual root keeps its own cache entry').toHaveLength(2);
+    expect(await readFile(join(worktreeRoot, '.ai-workflow/AGENTS.md'), 'utf8')).toContain(`immutable ${C}`);
+    expect(await readFile(join(parentRoot, '.ai-workflow/AGENTS.md'), 'utf8'), 'syncing the worktree must not edit the parent').toContain(`immutable ${B}`);
 
-    // A root switch to a separately adopted child root starts its own unit and normalizes
-    // the project to that actual root without editing the parent. The cwd is a nested
-    // subdirectory, so the gate must walk up to the adopted root.
-    const childSubdirectory = join(childRoot, 'src');
-    await mkdir(childSubdirectory, { recursive: true });
-    const parentBeforeSwitch = await snapshotTree(parentRoot);
-    state.head = 'd'.repeat(40);
-    const D = state.head;
-    const childUnit = await invoke({ event: 'PreToolUse', sessionId: 'parent', cwd: childSubdirectory });
-    expect(childUnit.project).toBe(childRoot);
-    expect(childUnit.report?.project).toBe(childRoot);
-    expect(childUnit.report?.source.commit).toBe(D);
-    expect(state.branchCalls).toBe(4);
-    expect(changedPaths(parentBeforeSwitch, await snapshotTree(parentRoot)), 'syncing a child root must not edit the parent root').toEqual([]);
+    const httpAfterWorktree = state.httpCalls;
+    const worktreeReplay = await invoke({ event: 'UserPromptSubmit', sessionId: 'child', cwd: worktreeRoot, parentSessionId: 'parent' });
+    expect(worktreeReplay.report?.source.commit).toBe(C);
+    expect(state.httpCalls, 'the worktree entry must be served with zero requests').toBe(httpAfterWorktree);
 
-    // A second distinct adopted root (a disposable coding-worktree stand-in) also gets its
-    // own unit; the sibling child root keeps its D bytes.
-    state.head = 'e'.repeat(40);
-    const E = state.head;
-    const worktreeUnit = await invoke({ event: 'PreToolUse', sessionId: 'parent', cwd: worktreeRoot });
-    expect(worktreeUnit.project).toBe(worktreeRoot);
-    expect(worktreeUnit.report?.source.commit).toBe(E);
-    expect(state.branchCalls).toBe(5);
-    expect(await readFile(join(childRoot, '.ai-workflow/AGENTS.md'), 'utf8'), 'a sibling root must not be edited').toContain(`immutable ${D}`);
-
-    // Switching back cannot inherit the earlier parent claim: HEAD is queried again.
-    state.head = 'f'.repeat(40);
-    const F = state.head;
-    const parentAgain = await invoke({ event: 'PreToolUse', sessionId: 'parent', cwd: parentRoot });
-    expect(parentAgain.project).toBe(parentRoot);
-    expect(parentAgain.report?.source.commit).toBe(F);
-    expect(state.branchCalls).toBe(6);
-
-    // An explicit PhaseEntry begins a new unit on the next HEAD (G); a same-root child
-    // reuses that phase snapshot instead of starting another unit.
-    state.head = '1'.repeat(40);
-    const G = state.head;
-    const phase = await invoke({ event: 'PhaseEntry', sessionId: 'parent', cwd: parentRoot });
-    expect(phase.report?.source.commit).toBe(G);
-    expect(state.branchCalls).toBe(7);
-    const phaseChild = await invoke({ event: 'PreToolUse', sessionId: 'child', cwd: parentRoot, parentSessionId: 'parent' });
-    expect(phaseChild.report?.source.commit).toBe(G);
-    expect(state.branchCalls, 'a same-root child must reuse the phase unit').toBe(7);
-
-    // No project synchronization metadata beyond the managed safe patches.
+    // No project-local synchronization metadata is created in either root.
     for (const metadata of ['.ai-workflow/sync.json', '.ai-workflow/project.yml', '.ai-workflow/.sync']) {
-      expect(await exists(join(parentRoot, metadata)), `${metadata} must not be created`).toBe(false);
+      expect(await exists(join(parentRoot, metadata)), `${metadata} must not be created in the parent`).toBe(false);
+      expect(await exists(join(worktreeRoot, metadata)), `${metadata} must not be created in the worktree`).toBe(false);
     }
   });
 });
@@ -526,28 +716,35 @@ function expectNoFreshness(result: ProjectGateResult): void {
   if (result.report !== undefined) expect(result.report.status).not.toBe('synchronized');
 }
 
-describe('project sync gate actor and authority exemptions', () => {
-  it('REQ-004/AC-008: permits the exact sync actor and contract read through a cached conflict without clearing it', async () => {
+describe('project sync gate actor and authority exemptions (AC-003)', () => {
+  it('AC-003/REQ-002: permits the exact sync actor and contract read through a stored conflict without clearing it and without a request', async () => {
     const root = await temporary('ai-workflow-gate-exempt-');
     const runtimeDirectory = await temporary('ai-workflow-gate-exempt-runtime-');
     roots.push(root, runtimeDirectory);
     await writeAdoptedTarget(root, COMMIT, { '.ai-workflow/AGENTS.md': MALFORMED_AGENTS });
-    const http = fixedHeadFetch(COMMIT, sourceFiles(COMMIT));
-    const before = await snapshotTree(root);
+    const state: ScriptedSourceState = { head: COMMIT, branchCalls: 0, httpCalls: 0 };
+    const http = scriptedHeadFetch(state);
+    const options = { fetch: http, env: {}, runtimeDirectory };
+    const invoke = (toolName: string, toolInput: unknown): Promise<ProjectGateResult> =>
+      runProjectGate({ host: 'opencode', event: 'PreToolUse', sessionId: 'exempt-session', cwd: root, toolName, toolInput }, options);
+
     const contractPath = join(root, '.ai-workflow/AGENTS.md');
     const contract = await readFile(contractPath, 'utf8');
+    const before = await snapshotTree(root);
 
-    const invoke = (toolName: string, toolInput: unknown): Promise<ProjectGateResult> =>
-      runProjectGate(
-        { host: 'opencode', event: 'PreToolUse', sessionId: 'exempt-session', cwd: root, toolName, toolInput },
-        { fetch: http, env: {}, runtimeDirectory },
-      );
+    // A phase entry stores the true conflict (not a source-failure warning) and denies ordinary tools.
+    const primed = await runProjectGate({ host: 'opencode', event: 'PhaseEntry', sessionId: 'exempt-session', cwd: root }, options);
+    expect(primed.decision).toBe('deny');
+    expect(primed.report?.status).toBe('conflict');
+    expect(primed.report?.verified).toBe(false);
+    const httpAfterPrime = state.httpCalls;
+    const branchAfterPrime = state.branchCalls;
+    const runtimeAfterPrime = await snapshotTree(runtimeDirectory);
+    expect(await runtimeFiles(runtimeDirectory)).toHaveLength(1);
 
-    // A true conflict (not a source-failure warning) denies an ordinary tool and is cached.
     const ordinary = await invoke('Bash', { command: 'ls -la' });
     expect(ordinary.decision).toBe('deny');
     expect(ordinary.report?.status).toBe('conflict');
-    expect(ordinary.report?.verified).toBe(false);
 
     // The exact sync actor is permitted so preflight cannot recurse or deadlock; the cached
     // ordinary deny is neither cleared nor bypassed, and no freshness is claimed.
@@ -583,14 +780,48 @@ describe('project sync gate actor and authority exemptions', () => {
     const unrelatedFile = await invoke('read', { filePath: join(root, 'MEMORY.md') });
     expect(unrelatedFile.decision).toBe('deny');
 
-    // Permitting a tool performs no target or frozen-plan write; the contract is unmodified.
-    expect(changedPaths(before, await snapshotTree(root))).toEqual([]);
+    expect(state.branchCalls, 'exemptions and native replays must not query HEAD').toBe(branchAfterPrime);
+    expect(state.httpCalls, 'exemptions and native replays must issue zero source requests').toBe(httpAfterPrime);
+    expect(changedPaths(runtimeAfterPrime, await snapshotTree(runtimeDirectory)), 'native events must not rewrite the stored deny').toEqual([]);
+    expect(changedPaths(before, await snapshotTree(root)), 'permitting a tool must not write the project').toEqual([]);
     expect(await readFile(contractPath, 'utf8')).toBe(contract);
   });
 });
 
-describe('project sync gate supported project path routing', () => {
-  it('REQ-003/AC-006: routes an explicit tool path to its own adopted root instead of the session root', async () => {
+describe('project sync gate concurrent phase entries (AC-001/AC-002)', () => {
+  it('AC-001/AC-002: concurrent phase entries leave one complete cache entry that a native event replays with zero requests', async () => {
+    const root = await temporary('ai-workflow-gate-concurrent-');
+    const runtimeDirectory = await temporary('ai-workflow-gate-concurrent-runtime-');
+    roots.push(root, runtimeDirectory);
+    await writeAdoptedTarget(root, COMMIT);
+    const state: ScriptedSourceState = { head: COMMIT, branchCalls: 0, httpCalls: 0 };
+    const http = scriptedHeadFetch(state);
+    const options = { fetch: http, env: {}, runtimeDirectory };
+
+    const [first, second] = await Promise.all([
+      runProjectGate({ host: 'claude', event: 'PhaseEntry', sessionId: 'concurrent-1', cwd: root }, options),
+      runProjectGate({ host: 'claude', event: 'PhaseEntry', sessionId: 'concurrent-2', cwd: root }, options),
+    ]);
+    expect(first.decision).toBe('allow');
+    expect(second.decision).toBe('allow');
+
+    const files = await runtimeFiles(runtimeDirectory);
+    expect(files, 'concurrent phase entries must leave exactly one cache entry').toHaveLength(1);
+    expect(await parseRuntimeFile(files[0]!), 'the surviving entry must be complete and parsable').toBeTruthy();
+
+    const httpAfterPhases = state.httpCalls;
+    const replay = await runProjectGate(
+      { host: 'claude', event: 'PreToolUse', sessionId: 'after', cwd: root, toolName: 'Bash', toolInput: { command: 'ls' } },
+      options,
+    );
+    expect(replay.decision).toBe('allow');
+    expect(replay.report, 'the following native event must replay a complete stored result').toBeDefined();
+    expect(state.httpCalls, 'the replay must issue zero source requests').toBe(httpAfterPhases);
+  });
+});
+
+describe('project sync gate supported project path routing (AC-002/AC-003)', () => {
+  it('AC-002/AC-003: routes a native event to its own adopted root cache and primes that root only through a phase entry', async () => {
     const sessionRoot = await temporary('ai-workflow-gate-session-');
     const operationRoot = await temporary('ai-workflow-gate-operation-');
     const runtimeDirectory = await temporary('ai-workflow-gate-route-runtime-');
@@ -599,41 +830,67 @@ describe('project sync gate supported project path routing', () => {
     await writeAdoptedTarget(operationRoot, COMMIT);
     await mkdir(join(operationRoot, 'src'), { recursive: true });
     await writeFile(join(operationRoot, 'src/file.ts'), 'export const routed = true;\n');
-    const http = fixedHeadFetch(COMMIT, sourceFiles(COMMIT));
-
-    const invoke = (sessionId: string, toolName: string, toolInput: unknown): Promise<ProjectGateResult> =>
-      runProjectGate(
-        { host: 'claude', event: 'PreToolUse', sessionId, cwd: sessionRoot, toolName, toolInput },
-        { fetch: http, env: {}, runtimeDirectory },
-      );
+    const state: ScriptedSourceState = { head: COMMIT, branchCalls: 0, httpCalls: 0 };
+    const http = scriptedHeadFetch(state);
+    const options = { fetch: http, env: {}, runtimeDirectory };
+    const invoke = (input: Omit<ProjectGateInput, 'host'>): Promise<ProjectGateResult> =>
+      runProjectGate({ host: 'claude', toolName: 'Bash', toolInput: { command: 'ls' }, ...input }, options);
 
     const operationAgents = join(operationRoot, '.ai-workflow/AGENTS.md');
     expect(await readFile(operationAgents, 'utf8')).not.toContain(`immutable ${COMMIT}`);
 
-    // Prime the session root with a cached synchronized unit for this session.
-    const primed = await invoke('route-session', 'Bash', { command: 'ls' });
+    // Prime only the session root with a phase entry.
+    const primed = await invoke({ event: 'PhaseEntry', sessionId: 'route-session', cwd: sessionRoot });
     expect(primed.project).toBe(sessionRoot);
     expect(primed.report?.status).toBe('synchronized');
+    const branchAfterPrime = state.branchCalls;
+    const httpAfterPrime = state.httpCalls;
     const sessionRootAfterPrime = await snapshotTree(sessionRoot);
 
-    // A Bash `workdir` explicitly targets a different adopted root: the operation must run at
-    // that root, synchronize it fresh, and never reuse the session root's cached result.
-    const routedBash = await invoke('route-session', 'Bash', { command: 'ls', workdir: operationRoot });
+    // A native event at the session root answers from that root's cache with no request.
+    const sessionNative = await invoke({ event: 'PreToolUse', sessionId: 'route-session', cwd: sessionRoot });
+    expect(sessionNative.project).toBe(sessionRoot);
+    expect(sessionNative.report?.project).toBe(sessionRoot);
+    expect(state.httpCalls, 'a primed native event must issue no request').toBe(httpAfterPrime);
+
+    // A Bash `workdir` targeting another adopted root has no stored check: no-check allow, no
+    // request and no write, and it must not reuse the session root's cached result.
+    const operationBefore = await snapshotTree(operationRoot);
+    const routedBash = await invoke({ event: 'PreToolUse', sessionId: 'route-session', cwd: sessionRoot, toolName: 'Bash', toolInput: { command: 'ls', workdir: operationRoot } });
     expect(routedBash.project).toBe(operationRoot);
-    expect(routedBash.report?.project).toBe(operationRoot);
-    expect(routedBash.report?.status).toBe('synchronized');
-    expect(routedBash.report?.source.commit).toBe(COMMIT);
-    expect(await readFile(operationAgents, 'utf8'), 'the routed root must sync fresh').toContain(`immutable ${COMMIT}`);
+    expect(routedBash.decision).toBe('allow');
+    expect(routedBash.report, 'an unprimed routed root must not synchronize').toBeUndefined();
+    expect(state.branchCalls, 'routing to an unprimed root must not query the source').toBe(branchAfterPrime);
+    expect(changedPaths(operationBefore, await snapshotTree(operationRoot)), 'the routed no-check must not edit that root').toEqual([]);
+    expect(await readFile(operationAgents, 'utf8')).not.toContain(`immutable ${COMMIT}`);
+
+    // Only a phase entry in the routed root synchronizes it.
+    const operationPhase = await invoke({ event: 'PhaseEntry', sessionId: 'route-operation', cwd: operationRoot });
+    expect(operationPhase.project).toBe(operationRoot);
+    expect(operationPhase.report?.project).toBe(operationRoot);
+    expect(operationPhase.report?.status).toBe('synchronized');
+    expect(operationPhase.report?.source.commit).toBe(COMMIT);
+    expect(state.branchCalls).toBe(branchAfterPrime + 1);
+    expect(await readFile(operationAgents, 'utf8'), 'the phase entry must sync the routed root').toContain(`immutable ${COMMIT}`);
     expect(changedPaths(sessionRootAfterPrime, await snapshotTree(sessionRoot)), 'the session root must not be touched by a routed operation').toEqual([]);
 
-    // An absolute Read file path under another adopted root routes to that root too.
-    const routedRead = await invoke('read-session', 'read', { filePath: join(operationRoot, 'src/file.ts') });
+    // Now native routed operations replay the routed root's cached result with no request.
+    const httpAfterOperation = state.httpCalls;
+    const routedRead = await invoke({ event: 'PreToolUse', sessionId: 'route-session', cwd: sessionRoot, toolName: 'read', toolInput: { filePath: join(operationRoot, 'src/file.ts') } });
     expect(routedRead.project).toBe(operationRoot);
     expect(routedRead.report?.project).toBe(operationRoot);
+    expect(state.httpCalls, 'a routed read must answer from the routed root cache').toBe(httpAfterOperation);
+
+    const routedBashReplay = await invoke({ event: 'PreToolUse', sessionId: 'route-session', cwd: sessionRoot, toolName: 'Bash', toolInput: { command: 'ls', workdir: operationRoot } });
+    expect(routedBashReplay.project).toBe(operationRoot);
+    expect(routedBashReplay.report?.project).toBe(operationRoot);
+    expect(state.httpCalls).toBe(httpAfterOperation);
 
     // A relative tool path resolves against the session cwd, never by guessing a parent root.
-    const relativeRead = await invoke('relative-session', 'read', { filePath: 'src/file.ts' });
+    const relativeRead = await invoke({ event: 'PreToolUse', sessionId: 'route-session', cwd: sessionRoot, toolName: 'read', toolInput: { filePath: 'src/file.ts' } });
     expect(relativeRead.project).toBe(sessionRoot);
-    expect(changedPaths(sessionRootAfterPrime, await snapshotTree(sessionRoot)), 'relative paths must not reroute the operation').toEqual([]);
+    expect(relativeRead.report?.project).toBe(sessionRoot);
+    expect(changedPaths(sessionRootAfterPrime, await snapshotTree(sessionRoot)), 'a relative path must not reroute the operation').toEqual([]);
+    expect(state.httpCalls).toBe(httpAfterOperation);
   });
 });
