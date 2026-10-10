@@ -10,8 +10,8 @@ Status: implemented
 
 ## Decision
 
-- `src/sync/source.ts` 的 `resolveTemplateSnapshot` 以浅临时克隆获取当前模板——`git clone --depth 1 --branch simplify https://github.com/hengboy/ai-workflow.git` 到一次性 `mkdtemp` 目录——并由 `rev-parse HEAD` 钉住唯一的 40 位十六进制不可变提交。
-- 九个受支持的 `templates/project` 文件从该克隆中读取，并逐文件校验身份、编码、大小、所有权标记结构与归档清单形态，且在快照返回前于 `finally` 块中移除临时目录。
+- `src/sync/source.ts` 的 `resolveTemplateSnapshot` 以浅临时克隆获取当前模板——`git clone --depth 1 --branch main https://github.com/hengboy/ai-workflow.git` 到一次性 `mkdtemp` 目录——并由 `rev-parse HEAD` 钉住唯一的 40 位十六进制不可变提交。
+- 五个受支持的 `templates/project` 文件从该克隆中读取，并逐文件校验为带有非空一级标题且不含旧式段落标记的非空 Markdown，且在快照返回前于 `finally` 块中移除临时目录。
 - 获取不读取任何令牌或凭据文件，也不使用 GitHub CLI 或 SSH 配置，因此不携带 API 配额与凭据面，且 `GIT_TERMINAL_PROMPT=0` 使非交互式克隆不会提示输入。
 - `GitRunner` 注入缝（`SynchronizeProjectOptions` 与 `ProjectGateOptions` 上的 `runGit`）取代旧的 `fetch`/`env` 选项，使测试无需网络即可驱动获取。
 - 失败语义不变：获取失败或不完整会使每个目标字节保持不变，并报告 `unverified`、`verified: false`、`proceed: true` 与可见警告。
@@ -29,4 +29,4 @@ Status: implemented
 - 获取现在依赖 `git` 可执行文件与网络访问；缺失 git 或远端不可达会与以前完全相同地失败为 `unverified`，且零目标写入。
 - 每次检查都执行一次无缓存的全新浅克隆，以少量克隆成本换取始终最新、单一提交的来源。
 - `GitRunner` 缝与 `tests/helpers.ts` 中的 PATH `git` 垫片同时覆盖注入运行器的单元路径与真实子进程集成路径。
-- 这会部分取代[项目模板同步](../feature/2026-10-08-project-template-sync.md) 中的获取决策；该记录现在改为描述浅公共克隆，而其合并、标记、报告与保留契约仍然有效。
+- 这会部分取代[项目模板同步](../feature/2026-10-08-project-template-sync.md) 中的获取决策；该记录现在改为描述浅公共克隆，而其检索、报告与保留理由仍然有效，且[生成的本地项目指令](../simplification/2026-10-10-generated-local-instructions.md)中的生成文件所有权变更取代了标记与合并事实。

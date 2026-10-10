@@ -22,6 +22,16 @@
       ]
     },
     {
+      "id": "templates",
+      "path": "templates",
+      "owner_role": "shared",
+      "responsibility": "Discovered typescript module at templates",
+      "language": "typescript",
+      "entry_kinds": [
+        "exported-symbol"
+      ]
+    },
+    {
       "id": "tests",
       "path": "tests",
       "owner_role": "shared",
@@ -40,17 +50,9 @@
       "module_root": "root",
       "entries": [
         "eslint.config.js",
-        "templates/hooks/opencode.js",
         "vitest.config.ts"
       ],
-      "symbols": [
-        {
-          "file": "templates/hooks/opencode.js",
-          "name": "AiWorkflowSyncPlugin",
-          "kind": "function",
-          "visibility": "public"
-        }
-      ],
+      "symbols": [],
       "related_files": [],
       "tests": [],
       "depends_on": [],
@@ -59,7 +61,6 @@
       "responsibility": "Discovered typescript module at .",
       "read_scope": [
         "eslint.config.js",
-        "templates/hooks/opencode.js",
         "vitest.config.ts"
       ],
       "shared_entry": false
@@ -101,9 +102,9 @@
         "src/notes/validate.ts",
         "src/profile/index.ts",
         "src/settings/index.ts",
+        "src/sync/artifacts.ts",
         "src/sync/gate.ts",
         "src/sync/index.ts",
-        "src/sync/merge.ts",
         "src/sync/source.ts",
         "src/utils/frontmatter.ts",
         "src/utils/fs.ts",
@@ -1011,6 +1012,72 @@
           "visibility": "public"
         },
         {
+          "file": "src/sync/artifacts.ts",
+          "name": "GeneratedArtifact",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/sync/artifacts.ts",
+          "name": "archiveManifestTarget",
+          "kind": "variable",
+          "visibility": "public"
+        },
+        {
+          "file": "src/sync/artifacts.ts",
+          "name": "emptyArchiveManifest",
+          "kind": "variable",
+          "visibility": "public"
+        },
+        {
+          "file": "src/sync/artifacts.ts",
+          "name": "generatedArtifacts",
+          "kind": "variable",
+          "visibility": "public"
+        },
+        {
+          "file": "src/sync/artifacts.ts",
+          "name": "generatedDocumentError",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/sync/artifacts.ts",
+          "name": "hasLegacySectionMarker",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/sync/artifacts.ts",
+          "name": "memorySource",
+          "kind": "variable",
+          "visibility": "public"
+        },
+        {
+          "file": "src/sync/artifacts.ts",
+          "name": "memoryTarget",
+          "kind": "variable",
+          "visibility": "public"
+        },
+        {
+          "file": "src/sync/artifacts.ts",
+          "name": "navigationJsonTarget",
+          "kind": "variable",
+          "visibility": "public"
+        },
+        {
+          "file": "src/sync/artifacts.ts",
+          "name": "navigationMarkdownTarget",
+          "kind": "variable",
+          "visibility": "public"
+        },
+        {
+          "file": "src/sync/artifacts.ts",
+          "name": "validateGeneratedSnapshot",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
           "file": "src/sync/gate.ts",
           "name": "ProjectGateInput",
           "kind": "interface",
@@ -1079,24 +1146,6 @@
         {
           "file": "src/sync/index.ts",
           "name": "synchronizeProject",
-          "kind": "function",
-          "visibility": "public"
-        },
-        {
-          "file": "src/sync/merge.ts",
-          "name": "OwnershipConflictError",
-          "kind": "class",
-          "visibility": "public"
-        },
-        {
-          "file": "src/sync/merge.ts",
-          "name": "mergeOwnedSections",
-          "kind": "function",
-          "visibility": "public"
-        },
-        {
-          "file": "src/sync/merge.ts",
-          "name": "validateOwnedSections",
           "kind": "function",
           "visibility": "public"
         },
@@ -1408,6 +1457,18 @@
         },
         {
           "file": "src/workflow/types.ts",
+          "name": "WorkspaceFinalization",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workflow/types.ts",
+          "name": "WorkspaceFinalizationReadScope",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workflow/types.ts",
           "name": "WorkspaceRepo",
           "kind": "interface",
           "visibility": "public"
@@ -1504,13 +1565,67 @@
         },
         {
           "file": "src/workspace/git.ts",
+          "name": "CommitChange",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workspace/git.ts",
+          "name": "TreeEntry",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workspace/git.ts",
+          "name": "commitChanges",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workspace/git.ts",
+          "name": "commitExists",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workspace/git.ts",
+          "name": "commitParents",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workspace/git.ts",
+          "name": "gitCommonDirectory",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workspace/git.ts",
           "name": "repositoryPreconditionErrors",
           "kind": "function",
           "visibility": "public"
         },
         {
           "file": "src/workspace/git.ts",
+          "name": "scopeViolations",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workspace/git.ts",
           "name": "symbolicHead",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workspace/git.ts",
+          "name": "treeEntries",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workspace/git.ts",
+          "name": "verifyDeliveryCommits",
           "kind": "function",
           "visibility": "public"
         },
@@ -2036,6 +2151,41 @@
         {
           "kind": "imports",
           "from": "src/install/index.ts#initializeProject",
+          "to": "src/sync/artifacts.ts#archiveManifestTarget"
+        },
+        {
+          "kind": "imports",
+          "from": "src/install/index.ts#initializeProject",
+          "to": "src/sync/artifacts.ts#emptyArchiveManifest"
+        },
+        {
+          "kind": "imports",
+          "from": "src/install/index.ts#initializeProject",
+          "to": "src/sync/artifacts.ts#generatedArtifacts"
+        },
+        {
+          "kind": "imports",
+          "from": "src/install/index.ts#initializeProject",
+          "to": "src/sync/artifacts.ts#memorySource"
+        },
+        {
+          "kind": "imports",
+          "from": "src/install/index.ts#initializeProject",
+          "to": "src/sync/artifacts.ts#memoryTarget"
+        },
+        {
+          "kind": "imports",
+          "from": "src/install/index.ts#initializeProject",
+          "to": "src/sync/artifacts.ts#navigationJsonTarget"
+        },
+        {
+          "kind": "imports",
+          "from": "src/install/index.ts#initializeProject",
+          "to": "src/sync/artifacts.ts#navigationMarkdownTarget"
+        },
+        {
+          "kind": "imports",
+          "from": "src/install/index.ts#initializeProject",
           "to": "src/sync/index.ts#notesStructureDirectories"
         },
         {
@@ -2097,6 +2247,11 @@
           "kind": "imports",
           "from": "src/install/index.ts#uninstall",
           "to": "src/workflow/types.ts#Host"
+        },
+        {
+          "kind": "imports",
+          "from": "src/install/index.ts#upgradeProject",
+          "to": "src/sync/artifacts.ts#generatedArtifacts"
         },
         {
           "kind": "imports",
@@ -2401,17 +2556,27 @@
         {
           "kind": "imports",
           "from": "src/sync/index.ts#applyTemplateSnapshot",
-          "to": "src/sync/merge.ts#OwnershipConflictError"
+          "to": "src/sync/artifacts.ts#archiveManifestTarget"
         },
         {
           "kind": "imports",
           "from": "src/sync/index.ts#applyTemplateSnapshot",
-          "to": "src/sync/merge.ts#mergeOwnedSections"
+          "to": "src/sync/artifacts.ts#emptyArchiveManifest"
         },
         {
           "kind": "imports",
           "from": "src/sync/index.ts#applyTemplateSnapshot",
-          "to": "src/sync/merge.ts#validateOwnedSections"
+          "to": "src/sync/artifacts.ts#generatedArtifacts"
+        },
+        {
+          "kind": "imports",
+          "from": "src/sync/index.ts#applyTemplateSnapshot",
+          "to": "src/sync/artifacts.ts#hasLegacySectionMarker"
+        },
+        {
+          "kind": "imports",
+          "from": "src/sync/index.ts#applyTemplateSnapshot",
+          "to": "src/sync/artifacts.ts#validateGeneratedSnapshot"
         },
         {
           "kind": "imports",
@@ -2436,7 +2601,12 @@
         {
           "kind": "imports",
           "from": "src/sync/source.ts#resolveTemplateSnapshot",
-          "to": "src/sync/merge.ts#validateOwnedSections"
+          "to": "src/sync/artifacts.ts#generatedArtifacts"
+        },
+        {
+          "kind": "imports",
+          "from": "src/sync/source.ts#resolveTemplateSnapshot",
+          "to": "src/sync/artifacts.ts#generatedDocumentError"
         },
         {
           "kind": "imports",
@@ -2725,6 +2895,56 @@
         },
         {
           "kind": "imports",
+          "from": "src/workspace/execution.ts#checkpointWorkspace",
+          "to": "src/workflow/workspace.ts#validateWorkspaceManifest"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workspace/execution.ts#checkpointWorkspace",
+          "to": "src/workspace/distribute.ts#resolveWorkspacePlan"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workspace/execution.ts#checkpointWorkspace",
+          "to": "src/workspace/record.ts#RESERVED_ROOT"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workspace/execution.ts#checkpointWorkspace",
+          "to": "src/workspace/record.ts#WorkspaceExecutionRecord"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workspace/execution.ts#checkpointWorkspace",
+          "to": "src/workspace/record.ts#errorMessage"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workspace/execution.ts#checkpointWorkspace",
+          "to": "src/workspace/record.ts#implementationRecordPath"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workspace/execution.ts#checkpointWorkspace",
+          "to": "src/workspace/record.ts#nowCst"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workspace/execution.ts#checkpointWorkspace",
+          "to": "src/workspace/record.ts#readWorkspaceRecord"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workspace/execution.ts#checkpointWorkspace",
+          "to": "src/workspace/record.ts#writeWorkspaceRecord"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workspace/execution.ts#projectWorkspaceExecution",
+          "to": "src/workspace/distribute.ts#ResolvedWorkspacePlan"
+        },
+        {
+          "kind": "imports",
           "from": "src/workspace/git.ts#repositoryPreconditionErrors",
           "to": "src/context/submodules.ts#SubmoduleDeclaration"
         },
@@ -2732,6 +2952,26 @@
           "kind": "imports",
           "from": "src/workspace/git.ts#repositoryPreconditionErrors",
           "to": "src/utils/fs.ts#exists"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workspace/git.ts#scopeViolations",
+          "to": "src/utils/paths.ts#normalizeScope"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workspace/git.ts#scopeViolations",
+          "to": "src/workflow/read-scope.ts#pathIsWithin"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workspace/record.ts#writeWorkspaceRecord",
+          "to": "src/utils/fs.ts#atomicWrite"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workspace/status.ts#StatusResult",
+          "to": "src/workspace/execution.ts#ExecutionProjection"
         },
         {
           "kind": "imports",
@@ -2757,6 +2997,11 @@
           "kind": "imports",
           "from": "src/workspace/status.ts#workspaceStatus",
           "to": "src/workspace/distribute.ts#resolveWorkspacePlan"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workspace/status.ts#workspaceStatus",
+          "to": "src/workspace/execution.ts#projectWorkspaceExecution"
         }
       ],
       "owner_role": "shared",
@@ -2794,9 +3039,9 @@
         "src/notes/validate.ts",
         "src/profile/index.ts",
         "src/settings/index.ts",
+        "src/sync/artifacts.ts",
         "src/sync/gate.ts",
         "src/sync/index.ts",
-        "src/sync/merge.ts",
         "src/sync/source.ts",
         "src/utils/frontmatter.ts",
         "src/utils/fs.ts",
@@ -2813,6 +3058,33 @@
         "src/workspace/distribute.ts",
         "src/workspace/git.ts",
         "src/workspace/status.ts"
+      ],
+      "shared_entry": false
+    },
+    {
+      "id": "templates",
+      "name": "templates",
+      "aliases": [],
+      "module_root": "templates",
+      "entries": [
+        "templates/hooks/opencode.js"
+      ],
+      "symbols": [
+        {
+          "file": "templates/hooks/opencode.js",
+          "name": "AiWorkflowSyncPlugin",
+          "kind": "function",
+          "visibility": "public"
+        }
+      ],
+      "related_files": [],
+      "tests": [],
+      "depends_on": [],
+      "relations": [],
+      "owner_role": "shared",
+      "responsibility": "Discovered typescript module at templates",
+      "read_scope": [
+        "templates/hooks/opencode.js"
       ],
       "shared_entry": false
     },
@@ -2881,6 +3153,18 @@
         },
         {
           "file": "tests/helpers.ts",
+          "name": "WorkspaceFinalizationFixture",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "tests/helpers.ts",
+          "name": "WorkspaceFinalizationReadScopeFixture",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "tests/helpers.ts",
           "name": "WorkspaceManifestFixture",
           "kind": "interface",
           "visibility": "public"
@@ -2912,6 +3196,12 @@
         {
           "file": "tests/helpers.ts",
           "name": "changedPaths",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "tests/helpers.ts",
+          "name": "commitFile",
           "kind": "function",
           "visibility": "public"
         },
@@ -3043,6 +3333,7 @@
         "tests/behavior/planning-bilingual.test.ts",
         "tests/behavior/planning-content.test.ts",
         "tests/behavior/profile-switch-content.test.ts",
+        "tests/behavior/project-sync-content.test.ts",
         "tests/behavior/setup-ai-workflow-content.test.ts",
         "tests/behavior/surface-routing.test.ts",
         "tests/behavior/workspace-planning-content.test.ts",
@@ -3052,6 +3343,7 @@
         "tests/install/install.test.ts",
         "tests/install/protection.test.ts",
         "tests/install/skill-installation.test.ts",
+        "tests/install/sync-hooks.test.ts",
         "tests/integration/context-project-help-cli.test.ts",
         "tests/integration/context-rebuild-cli.test.ts",
         "tests/integration/global-agent-guidance.test.ts",
@@ -3073,9 +3365,13 @@
         "tests/integration/profile-cli.test.ts",
         "tests/integration/project-cli.test.ts",
         "tests/integration/project-sync-cli.test.ts",
+        "tests/integration/project-sync-hooks.test.ts",
         "tests/integration/project-upgrade.test.ts",
+        "tests/integration/workspace-checkpoint-cli.test.ts",
+        "tests/integration/workspace-coding-git.test.ts",
         "tests/integration/workspace-distribute-cli.test.ts",
         "tests/integration/workspace-finalization-git.test.ts",
+        "tests/integration/workspace-single-repo-compatibility.test.ts",
         "tests/integration/workspace-status-cli.test.ts",
         "tests/unit/atomic-write.test.ts",
         "tests/unit/context-submodules.test.ts",
@@ -3091,17 +3387,15 @@
         "tests/unit/notes-pairing.test.ts",
         "tests/unit/opencode-version.test.ts",
         "tests/unit/profile.test.ts",
-        "tests/unit/project-template-merge.test.ts",
+        "tests/unit/project-sync-gate.test.ts",
         "tests/unit/project-template-source.test.ts",
+        "tests/unit/project-template-sync.test.ts",
         "tests/unit/settings.test.ts",
         "tests/unit/workflow-execution-order.test.ts",
         "tests/unit/workflow-pairing.test.ts",
         "tests/unit/workflow-read-scope.test.ts",
         "tests/unit/workflow-workspace.test.ts",
-        "tests/behavior/project-sync-content.test.ts",
-        "tests/install/sync-hooks.test.ts",
-        "tests/integration/project-sync-hooks.test.ts",
-        "tests/unit/project-sync-gate.test.ts"
+        "tests/unit/workspace-execution.test.ts"
       ],
       "depends_on": [],
       "relations": [],
@@ -3119,6 +3413,7 @@
         "tests/behavior/planning-bilingual.test.ts",
         "tests/behavior/planning-content.test.ts",
         "tests/behavior/profile-switch-content.test.ts",
+        "tests/behavior/project-sync-content.test.ts",
         "tests/behavior/setup-ai-workflow-content.test.ts",
         "tests/behavior/surface-routing.test.ts",
         "tests/behavior/workspace-planning-content.test.ts",
@@ -3129,6 +3424,7 @@
         "tests/install/install.test.ts",
         "tests/install/protection.test.ts",
         "tests/install/skill-installation.test.ts",
+        "tests/install/sync-hooks.test.ts",
         "tests/integration/context-project-help-cli.test.ts",
         "tests/integration/context-rebuild-cli.test.ts",
         "tests/integration/global-agent-guidance.test.ts",
@@ -3150,9 +3446,13 @@
         "tests/integration/profile-cli.test.ts",
         "tests/integration/project-cli.test.ts",
         "tests/integration/project-sync-cli.test.ts",
+        "tests/integration/project-sync-hooks.test.ts",
         "tests/integration/project-upgrade.test.ts",
+        "tests/integration/workspace-checkpoint-cli.test.ts",
+        "tests/integration/workspace-coding-git.test.ts",
         "tests/integration/workspace-distribute-cli.test.ts",
         "tests/integration/workspace-finalization-git.test.ts",
+        "tests/integration/workspace-single-repo-compatibility.test.ts",
         "tests/integration/workspace-status-cli.test.ts",
         "tests/unit/atomic-write.test.ts",
         "tests/unit/context-submodules.test.ts",
@@ -3168,17 +3468,15 @@
         "tests/unit/notes-pairing.test.ts",
         "tests/unit/opencode-version.test.ts",
         "tests/unit/profile.test.ts",
-        "tests/unit/project-template-merge.test.ts",
+        "tests/unit/project-sync-gate.test.ts",
         "tests/unit/project-template-source.test.ts",
+        "tests/unit/project-template-sync.test.ts",
         "tests/unit/settings.test.ts",
         "tests/unit/workflow-execution-order.test.ts",
         "tests/unit/workflow-pairing.test.ts",
         "tests/unit/workflow-read-scope.test.ts",
         "tests/unit/workflow-workspace.test.ts",
-        "tests/behavior/project-sync-content.test.ts",
-        "tests/install/sync-hooks.test.ts",
-        "tests/integration/project-sync-hooks.test.ts",
-        "tests/unit/project-sync-gate.test.ts"
+        "tests/unit/workspace-execution.test.ts"
       ],
       "shared_entry": false
     },
@@ -3227,29 +3525,29 @@
       "owner_role": "shared",
       "responsibility": "Conditional Planning-to-Coding workspace session handoff and execution consistency across the planning, plan-to-tasks and coding skills",
       "read_scope": [
-        "templates/skills/planning/SKILL.md",
-        "templates/skills/plan-to-tasks/SKILL.md",
-        "templates/skills/coding/SKILL.md",
-        "README.md",
-        "MEMORY.md",
-        "templates/project/MEMORY.md",
-        "templates/skills/planning/references/plan.md",
-        "templates/skills/plan-to-tasks/references/task.md",
-        "templates/skills/plan-to-tasks/references/execution-order.md",
-        ".ai-workflow/notes/implemented/process/2026-09-23-planning-coding-session-boundary.md",
-        ".ai-workflow/notes/implemented/process/2026-10-02-workspace-distribute-handoff.md",
-        ".ai-workflow/notes/implemented/bug-fix/2026-10-08-workspace-session-handoff.md",
-        "src/workspace/status.ts",
-        "src/workflow/parse.ts",
-        "templates/agents/git-operator.md",
-        "templates/project/AGENTS.md",
         ".ai-workflow/AGENTS.md",
         ".ai-workflow/notes/implemented/bug-fix/2026-10-08-workspace-execution-consistency.md",
+        ".ai-workflow/notes/implemented/bug-fix/2026-10-08-workspace-session-handoff.md",
+        ".ai-workflow/notes/implemented/process/2026-09-23-planning-coding-session-boundary.md",
+        ".ai-workflow/notes/implemented/process/2026-10-02-workspace-distribute-handoff.md",
+        "MEMORY.md",
+        "README.md",
+        "src/workflow/parse.ts",
+        "src/workspace/status.ts",
+        "templates/agents/git-operator.md",
+        "templates/project/AGENTS.md",
+        "templates/project/MEMORY.md",
+        "templates/skills/coding/SKILL.md",
+        "templates/skills/plan-to-tasks/SKILL.md",
+        "templates/skills/plan-to-tasks/references/execution-order.md",
+        "templates/skills/plan-to-tasks/references/task.md",
+        "templates/skills/planning/SKILL.md",
+        "templates/skills/planning/references/plan.md",
         "tests/behavior/change-routing.test.ts",
+        "tests/behavior/implementation-record.test.ts",
         "tests/behavior/workspace-planning-content.test.ts",
         "tests/behavior/workspace-workflow-content.test.ts",
         "tests/behavior/worktree-policy.test.ts",
-        "tests/behavior/implementation-record.test.ts",
         "tests/integration/plan-workspace-cli.test.ts",
         "tests/integration/workspace-finalization-git.test.ts",
         "tests/integration/workspace-status-cli.test.ts"
@@ -3265,7 +3563,6 @@
       "module_root": "root",
       "entries": [
         "templates/project/AGENTS.md",
-        "templates/project/MEMORY.md",
         "templates/project/notes/AGENTS.md",
         "templates/project/notes/README.md",
         "templates/project/notes/archived/AGENTS.md",
@@ -3279,14 +3576,16 @@
         ".ai-workflow/notes/implemented/feature/2026-10-09-sync-once-at-skill-start.md",
         ".ai-workflow/notes/implemented/process/2026-09-16-project-contract-and-agent-notes.md",
         ".ai-workflow/notes/implemented/simplification/2026-10-09-public-git-template-source.md",
+        ".ai-workflow/notes/implemented/simplification/2026-10-10-generated-local-instructions.md",
         "MEMORY.md",
         "src/cli.ts",
         "src/install/hooks.ts",
         "src/install/index.ts",
+        "src/sync/artifacts.ts",
         "src/sync/gate.ts",
         "src/sync/index.ts",
-        "src/sync/merge.ts",
         "src/sync/source.ts",
+        "templates/project/MEMORY.md",
         "templates/contract/AGENTS.md",
         "templates/hooks/opencode.js",
         "templates/skills/coding/SKILL.md",
@@ -3299,7 +3598,7 @@
       "tests": [
         "tests/integration/project-sync-cli.test.ts",
         "tests/integration/project-upgrade.test.ts",
-        "tests/unit/project-template-merge.test.ts",
+        "tests/unit/project-template-sync.test.ts",
         "tests/unit/project-template-source.test.ts",
         "tests/behavior/project-sync-content.test.ts",
         "tests/install/sync-hooks.test.ts",
@@ -3309,7 +3608,7 @@
       "depends_on": [],
       "relations": [],
       "owner_role": "shared",
-      "responsibility": "Delivered single-skill-start project template synchronization: one automatic synchronization at each planning, coding or plan-to-tasks skill start, stored per actual root in the host runtime cache, native events served from the stored result with zero source requests and a no-check allow when absent, plus the unchanged manual command and host entries",
+      "responsibility": "Delivered file-level project template synchronization: exactly five markerless generated files replaced as complete files with root MEMORY init-only and local, plus the preserved single-skill-start gate that runs one automatic synchronization per actual root, stores the result outside the project, serves native events with zero source requests and allows with a no-check context when absent, together with the unchanged manual command and additive host entries",
       "read_scope": [
         ".ai-workflow/AGENTS.md",
         ".ai-workflow/notes/implemented/architecture/2026-09-14-user-level-agent-contract.md",
@@ -3317,13 +3616,14 @@
         ".ai-workflow/notes/implemented/feature/2026-10-09-sync-once-at-skill-start.md",
         ".ai-workflow/notes/implemented/process/2026-09-16-project-contract-and-agent-notes.md",
         ".ai-workflow/notes/implemented/simplification/2026-10-09-public-git-template-source.md",
+        ".ai-workflow/notes/implemented/simplification/2026-10-10-generated-local-instructions.md",
         "MEMORY.md",
         "src/cli.ts",
         "src/install/hooks.ts",
         "src/install/index.ts",
+        "src/sync/artifacts.ts",
         "src/sync/gate.ts",
         "src/sync/index.ts",
-        "src/sync/merge.ts",
         "src/sync/source.ts",
         "templates/contract/AGENTS.md",
         "templates/hooks/opencode.js",
@@ -3345,8 +3645,8 @@
         "tests/integration/project-sync-hooks.test.ts",
         "tests/integration/project-upgrade.test.ts",
         "tests/unit/project-sync-gate.test.ts",
-        "tests/unit/project-template-merge.test.ts",
-        "tests/unit/project-template-source.test.ts"
+        "tests/unit/project-template-source.test.ts",
+        "tests/unit/project-template-sync.test.ts"
       ],
       "shared_entry": false
     },
@@ -3436,6 +3736,12 @@
           "file": "src/workspace/record.ts",
           "name": "WorkspaceExecutionRecord",
           "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workspace/record.ts",
+          "name": "errorMessage",
+          "kind": "variable",
           "visibility": "public"
         },
         {
@@ -3571,33 +3877,33 @@
       "owner_role": "shared",
       "responsibility": "Delivered parent workspace coding orchestration: exact .gitmodules-matched child-plan activation, one primary session with an approved plan-to-tasks preparation that returns control, one run-owned worktree per active repository, the original parent phases with delivery barriers, the filesystem-only workspace checkpoint single-record protocol, per-repository delivery review versus a separate finalization review, bounded recovery and unchanged ordinary/root-only routes, with the three-host native smoke an outstanding reported gap",
       "read_scope": [
-        "src/workspace/execution.ts",
-        "src/workspace/record.ts",
-        "tests/unit/workspace-execution.test.ts",
-        "tests/integration/workspace-checkpoint-cli.test.ts",
-        "tests/integration/workspace-coding-git.test.ts",
-        "tests/integration/workspace-single-repo-compatibility.test.ts",
-        "src/cli.ts",
-        "src/workspace/git.ts",
-        "src/workflow/types.ts",
-        "src/workflow/workspace.ts",
-        "templates/skills/coding/SKILL.md",
-        "templates/skills/coding/references/workspace.md",
-        "templates/project/MEMORY.md",
-        "README.md",
-        "MEMORY.md",
-        ".ai-workflow/notes/implemented/feature/2026-10-09-workspace-coding-orchestration.md",
         ".ai-workflow/notes/implemented/architecture/2026-09-30-submodule-workspace.md",
+        ".ai-workflow/notes/implemented/bug-fix/2026-10-08-workspace-execution-consistency.md",
+        ".ai-workflow/notes/implemented/bug-fix/2026-10-08-workspace-session-handoff.md",
+        ".ai-workflow/notes/implemented/feature/2026-10-09-workspace-coding-orchestration.md",
         ".ai-workflow/notes/implemented/process/2026-09-23-planning-coding-session-boundary.md",
         ".ai-workflow/notes/implemented/process/2026-10-02-workspace-distribute-handoff.md",
-        ".ai-workflow/notes/implemented/bug-fix/2026-10-08-workspace-session-handoff.md",
-        ".ai-workflow/notes/implemented/bug-fix/2026-10-08-workspace-execution-consistency.md",
+        "MEMORY.md",
+        "README.md",
+        "src/cli.ts",
+        "src/workflow/types.ts",
+        "src/workflow/workspace.ts",
+        "src/workspace/execution.ts",
+        "src/workspace/git.ts",
+        "src/workspace/record.ts",
+        "templates/project/MEMORY.md",
+        "templates/skills/coding/SKILL.md",
+        "templates/skills/coding/references/workspace.md",
         "tests/behavior/change-routing.test.ts",
         "tests/behavior/workspace-planning-content.test.ts",
         "tests/behavior/workspace-workflow-content.test.ts",
         "tests/integration/plan-workspace-cli.test.ts",
+        "tests/integration/workspace-checkpoint-cli.test.ts",
+        "tests/integration/workspace-coding-git.test.ts",
         "tests/integration/workspace-finalization-git.test.ts",
-        "tests/integration/workspace-status-cli.test.ts"
+        "tests/integration/workspace-single-repo-compatibility.test.ts",
+        "tests/integration/workspace-status-cli.test.ts",
+        "tests/unit/workspace-execution.test.ts"
       ],
       "shared_entry": false
     }

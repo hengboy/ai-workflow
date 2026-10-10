@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 # ai-workflow notes pairing --project <project-root> --write .ai-workflow/notes/implemented/feature/2026-10-09-sync-once-at-skill-start.md
-2026-10-09-sync-once-at-skill-start.md: 1feb697ff14cd36a8b1c753d70fe4e5cda2c53eb
-2026-10-09-sync-once-at-skill-start.zh.md: 4487ca182a08cef0182ec52b429ef9fc7a0b9a34
+2026-10-09-sync-once-at-skill-start.md: bfcad62fbac75a7b5b4d7f5f0b9468dbe06529e7
+2026-10-09-sync-once-at-skill-start.zh.md: fb1a076d9e84cf5a9971151db0e24c70f8ff1593

@@ -35,6 +35,7 @@ Status: implemented
 - 用户在已存 authority 之后编辑契约时，会保留已存要求直到下一次技能启动。
 - 手动同步修补文件，但不替换已存判定。
 - 上一格式遗留的会话文件不被使用。
-- 完成全量门禁需要一次用户授权的基线修复：ESLint 配置现在忽略 `tests/install/`（与其他测试目录一致）以及随附的 `templates/hooks/opencode.js` 插件模板；`src/sync/index.ts` 与 `src/sync/merge.ts` 用守卫或兜底替换了非空断言；冲突比较器把未定义的 `path` 视为相等，以匹配此前语义；`templates/skills/plan-to-tasks/SKILL.md` 改写了其契约 "re-read" 句子，使 execution-order 段落成为随附测试所针对的那一段。相同的 lint 错误与测试失败在未改动的 `45cef2a` 检出上完全复现，且该修复由用户另行授权。
+- 完成全量门禁需要一次用户授权的基线修复：ESLint 配置现在忽略 `tests/install/`（与其他测试目录一致）以及随附的 `templates/hooks/opencode.js` 插件模板；`src/sync/index.ts` 用守卫或兜底替换了非空断言，现已移除的 `src/sync/merge.ts` 当时也是如此；冲突比较器把未定义的 `path` 视为相等，以匹配此前语义；`templates/skills/plan-to-tasks/SKILL.md` 改写了其契约 "re-read" 句子，使 execution-order 段落成为随附测试所针对的那一段。相同的 lint 错误与测试失败在未改动的 `45cef2a` 检出上完全复现，且该修复由用户另行授权。
 - 已知的既有局限，本计划未修复：`pnpm check` 在构建阶段之前运行测试阶段，而集成与插件钩子测试会启动已构建的 `dist/cli.js`，因此没有先前构建的干净检出可能使这些测试失败或运行过期构建；实现 worktree 依赖共享的预构建 `dist/`。这是需要单独处理的已知缺口，并非交付声明。
-- 本记录部分取代 [项目模板同步](2026-10-08-project-template-sync.md) 的按边界节奏事实——其门禁生命周期 Decision 条目与技能的按步骤及按阶段条目——而该记录的检索、合并与报告契约仍然有效。
+- 本记录部分取代 [项目模板同步](2026-10-08-project-template-sync.md) 的按边界节奏事实——其门禁生命周期 Decision 条目与技能的按步骤及按阶段条目——而该记录的检索与报告契约仍然有效。
+- [生成的本地项目指令](../simplification/2026-10-10-generated-local-instructions.md)中的生成文件所有权变更部分取代本记录的 `src/sync/merge.ts` 引用：该模块已被移除，生成文件现为五个无标记完整文件，而本记录的每次技能启动单次运行节奏、豁免与仅缓存的原生事件行为仍然有效。

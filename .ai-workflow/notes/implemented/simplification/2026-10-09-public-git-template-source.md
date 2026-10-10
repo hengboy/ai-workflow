@@ -10,8 +10,8 @@ Anonymous template acquisition used the GitHub contents API, whose unauthenticat
 
 ## Decision
 
-- `resolveTemplateSnapshot` in `src/sync/source.ts` acquires the current templates with a shallow temporary clone — `git clone --depth 1 --branch simplify https://github.com/hengboy/ai-workflow.git` into a throwaway `mkdtemp` directory — and `rev-parse HEAD` pins the single immutable 40-hex commit.
-- The nine supported `templates/project` files are read from that clone and validated per file for identity, encoding, size, ownership-marker structure and the archive-manifest shape, and the temporary directory is removed in a `finally` block before the snapshot returns.
+- `resolveTemplateSnapshot` in `src/sync/source.ts` acquires the current templates with a shallow temporary clone — `git clone --depth 1 --branch main https://github.com/hengboy/ai-workflow.git` into a throwaway `mkdtemp` directory — and `rev-parse HEAD` pins the single immutable 40-hex commit.
+- The five supported `templates/project` files are read from that clone and validated per file as nonempty Markdown with a level-one title and no legacy section markers, and the temporary directory is removed in a `finally` block before the snapshot returns.
 - Acquisition reads no token and no credential file and uses no GitHub CLI or SSH configuration, so it carries no API quota and no credential surface, and `GIT_TERMINAL_PROMPT=0` keeps a non-interactive clone from prompting.
 - A `GitRunner` injection seam (`runGit` on `SynchronizeProjectOptions` and `ProjectGateOptions`) replaces the old `fetch`/`env` options so tests drive acquisition without the network.
 - Failure semantics are unchanged: a failed or incomplete acquisition leaves every target byte unchanged and reports `unverified` with `verified: false`, `proceed: true` and a visible warning.
@@ -29,4 +29,4 @@ Anonymous template acquisition used the GitHub contents API, whose unauthenticat
 - Acquisition now depends on the `git` executable and network access; a missing git or an unreachable remote fails exactly as before, to `unverified` with zero target writes.
 - Every check performs a fresh shallow clone with no cache, trading a small clone cost for an always-current, single-commit source.
 - The `GitRunner` seam and a PATH `git` shim in `tests/helpers.ts` cover both the injected-runner unit path and the real subprocess integration path.
-- This partially supersedes the acquisition decision in [Project template synchronization](../feature/2026-10-08-project-template-sync.md); that record now describes the shallow public clone in place, while its merge, marker, report and preservation contracts stay current.
+- This partially supersedes the acquisition decision in [Project template synchronization](../feature/2026-10-08-project-template-sync.md); that record now describes the shallow public clone in place, while its retrieval, report and preservation rationale stays current, and the generated-file ownership change in [Generated local project instructions](../simplification/2026-10-10-generated-local-instructions.md) supersedes the marker and merge facts.
