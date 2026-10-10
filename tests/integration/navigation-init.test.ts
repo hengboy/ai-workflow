@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { initializeProject } from '../../src/install/index.js';
 import { validateContext } from '../../src/context/validate.js';
@@ -126,18 +126,44 @@ describe('generated project initialization', () => {
     expect(await exists(join(root, projectManifest))).toBe(false);
   });
 
-  it('rejects an existing managed target before writing', async () => {
+  it('rejects an existing generated destination before writing', async () => {
     const root = await temporary();
-    const memoryBytes = '# existing memory\n';
-    await writeFile(join(root, 'MEMORY.md'), memoryBytes);
+    const contractBytes = '# existing project contract\n';
+    await mkdir(join(root, '.ai-workflow'), { recursive: true });
+    await writeFile(join(root, '.ai-workflow/AGENTS.md'), contractBytes);
 
     await expect(initializeProject(root)).rejects.toThrow(/no files written/);
 
-    expect(await readText(root, 'MEMORY.md')).toBe(memoryBytes);
+    expect(await readText(root, '.ai-workflow/AGENTS.md')).toBe(contractBytes);
     expect(await exists(join(root, 'AGENTS.md'))).toBe(false);
     expect(await exists(join(root, 'CLAUDE.md'))).toBe(false);
     expect(await exists(join(root, navigationJson))).toBe(false);
     expect(await exists(join(root, navigationMarkdown))).toBe(false);
+    expect(await exists(join(root, '.gitignore'))).toBe(false);
+  });
+
+  it('preserves an existing valid titled MEMORY.md byte-for-byte, including CRLF, and does not conflict on it', async () => {
+    const root = await temporary();
+    const memoryBytes = '# Project memory\r\n\r\nIndependent CRLF standard that must survive initialization.\r\n';
+    await writeFile(join(root, 'MEMORY.md'), memoryBytes);
+    const mtimeBefore = (await stat(join(root, 'MEMORY.md'), { bigint: true })).mtimeNs.toString();
+
+    await initializeProject(root);
+
+    expect(await readText(root, 'MEMORY.md')).toBe(memoryBytes);
+    expect((await stat(join(root, 'MEMORY.md'), { bigint: true })).mtimeNs.toString()).toBe(mtimeBefore);
+    expect(await exists(join(root, navigationJson))).toBe(true);
+    // The generated documents are published alongside the preserved local MEMORY.
+    expect(await readText(root, '.ai-workflow/AGENTS.md')).not.toMatch(/ai-workflow:section/);
+    expect(await exists(join(root, '.gitignore'))).toBe(true);
+  });
+
+  it('rejects a non-file MEMORY.md path before writing', async () => {
+    const root = await temporary();
+    await mkdir(join(root, 'MEMORY.md'), { recursive: true });
+
+    await expect(initializeProject(root)).rejects.toThrow();
+    expect(await exists(join(root, navigationJson))).toBe(false);
     expect(await exists(join(root, '.gitignore'))).toBe(false);
   });
 });
@@ -361,7 +387,7 @@ describe('navigation protection', () => {
     expect(await exists(join(root, navigationMarkdown))).toBe(true);
   });
 
-  it('refuses to overwrite existing navigation and MEMORY.md on re-init and leaves bytes unchanged', async () => {
+  it('refuses to overwrite existing generated documents and navigation on re-init and leaves bytes unchanged', async () => {
     const root = await temporary();
     await mkdir(join(root, 'src'), { recursive: true });
     await writeFile(join(root, 'src/a.ts'), 'export function a(): void {}\n');

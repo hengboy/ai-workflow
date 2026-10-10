@@ -11,6 +11,7 @@ import { installSynchronization, synchronizationPath, uninstallSynchronization, 
 import { loadProfile, type Profile } from '../profile/index.js';
 import { loadSettings, writeActiveProfile } from '../settings/index.js';
 import { applyTemplateSnapshot, notesStructureDirectories, reconcileIgnoreFile, type SyncReport } from '../sync/index.js';
+import { archiveManifestTarget, emptyArchiveManifest, generatedArtifacts, memorySource, memoryTarget, navigationJsonTarget, navigationMarkdownTarget } from '../sync/artifacts.js';
 import { renderNavigation } from '../context/navigation.js';
 import { scanProject } from '../context/discovery/scanner.js';
 import { loadProjectConfig } from '../context/discovery/project-config.js';
@@ -39,23 +40,20 @@ export interface ProfileActivationReport {
 }
 const manifestRelative = '.config/ai-workflow/install-manifest.json';
 const settingsRelative = '.config/ai-workflow/config.yaml';
-const navigationJsonRelative = '.ai-workflow/index/navigation.json';
-const navigationMarkdownRelative = '.ai-workflow/index/navigation.md';
+const navigationJsonRelative = navigationJsonTarget;
+const navigationMarkdownRelative = navigationMarkdownTarget;
 const marketplaceRelative = '.agents/plugins/marketplace.json';
 const skillsRelative = '.agents/skills';
-const projectTemplates = ['MEMORY.md', 'navigation.json', 'navigation.md', 'AGENTS.md', 'notes/AGENTS.md', 'notes/README.md', 'notes/implemented/AGENTS.md', 'notes/archived/AGENTS.md', 'notes/archived/manifest.json'] as const;
 const contractBegin = '<!-- ai-workflow:begin -->';
 const contractEnd = '<!-- ai-workflow:end -->';
 const globalInstructionRelative: Record<Host, string> = { opencode: '.config/opencode/AGENTS.md', claude: '.claude/CLAUDE.md', codex: '.codex/AGENTS.md' };
-function projectTargets(): Array<{ source: string; target: string }> {
-  return projectTemplates.map((name) => ({ source: join('templates/project', name), target: name === 'MEMORY.md' ? name : name === 'navigation.json' || name === 'navigation.md' ? `.ai-workflow/index/${name}` : `.ai-workflow/${name}` }));
+async function templateFile(source: string): Promise<string> {
+  return readFile(new URL(`../../${source}`, import.meta.url), 'utf8');
 }
-async function readTemplateContents(targets: Array<{ source: string; target: string }>): Promise<Array<{ target: string; contents: string }>> {
-  return Promise.all(targets.map(async ({ source, target }) => ({ target, contents: await readFile(new URL(`../../${source}`, import.meta.url), 'utf8') })));
+async function generatedTemplateContents(): Promise<Array<{ target: string; contents: string }>> {
+  return Promise.all(generatedArtifacts.map(async ({ source, target }) => ({ target, contents: await templateFile(source) })));
 }
-async function projectTemplateContents(): Promise<Array<{ target: string; contents: string }>> {
-  return readTemplateContents(projectTargets());
-}
+function hasLevelOneTitle(contents: string): boolean { return /^#\s+\S/m.test(contents); }
 function agentsRoot(home: string, host: Host): string {
   if (host === 'codex') return join(home, '.codex/agents');
   if (host === 'claude') return join(home, '.claude/agents');
@@ -327,10 +325,18 @@ async function removeEmptyDirectory(path: string): Promise<void> {
 
 export async function initializeProject(project: string): Promise<string[]> {
   const root = resolve(project);
-  const templates = await projectTemplateContents();
-  const conflicts: Array<{ target: string; contents: string }> = [];
-  for (const item of templates) if (await exists(join(root, item.target))) conflicts.push(item);
-  if (conflicts.length) throw new Error(`Initialization conflicts; no files written. Merge these templates manually:\n${conflicts.map((item) => `${item.target}\n--- proposed ---\n${item.contents}`).join('\n')}`);
+
+  // Root MEMORY is an init-only local bootstrap: validate an existing one but never overwrite it.
+  const memoryPath = join(root, memoryTarget);
+  if (await exists(memoryPath)) {
+    if (!(await stat(memoryPath)).isFile()) throw new Error(`Initialization conflicts; no files written. ${memoryTarget} must be a regular file.`);
+    if (!hasLevelOneTitle(await readFile(memoryPath, 'utf8'))) throw new Error(`Initialization conflicts; no files written. ${memoryTarget} must carry a level-one title.`);
+  }
+
+  const conflicts: string[] = [];
+  for (const artifact of generatedArtifacts) if (await exists(join(root, artifact.target))) conflicts.push(artifact.target);
+  for (const target of [navigationJsonTarget, navigationMarkdownTarget, archiveManifestTarget]) if (await exists(join(root, target))) conflicts.push(target);
+  if (conflicts.length) throw new Error(`Initialization conflicts; no files written. Merge these templates manually:\n${conflicts.join('\n')}`);
 
   const requiredDirectories = ['.ai-workflow', '.ai-workflow/index', ...notesStructureDirectories()];
   const directoryConflicts: string[] = [];
@@ -350,10 +356,13 @@ export async function initializeProject(project: string): Promise<string[]> {
   const validation = await validateNavigationModel(root, index);
   if (!validation.valid) throw new Error(validation.errors.join('\n'));
 
-  const proposed = new Map(templates.map((item) => [item.target, item.contents]));
-  proposed.set(navigationJsonRelative, `${JSON.stringify(index, null, 2)}\n`);
-  proposed.set(navigationMarkdownRelative, renderNavigation(index));
-  const published = projectTargets().map(({ target }) => ({ target, contents: proposed.get(target) as string }));
+  const proposed = new Map<string, string>();
+  for (const item of await generatedTemplateContents()) proposed.set(item.target, item.contents);
+  proposed.set(navigationJsonTarget, `${JSON.stringify(index, null, 2)}\n`);
+  proposed.set(navigationMarkdownTarget, renderNavigation(index));
+  proposed.set(archiveManifestTarget, emptyArchiveManifest);
+  if (!(await exists(memoryPath))) proposed.set(memoryTarget, await templateFile(memorySource));
+  const publishOrder = [memoryTarget, navigationJsonTarget, navigationMarkdownTarget, ...generatedArtifacts.map((artifact) => artifact.target), archiveManifestTarget];
 
   const ignorePath = join(root, '.gitignore');
   const ignoreExisted = await exists(ignorePath);
@@ -373,11 +382,13 @@ export async function initializeProject(project: string): Promise<string[]> {
       await mkdir(join(root, directory), { recursive: true });
       created.push(directory);
     }
-    for (const item of published) {
-      const path = join(root, item.target);
+    for (const target of publishOrder) {
+      const contents = proposed.get(target);
+      if (contents === undefined) continue;
+      const path = join(root, target);
       writtenFiles.push(path);
-      await atomicWrite(path, item.contents);
-      created.push(item.target);
+      await atomicWrite(path, contents);
+      created.push(target);
     }
     const ignoreContents = reconcileIgnoreFile(ignoreOriginal);
     if (ignoreContents !== undefined) { await atomicWrite(ignorePath, ignoreContents); created.push('.gitignore'); }
@@ -446,12 +457,7 @@ export async function upgradeProject(project: string): Promise<ProjectUpgradeRep
         return leftPath < rightPath ? -1 : leftPath > rightPath ? 1 : 0;
       }) };
   }
-  const targets = projectTargets();
-  const templates = await readTemplateContents(targets);
-  const files = Object.fromEntries(targets.map(({ source: path }, index) => {
-    const template = templates[index];
-    if (template === undefined) throw new Error(`Missing project template: ${path}`);
-    return [path.replace(/\\/g, '/'), template.contents];
-  }));
+  const files: Record<string, string> = {};
+  for (const artifact of generatedArtifacts) files[artifact.source] = await templateFile(artifact.source);
   return applyTemplateSnapshot({ projectRoot: root }, { source, files });
 }

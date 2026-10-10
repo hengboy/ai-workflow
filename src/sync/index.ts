@@ -3,7 +3,13 @@ import { dirname, join, relative, resolve } from 'node:path';
 import { atomicWrite } from '../utils/fs.js';
 import { noteClasses, noteLifecycles } from '../notes/index.js';
 import { resolveTemplateSnapshot, type GitRunner } from './source.js';
-import { mergeOwnedSections, OwnershipConflictError, validateOwnedSections } from './merge.js';
+import {
+  archiveManifestTarget,
+  emptyArchiveManifest,
+  generatedArtifacts,
+  hasLegacySectionMarker,
+  validateGeneratedSnapshot,
+} from './artifacts.js';
 
 export type SyncStatus = 'synchronized' | 'unverified' | 'needs_attention' | 'pending' | 'conflict' | 'failed';
 
@@ -41,6 +47,7 @@ export function notesStructureDirectories(): string[] {
   }
   return directories;
 }
+
 const legacyIgnoreLines = new Set(['.ai-workflow', '.ai-workflow/', 'MEMORY.md']);
 function missingIgnoreLines(original: string): string[] {
   const lines = original.split(/\r?\n/).map((line) => line.trim());
@@ -50,6 +57,7 @@ function missingIgnoreLines(original: string): string[] {
   if (!has(['.worktrees', '.worktrees/'])) additions.push('.worktrees/');
   return additions;
 }
+
 // Legacy versions ignored the whole `.ai-workflow/` tree and `MEMORY.md`. Migrate those entries
 // in place so only `.ai-workflow/plans/` stays ignored and the rest travels with Git.
 export function reconcileIgnoreFile(original: string): string | undefined {
@@ -60,6 +68,7 @@ export function reconcileIgnoreFile(original: string): string | undefined {
   const body = retained.join('\n').trimEnd();
   return `${body}${body ? '\n' : ''}${additions.join('\n')}${additions.length ? '\n' : ''}`;
 }
+
 function isArchiveManifest(contents: string): boolean {
   try {
     const parsed = JSON.parse(contents) as { version?: unknown; files?: unknown };
@@ -67,19 +76,12 @@ function isArchiveManifest(contents: string): boolean {
   } catch { return false; }
 }
 
-const projectTargets: Record<string, string> = {
-  'templates/project/AGENTS.md': '.ai-workflow/AGENTS.md',
-  'templates/project/MEMORY.md': 'MEMORY.md',
-  'templates/project/navigation.json': '.ai-workflow/index/navigation.json',
-  'templates/project/navigation.md': '.ai-workflow/index/navigation.md',
-  'templates/project/notes/AGENTS.md': '.ai-workflow/notes/AGENTS.md',
-  'templates/project/notes/README.md': '.ai-workflow/notes/README.md',
-  'templates/project/notes/implemented/AGENTS.md': '.ai-workflow/notes/implemented/AGENTS.md',
-  'templates/project/notes/archived/AGENTS.md': '.ai-workflow/notes/archived/AGENTS.md',
-  'templates/project/notes/archived/manifest.json': '.ai-workflow/notes/archived/manifest.json',
-};
-const archiveManifestRelative = '.ai-workflow/notes/archived/manifest.json';
-const preservedTargets = new Set(['.ai-workflow/index/navigation.json', '.ai-workflow/index/navigation.md', archiveManifestRelative]);
+function byPath(left: SyncWarning, right: SyncWarning): number {
+  const a = left.path;
+  const b = right.path;
+  if (a === undefined || b === undefined) return 0;
+  return a < b ? -1 : a > b ? 1 : 0;
+}
 
 export async function synchronizeProject(options: SynchronizeProjectOptions): Promise<SyncReport> {
   const requestedRoot = resolve(options.projectRoot);
@@ -147,66 +149,96 @@ export async function synchronizeProject(options: SynchronizeProjectOptions): Pr
   return applyTemplateSnapshot(options, snapshot);
 }
 
-/** Internal shared patch transaction; callers establish adoption and acquire the snapshot. */
+interface PendingChange {
+  path: string;
+  contents: string;
+  original: Buffer | undefined;
+}
+
+/**
+ * Shared publication core used by remote synchronization and shipped-template upgrade.
+ * It validates the complete five-member snapshot, preflights every writable target and
+ * required path, then replaces generated files as complete bytes with invocation-local recovery.
+ */
 export async function applyTemplateSnapshot(
   options: Pick<SynchronizeProjectOptions, 'projectRoot' | 'check'>,
   snapshot: { source: SyncReport['source']; files: Record<string, string> },
 ): Promise<SyncReport> {
-  const changes: Array<{ path: string; contents: string; original: Buffer | undefined }> = [];
-  const skipped: string[] = [];
   const warnings: SyncWarning[] = snapshot.source.commit === null
     ? [{ reason: 'Local shipped templates were used; the current upstream snapshot has not been verified' }]
     : [];
   const conflicts: SyncWarning[] = [];
-  for (const [sourcePath, targetPath] of Object.entries(projectTargets)) {
+  const snapshotError = validateGeneratedSnapshot(snapshot.files);
+  if (snapshotError !== undefined) {
+    return {
+      project: options.projectRoot,
+      source: snapshot.source,
+      status: 'unverified',
+      verified: false,
+      proceed: true,
+      check: options.check ?? false,
+      created: [],
+      updated: [],
+      skipped: [],
+      warnings: [...warnings, { path: snapshotError.path, reason: `Generated source snapshot is invalid: ${snapshotError.reason}` }],
+      conflicts: [],
+    };
+  }
+
+  const changes: PendingChange[] = [];
+  const skipped: string[] = [];
+  for (const artifact of generatedArtifacts) {
+    const targetPath = artifact.target;
+    const template = snapshot.files[artifact.source];
+    if (template === undefined) continue;
     let original: Buffer | undefined;
     try {
       const target = join(options.projectRoot, targetPath);
       if ((await stat(target)).isDirectory()) {
-        conflicts.push({ path: targetPath, reason: 'A directory occupies the managed file' });
+        conflicts.push({ path: targetPath, reason: 'A directory occupies the generated file' });
         continue;
       }
       original = await readFile(target);
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOTDIR') {
-        conflicts.push({ path: targetPath, reason: 'A managed file parent is not a directory' });
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === 'ENOTDIR') {
+        conflicts.push({ path: targetPath, reason: 'A generated file parent is not a directory' });
         continue;
       }
-      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      if (code !== 'ENOENT') throw error;
     }
-    try {
-      const originalContents = original?.toString('utf8');
-      const template = snapshot.files[sourcePath];
-      if (template === undefined) {
-        if (originalContents !== undefined) {
-          if (!preservedTargets.has(targetPath)) validateOwnedSections(originalContents);
-          warnings.push({ path: targetPath, reason: 'Supported source artifact is retired; the existing target is preserved' });
-        }
-        skipped.push(targetPath);
-        continue;
-      }
-      if (targetPath === archiveManifestRelative) {
-        if (originalContents !== undefined) {
-          if (isArchiveManifest(originalContents)) skipped.push(targetPath);
-          else conflicts.push({ path: targetPath, reason: 'Existing archive manifest is invalid; it cannot be replaced' });
-        } else if (!isArchiveManifest(template) || Object.keys((JSON.parse(template) as { files: object }).files).length !== 0) {
-          conflicts.push({ path: targetPath, reason: 'A missing archive manifest requires an empty valid source manifest' });
-        } else {
-          changes.push({ path: targetPath, contents: template, original });
-        }
-        continue;
-      }
-      if (preservedTargets.has(targetPath)) { skipped.push(targetPath); continue; }
-      const merged = mergeOwnedSections(originalContents ?? '', template);
-      const contents = original === undefined ? template : merged.contents;
-      warnings.push(...merged.warnings.map((warning) => ({ ...warning, path: targetPath })));
-      if (contents === originalContents) skipped.push(targetPath);
-      else changes.push({ path: targetPath, contents, original });
-    } catch (error) {
-      if (!(error instanceof OwnershipConflictError)) throw error;
-      conflicts.push({ path: targetPath, reason: error.message, ...(error.section ? { section: error.section } : {}) });
+    if (original !== undefined && hasLegacySectionMarker(original.toString('utf8'))) {
+      conflicts.push({ path: targetPath, reason: 'Legacy section markers are not supported; replace this generated file manually instead of merging it' });
+      continue;
     }
+    if (original === undefined) changes.push({ path: targetPath, contents: template, original: undefined });
+    else if (!original.equals(Buffer.from(template, 'utf8'))) changes.push({ path: targetPath, contents: template, original });
+    else skipped.push(targetPath);
   }
+
+  const archivePath = join(options.projectRoot, archiveManifestTarget);
+  let archiveOriginal: Buffer | undefined;
+  let archiveOccupied = false;
+  try {
+    if ((await stat(archivePath)).isDirectory()) {
+      conflicts.push({ path: archiveManifestTarget, reason: 'A directory occupies the archive manifest' });
+      archiveOccupied = true;
+    } else {
+      archiveOriginal = await readFile(archivePath);
+    }
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === 'ENOTDIR') {
+      conflicts.push({ path: archiveManifestTarget, reason: 'The archive manifest parent is not a directory' });
+      archiveOccupied = true;
+    } else if (code !== 'ENOENT') throw error;
+  }
+  if (!archiveOccupied) {
+    if (archiveOriginal === undefined) changes.push({ path: archiveManifestTarget, contents: emptyArchiveManifest, original: undefined });
+    else if (isArchiveManifest(archiveOriginal.toString('utf8'))) skipped.push(archiveManifestTarget);
+    else conflicts.push({ path: archiveManifestTarget, reason: 'Existing archive manifest is invalid; it cannot be replaced' });
+  }
+
   const missingDirectories: string[] = [];
   for (const directory of notesStructureDirectories()) {
     try {
@@ -219,6 +251,7 @@ export async function applyTemplateSnapshot(
       else throw error;
     }
   }
+
   let ignoreOriginal: Buffer | undefined;
   try { ignoreOriginal = await readFile(join(options.projectRoot, '.gitignore')); } catch (error) {
     const code = (error as NodeJS.ErrnoException).code;
@@ -228,6 +261,7 @@ export async function applyTemplateSnapshot(
   const ignoreContents = reconcileIgnoreFile(ignoreOriginal?.toString('utf8') ?? '');
   if (ignoreContents === undefined) skipped.push('.gitignore');
   else changes.push({ path: '.gitignore', contents: ignoreContents, original: ignoreOriginal });
+
   if (conflicts.length) {
     return {
       project: options.projectRoot,
@@ -240,24 +274,19 @@ export async function applyTemplateSnapshot(
       updated: [],
       skipped: skipped.sort(),
       warnings,
-      conflicts: conflicts.sort((left, right) => {
-        const a = left.path;
-        const b = right.path;
-        if (a === undefined || b === undefined) return 0;
-        return a < b ? -1 : a > b ? 1 : 0;
-      }),
+      conflicts: conflicts.sort(byPath),
     };
   }
+
   const createdDirectories: string[] = [];
   if (!options.check) {
-    const attempted: typeof changes = [];
+    const attempted: PendingChange[] = [];
     let publishingPath = '';
     try {
       for (const directory of missingDirectories) {
         publishingPath = directory;
-        const target = join(options.projectRoot, directory);
-        await mkdir(target);
-        createdDirectories.push(target);
+        await mkdir(join(options.projectRoot, directory));
+        createdDirectories.push(directory);
       }
       for (const change of changes.sort((left, right) => left.path < right.path ? -1 : left.path > right.path ? 1 : 0)) {
         publishingPath = change.path;
@@ -274,7 +303,7 @@ export async function applyTemplateSnapshot(
         }
         for (const parent of missingParents.reverse()) {
           await mkdir(parent);
-          createdDirectories.push(parent);
+          createdDirectories.push(relative(options.projectRoot, parent));
         }
         await atomicWrite(target, change.contents);
       }
@@ -284,23 +313,16 @@ export async function applyTemplateSnapshot(
       for (const change of attempted.reverse()) {
         const target = join(options.projectRoot, change.path);
         try {
-          if (change.original === undefined) {
-            await rm(target, { force: true });
-          } else {
-            let current: Buffer | undefined;
-            try { current = await readFile(target); } catch (recoveryError) {
-              if ((recoveryError as NodeJS.ErrnoException).code !== 'ENOENT') throw recoveryError;
-            }
-            if (!current?.equals(change.original)) await atomicWrite(target, change.original);
-          }
+          if (change.original === undefined) await rm(target, { force: true });
+          else await atomicWrite(target, change.original);
         } catch (recoveryError) {
           recoveryWarnings.push({ path: change.path, reason: `Recovery failed: ${recoveryError instanceof Error ? recoveryError.message : String(recoveryError)}` });
         }
       }
-      for (const directory of createdDirectories.reverse()) {
-        try { await rmdir(directory); } catch (recoveryError) {
+      for (const directory of createdDirectories.slice().reverse()) {
+        try { await rmdir(join(options.projectRoot, directory)); } catch (recoveryError) {
           if ((recoveryError as NodeJS.ErrnoException).code === 'ENOENT') continue;
-          recoveryWarnings.push({ path: relative(options.projectRoot, directory), reason: `Directory recovery failed: ${recoveryError instanceof Error ? recoveryError.message : String(recoveryError)}` });
+          recoveryWarnings.push({ path: directory, reason: `Directory recovery failed: ${recoveryError instanceof Error ? recoveryError.message : String(recoveryError)}` });
         }
       }
       return {
@@ -318,6 +340,7 @@ export async function applyTemplateSnapshot(
       };
     }
   }
+
   const pending = Boolean(options.check && (changes.length || missingDirectories.length));
   return {
     project: options.projectRoot,
@@ -326,8 +349,7 @@ export async function applyTemplateSnapshot(
     verified: !pending && warnings.length === 0,
     proceed: !pending,
     check: options.check ?? false,
-    created: [...changes.filter((change) => change.original === undefined).map((change) => change.path),
-      ...(options.check ? missingDirectories : createdDirectories.map((directory) => relative(options.projectRoot, directory)))].sort(),
+    created: changes.filter((change) => change.original === undefined).map((change) => change.path).sort(),
     updated: changes.filter((change) => change.original !== undefined).map((change) => change.path).sort(),
     skipped: skipped.sort(),
     warnings,

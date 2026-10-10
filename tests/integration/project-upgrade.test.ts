@@ -4,13 +4,12 @@ import { createHash } from 'node:crypto';
 import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
-import { initializeProject, upgradeProject } from '../../src/install/index.js';
+import { upgradeProject } from '../../src/install/index.js';
 import { exists } from '../../src/utils/fs.js';
 import { notePair, temporary } from '../helpers.js';
 
-// A mutable hook reuses the repository's existing injectable atomic-write pattern
-// (tests/integration/navigation-init.test.ts) to simulate one ordinary filesystem failure.
-// It affects only this test process and adds no production test backdoor.
+// A mutable hook reuses the repository's existing injectable atomic-write pattern to simulate one
+// ordinary filesystem failure. It affects only this test process and adds no production backdoor.
 const fsControl = vi.hoisted(() => ({ failPath: null as string | null, after: false }));
 
 vi.mock('../../src/utils/fs.js', async (importOriginal) => {
@@ -37,13 +36,17 @@ afterEach(() => {
 const lifecycleDirectories = ['proposed', 'implemented', 'rejected', 'archived'] as const;
 const noteClasses = ['architecture', 'bug-fix', 'feature', 'process', 'simplification', 'testing'] as const;
 
-// The contract/notes management files an existing pre-notes project is missing.
-const managementFiles = [
+// The five generated governance documents plus the empty archive data bootstrap that an
+// existing pre-notes project is missing.
+const generatedFiles = [
   '.ai-workflow/AGENTS.md',
   '.ai-workflow/notes/AGENTS.md',
   '.ai-workflow/notes/README.md',
   '.ai-workflow/notes/implemented/AGENTS.md',
   '.ai-workflow/notes/archived/AGENTS.md',
+] as const;
+const managementFiles = [
+  ...generatedFiles,
   '.ai-workflow/notes/archived/manifest.json',
 ] as const;
 
@@ -128,7 +131,7 @@ type UpgradeReport = {
   updated: string[];
   skipped: string[];
   warnings: Array<{ reason: string; path?: string; section?: string }>;
-  conflicts: Array<{ reason: string; path?: string; section?: string }>;
+  conflicts: Array<{ reason: string; path?: string; line?: number; originalLine?: string }>;
 };
 
 const localSnapshotWarningReason = 'Local shipped templates were used; the current upstream snapshot has not been verified';
@@ -218,11 +221,14 @@ async function expectTreeUnchanged(root: string, before: Map<string, string>): P
   }
 }
 
-describe('project upgrade', () => {
-  it('AC-013 fills the missing contract and notes management structure on the first upgrade without touching existing bytes', async () => {
+const shippedTemplate = (name: string): Promise<string> => readFile(new URL(`../../templates/project/${name}`, import.meta.url), 'utf8');
+
+describe('project upgrade generated replacement and completion', () => {
+  it('AC-009 completes missing generated governance and management structure while preserving local bytes', async () => {
     const root = await temporary('ai-workflow-upgrade-first-');
     await writeExistingProject(root);
     const before = await snapshot(root, preservedPaths);
+    const memoryBefore = await readFile(join(root, 'MEMORY.md'));
 
     const result = await upgrade(root);
     const created = normalized(result.created);
@@ -237,17 +243,26 @@ describe('project upgrade', () => {
     expect(categoryDirectories).toHaveLength(24);
     for (const path of categoryDirectories) expect(await exists(join(root, path))).toBe(true);
 
+    // The generated documents are the complete markerless shipped templates.
+    for (const name of ['AGENTS.md', 'notes/AGENTS.md', 'notes/README.md', 'notes/implemented/AGENTS.md', 'notes/archived/AGENTS.md']) {
+      const local = name === 'AGENTS.md' ? '.ai-workflow/AGENTS.md' : `.ai-workflow/${name}`;
+      const shipped = await shippedTemplate(name);
+      expect(await readFile(join(root, local), 'utf8')).toBe(shipped);
+      expect(shipped).not.toMatch(/ai-workflow:section/);
+    }
+
     for (const path of preservedPaths) expect(created).not.toContain(path);
     expect(created.filter((entry) => skipped.includes(entry))).toEqual([]);
 
-    // MEMORY.md is a managed target now: its independent standard survives even though managed sections are added.
-    expect(await readFile(join(root, 'MEMORY.md'), 'utf8')).toContain('Existing standard that must survive an upgrade.');
-    expect(created).not.toContain('MEMORY.md');
+    // MEMORY is local project content, not a managed target: its bytes stay identical.
+    expect(result.created).not.toContain('MEMORY.md');
+    expect(result.updated).not.toContain('MEMORY.md');
+    expect(await readFile(join(root, 'MEMORY.md'))).toEqual(memoryBefore);
 
     await expectUnchanged(root, before);
   });
 
-  it('AC-013 reports created as empty and lists the skipped management targets on a repeat upgrade', async () => {
+  it('AC-009 reports created as empty and lists the skipped generated targets on a repeat upgrade', async () => {
     const root = await temporary('ai-workflow-upgrade-repeat-');
     await writeExistingProject(root);
     await upgrade(root);
@@ -258,9 +273,27 @@ describe('project upgrade', () => {
     const skipped = normalized(second.skipped);
 
     expect(created).toEqual([]);
-    expect(skipped).toEqual(expect.arrayContaining([...managementFiles]));
+    expect(skipped).toEqual(expect.arrayContaining([...generatedFiles]));
 
     await expectUnchanged(root, afterFirst);
+  });
+
+  it('AC-009 fully replaces stale markerless generated bytes and preserves local MEMORY with CRLF', async () => {
+    const root = await temporary('ai-workflow-upgrade-replace-');
+    await writeExistingProject(root);
+    const crlfMemory = '# Project memory\r\n\r\nCRLF standard that must survive an upgrade.\r\n';
+    await writeFile(join(root, 'MEMORY.md'), crlfMemory);
+    await writeFile(join(root, '.ai-workflow/AGENTS.md'), '# Project contract\n\nStale manually edited body.\n');
+    await writeFile(join(root, '.ai-workflow/notes/AGENTS.md'), '# Agent Notes instructions\n\nStale notes body.\n');
+    const navigationBefore = await readFile(join(root, '.ai-workflow/index/navigation.json'), 'utf8');
+
+    const report = await upgrade(root);
+
+    expect(normalized(report.updated)).toEqual(expect.arrayContaining(['.ai-workflow/AGENTS.md', '.ai-workflow/notes/AGENTS.md']));
+    expect(await readFile(join(root, '.ai-workflow/AGENTS.md'), 'utf8')).toBe(await shippedTemplate('AGENTS.md'));
+    expect(await readFile(join(root, '.ai-workflow/notes/AGENTS.md'), 'utf8')).toBe(await shippedTemplate('notes/AGENTS.md'));
+    expect(await readFile(join(root, 'MEMORY.md'), 'utf8')).toBe(crlfMemory);
+    expect(await readFile(join(root, '.ai-workflow/index/navigation.json'), 'utf8')).toBe(navigationBefore);
   });
 
   it('migrates legacy whole-tree .ai-workflow and MEMORY.md ignore entries on upgrade', async () => {
@@ -324,8 +357,6 @@ describe('project upgrade', () => {
     const memory = `# Project memory\n\n## Standards\n\n- ${line}\n`;
     await writeFile(join(root, 'MEMORY.md'), memory);
 
-    // The upgrade must proceed: text that forbids ADRs or describes preserved history is not a
-    // rule that still requires them. Only an imperative rule to create/read ADRs blocks writing.
     const result = await upgrade(root);
 
     expect(normalized(result.created)).toEqual(expect.arrayContaining([...managementFiles]));
@@ -360,7 +391,7 @@ describe('project upgrade failure boundaries', () => {
     expect(report.proceed).toBe(false);
     expect(report.created).toEqual([]);
     expect(report.conflicts).toEqual(expect.arrayContaining([
-      expect.objectContaining({ path: '.ai-workflow', reason: expect.stringMatching(/no files written/i) }),
+      expect.objectContaining({ path: '.ai-workflow' }),
       expect.objectContaining({ path: '.ai-workflow/index/navigation.json' }),
       expect.objectContaining({ path: '.ai-workflow/index/navigation.md' }),
     ]));
@@ -379,7 +410,7 @@ describe('project upgrade failure boundaries', () => {
     expect(report.status).toBe('conflict');
     expect(report.proceed).toBe(false);
     expect(report.created).toEqual([]);
-    expect(report.conflicts.some((entry) => entry.path === 'MEMORY.md' && /missing/i.test(entry.reason))).toBe(true);
+    expect(report.conflicts.some((entry) => entry.path === 'MEMORY.md')).toBe(true);
     await expectTreeUnchanged(root, before);
   });
 
@@ -397,48 +428,42 @@ describe('project upgrade failure boundaries', () => {
       expect(report.status).toBe('conflict');
       expect(report.proceed).toBe(false);
       expect(report.created).toEqual([]);
-      expect(report.conflicts.some((entry) => entry.path === missing && /missing/i.test(entry.reason))).toBe(true);
+      expect(report.conflicts.some((entry) => entry.path === missing)).toBe(true);
       await expectTreeUnchanged(root, before);
     },
   );
 
-  it('AC-014 preserves a differing unmarked same-heading rule and still creates safe missing management content', async () => {
-    const root = await temporary('ai-workflow-upgrade-unmarked-');
+  it('AC-014 replaces differing markerless generated content instead of preserving it as local', async () => {
+    const root = await temporary('ai-workflow-upgrade-markerless-');
     await writeExistingProject(root);
-    const contractBytes = [
-      '# Custom contract',
-      '',
-      '## Shared context and maintenance',
-      '',
-      'Hand-written differing shared context.',
-      '',
-    ].join('\n');
+    const contractBytes = '# Custom contract\n\nHand-written differing shared context.\n';
     await writeFile(join(root, '.ai-workflow/AGENTS.md'), contractBytes);
     const before = await snapshot(root, preservedPaths);
 
     const report = await upgrade(root);
 
-    // Local templates cannot claim freshness; the differing rule is a warning, not a blocker.
     expect(report.status).toBe('needs_attention');
-    expect(report.warnings).toEqual(expect.arrayContaining([
-      expect.objectContaining({ path: '.ai-workflow/AGENTS.md', section: 'shared-context', reason: expect.stringMatching(/differs|ambiguous/i) }),
-    ]));
-
-    // The differing unmarked same-heading rule survives byte-for-byte exactly once: no overwrite and no duplicate.
-    const upgradedContract = await readFile(join(root, '.ai-workflow/AGENTS.md'), 'utf8');
-    expect(upgradedContract.startsWith(contractBytes)).toBe(true);
-    expect(upgradedContract.split('Hand-written differing shared context.').length - 1).toBe(1);
-    expect(upgradedContract.split('## Shared context and maintenance').length - 1).toBe(1);
-    // Safe missing managed sections are still added.
-    expect(upgradedContract).toContain('## Orchestration');
     expect(normalized(report.updated)).toContain('.ai-workflow/AGENTS.md');
-
-    // Safe missing management files are still created.
-    expect(normalized(report.created)).toEqual(expect.arrayContaining(managementFiles.filter((path) => path !== '.ai-workflow/AGENTS.md')));
-    for (const path of managementFiles) expect(await exists(join(root, path))).toBe(true);
-
-    // Independent data survives.
+    expect(await readFile(join(root, '.ai-workflow/AGENTS.md'), 'utf8')).toBe(await shippedTemplate('AGENTS.md'));
+    expect(normalized(report.created)).toEqual(expect.arrayContaining([...managementFiles].filter((path) => path !== '.ai-workflow/AGENTS.md')));
     await expectUnchanged(root, before);
+  });
+
+  it('AC-008 refuses a generated target that still carries legacy section markers before any write', async () => {
+    const root = await temporary('ai-workflow-upgrade-legacy-marker-');
+    await writeExistingProject(root);
+    const legacy = '# Project contract\n\n<!-- ai-workflow:section shared-context:begin -->\nold body\n<!-- ai-workflow:section shared-context:end -->\n';
+    await writeFile(join(root, '.ai-workflow/AGENTS.md'), legacy);
+    const before = await snapshotTree(root);
+
+    const result = await runCli(['init', root, '--upgrade']);
+
+    expect(result.code).toBe(1);
+    const report = JSON.parse(result.stdout) as UpgradeReport;
+    expect(report.status).toBe('conflict');
+    expect(report.conflicts.some((entry) => entry.path === '.ai-workflow/AGENTS.md')).toBe(true);
+    await expectTreeUnchanged(root, before);
+    expect(await readFile(join(root, '.ai-workflow/AGENTS.md'), 'utf8')).toBe(legacy);
   });
 
   it('AC-014 stops before writing and reports the exact MEMORY.md line that still requires ADRs', async () => {
@@ -600,93 +625,5 @@ describe('project upgrade failure boundaries', () => {
     expect(report.updated).toEqual([]);
     expect(report.conflicts.some((entry) => entry.path === '.ai-workflow/AGENTS.md')).toBe(true);
     await expectTreeUnchanged(root, before);
-  });
-});
-
-// --- Owned-section adoption lifecycle (fresh init markers + local upgrade patch core) ---
-
-const ownedBeginMarker = /<!-- ai-workflow:section ([^:\s<>]+):begin -->\n/;
-
-/** Independent extraction of the first owned section, used only to build the stale fixture. */
-function firstOwnedSection(content: string): { id: string; bodyStart: number; bodyEnd: number } {
-  const begin = ownedBeginMarker.exec(content);
-  if (!begin) throw new Error('Shipped template is missing an owned section marker');
-  const id = begin[1] as string;
-  const bodyStart = begin.index + begin[0].length;
-  const bodyEnd = content.indexOf(`<!-- ai-workflow:section ${id}:end -->`, bodyStart);
-  if (bodyEnd === -1) throw new Error(`Shipped template is missing the end marker for ${id}`);
-  return { id, bodyStart, bodyEnd };
-}
-
-interface UpgradeLifecycleReport {
-  created: string[];
-  updated: string[];
-  skipped: string[];
-  status: string;
-  verified: boolean;
-  proceed: boolean;
-  source?: { repository: string; branch: string; commit: string | null };
-}
-
-const markdownDestinations = [
-  '.ai-workflow/AGENTS.md',
-  'MEMORY.md',
-  '.ai-workflow/notes/AGENTS.md',
-  '.ai-workflow/notes/README.md',
-  '.ai-workflow/notes/implemented/AGENTS.md',
-  '.ai-workflow/notes/archived/AGENTS.md',
-] as const;
-
-describe('project upgrade owned-section lifecycle', () => {
-  it('owned-section lifecycle: fresh init marks every management file and a local upgrade replaces stale owned bodies while preserving independent data', async () => {
-    const root = await temporary('ai-workflow-upgrade-owned-');
-    await mkdir(join(root, 'src'), { recursive: true });
-    await writeFile(join(root, 'src/index.ts'), 'export const existing = true;\n');
-
-    await initializeProject(root);
-
-    // Fresh init delivers ownership markers in all six Markdown management destinations.
-    for (const destination of markdownDestinations) {
-      const contents = await readFile(join(root, destination), 'utf8');
-      expect(contents, `${destination} must carry an owned begin marker`).toMatch(/<!-- ai-workflow:section [^:\s<>]+:begin -->/);
-      expect(contents, `${destination} must carry an owned end marker`).toMatch(/<!-- ai-workflow:section [^:\s<>]+:end -->/);
-    }
-
-    // Independent project data that must survive the upgrade.
-    const frozenPlan = '.ai-workflow/plans/20260101-custom/spec.md';
-    const customNote = '.ai-workflow/notes/implemented/feature/2026-01-01-custom.md';
-    await mkdir(join(root, '.ai-workflow/plans/20260101-custom'), { recursive: true });
-    await mkdir(join(root, '.ai-workflow/notes/implemented/feature'), { recursive: true });
-    await writeFile(join(root, frozenPlan), '# Frozen plan\n\nIndependent frozen plan bytes.\n');
-    await writeFile(join(root, customNote), '# Custom note\n\nIndependent note bytes.\n');
-    const memoryBefore = await readFile(join(root, 'MEMORY.md'), 'utf8');
-    const navigationBefore = await readFile(join(root, '.ai-workflow/index/navigation.json'), 'utf8');
-
-    // Stale one owned body in the shipped AGENTS.md template and add project-owned bytes around it.
-    const template = await readFile(new URL('../../templates/project/AGENTS.md', import.meta.url), 'utf8');
-    const section = firstOwnedSection(template);
-    const customPrefix = 'custom prefix line\n';
-    const customSuffix = 'custom suffix line\n';
-    const stale = `${template.slice(0, section.bodyStart)}STALE OWNED BODY\n${template.slice(section.bodyEnd)}`;
-    await writeFile(join(root, '.ai-workflow/AGENTS.md'), `${customPrefix}${stale}${customSuffix}`);
-
-    const report = (await upgradeProject(root)) as unknown as UpgradeLifecycleReport;
-
-    // The stale owned body is replaced from the shipped section; custom outside bytes are retained.
-    expect(await readFile(join(root, '.ai-workflow/AGENTS.md'), 'utf8')).toBe(`${customPrefix}${template}${customSuffix}`);
-    expect(report.updated).toContain('.ai-workflow/AGENTS.md');
-    expect(report.created).toEqual([]);
-    expect(report.skipped).toEqual(expect.arrayContaining(['MEMORY.md', '.ai-workflow/notes/AGENTS.md']));
-    // Local templates cannot claim current upstream freshness, but safe work may continue.
-    expect(report.verified).toBe(false);
-    expect(report.proceed).toBe(true);
-    expect(report.source?.commit ?? null).toBeNull();
-    expect(['synchronized', 'needs_attention']).toContain(report.status);
-
-    // Independent project data survives byte-for-byte.
-    expect(await readFile(join(root, frozenPlan), 'utf8')).toBe('# Frozen plan\n\nIndependent frozen plan bytes.\n');
-    expect(await readFile(join(root, customNote), 'utf8')).toBe('# Custom note\n\nIndependent note bytes.\n');
-    expect(await readFile(join(root, 'MEMORY.md'), 'utf8')).toBe(memoryBefore);
-    expect(await readFile(join(root, '.ai-workflow/index/navigation.json'), 'utf8')).toBe(navigationBefore);
   });
 });

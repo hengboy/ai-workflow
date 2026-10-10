@@ -7,39 +7,30 @@ const REPOSITORY = 'hengboy/ai-workflow';
 const BRANCH = 'main';
 const PUBLIC_URL = 'https://github.com/hengboy/ai-workflow.git';
 
-/** The complete supported project-template source set fixed by the specification table. */
-const SOURCE_PATHS = [
+/** The exactly-five generated members fixed by REQ-001. */
+const GENERATED_SOURCES = [
   'templates/project/AGENTS.md',
-  'templates/project/MEMORY.md',
-  'templates/project/navigation.json',
-  'templates/project/navigation.md',
   'templates/project/notes/AGENTS.md',
   'templates/project/notes/README.md',
   'templates/project/notes/implemented/AGENTS.md',
   'templates/project/notes/archived/AGENTS.md',
-  'templates/project/notes/archived/manifest.json',
 ] as const;
 
-function upstreamSectionId(repoPath: string): string {
-  return repoPath.replace(/[^a-z0-9]+/gi, '-').replace(/^-+|-+$/g, '').toLowerCase();
-}
-
 /**
- * Independent expected upstream content for one immutable commit: the mergeable Markdown
- * templates carry a valid owned section, and the preserved JSON data stays valid.
+ * Independent expected upstream content for one immutable commit: every generated member is
+ * markerless Markdown with a nonempty level-one title.
  */
-function upstreamFileContents(commit: string, repoPath: string): string {
-  if (repoPath.endsWith('manifest.json')) return '{\n  "version": 1,\n  "files": {}\n}\n';
-  if (repoPath.endsWith('json')) return `${JSON.stringify({ version: 1, commit }, null, 2)}\n`;
-  const id = upstreamSectionId(repoPath);
-  return `# ${repoPath}\n<!-- ai-workflow:section ${id}:begin -->\nimmutable ${commit}\n<!-- ai-workflow:section ${id}:end -->\n`;
+function generatedFiles(commit: string): Record<string, string> {
+  const files: Record<string, string> = {};
+  for (const path of GENERATED_SOURCES) {
+    const name = path.slice('templates/project/'.length).replace(/\.md$/, '');
+    files[path] = `# ${name}\n\nImmutable commit ${commit} body.\n`;
+  }
+  return files;
 }
 
-/** The full valid source set at one commit, keyed by repository-relative path. */
-function sourceFiles(commit: string): Record<string, string> {
-  const files: Record<string, string> = {};
-  for (const path of SOURCE_PATHS) files[path] = upstreamFileContents(commit, path);
-  return files;
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 // The regression guard: while these suites run, any HTTP request is a failure. Source
@@ -54,44 +45,58 @@ beforeEach(() => {
 });
 afterEach(() => { vi.unstubAllGlobals(); });
 
-describe('project template source', () => {
-  it('shallow-clones the fixed public source and reads every supported template, never HTTP', async () => {
+describe('project template source acquisition', () => {
+  it('shallow-clones the fixed public source once and returns exactly the five generated members, never HTTP', async () => {
     const commit = 'a'.repeat(40);
-    const fake = fakeGit({ commit, files: sourceFiles(commit) });
+    const expected = generatedFiles(commit);
+    const fake = fakeGit({ commit, files: expected });
 
     const snapshot = await resolveTemplateSnapshot({ runGit: fake.runGit });
 
     expect(snapshot.source).toEqual({ repository: REPOSITORY, branch: BRANCH, commit });
-    expect(Object.keys(snapshot.files).sort()).toEqual([...SOURCE_PATHS].sort());
-    for (const path of SOURCE_PATHS) expect(snapshot.files[path]).toBe(upstreamFileContents(commit, path));
+    expect(Object.keys(snapshot.files).sort()).toEqual([...GENERATED_SOURCES].sort());
+    for (const path of GENERATED_SOURCES) expect(snapshot.files[path]).toBe(expected[path]);
 
-    // The exact production sequence: one shallow clone of the fixed public address into the
-    // already-created destination, then a rev-parse of that clone's HEAD.
+    // The exact production sequence: one shallow clone into the destination, then rev-parse.
     expect(fake.cloneCount()).toBe(1);
     const destination = fake.clones[0]!;
     expect(fake.calls[0]).toEqual(['clone', '--depth', '1', '--branch', BRANCH, PUBLIC_URL, destination]);
     expect(fake.calls[1]).toEqual(['-C', destination, 'rev-parse', 'HEAD']);
-
-    // No HTTP at all, even though global fetch would now throw if touched.
     expect(fetchCalls).toBe(0);
+  });
+
+  it('does not extend the allowlist for extra upstream files', async () => {
+    const commit = '2'.repeat(40);
+    const files = {
+      ...generatedFiles(commit),
+      'templates/project/EXTRA.md': '# Extra\n\nUnsupported destination.\n',
+      'templates/project/notes/EXTRA.md': '# Extra notes\n\nUnsupported destination.\n',
+    };
+    const fake = fakeGit({ commit, files });
+
+    const snapshot = await resolveTemplateSnapshot({ runGit: fake.runGit });
+
+    expect(Object.keys(snapshot.files).sort()).toEqual([...GENERATED_SOURCES].sort());
+    expect(snapshot.files).not.toHaveProperty('templates/project/EXTRA.md');
+    expect(snapshot.files).not.toHaveProperty('templates/project/notes/EXTRA.md');
   });
 
   it('clones once per trigger with fresh state, so a later head returns the new commit and bytes', async () => {
     const commitA = 'a'.repeat(40);
     const commitB = 'b'.repeat(40);
-    const state = { commit: commitA, files: sourceFiles(commitA) };
+    const state = { commit: commitA, files: generatedFiles(commitA) };
     const fake = fakeGit(state);
 
     const first = await resolveTemplateSnapshot({ runGit: fake.runGit });
     expect(first.source).toEqual({ repository: REPOSITORY, branch: BRANCH, commit: commitA });
-    for (const path of SOURCE_PATHS) expect(first.files[path]).toBe(upstreamFileContents(commitA, path));
+    for (const path of GENERATED_SOURCES) expect(first.files[path]).toBe(generatedFiles(commitA)[path]);
 
     // A later trigger observes a new HEAD; it must read only the new commit and reuse nothing.
     state.commit = commitB;
-    state.files = sourceFiles(commitB);
+    state.files = generatedFiles(commitB);
     const second = await resolveTemplateSnapshot({ runGit: fake.runGit });
     expect(second.source).toEqual({ repository: REPOSITORY, branch: BRANCH, commit: commitB });
-    for (const path of SOURCE_PATHS) expect(second.files[path]).toBe(upstreamFileContents(commitB, path));
+    for (const path of GENERATED_SOURCES) expect(second.files[path]).toBe(generatedFiles(commitB)[path]);
     expect(second.files).not.toEqual(first.files);
     expect(fake.cloneCount()).toBe(2);
     expect(fake.calls.filter((arguments_) => arguments_[0] === 'clone')).toHaveLength(2);
@@ -99,7 +104,7 @@ describe('project template source', () => {
 
   it('removes the temporary clone directory after a successful acquisition', async () => {
     const commit = 'c'.repeat(40);
-    const fake = fakeGit({ commit, files: sourceFiles(commit) });
+    const fake = fakeGit({ commit, files: generatedFiles(commit) });
 
     await resolveTemplateSnapshot({ runGit: fake.runGit });
 
@@ -117,7 +122,7 @@ describe('project template source', () => {
   });
 
   it('rejects an ambiguous branch head that is not an immutable 40-hex commit', async () => {
-    const fake = fakeGit({ commit: 'deadbeef', files: sourceFiles('a'.repeat(40)) });
+    const fake = fakeGit({ commit: 'deadbeef', files: generatedFiles('a'.repeat(40)) });
 
     await expect(resolveTemplateSnapshot({ runGit: fake.runGit })).rejects.toThrow(/Template source branch has no immutable commit: main/);
   });
@@ -130,33 +135,33 @@ describe('project template source', () => {
   });
 });
 
-describe('project template source structure validation', () => {
-  const malformedCases: Array<{ name: string; path: string; contents: string; reason: RegExp }> = [
-    {
-      name: 'an unclosed owned-section marker',
-      path: 'templates/project/MEMORY.md',
-      contents: '# Project memory\n\n<!-- ai-workflow:section standards:begin -->\nnever closed\n',
-      reason: /Template source structure is invalid: templates\/project\/MEMORY\.md/,
-    },
-    {
-      name: 'a JSON template with invalid syntax',
-      path: 'templates/project/navigation.json',
-      contents: '{ this is not valid json\n',
-      reason: /Template source structure is invalid: templates\/project\/navigation\.json/,
-    },
-    {
-      name: 'an archive manifest that is not version 1 with a files object',
-      path: 'templates/project/notes/archived/manifest.json',
-      contents: '{\n  "version": 2,\n  "files": {}\n}\n',
-      reason: /Template source structure is invalid: templates\/project\/notes\/archived\/manifest\.json/,
-    },
-  ];
+describe('project template source completeness and format validation', () => {
+  it('rejects an incomplete snapshot that is missing one required generated member', async () => {
+    const commit = '1'.repeat(40);
+    const path = 'templates/project/notes/implemented/AGENTS.md';
+    const files = generatedFiles(commit);
+    delete files[path];
+    const fake = fakeGit({ commit, files });
 
-  it.each(malformedCases)('rejects $name before any target is touched', async ({ path, contents, reason }) => {
-    const commit = 'd'.repeat(40);
-    const fake = fakeGit({ commit, files: { ...sourceFiles(commit), [path]: contents } });
+    await expect(resolveTemplateSnapshot({ runGit: fake.runGit })).rejects.toThrow(new RegExp(escapeRegExp(path)));
+    expect(fetchCalls).toBe(0);
+  });
 
-    await expect(resolveTemplateSnapshot({ runGit: fake.runGit })).rejects.toThrow(reason);
+  it('rejects a member that is empty, whitespace-only, titleless or still carries legacy section-marker syntax', async () => {
+    const commit = 'f'.repeat(40);
+    const path = 'templates/project/notes/README.md';
+    const malformed = [
+      '',
+      '   \n\t\n',
+      'Body without a level-one title.\n',
+      '# Title\n\n<!-- ai-workflow:section standards:begin -->\nold body\n<!-- ai-workflow:section standards:end -->\n',
+    ];
+
+    for (const contents of malformed) {
+      const files = { ...generatedFiles(commit), [path]: contents };
+      const fake = fakeGit({ commit, files });
+      await expect(resolveTemplateSnapshot({ runGit: fake.runGit })).rejects.toThrow(new RegExp(escapeRegExp(path)));
+    }
     expect(fetchCalls).toBe(0);
   });
 });

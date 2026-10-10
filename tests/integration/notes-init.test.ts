@@ -21,7 +21,12 @@ describe('notes initialization', () => {
       '.ai-workflow/notes/implemented/AGENTS.md',
       '.ai-workflow/notes/archived/AGENTS.md',
     ];
-    for (const path of managementFiles) expect(await exists(join(root, path))).toBe(true);
+    for (const path of managementFiles) {
+      expect(await exists(join(root, path))).toBe(true);
+      const contents = await readFile(join(root, path), 'utf8');
+      expect(contents, `${path} must be markerless generated content`).not.toMatch(/ai-workflow:section/);
+      expect(contents, `${path} must carry a level-one title`).toMatch(/^# /m);
+    }
 
     expect(JSON.parse(await readFile(join(root, '.ai-workflow/notes/archived/manifest.json'), 'utf8'))).toEqual({
       version: 1,
