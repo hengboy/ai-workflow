@@ -20,6 +20,14 @@ request. This skill instead performs its own fresh, cache-independent synchroniz
 user's explicit request, and it never replaces the stored gate decision. Do not start that
 automatic check from here.
 
+## Project context
+
+Before acting, explicitly read the project's `.ai-workflow/AGENTS.md`, `MEMORY.md`,
+`.ai-workflow/index/navigation.json` and `.ai-workflow/index/navigation.md`, or receive them
+through complete context injection. A Markdown link or an inherited parent read does not load
+them into this session, and the project contract applies to the whole project and to every
+participating agent.
+
 ## Incremental synchronization
 
 Run the installed incremental CLI. It never builds the CLI and never replaces a target with a

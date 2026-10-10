@@ -9,6 +9,10 @@ description: Initialize ai-workflow in a project, or upgrade an existing adoptio
 
 Set up ai-workflow with the locally installed `ai-workflow` CLI: first-time initialization for a project that has not adopted ai-workflow yet, or an upgrade that completes missing management files and directories in an existing project. Run an upgrade only when the user explicitly authorizes it. Report every result. Do not invoke external orchestrators or provider APIs.
 
+## Project context
+
+Before acting, explicitly read the project's `.ai-workflow/AGENTS.md`, `MEMORY.md`, `.ai-workflow/index/navigation.json` and `.ai-workflow/index/navigation.md`, or receive them through complete context injection. A Markdown link or an inherited parent read does not load them into this session. The project contract applies to the whole project and to every participating agent.
+
 ## Routine preflight and authorization
 
 Installing the shared synchronization entry authorizes only the narrow routine preflight that

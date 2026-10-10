@@ -70,42 +70,32 @@ afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
 
-function marker(id: string, body: string): string {
+/** Legacy section-comment syntax: a generated target carrying it is refused, never merged. */
+function legacyMarker(id: string, body: string): string {
   return `<!-- ai-workflow:section ${id}:begin -->\n${body}\n<!-- ai-workflow:section ${id}:end -->\n`;
 }
 
 const navigationJson = `${JSON.stringify({ version: 1, module_roots: [], features: [] }, null, 2)}\n`;
 const manifestJson = '{\n  "version": 1,\n  "files": {}\n}\n';
-const notesGovernance = marker('notes-governance', 'Shared notes governance.');
-const notesReadme = marker('notes-readme', 'Shared notes readme.');
-const implementedGovernance = marker('implemented-governance', 'Shared implemented governance.');
-const archivedGovernance = marker('archived-governance', 'Shared archived governance.');
 
+// Exactly the five generated documents, each a complete markerless Markdown file.
 const baseSourceFiles: Record<string, string> = {
-  'templates/project/AGENTS.md': `# Project contract\n${marker('shared-context', '## Shared context\nFresh shared context.')}`,
-  'templates/project/MEMORY.md': `# Project memory\n${marker('standards', 'Fresh standards.')}`,
-  'templates/project/navigation.json': navigationJson,
-  'templates/project/navigation.md': '# Navigation\n\nAdopted navigation.\n',
-  'templates/project/notes/AGENTS.md': notesGovernance,
-  'templates/project/notes/README.md': notesReadme,
-  'templates/project/notes/implemented/AGENTS.md': implementedGovernance,
-  'templates/project/notes/archived/AGENTS.md': archivedGovernance,
-  'templates/project/notes/archived/manifest.json': manifestJson,
+  'templates/project/AGENTS.md': '# Project contract\n\nFresh shared context. Adopted project guidance.\n',
+  'templates/project/notes/AGENTS.md': '# Notes governance\n\nFresh notes governance.\n',
+  'templates/project/notes/README.md': '# Notes readme\n\nFresh notes readme.\n',
+  'templates/project/notes/implemented/AGENTS.md': '# Implemented governance\n\nFresh implemented governance.\n',
+  'templates/project/notes/archived/AGENTS.md': '# Archived governance\n\nFresh archived governance.\n',
 };
 
-// A source MEMORY whose owned section body starts with a heading, so an unmarked target
-// section with the same heading but different bytes becomes an unresolved attention warning.
-const attentionSourceFiles: Record<string, string> = {
-  ...baseSourceFiles,
-  'templates/project/MEMORY.md': `# Project memory\n${marker('standards', '## Standards\nFresh standards.')}`,
-};
-
-// Adopted target: marked sections differ from source; custom bytes and independent data
-// must survive a safe patch.
-const targetAgents = `custom preface\n${marker('shared-context', '## Shared context\nOld shared context.')}custom suffix\n`;
-const targetMemory = `# Project memory\n${marker('standards', 'Old standards.')}custom trailing note\n`;
-const attentionTargetMemory = '# Project memory\n\n## Standards\nOld differing standard.\n';
-const malformedAgents = `${marker('shared-context', 'one')}${marker('shared-context', 'two')}`;
+// Adopted target: complete markerless documents whose older bytes differ from source, so a safe
+// full-file replacement lands while project-owned bytes and frozen data survive.
+const targetAgents = '# Project contract\n\nOld shared context.\ncustom trailing note\n';
+const targetMemory = '# Project memory\n\nProject-specific standard body.\n';
+const targetNotesGovernance = '# Notes governance\n\nOld notes governance.\n';
+const targetNotesReadme = '# Notes readme\n\nOld notes readme.\n';
+const targetImplementedGovernance = '# Implemented governance\n\nOld implemented governance.\n';
+const targetArchivedGovernance = '# Archived governance\n\nOld archived governance.\n';
+const legacyAgents = legacyMarker('shared-context', 'Old shared context that must be replaced manually.');
 const planSpecBytes = '# Frozen plan\n\nIndependent frozen plan bytes.\n';
 
 interface GitFixture { binDirectory: string; fixturePath: string }
@@ -131,10 +121,10 @@ async function adoptedProject(overrides: Record<string, string> = {}): Promise<s
     'MEMORY.md': targetMemory,
     '.ai-workflow/index/navigation.json': navigationJson,
     '.ai-workflow/index/navigation.md': '# Navigation\n\nAdopted navigation.\n',
-    '.ai-workflow/notes/AGENTS.md': notesGovernance,
-    '.ai-workflow/notes/README.md': notesReadme,
-    '.ai-workflow/notes/implemented/AGENTS.md': implementedGovernance,
-    '.ai-workflow/notes/archived/AGENTS.md': archivedGovernance,
+    '.ai-workflow/notes/AGENTS.md': targetNotesGovernance,
+    '.ai-workflow/notes/README.md': targetNotesReadme,
+    '.ai-workflow/notes/implemented/AGENTS.md': targetImplementedGovernance,
+    '.ai-workflow/notes/archived/AGENTS.md': targetArchivedGovernance,
     '.ai-workflow/notes/archived/manifest.json': manifestJson,
     '.ai-workflow/plans/20260101-custom/spec.md': planSpecBytes,
     ...overrides,
@@ -282,17 +272,9 @@ const mappingCases: MappingCase[] = [
     contextIncludes: ['unverified', 'Warning:'],
   },
   {
-    name: 'needs_attention warning allows with visible context and fresh authority',
-    expectedStatus: 'needs_attention',
-    source: attentionSourceFiles,
-    target: { 'MEMORY.md': attentionTargetMemory },
-    authority: true,
-    contextIncludes: ['needs_attention', 'Fresh shared context.'],
-  },
-  {
     name: 'conflict blocks with an explicit native denial',
     expectedStatus: 'conflict',
-    target: { '.ai-workflow/AGENTS.md': malformedAgents },
+    target: { '.ai-workflow/AGENTS.md': legacyAgents },
     deny: true,
     authority: false,
     contextIncludes: ['conflict', 'Conflict:'],
@@ -574,7 +556,7 @@ describe('opencode plugin boundary', () => {
     const contextDirectory = await temporary('ai-workflow-plugin-context-');
     const fixtureLogDirectory = await temporary('ai-workflow-plugin-log-');
     const rootA = await adoptedProject();
-    const rootBAgents = `# root B custom preface\n${marker('shared-context', '## Shared context\nOld shared context.')}root B suffix\n`;
+    const rootBAgents = '# root B contract\n\nOld root B shared context.\n';
     const rootB = await adoptedProject({ '.ai-workflow/AGENTS.md': rootBAgents });
     roots.push(home, contextDirectory, fixtureLogDirectory, rootA, rootB);
     expect(contextDirectory).not.toBe(rootA);
@@ -653,7 +635,7 @@ describe('opencode plugin boundary', () => {
     const home = await temporary('ai-workflow-plugin-conflict-home-');
     const contextDirectory = await temporary('ai-workflow-plugin-conflict-context-');
     const fixtureLogDirectory = await temporary('ai-workflow-plugin-conflict-log-');
-    const rootA = await adoptedProject({ '.ai-workflow/AGENTS.md': malformedAgents });
+    const rootA = await adoptedProject({ '.ai-workflow/AGENTS.md': legacyAgents });
     roots.push(home, contextDirectory, fixtureLogDirectory, rootA);
 
     const git = await gitFixture(baseSourceFiles);
@@ -743,7 +725,7 @@ describe('opencode plugin boundary', () => {
     const contextDirectory = await temporary('ai-workflow-plugin-route-context-');
     const fixtureLogDirectory = await temporary('ai-workflow-plugin-route-log-');
     const sessionRoot = await adoptedProject();
-    const operationRootAgents = `# route B custom preface\n${marker('shared-context', '## Shared context\nOld shared context.')}route B suffix\n`;
+    const operationRootAgents = '# route B contract\n\nOld route B shared context.\n';
     const operationRoot = await adoptedProject({ '.ai-workflow/AGENTS.md': operationRootAgents });
     roots.push(home, contextDirectory, fixtureLogDirectory, sessionRoot, operationRoot);
 

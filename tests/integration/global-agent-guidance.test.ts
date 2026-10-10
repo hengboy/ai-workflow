@@ -60,6 +60,12 @@ describe('global agent guidance', () => {
     expect(contents).toMatch(/explicitly\s+read\s+`?\.ai-workflow\/AGENTS\.md`?/i);
     expect(contents).toMatch(/missing[\s\S]{0,160}`?\.ai-workflow\/AGENTS\.md`?[\s\S]{0,160}init\s+.*--upgrade/i);
     expect(contents).not.toMatch(/^## (?:Workflow roles|Agent Notes)$/m);
+    // REQ-007 / AC-010: the global loading entry minimally clarifies that the project's own
+    // `MEMORY.md` must also be explicitly read alongside the project contract.
+    expect(contents, 'the global entry must require the project MEMORY read explicitly').toMatch(/MEMORY\.md/);
+    expect(contents, 'the MEMORY requirement must be phrased as an explicit read or injection').toMatch(
+      /(?:explicitly\s+read|read\s+or\s+inject|inject[^.\n]{0,40}MEMORY)[\s\S]{0,120}MEMORY\.md|MEMORY\.md[\s\S]{0,120}(?:explicitly\s+read|read\s+or\s+inject)/i,
+    );
   });
 
   it('AC-010 keeps exactly one contract file under templates/contract', async () => {

@@ -54,9 +54,24 @@ describe('agent notes workflow content', () => {
       expect(text, `${path} points at ${NOTES_README}`).toContain(NOTES_README);
     }
 
-    for (const path of ['templates/project/AGENTS.md', 'templates/project/MEMORY.md']) {
+    // Notes governance is a generic workflow obligation owned by the generated contract; the
+    // project-owned MEMORY scaffolding no longer restates it.
+    const contractText = await read('templates/project/AGENTS.md');
+    expect(contractText, `templates/project/AGENTS.md points at ${NOTES_README}`).toContain(NOTES_README);
+  });
+
+  it('requires every workflow skill and role to explicitly load all four fixed contexts', async () => {
+    const FIXED_CONTEXT = [
+      '.ai-workflow/AGENTS.md',
+      'MEMORY.md',
+      '.ai-workflow/index/navigation.json',
+      '.ai-workflow/index/navigation.md',
+    ];
+    for (const path of WORKFLOW_ARTIFACTS) {
       const text = await read(path);
-      expect(text, `${path} points at ${NOTES_README}`).toContain(NOTES_README);
+      for (const fixed of FIXED_CONTEXT) {
+        expect(text, `${path} explicitly loads ${fixed}`).toContain(fixed);
+      }
     }
   });
 
@@ -115,5 +130,24 @@ describe('agent notes workflow content', () => {
     for (const path of ['templates/agents/spec-review.md', 'templates/agents/standards-review.md']) {
       expect(await read(path), `${path} stays read-only`).toMatch(/^tools: \[read\]$/m);
     }
+  });
+
+  it('keeps the review axes distinct: spec/plan acceptance authority versus project standards', async () => {
+    const specReview = await read('templates/agents/spec-review.md');
+    // REQ-007: Spec Review uses the frozen spec and plan as its acceptance authority and must
+    // not promote MEMORY (project rules) into that acceptance authority.
+    expect(specReview, 'Spec Review is bounded by the frozen documents').toMatch(
+      /sole authorit(?:y|ies)[^.\n]*supplied spec, plan and task documents/i,
+    );
+    expect(specReview, 'Spec Review does not treat MEMORY as acceptance authority').toMatch(/apply MEMORY standards/i);
+
+    const standardsReview = await read('templates/agents/standards-review.md');
+    // REQ-007: Standards Review keeps project standards (MEMORY and its referenced notes rules).
+    expect(standardsReview, 'Standards Review stays on MEMORY standards').toMatch(
+      /against root `?MEMORY\.md`?|MEMORY\.md.*standards authority/i,
+    );
+    expect(standardsReview, 'Standards Review uses the spec only as input, not as a standards source').toMatch(
+      /do not[^.\n]{0,60}use the spec as a standards source/i,
+    );
   });
 });

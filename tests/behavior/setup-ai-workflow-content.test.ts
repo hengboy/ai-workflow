@@ -50,4 +50,22 @@ describe('setup ai-workflow skill', () => {
     expect(metadata.interface?.short_description).toMatch(/explicit|authoriz/i);
     expect(metadata.interface?.default_prompt).toContain('$setup-ai-workflow');
   });
+
+  it('requires the primary setup session to explicitly load the fixed project context before acting', async () => {
+    const text = await readFile(`${packagePath('templates', 'skills', 'setup-ai-workflow')}/SKILL.md`, 'utf8');
+    const fixed = {
+      contract: '.ai-workflow/AGENTS.md',
+      memory: 'MEMORY.md',
+      navigationJson: '.ai-workflow/index/navigation.json',
+      navigationMarkdown: '.ai-workflow/index/navigation.md',
+    };
+    // AC-010: every primary role must explicitly read or receive all four fixed contexts; a
+    // Markdown link or an inherited parent read does not load them into this session.
+    for (const [name, path] of Object.entries(fixed)) {
+      expect(text, `setup must explicitly load the ${name} context (${path})`).toContain(path);
+    }
+    expect(text, 'setup must state an explicit read or complete injected context').toMatch(
+      /explicitly read|read or inject|inject[^.\n]{0,60}context|complete injected/i,
+    );
+  });
 });

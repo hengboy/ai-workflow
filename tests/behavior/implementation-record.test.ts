@@ -188,16 +188,18 @@ describe('implementation record guidance', () => {
       assertScopedExemption(contract, 'templates/project/AGENTS.md');
     });
 
-    it('states the same record path and scoped exemption in templates/project/MEMORY.md', async () => {
+    it('keeps the generated run-record contract out of the project-owned MEMORY scaffolding', async () => {
       const memory = await projectMemoryTemplate();
 
-      expect(memory).toContain(RECORD_PATH);
-      assertScopedExemption(memory, 'templates/project/MEMORY.md');
+      // The MEMORY template is project-content scaffolding only; generic workflow obligations
+      // such as the run record belong to the generated project contract.
+      expect(memory, 'the MEMORY scaffolding must not embed the generated run record').not.toContain(RECORD_PATH);
+      expect(memory, 'the MEMORY scaffolding must not embed the generated run record').not.toContain('implementation.yaml');
+      expect(memory, 'the MEMORY scaffolding must not embed the generated timestamp rule').not.toMatch(/UTC\+08:00/);
     });
 
-    it('states the same UTC+08:00 timestamp rule in both project templates', async () => {
+    it('states the UTC+08:00 timestamp rule in the generated project contract', async () => {
       expect(flatten(await projectContractTemplate())).toMatch(/UTC\+08:00/);
-      expect(flatten(await projectMemoryTemplate())).toMatch(/UTC\+08:00/);
     });
   });
 

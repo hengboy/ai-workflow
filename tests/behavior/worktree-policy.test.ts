@@ -39,18 +39,18 @@ describe('mandatory project-local temporary worktree policy', () => {
     expect(coding).toMatch(/materialize the project's entire gitignored state/i);
     expect(coding).toContain('.worktrees/');
 
-    for (const path of ['MEMORY.md', 'templates/project/AGENTS.md', 'templates/project/MEMORY.md']) {
+    for (const path of ['MEMORY.md', 'templates/project/AGENTS.md']) {
       const text = normalize(await readFile(packagePath(path), 'utf8'));
       expect(text, `${path} shares ignored state`).toMatch(/gitignored state/i);
       expect(text, `${path} excludes the worktree container`).toContain('.worktrees/');
     }
   });
 
-  it('materializes notes alongside the project contract as a single source in the project MEMORY standard', async () => {
-    const memory = normalize(await readFile(packagePath('templates/project/MEMORY.md'), 'utf8'));
-    const materialization = memory.split(/(?<=\.)\s/).find((sentence) => /gitignored state/i.test(sentence));
+  it('materializes notes alongside the project contract as a single source in the generated contract', async () => {
+    const contract = normalize(await readFile(packagePath('templates/project/AGENTS.md'), 'utf8'));
+    const materialization = contract.split(/(?<=\.)\s/).find((sentence) => /gitignored state/i.test(sentence));
 
-    expect(materialization, 'templates/project/MEMORY.md states the worktree materialization standard').toBeDefined();
+    expect(materialization, 'templates/project/AGENTS.md states the worktree materialization standard').toBeDefined();
     expect(materialization).toMatch(/notes/i);
   });
 

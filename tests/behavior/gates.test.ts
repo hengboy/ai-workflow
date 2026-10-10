@@ -50,9 +50,13 @@ describe('write gates', () => {
     await expect(initializeProject(root)).rejects.toThrow(/no files written/);
     expect(await exists(join(root, 'AGENTS.md'))).toBe(false);
   });
-  it('init reports merge content for every conflict', async () => {
+  it('init names the conflicting local MEMORY path without embedding template merge content', async () => {
     const root = await temporary();
     await writeFile(join(root, 'MEMORY.md'), 'existing');
-    await expect(initializeProject(root)).rejects.toThrow(/MEMORY\.md.*---/s);
+    // REQ-002: an existing titleless MEMORY refuses initialization before any write and the
+    // error names the path; root MEMORY is project-owned and is never merged from a template.
+    await expect(initializeProject(root)).rejects.toThrow(/MEMORY\.md/);
+    await expect(initializeProject(root)).rejects.toThrow(/no files written/i);
+    await expect(initializeProject(root)).rejects.not.toThrow(/---/);
   });
 });

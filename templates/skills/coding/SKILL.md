@@ -129,7 +129,7 @@ product code.
 
 ## Preconditions
 
-- Read `.ai-workflow/AGENTS.md`, `MEMORY.md` and both navigation index files. Read the frozen `spec.md` and `plan.md` for a planned change; a direct or mechanical change uses the request's explicit scope and acceptance evidence as its boundary. The project contract applies to the whole project and to every participating agent.
+- Read `.ai-workflow/AGENTS.md`, `MEMORY.md`, `.ai-workflow/index/navigation.json` and `.ai-workflow/index/navigation.md` explicitly before acting, or receive them through complete context injection. Read the frozen `spec.md` and `plan.md` for a planned change; a direct or mechanical change uses the request's explicit scope and acceptance evidence as its boundary. The project contract applies to the whole project and to every participating agent.
 - A plan may be implemented either as a whole or through its split tasks. When a
   `tasks/<taskId>.md` is assigned, use only that task's exact read and write
   scopes and declared commands. When no task files exist, use the frozen plan's

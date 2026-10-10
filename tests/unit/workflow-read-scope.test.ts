@@ -72,3 +72,23 @@ describe('taskReadScopeDiagnostics', () => {
     expect(taskReadScopeDiagnostics(trimmed, task)).toContain(`missing authorized read_scope path: ${note}`);
   });
 });
+
+describe('fixed context across repositories (REQ-007 / AC-010)', () => {
+  it('keeps the four fixed contexts project-relative so a child roots them in its own repository', () => {
+    // Every fixed entry is project-relative and never absolute, so the same names resolve
+    // against each repository's own root instead of inheriting the parent's location.
+    for (const path of fixedTaskContext) {
+      expect(path.startsWith('/'), `${path} must not be absolute`).toBe(false);
+      expect(path, `${path} must not be a Windows absolute path`).not.toMatch(/^[A-Za-z]:\//);
+    }
+
+    const primary = taskReadScope(authorization({ exact_paths: ['src/primary.ts'] }));
+    const child = taskReadScope(authorization({ task_id: 'task-002-child', exact_paths: ['packages/child/src/child.ts'] }));
+    expect(primary).toEqual(expect.arrayContaining(fixedTaskContext));
+    expect(child).toEqual(expect.arrayContaining(fixedTaskContext));
+  });
+
+  it('rejects a child context path that escapes its repository root', () => {
+    expect(() => taskReadScope(authorization({ exact_paths: ['../sibling/MEMORY.md'] }))).toThrow(/escapes the project/);
+  });
+});

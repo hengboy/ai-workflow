@@ -9,40 +9,22 @@ import { exists } from '../../src/utils/fs.js';
 
 const COMMIT = 'a'.repeat(40);
 
-/** The complete supported project-template source set fixed by the specification table. */
+/** The fixed generated source allowlist: exactly the five replaceable documents. */
 const SOURCE_PATHS = [
   'templates/project/AGENTS.md',
-  'templates/project/MEMORY.md',
-  'templates/project/navigation.json',
-  'templates/project/navigation.md',
   'templates/project/notes/AGENTS.md',
   'templates/project/notes/README.md',
   'templates/project/notes/implemented/AGENTS.md',
   'templates/project/notes/archived/AGENTS.md',
-  'templates/project/notes/archived/manifest.json',
 ] as const;
 
-/** The six mergeable Markdown templates that carry ownership markers in this fixture. */
-const MERGEABLE_MARKDOWN = new Set<string>([
-  'templates/project/AGENTS.md',
-  'templates/project/MEMORY.md',
-  'templates/project/notes/AGENTS.md',
-  'templates/project/notes/README.md',
-  'templates/project/notes/implemented/AGENTS.md',
-  'templates/project/notes/archived/AGENTS.md',
-]);
-
-/** The full source-to-target mapping the synchronizer owns. */
+/** The full generated source-to-target mapping the synchronizer owns. Root MEMORY is init-only. */
 const TARGETS: Record<string, string> = {
   'templates/project/AGENTS.md': '.ai-workflow/AGENTS.md',
-  'templates/project/MEMORY.md': 'MEMORY.md',
-  'templates/project/navigation.json': '.ai-workflow/index/navigation.json',
-  'templates/project/navigation.md': '.ai-workflow/index/navigation.md',
   'templates/project/notes/AGENTS.md': '.ai-workflow/notes/AGENTS.md',
   'templates/project/notes/README.md': '.ai-workflow/notes/README.md',
   'templates/project/notes/implemented/AGENTS.md': '.ai-workflow/notes/implemented/AGENTS.md',
   'templates/project/notes/archived/AGENTS.md': '.ai-workflow/notes/archived/AGENTS.md',
-  'templates/project/notes/archived/manifest.json': '.ai-workflow/notes/archived/manifest.json',
 };
 
 // The complete notes management structure, listed literally so the fixture stays
@@ -68,41 +50,36 @@ beforeEach(() => {
 });
 afterEach(() => { vi.unstubAllGlobals(); });
 
-function upstreamSectionId(repoPath: string): string {
-  return repoPath.replace(/[^a-z0-9]+/gi, '-').replace(/^-+|-+$/g, '').toLowerCase();
-}
-
-function marked(id: string, body: string): string {
-  return `<!-- ai-workflow:section ${id}:begin -->\n${body}\n<!-- ai-workflow:section ${id}:end -->\n`;
+function docTitle(repoPath: string): string {
+  return repoPath.slice(repoPath.lastIndexOf('/') + 1).replace(/\.md$/, '');
 }
 
 /**
- * Independent expected upstream content for the fixture's immutable ref: the six
- * mergeable Markdown templates carry a valid owned section, navigation is unmarked
- * but valid, and the JSON data stays structurally valid.
+ * Independent expected upstream content for the fixture's immutable ref: every generated
+ * member is a complete markerless document with a level-one title.
  */
-function upstreamFileContents(ref: string, repoPath: string): string {
-  if (repoPath.endsWith('manifest.json')) return '{\n  "version": 1,\n  "files": {}\n}\n';
-  if (repoPath.endsWith('json')) return `${JSON.stringify({ version: 1, ref }, null, 2)}\n`;
-  const id = upstreamSectionId(repoPath);
-  return `# ${repoPath}\n<!-- ai-workflow:section ${id}:begin -->\nimmutable ${ref}\n<!-- ai-workflow:section ${id}:end -->\n`;
+function sourceContent(repoPath: string, ref: string): string {
+  if (repoPath === 'templates/project/AGENTS.md') return `# Project contract\n\nFresh shared context at ${ref}.\n`;
+  return `# ${docTitle(repoPath)}\n\nFresh generated body at ${ref} for ${repoPath}.\n`;
 }
 
-/** The full valid source set at one commit. */
+/** The full valid markerless source set at one commit. */
 function sourceFiles(commit: string): Record<string, string> {
   const files: Record<string, string> = {};
-  for (const path of SOURCE_PATHS) files[path] = upstreamFileContents(commit, path);
+  for (const path of SOURCE_PATHS) files[path] = sourceContent(path, commit);
   return files;
 }
 
 /**
- * Adopted target content: the six mergeable Markdown templates keep the same valid
- * ownership markers but an older body, so a successful synchronization is a safe
- * patch; navigation and the archive manifest already match the source.
+ * Adopted target content: a complete markerless document with an older body, so a
+ * successful synchronization replaces it as a whole file.
  */
 function targetFileContents(commit: string, sourcePath: string): string {
-  if (!MERGEABLE_MARKDOWN.has(sourcePath)) return upstreamFileContents(commit, sourcePath);
-  return `# ${sourcePath}\n<!-- ai-workflow:section ${upstreamSectionId(sourcePath)}:begin -->\nold ${upstreamSectionId(sourcePath)} body\n<!-- ai-workflow:section ${upstreamSectionId(sourcePath)}:end -->\n`;
+  return `# ${docTitle(sourcePath)}\n\nOld generated body at ${commit} for ${sourcePath}.\n`;
+}
+
+function navigationJson(): string {
+  return `${JSON.stringify({ version: 1, module_roots: [], features: [] }, null, 2)}\n`;
 }
 
 /** A fixed-HEAD git runner that materializes the given source set for one immutable commit. */
@@ -115,17 +92,27 @@ function headFailureGit(): TestGitRunner {
   return async () => { throw new Error('source unavailable: clone failed'); };
 }
 
-/** A minimal valid adoption: every managed target present with an older marked body. */
-async function writeAdoptedTarget(root: string, commit: string, overrides: Record<string, string> = {}): Promise<void> {
+/** Adoption prerequisites and project-owned data the synchronizer never writes. */
+async function writeAdoptionPrerequisites(root: string): Promise<void> {
   for (const directory of NOTES_DIRECTORIES) await mkdir(join(root, directory), { recursive: true });
+  await mkdir(join(root, '.ai-workflow/index'), { recursive: true });
+  await writeFile(join(root, 'MEMORY.md'), '# Project memory\n\nProject-specific standard body.\n');
+  await writeFile(join(root, '.ai-workflow/index/navigation.json'), navigationJson());
+  await writeFile(join(root, '.ai-workflow/index/navigation.md'), '# Navigation\n\nAdopted navigation.\n');
+  await writeFile(join(root, '.ai-workflow/notes/archived/manifest.json'), '{\n  "version": 1,\n  "files": {}\n}\n');
+  // Already-complete ignore entries, so ignore reconciliation is a no-op.
+  await writeFile(join(root, '.gitignore'), '.ai-workflow/plans/\n.worktrees/\n');
+}
+
+/** A minimal valid adoption: every generated target present with an older markerless body. */
+async function writeAdoptedTarget(root: string, commit: string, overrides: Record<string, string> = {}): Promise<void> {
+  await writeAdoptionPrerequisites(root);
   for (const [sourcePath, targetPath] of Object.entries(TARGETS)) {
     const contents = overrides[targetPath] ?? targetFileContents(commit, sourcePath);
     const target = join(root, targetPath);
     await mkdir(dirname(target), { recursive: true });
     await writeFile(target, contents);
   }
-  // Already-complete ignore entries, so ignore reconciliation is a no-op.
-  await writeFile(join(root, '.gitignore'), '.ai-workflow/plans/\n.worktrees/\n');
 }
 
 /** Every regular file the gate wrote under the opaque runtime directory, recursively sorted. */
@@ -161,13 +148,9 @@ async function parseRuntimeFile(path: string): Promise<unknown> {
   return JSON.parse(await readFile(path, 'utf8')) as unknown;
 }
 
-// A differing unmarked same-heading legacy rule: the source MEMORY.md owns a
-// `## Standards` section, while the target keeps an unmarked `## Standards` body that
-// differs. The merge preserves the target bytes and records a needs_attention warning,
-// so a safe contract update can coexist with unresolved attention.
-const DIFFERING_LEGACY_MEMORY = '# Project memory\n\n## Standards\nProject-specific standard body.\n';
-const DIFFERING_LEGACY_SOURCE_MEMORY = `# Memory template\n${marked('standards', '## Standards\nFresh standard body.')}`;
-const MALFORMED_AGENTS = '# Contract\n\n<!-- ai-workflow:section broken:begin -->\nnever closed\n';
+// A generated target that still carries the retired `ai-workflow:section` comment syntax is
+// refused with a manual-replacement instruction; nothing is parsed, adopted or migrated.
+const LEGACY_MARKER_AGENTS = '# Contract\n\n<!-- ai-workflow:section shared-context:begin -->\nnever replaced\n<!-- ai-workflow:section shared-context:end -->\n';
 
 interface SeverityCase {
   name: string;
@@ -184,14 +167,15 @@ interface SeverityCase {
     /** Only the synchronized case proves an actual patch reached the contract. */
     updatedContains?: string[];
   };
-  readOnlyProjectRoot?: boolean;
+  /** A generated target's parent directory to make read-only so publication fails mid-run. */
+  readOnlyDirectory?: string;
 }
 
 // Every case now runs through the one automatic trigger, `PhaseEntry`; its report mapping
 // is preserved as a regression guard while the trigger cadence changes.
 const severityCases: SeverityCase[] = [
   {
-    name: 'a phase entry on a marked project with a safe update allows and exposes the fresh contract authority',
+    name: 'a phase entry on an adopted project with a safe full-file update allows and exposes the fresh contract authority',
     host: 'claude',
     setup: async (root, commit) => {
       await writeAdoptedTarget(root, commit);
@@ -209,19 +193,10 @@ const severityCases: SeverityCase[] = [
     expected: { decision: 'allow', status: 'unverified', verified: false, proceed: true, authority: false },
   },
   {
-    name: 'a safe contract update with unresolved differing legacy content still exposes the fresh contract authority',
-    host: 'opencode',
-    setup: async (root, commit) => {
-      await writeAdoptedTarget(root, commit, { 'MEMORY.md': DIFFERING_LEGACY_MEMORY });
-      return fixedHeadGit(commit, { ...sourceFiles(commit), 'templates/project/MEMORY.md': DIFFERING_LEGACY_SOURCE_MEMORY });
-    },
-    expected: { decision: 'allow', status: 'needs_attention', verified: false, proceed: true, authority: true, updatedContains: ['.ai-workflow/AGENTS.md'] },
-  },
-  {
-    name: 'a malformed target marker denies with a visible reason',
+    name: 'a generated target carrying legacy section markers denies with a visible manual-replacement reason',
     host: 'claude',
     setup: async (root, commit) => {
-      await writeAdoptedTarget(root, commit, { '.ai-workflow/AGENTS.md': MALFORMED_AGENTS });
+      await writeAdoptedTarget(root, commit, { '.ai-workflow/AGENTS.md': LEGACY_MARKER_AGENTS });
       return fixedHeadGit(commit, sourceFiles(commit));
     },
     expected: { decision: 'deny', status: 'conflict', verified: false, proceed: false, authority: false },
@@ -229,7 +204,7 @@ const severityCases: SeverityCase[] = [
   {
     name: 'an ordinary filesystem failure denies with a visible reason',
     host: 'codex',
-    readOnlyProjectRoot: true,
+    readOnlyDirectory: '.ai-workflow',
     setup: async (root, commit) => {
       await writeAdoptedTarget(root, commit);
       return fixedHeadGit(commit, sourceFiles(commit));
@@ -247,11 +222,12 @@ describe('project sync gate phase-entry report mapping (AC-001/AC-003)', () => {
 
     let result: ProjectGateResult | undefined;
     let thrown: unknown;
-    if (testCase.readOnlyProjectRoot) await chmod(root, 0o555);
+    const readOnlyTarget = testCase.readOnlyDirectory === undefined ? undefined : join(root, testCase.readOnlyDirectory);
+    if (readOnlyTarget) await chmod(readOnlyTarget, 0o555);
     try {
-      if (testCase.readOnlyProjectRoot) {
-        const writable = await access(root, constants.W_OK).then(() => true, () => false);
-        if (writable) throw new Error('This environment cannot enforce a read-only project root (likely running as root); the filesystem-failure gate case requires an unprivileged process.');
+      if (readOnlyTarget) {
+        const writable = await access(readOnlyTarget, constants.W_OK).then(() => true, () => false);
+        if (writable) throw new Error('This environment cannot enforce a read-only directory (likely running as root); the filesystem-failure gate case requires an unprivileged process.');
       }
       result = await runProjectGate(
         { host: testCase.host, event: 'PhaseEntry', sessionId: 'session-1', cwd: root, toolName: 'Bash', toolInput: { command: 'ls' } },
@@ -260,9 +236,9 @@ describe('project sync gate phase-entry report mapping (AC-001/AC-003)', () => {
     } catch (error) {
       thrown = error;
     } finally {
-      if (testCase.readOnlyProjectRoot) await chmod(root, 0o755);
+      if (readOnlyTarget) await chmod(readOnlyTarget, 0o755);
     }
-    if (thrown instanceof Error && /cannot enforce a read-only project root/.test(thrown.message)) throw thrown;
+    if (thrown instanceof Error && /cannot enforce a read-only directory/.test(thrown.message)) throw thrown;
 
     expect(thrown, 'the gate reports a decision, it does not throw').toBeUndefined();
     expect(result).toBeDefined();
@@ -293,14 +269,13 @@ describe('project sync gate phase-entry report mapping (AC-001/AC-003)', () => {
     }
 
     // `authority` is the current on-disk contract to reload, not an upstream freshness
-    // claim. Any invocation that safely published a contract change must expose it,
-    // including a needs_attention result where a safe patch landed. Results with no safe
-    // contract update (source unverified with zero writes, conflict, failed) are not
-    // required to expose it and are intentionally left unasserted here.
+    // claim. Any invocation that safely published a contract change must expose it.
+    // Results with no safe contract update (source unverified with zero writes, conflict,
+    // failed) are not required to expose it and are intentionally left unasserted here.
     if (testCase.expected.authority) {
       const contract = await readFile(join(root, '.ai-workflow/AGENTS.md'), 'utf8');
       expect(gate.authority, 'the current contract must be exposed for re-read').toBe(contract);
-      expect(gate.authority).toContain(`immutable ${COMMIT}`);
+      expect(gate.authority).toContain(`Fresh shared context at ${COMMIT}`);
     }
 
     // AC-001: a phase entry stores exactly one complete, parsable root-keyed cache entry.
@@ -355,7 +330,7 @@ describe('project sync gate native event cache reuse (AC-002/AC-003)', () => {
     const root = await temporary('ai-workflow-gate-deny-');
     const runtimeDirectory = await temporary('ai-workflow-gate-deny-runtime-');
     roots.push(root, runtimeDirectory);
-    await writeAdoptedTarget(root, COMMIT, { '.ai-workflow/AGENTS.md': MALFORMED_AGENTS });
+    await writeAdoptedTarget(root, COMMIT, { '.ai-workflow/AGENTS.md': LEGACY_MARKER_AGENTS });
     const fake = fakeGit({ commit: COMMIT, files: sourceFiles(COMMIT) });
     const options = { runGit: fake.runGit, runtimeDirectory };
 
@@ -529,7 +504,7 @@ describe('project sync gate single-start lifecycle (AC-001/AC-002)', () => {
     expect(first.report?.source.commit).toBe(A);
     expect(fake.cloneCount()).toBe(1);
     const gitAfterFirst = fake.invocationCount();
-    expect(await readFile(join(parentRoot, '.ai-workflow/AGENTS.md'), 'utf8')).toContain(`immutable ${A}`);
+    expect(await readFile(join(parentRoot, '.ai-workflow/AGENTS.md'), 'utf8')).toContain(`Fresh shared context at ${A}`);
     expect(await runtimeFiles(runtimeDirectory)).toHaveLength(1);
 
     // Upstream advances, but no native event may observe it or re-synchronize. This is the
@@ -555,7 +530,7 @@ describe('project sync gate single-start lifecycle (AC-001/AC-002)', () => {
     expect(fake.invocationCount(), 'no native event may issue a git invocation').toBe(gitAfterFirst);
     expect(changedPaths(runtimeAfterFirst, await snapshotTree(runtimeDirectory)), 'native events must not rewrite the cache').toEqual([]);
     expect(changedPaths(parentAfterFirst, await snapshotTree(parentRoot)), 'native events must not edit the contract').toEqual([]);
-    expect(await readFile(join(parentRoot, '.ai-workflow/AGENTS.md'), 'utf8')).toContain(`immutable ${A}`);
+    expect(await readFile(join(parentRoot, '.ai-workflow/AGENTS.md'), 'utf8')).toContain(`Fresh shared context at ${A}`);
 
     // A second phase entry replaces the stored entry rather than adding one, and picks up B.
     const B = source.commit;
@@ -563,7 +538,7 @@ describe('project sync gate single-start lifecycle (AC-001/AC-002)', () => {
     expect(second.report?.source.commit).toBe(B);
     expect(fake.cloneCount()).toBe(2);
     expect(await runtimeFiles(runtimeDirectory), 'a second phase entry must replace the stored entry').toHaveLength(1);
-    expect(await readFile(join(parentRoot, '.ai-workflow/AGENTS.md'), 'utf8')).toContain(`immutable ${B}`);
+    expect(await readFile(join(parentRoot, '.ai-workflow/AGENTS.md'), 'utf8')).toContain(`Fresh shared context at ${B}`);
     const gitAfterSecond = fake.invocationCount();
     const replayB = await invoke({ event: 'PreToolUse', sessionId: 'parent', cwd: parentRoot });
     expect(replayB.report?.source.commit).toBe(B);
@@ -590,8 +565,8 @@ describe('project sync gate single-start lifecycle (AC-001/AC-002)', () => {
     expect(worktreePhase.report?.source.commit).toBe(C);
     expect(fake.cloneCount()).toBe(3);
     expect(await runtimeFiles(runtimeDirectory), 'each actual root keeps its own cache entry').toHaveLength(2);
-    expect(await readFile(join(worktreeRoot, '.ai-workflow/AGENTS.md'), 'utf8')).toContain(`immutable ${C}`);
-    expect(await readFile(join(parentRoot, '.ai-workflow/AGENTS.md'), 'utf8'), 'syncing the worktree must not edit the parent').toContain(`immutable ${B}`);
+    expect(await readFile(join(worktreeRoot, '.ai-workflow/AGENTS.md'), 'utf8')).toContain(`Fresh shared context at ${C}`);
+    expect(await readFile(join(parentRoot, '.ai-workflow/AGENTS.md'), 'utf8'), 'syncing the worktree must not edit the parent').toContain(`Fresh shared context at ${B}`);
 
     const gitAfterWorktree = fake.invocationCount();
     const worktreeReplay = await invoke({ event: 'UserPromptSubmit', sessionId: 'child', cwd: worktreeRoot });
@@ -616,7 +591,7 @@ describe('project sync gate actor and authority exemptions (AC-003)', () => {
     const root = await temporary('ai-workflow-gate-exempt-');
     const runtimeDirectory = await temporary('ai-workflow-gate-exempt-runtime-');
     roots.push(root, runtimeDirectory);
-    await writeAdoptedTarget(root, COMMIT, { '.ai-workflow/AGENTS.md': MALFORMED_AGENTS });
+    await writeAdoptedTarget(root, COMMIT, { '.ai-workflow/AGENTS.md': LEGACY_MARKER_AGENTS });
     const fake = fakeGit({ commit: COMMIT, files: sourceFiles(COMMIT) });
     const options = { runGit: fake.runGit, runtimeDirectory };
     const invoke = (toolName: string, toolInput: unknown): Promise<ProjectGateResult> =>
@@ -729,7 +704,7 @@ describe('project sync gate supported project path routing (AC-002/AC-003)', () 
       runProjectGate({ host: 'claude', toolName: 'Bash', toolInput: { command: 'ls' }, ...input }, options);
 
     const operationAgents = join(operationRoot, '.ai-workflow/AGENTS.md');
-    expect(await readFile(operationAgents, 'utf8')).not.toContain(`immutable ${COMMIT}`);
+    expect(await readFile(operationAgents, 'utf8')).not.toContain(`Fresh shared context at ${COMMIT}`);
 
     // Prime only the session root with a phase entry.
     const primed = await invoke({ event: 'PhaseEntry', sessionId: 'route-session', cwd: sessionRoot });
@@ -754,7 +729,7 @@ describe('project sync gate supported project path routing (AC-002/AC-003)', () 
     expect(routedBash.report, 'an unprimed routed root must not synchronize').toBeUndefined();
     expect(fake.cloneCount(), 'routing to an unprimed root must not clone the source').toBe(cloneAfterPrime);
     expect(changedPaths(operationBefore, await snapshotTree(operationRoot)), 'the routed no-check must not edit that root').toEqual([]);
-    expect(await readFile(operationAgents, 'utf8')).not.toContain(`immutable ${COMMIT}`);
+    expect(await readFile(operationAgents, 'utf8')).not.toContain(`Fresh shared context at ${COMMIT}`);
 
     // Only a phase entry in the routed root synchronizes it.
     const operationPhase = await invoke({ event: 'PhaseEntry', sessionId: 'route-operation', cwd: operationRoot });
@@ -763,7 +738,7 @@ describe('project sync gate supported project path routing (AC-002/AC-003)', () 
     expect(operationPhase.report?.status).toBe('synchronized');
     expect(operationPhase.report?.source.commit).toBe(COMMIT);
     expect(fake.cloneCount()).toBe(cloneAfterPrime + 1);
-    expect(await readFile(operationAgents, 'utf8'), 'the phase entry must sync the routed root').toContain(`immutable ${COMMIT}`);
+    expect(await readFile(operationAgents, 'utf8'), 'the phase entry must sync the routed root').toContain(`Fresh shared context at ${COMMIT}`);
     expect(changedPaths(sessionRootAfterPrime, await snapshotTree(sessionRoot)), 'the session root must not be touched by a routed operation').toEqual([]);
 
     // Now native routed operations replay the routed root's cached result with no request.
@@ -784,5 +759,35 @@ describe('project sync gate supported project path routing (AC-002/AC-003)', () 
     expect(relativeRead.report?.project).toBe(sessionRoot);
     expect(changedPaths(sessionRootAfterPrime, await snapshotTree(sessionRoot)), 'a relative path must not reroute the operation').toEqual([]);
     expect(fake.invocationCount()).toBe(gitAfterOperation);
+  });
+});
+
+describe('project sync gate project-owned memory (REQ-002 / AC-011)', () => {
+  it('never writes project MEMORY and never exposes it as generated authority', async () => {
+    const root = await temporary('ai-workflow-gate-memory-');
+    const runtimeDirectory = await temporary('ai-workflow-gate-memory-runtime-');
+    roots.push(root, runtimeDirectory);
+    await writeAdoptedTarget(root, COMMIT);
+
+    // Bring every generated target to the source bytes so the only remaining divergence is the
+    // project-owned MEMORY file, which synchronization no longer manages.
+    for (const [sourcePath, targetPath] of Object.entries(TARGETS)) {
+      await writeFile(join(root, targetPath), sourceContent(sourcePath, COMMIT));
+    }
+    const memoryPath = join(root, 'MEMORY.md');
+    const memoryBefore = await readFile(memoryPath);
+    const fake = fakeGit({ commit: COMMIT, files: sourceFiles(COMMIT) });
+
+    const result = await runProjectGate(
+      { host: 'claude', event: 'PhaseEntry', sessionId: 'memory-session', cwd: root },
+      { runGit: fake.runGit, runtimeDirectory },
+    );
+
+    expect(result.decision).toBe('allow');
+    expect(result.report?.status).toBe('synchronized');
+    expect(result.report?.created).not.toContain('MEMORY.md');
+    expect(result.report?.updated).not.toContain('MEMORY.md');
+    expect(result.authority, 'project MEMORY is not a generated authority path').toBeUndefined();
+    expect(await readFile(memoryPath), 'project MEMORY bytes are preserved').toEqual(memoryBefore);
   });
 });

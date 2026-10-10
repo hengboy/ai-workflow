@@ -102,12 +102,14 @@ describe('change routing guidance', () => {
     );
   });
 
-  it('keeps the routing standard in the project memory template and the README', async () => {
-    const memory = await read('templates/project/MEMORY.md');
-    expect(flatten(memory), 'MEMORY records the routing standard').toMatch(
+  it('keeps the routing standard in the generated contract and the README', async () => {
+    // Generic workflow obligations live in the generated project contract; the project-owned
+    // MEMORY scaffolding is no longer required to carry them.
+    const contract = await read('templates/project/AGENTS.md');
+    expect(flatten(contract), 'the generated contract records the routing standard').toMatch(
       /Requests are classified before work starts[^.]*implemented directly without Planning or the dual-axis review/i,
     );
-    expect(memory, 'MEMORY keeps the plan path for planned changes').toMatch(
+    expect(contract, 'the contract keeps the plan path for planned changes').toMatch(
       /runs Planning and keeps that review gate/i,
     );
 
@@ -180,8 +182,7 @@ describe('change routing guidance', () => {
 
   it('routes the child-participating handoff to a coding session that prepares and distributes, not a standalone plan-to-tasks session', async () => {
     const documents = [
-      { label: 'MEMORY.md', text: await read('MEMORY.md') },
-      { label: 'templates/project/MEMORY.md', text: await read('templates/project/MEMORY.md') },
+      { label: 'templates/project/AGENTS.md', text: await read('templates/project/AGENTS.md') },
       { label: 'README.md', text: await read('README.md') },
     ];
 

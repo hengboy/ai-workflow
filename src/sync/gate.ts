@@ -30,7 +30,6 @@ export interface ProjectGateResult {
 
 const authorityPaths = new Set([
   '.ai-workflow/AGENTS.md',
-  'MEMORY.md',
   '.ai-workflow/notes/AGENTS.md',
   '.ai-workflow/notes/README.md',
   '.ai-workflow/notes/implemented/AGENTS.md',

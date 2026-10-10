@@ -67,6 +67,9 @@ describe('project synchronization shipped instructions', () => {
       expect(body, `${relative} must state a missing check allows without a freshness claim`).toMatch(
         /(?:no|missing|absent)[^.\n]{0,12}(?:stored )?check[\s\S]{0,160}(?:no|not|without)[\s\S]{0,80}(?:fresh|claim|verif)/i,
       );
+      // REQ-007 / AC-010: the global loading entry minimally requires the project MEMORY read
+      // alongside the project contract, without changing block ownership or installation.
+      expect(body, `${relative} must require reading the project MEMORY explicitly`).toMatch(/MEMORY\.md/);
     }
 
     // 2. The new safe shared sync skill is shipped with its metadata.
@@ -106,6 +109,14 @@ describe('project synchronization shipped instructions', () => {
       interface?: { default_prompt?: string };
     };
     expect(metadata.interface?.default_prompt).toContain('$sync-ai-workflow');
+    // AC-010: the manual synchronization skill is a primary session and must explicitly load
+    // the same four fixed project contexts rather than relying on an implicit host load.
+    for (const fixed of ['.ai-workflow/AGENTS.md', 'MEMORY.md', '.ai-workflow/index/navigation.json', '.ai-workflow/index/navigation.md']) {
+      expect(syncSkill, `sync-ai-workflow must explicitly load ${fixed}`).toContain(fixed);
+    }
+    expect(syncSkill, 'sync-ai-workflow states an explicit read or injected context').toMatch(
+      /explicitly read|read or inject|inject[^.\n]{0,60}context|complete injected/i,
+    );
 
     // 3. Single-start phase entry: planning, coding and plan-to-tasks invoke it exactly once at
     //    skill start, reuse the stored result later and never ask for a per-step or per-phase check.
@@ -157,10 +168,12 @@ describe('project synchronization shipped instructions', () => {
   });
 
   it('AC-006/AC-008: publishes the single-start cadence in the project contract and MEMORY files', async () => {
+    // The single-start cadence is a generic workflow obligation owned by the generated project
+    // contract, not by the project-owned MEMORY scaffolding. The adopted mirrors are asserted
+    // after the self-adoption step updates them.
     const published: readonly (readonly [string, string])[] = [
       ['templates/project/AGENTS.md', packagePath('templates', 'project', 'AGENTS.md')],
       ['.ai-workflow/AGENTS.md', packagePath('.ai-workflow', 'AGENTS.md')],
-      ['templates/project/MEMORY.md', packagePath('templates', 'project', 'MEMORY.md')],
       ['MEMORY.md', packagePath('MEMORY.md')],
     ];
     for (const [label, path] of published) {
