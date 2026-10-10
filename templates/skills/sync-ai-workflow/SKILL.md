@@ -28,24 +28,35 @@ through complete context injection. A Markdown link or an inherited parent read 
 them into this session, and the project contract applies to the whole project and to every
 participating agent.
 
-## Incremental synchronization
+## Synchronization
 
-Run the installed incremental CLI. It never builds the CLI and never replaces a target with a
-whole-file template copy; it acquires the current templates with a shallow temporary clone of
-the fixed public address. A complete template overwrite destroys independent project content
-and is out of scope:
+Run the installed `ai-workflow sync` CLI. It never builds the CLI; it acquires the current
+templates with a shallow temporary clone of the fixed public address.
 
-- `ai-workflow sync [project]` applies safe section patches to the managed files and reports
-  the result. An omitted project defaults to the actual current directory and is normalized
-  to its adopted root.
-- `ai-workflow sync [project] --check` computes the same verdict and proposed patch without
-  writing; use it to inspect pending changes before applying them.
+The five generated workflow documents are replaced as complete files:
+`.ai-workflow/AGENTS.md`, `.ai-workflow/notes/AGENTS.md`,
+`.ai-workflow/notes/README.md`, `.ai-workflow/notes/implemented/AGENTS.md` and
+`.ai-workflow/notes/archived/AGENTS.md`. Each generated file is compared and, when it differs,
+overwritten with its entire source, so manual edits inside a generated file are overwritten by
+design; an absent generated file is created and an identical one is skipped. Root `MEMORY.md` is
+project-owned: synchronization never replaces, appends, normalizes or compares it against a
+template, and navigation, note bodies, the archive manifest and every other local or data
+artifact are preserved.
 
-The core patches only owned `<!-- ai-workflow:section <id>:begin/end -->` sections, preserves
-every byte outside them, adopts an exact unmarked same-heading legacy section, and inserts a
-clearly absent section once. It writes no product code, no navigation, no note body, no
-frozen plan or task file, and performs no Git operation. Frozen planning artifacts are never
-synchronization input.
+- `ai-workflow sync [project]` applies the generated replacements and reports the result. An
+  omitted project defaults to the actual current directory and is normalized to its adopted
+  root.
+- `ai-workflow sync [project] --check` computes the same verdict and proposed changes without
+  writing, including mtimes; use it to inspect pending changes before applying them. A repeat
+  against an identical snapshot is idempotent and changes nothing.
+
+A generated target that still contains old `ai-workflow:section` comment markers is an
+unsupported legacy format: synchronization refuses it as a `conflict` before any write and
+requires manual replacement instead of a merge. A local shipped-template upgrade reports a
+visible `needs_attention` with an unverified local-source warning until markerless upstream is
+available. Synchronization writes no product code, no navigation, no note body, no frozen plan or
+task file, and performs no Git operation. Frozen planning artifacts are never synchronization
+input.
 
 ## Source and credentials
 
@@ -74,9 +85,9 @@ and the planning, coding and plan-to-tasks skills use the `--phase --project <ac
 | --- | --- | --- | --- |
 | `synchronized` | 0 | true | Success; a freshness claim is allowed. |
 | `unverified` | 2 | true | Source acquisition failed; proceed and surface the warnings. |
-| `needs_attention` | 2 | true | Safe patches applied or retained; ambiguous content remains. |
-| `pending` | 1 | false | Check mode found safe changes still to apply. |
-| `conflict` | 1 | false | Stop; a structural conflict wrote nothing. |
+| `needs_attention` | 2 | true | Local shipped templates used; proceed with a visible warning and no freshness claim. |
+| `pending` | 1 | false | Check mode found generated replacements still to apply. |
+| `conflict` | 1 | false | Stop; a structural, prerequisite or legacy-marker conflict wrote nothing. |
 | `failed` | 1 | false | Stop; publication failed or recovery did not restore the tree. |
 
 Only a `synchronized` result with `verified: true` means the managed artifacts are current; a
@@ -97,8 +108,8 @@ rely on the process exit code alone, because a warning also exits 2.
 
 - The adoption already existed; this skill initialized no new project, reinstalled no host
   entry and expanded no product scope.
-- The incremental CLI ran (or `--check`) with no CLI build and no whole-file copy; template
-  acquisition used only the shallow temporary clone.
+- The `ai-workflow sync` CLI ran (or `--check`) with no CLI build; template acquisition used
+  only the shallow temporary clone and project-owned content stayed preserved.
 - The `SyncReport` was parsed and its `status`, `verified` and `proceed` were reported
   truthfully.
 - A freshness claim was made only for a `verified`, `synchronized` result.

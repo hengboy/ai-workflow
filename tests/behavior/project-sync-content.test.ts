@@ -76,8 +76,19 @@ describe('project synchronization shipped instructions', () => {
     const syncSkill = await readFile(join(home, sharedSkill('sync-ai-workflow')), 'utf8');
     expect(syncSkill).toMatch(/^name: sync-ai-workflow$/m);
     expect(syncSkill, 'manual synchronization uses the incremental CLI').toMatch(/ai-workflow sync\b/);
-    expect(syncSkill, 'incremental section patching, not a whole-file copy').toMatch(/incremental|section|patch/i);
-    expect(syncSkill, 'whole-file template copying is refused').toMatch(/whole[- ]file|complete (?:template|file) copy|copy (?:the )?whole|wholesale/i);
+    // REQ-003/REQ-005: the shipped guidance must describe the file-level complete replacement of
+    // the generated documents and the explicit manual refusal of a legacy section-marked target.
+    // The retired incremental section-patching, owned-section and same-heading adoption model
+    // must be gone from the user-visible instructions.
+    expect(syncSkill, 'the retired incremental section-patching and owned-section model is absent').not.toMatch(
+      /safe section patches?|owned\s+`?<!--\s*ai-workflow:section|patch(?:es|ing)? only[^.\n]{0,60}owned|adopts?\s+an?\s+exact[^.\n]{0,70}legacy section|section[- ](?:merge|adoption)/i,
+    );
+    expect(syncSkill, 'generated workflow files are replaced as complete files').toMatch(
+      /generated (?:workflow )?(?:document|file)s?[\s\S]{0,80}replac|replac\w*[\s\S]{0,80}generated (?:workflow )?(?:document|file)s?/i,
+    );
+    expect(syncSkill, 'a legacy section-marked generated target is refused for manual replacement').toMatch(
+      /manual[- ]replac|replac\w*[^.\n]{0,40}manual|legacy[^.\n]{0,80}(?:refus|conflict|manual)/i,
+    );
     expect(syncSkill, 'the skill names the fixed public git address').toMatch(/https:\/\/github\.com\/hengboy\/ai-workflow\.git/);
     expect(syncSkill, 'the skill names the fixed branch').toMatch(/\bmain\b/);
     expect(syncSkill, 'the skill describes shallow acquisition').toMatch(/--depth|shallow/i);
