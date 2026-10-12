@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (.ai-workflow/notes/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+# ai-workflow notes pairing --project <project-root> --write .ai-workflow/notes/implemented/bug-fix/2026-10-12-system-proxy-template-source.md
+2026-10-12-system-proxy-template-source.md: 35841cefeca9c97961f5f077805243e3ffc7f821
+2026-10-12-system-proxy-template-source.zh.md: f4d29caba9a2a5923628c42b2f4b437b91afa361

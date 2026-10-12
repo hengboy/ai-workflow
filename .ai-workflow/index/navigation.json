@@ -3572,6 +3572,7 @@
       "related_files": [
         ".ai-workflow/AGENTS.md",
         ".ai-workflow/notes/implemented/architecture/2026-09-14-user-level-agent-contract.md",
+        ".ai-workflow/notes/implemented/bug-fix/2026-10-12-system-proxy-template-source.md",
         ".ai-workflow/notes/implemented/feature/2026-10-08-project-template-sync.md",
         ".ai-workflow/notes/implemented/feature/2026-10-09-sync-once-at-skill-start.md",
         ".ai-workflow/notes/implemented/process/2026-09-16-project-contract-and-agent-notes.md",
@@ -3600,6 +3601,7 @@
         "tests/integration/project-upgrade.test.ts",
         "tests/unit/project-template-sync.test.ts",
         "tests/unit/project-template-source.test.ts",
+        "tests/unit/project-template-source-network.test.ts",
         "tests/behavior/project-sync-content.test.ts",
         "tests/install/sync-hooks.test.ts",
         "tests/integration/project-sync-hooks.test.ts",
@@ -3612,6 +3614,7 @@
       "read_scope": [
         ".ai-workflow/AGENTS.md",
         ".ai-workflow/notes/implemented/architecture/2026-09-14-user-level-agent-contract.md",
+        ".ai-workflow/notes/implemented/bug-fix/2026-10-12-system-proxy-template-source.md",
         ".ai-workflow/notes/implemented/feature/2026-10-08-project-template-sync.md",
         ".ai-workflow/notes/implemented/feature/2026-10-09-sync-once-at-skill-start.md",
         ".ai-workflow/notes/implemented/process/2026-09-16-project-contract-and-agent-notes.md",
@@ -3645,6 +3648,7 @@
         "tests/integration/project-sync-hooks.test.ts",
         "tests/integration/project-upgrade.test.ts",
         "tests/unit/project-sync-gate.test.ts",
+        "tests/unit/project-template-source-network.test.ts",
         "tests/unit/project-template-source.test.ts",
         "tests/unit/project-template-sync.test.ts"
       ],
