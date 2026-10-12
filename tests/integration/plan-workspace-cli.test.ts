@@ -493,6 +493,33 @@ describe('plan validate for the workspace_finalization declaration', () => {
     expect(outputOf(result)).toMatch(/finalization/i);
   });
 
+  it('accepts a slice manifest that shares a business requirement with workspace_finalization while its criteria stay disjoint', async () => {
+    const root = await temporary('ai-workflow-plan-finalization-slice-shared-req-');
+    const spec: WorkspacePlanFixtureSpec = {
+      planId: SLICE_ID,
+      requirements: ['REQ-001', 'REQ-002', FIN_REQ],
+      acceptanceCriteria: ['AC-001', 'AC-002', FIN_AC],
+      workspaceRepos: [
+        { name: 'workspace', path: '.', dependsOn: [] },
+        { name: 'app', path: 'packages/app', dependsOn: [] },
+      ],
+      tasks: [{ id: 'task-001-app', repo: 'app', requirements: ['REQ-002', FIN_REQ], acceptanceCriteria: ['AC-002'], writeScope: ['src/app.ts'] }],
+      phases: [['task-001-app']],
+      workspaceFinalization: { requirements: [FIN_REQ], acceptanceCriteria: [FIN_AC], readScope: [{ repo: 'app', paths: ['src/app.ts'] }], writeScope: ['README.md'] },
+      manifest: {
+        planId: SLICE_ID,
+        role: 'slice',
+        repositories: [{ name: 'app', path: 'packages/app', dependsOn: [], requirements: ['REQ-002', FIN_REQ], acceptanceCriteria: ['AC-002'] }],
+      },
+    };
+    const directory = await workspacePlanFixture(root, spec);
+
+    const result = await runCli(['plan', 'validate', '--plan', directory]);
+
+    expect(result.code, outputOf(result)).toBe(0);
+    expect((JSON.parse(result.stdout) as { valid: boolean }).valid).toBe(true);
+  });
+
   it('rejects a malformed finalization read_scope entry', async () => {
     const root = await temporary('ai-workflow-plan-finalization-scope-');
     const spec = finalizationSpec({

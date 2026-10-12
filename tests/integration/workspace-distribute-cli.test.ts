@@ -447,4 +447,38 @@ describe('workspace distribute', () => {
     const validated = await runCli(['plan', 'validate', '--plan', join(app, '.ai-workflow/plans', PLAN_ID)]);
     expect(validated.code, outputOf(validated)).toBe(0);
   }, TIMEOUT);
+
+  it('distributes slices that each validate when a child task shares a finalization requirement with disjoint criteria', async () => {
+    // A child task carries REQ-100, which `workspace_finalization` also owns, while every
+    // acceptance criterion stays disjoint; both the parent and each produced slice must validate.
+    const spec = finalizationSpec();
+    spec.tasks = [
+      { id: 'task-001-workspace', repo: 'workspace', requirements: ['REQ-001'], acceptanceCriteria: ['AC-001'], writeScope: ['src/workspace.ts'] },
+      { id: 'task-002-app', repo: 'app', requirements: ['REQ-002', 'REQ-100'], acceptanceCriteria: ['AC-002'], writeScope: ['src/app.ts'] },
+      { id: 'task-003-lib', repo: 'lib', requirements: ['REQ-003'], acceptanceCriteria: ['AC-003'], writeScope: ['src/lib.ts'] },
+    ];
+    spec.manifest = {
+      planId: PLAN_ID,
+      role: 'workspace',
+      repositories: [
+        { ...WORKSPACE_REPO, requirements: ['REQ-001', 'REQ-100'], acceptanceCriteria: ['AC-001', 'AC-100'] },
+        { ...APP_REPO, requirements: ['REQ-002', 'REQ-100'], acceptanceCriteria: ['AC-002'] },
+        { ...LIB_REPO, requirements: ['REQ-003'], acceptanceCriteria: ['AC-003'] },
+      ],
+    };
+    const { directory, app, lib } = await buildWorkspace(spec);
+
+    const parentValidated = await runCli(['plan', 'validate', '--plan', directory]);
+    expect(parentValidated.code, outputOf(parentValidated)).toBe(0);
+
+    const result = await runCli(['workspace', 'distribute', '--plan', directory]);
+    expect(result.code, outputOf(result)).toBe(0);
+    expect(parseJson<DistributeOutput>(result).valid).toBe(true);
+
+    for (const slice of [join(app, '.ai-workflow/plans', PLAN_ID), join(lib, '.ai-workflow/plans', PLAN_ID)]) {
+      const validated = await runCli(['plan', 'validate', '--plan', slice]);
+      expect(validated.code, outputOf(validated)).toBe(0);
+      expect(parseJson<{ valid: boolean }>(validated).valid).toBe(true);
+    }
+  }, TIMEOUT);
 });

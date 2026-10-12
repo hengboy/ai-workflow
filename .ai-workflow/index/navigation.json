@@ -3866,13 +3866,15 @@
         ".ai-workflow/notes/implemented/process/2026-09-23-planning-coding-session-boundary.md",
         ".ai-workflow/notes/implemented/process/2026-10-02-workspace-distribute-handoff.md",
         ".ai-workflow/notes/implemented/bug-fix/2026-10-08-workspace-session-handoff.md",
-        ".ai-workflow/notes/implemented/bug-fix/2026-10-08-workspace-execution-consistency.md"
+        ".ai-workflow/notes/implemented/bug-fix/2026-10-08-workspace-execution-consistency.md",
+        ".ai-workflow/notes/implemented/bug-fix/2026-10-12-slice-finalization-shared-requirements.md"
       ],
       "tests": [
         "tests/behavior/change-routing.test.ts",
         "tests/behavior/workspace-planning-content.test.ts",
         "tests/behavior/workspace-workflow-content.test.ts",
         "tests/integration/plan-workspace-cli.test.ts",
+        "tests/integration/workspace-distribute-cli.test.ts",
         "tests/integration/workspace-finalization-git.test.ts",
         "tests/integration/workspace-status-cli.test.ts"
       ],
@@ -3884,6 +3886,7 @@
         ".ai-workflow/notes/implemented/architecture/2026-09-30-submodule-workspace.md",
         ".ai-workflow/notes/implemented/bug-fix/2026-10-08-workspace-execution-consistency.md",
         ".ai-workflow/notes/implemented/bug-fix/2026-10-08-workspace-session-handoff.md",
+        ".ai-workflow/notes/implemented/bug-fix/2026-10-12-slice-finalization-shared-requirements.md",
         ".ai-workflow/notes/implemented/feature/2026-10-09-workspace-coding-orchestration.md",
         ".ai-workflow/notes/implemented/process/2026-09-23-planning-coding-session-boundary.md",
         ".ai-workflow/notes/implemented/process/2026-10-02-workspace-distribute-handoff.md",
@@ -3904,6 +3907,7 @@
         "tests/integration/plan-workspace-cli.test.ts",
         "tests/integration/workspace-checkpoint-cli.test.ts",
         "tests/integration/workspace-coding-git.test.ts",
+        "tests/integration/workspace-distribute-cli.test.ts",
         "tests/integration/workspace-finalization-git.test.ts",
         "tests/integration/workspace-single-repo-compatibility.test.ts",
         "tests/integration/workspace-status-cli.test.ts",

@@ -116,7 +116,7 @@ export function validateWorkspaceManifest(manifest: WorkspaceManifest, plan: Pla
     for (const task of tasks) if (task.repo !== repository.name) errors.push(`Slice task ${task.id} belongs to repository "${task.repo}", expected "${repository.name}"`);
     const finalization = plan.workspaceFinalization;
     if (finalization) {
-      const carries = [...repository.requirements, ...repository.acceptanceCriteria].some((id) => finalization.requirements.includes(id) || finalization.acceptanceCriteria.includes(id));
+      const carries = [...repository.requirements, ...repository.acceptanceCriteria].some((id) => finalization.acceptanceCriteria.includes(id));
       if (carries) errors.push('Slice manifest must not carry workspace_finalization criteria');
     }
     errors.push(...subsetErrors('Slice requirements do not match the declared subset', repository.requirements, coveredRequirements(repository.name)));

@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (.ai-workflow/notes/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+# ai-workflow notes pairing --project <project-root> --write .ai-workflow/notes/implemented/bug-fix/2026-10-12-slice-finalization-shared-requirements.md
+2026-10-12-slice-finalization-shared-requirements.md: 0d2324ea84f455831173ddc0051a065fa08beef6
+2026-10-12-slice-finalization-shared-requirements.zh.md: 906bda384b7968c3c74f41fa64e7d02267c4718c
