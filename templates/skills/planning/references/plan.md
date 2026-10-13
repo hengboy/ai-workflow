@@ -16,7 +16,7 @@ Replace every placeholder and illustrative entry below. Remove this instruction 
 
 ## Bilingual shape
 
-The English `plan.md` mirrors the structure of `plan.zh.md`. The Chinese side has no YAML frontmatter and starts with the same English title followed by the Chinese switcher:
+Apply Planning's [Document contract](../SKILL.md#document-contract). The Chinese `plan.zh.md` starts as follows, with no YAML frontmatter:
 
 ```markdown
 # Implementation Plan
@@ -25,8 +25,6 @@ The English `plan.md` mirrors the structure of `plan.zh.md`. The Chinese side ha
 
 （中文正文，结构镜像英文侧；无 YAML frontmatter。）
 ```
-
-Only the English `plan.md` carries the YAML frontmatter with `plan_id`, `status: frozen`, counts and `digest: ""`. The Chinese bytes never affect the digest.
 
 ## Requirement coverage
 
@@ -101,4 +99,4 @@ For required cross-repository acceptance evidence, name the responsible owner, e
 
 ## Workspace finalization
 
-A plan with participating non-root repositories may declare optional `workspace_finalization` frozen root coverage in the frontmatter: `requirements`, `acceptance_criteria`, repository-qualified `read_scope` entries, root-relative `write_scope` and ordered `test_commands`. Finalization criteria are `disjoint` from every task's acceptance criteria and remain root-owned. Document this coverage separately from the task DAG: finalization coverage `never becomes a task`, `never joins the execution order` and is `not sliced` into any repository. Complete plan coverage is the `union` of task coverage and finalization coverage, so the workspace manifest's root subset equals root task coverage plus the declared finalization coverage while child subsets remain exactly their tasks. Commands run rooted in the finalization worktree, and the root write scope cannot enter a submodule, change the repository boundary or claim sibling files. A plan without this field keeps the existing coverage logic unchanged; frozen criteria are never inferred from prose or migrated, and a task assigned finalization-only criteria is rejected.
+A plan with participating non-root repositories may declare optional `workspace_finalization` frozen root coverage in the frontmatter: `requirements`, `acceptance_criteria`, repository-qualified `read_scope` entries, root-relative `write_scope` and ordered `test_commands`. Finalization acceptance criteria are `disjoint` from every task's acceptance criteria; requirements may overlap task requirements. This root-owned coverage `never becomes a task`, `never joins the execution order` and is `not sliced` into any repository. Complete coverage is the `union` of task and finalization coverage: the manifest's root subset is root task plus finalization coverage; child subsets remain exactly their tasks. Commands run in the finalization worktree; root write scope cannot enter a submodule, change the repository boundary or claim sibling files. Without this field, coverage logic is unchanged. Never infer frozen criteria from prose or migrate them; reject tasks claiming finalization-only criteria.

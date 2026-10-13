@@ -77,7 +77,12 @@ describe('per-repository workspace worktree policy (REQ-002, REQ-004)', () => {
 
   it('requires an explicit workdir for every workspace command', async () => {
     const coding = normalize(await readFile(packagePath('templates', 'skills', 'coding', 'SKILL.md'), 'utf8'));
+    expect(coding, 'workspace rules are loaded before preparation or implementation state').toMatch(
+      /Explicitly read `references\/workspace\.md` before approved preparation or any implementation state/i,
+    );
+    const reference = await readFile(packagePath('templates', 'skills', 'coding', 'references', 'workspace.md'), 'utf8');
+    const packet = reference.match(/## Packet contract[\s\S]*?(?=\n## |$)/)?.[0] ?? '';
 
-    expect(coding, 'every command carries an explicit workdir').toMatch(/every command uses an explicit workdir/i);
+    expect(normalize(packet), 'every command carries an explicit workdir').toMatch(/every command uses an explicit workdir/i);
   });
 });

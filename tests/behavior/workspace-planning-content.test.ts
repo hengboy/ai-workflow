@@ -39,7 +39,8 @@ function parsedYamlFences(text: string): unknown[] {
     .map((match) => match[1] ?? '')
     .flatMap((block) => {
       try {
-        return [parse(block)];
+        const value: unknown = parse(block);
+        return [value];
       } catch {
         return [];
       }
@@ -93,11 +94,17 @@ describe('planning declares and freezes a workspace plan (REQ-002 / AC-003, AC-0
   });
 
   it('ships the workspace_repos declaration and the per-repository delivery boundary', async () => {
-    const workspace = section((await readShipped(PLANNING_SKILL)) ?? '', '## Workspace planning');
+    const skill = (await readShipped(PLANNING_SKILL)) ?? '';
+    const workspace = section(skill, '## Workspace planning');
     expect(workspace, 'the Workspace planning section exists').not.toBe('');
+    expect(workspace, 'workspace fields use the mandatory plan template').toContain('using the mandatory plan template');
+    expect(section(skill, '## Document contract'), 'the plan template is read before drafting').toMatch(
+      /Before drafting, read [^\n]*\[the implementation plan template\]\(references\/plan\.md\)/,
+    );
+    const repositories = section((await readShipped(PLANNING_PLAN_REFERENCE)) ?? '', '## Workspace repositories');
 
     expectFragments(
-      workspace,
+      repositories,
       [
         'workspace_repos',
         'name',
@@ -128,7 +135,8 @@ describe('planning declares and freezes a workspace plan (REQ-002 / AC-003, AC-0
   });
 
   it('schedules per-repository note work and hands off the distribution step', async () => {
-    const workspace = section((await readShipped(PLANNING_SKILL)) ?? '', '## Workspace planning');
+    const skill = (await readShipped(PLANNING_SKILL)) ?? '';
+    const workspace = section(skill, '## Workspace planning');
     expect(workspace, 'the Workspace planning section exists').not.toBe('');
 
     expectFragments(
@@ -136,12 +144,16 @@ describe('planning declares and freezes a workspace plan (REQ-002 / AC-003, AC-0
       [
         "schedules each repository's note",
         'MEMORY.md',
-        'in that repository',
-        'hands off',
-        'ai-workflow workspace distribute --plan <directory>'
+        'in that repository'
       ],
       'the per-repository note schedule and hand-off'
     );
+    expect(workspace, 'workspace planning routes the handoff to its owner').toContain('the Completion checklist owns the split and session handoff');
+    const completion = flatten(section(skill, '## Completion checklist'));
+    expect(completion, 'the distribution handoff starts the parent Coding session').toMatch(
+      /tell the user to start a new session at <workspace-root> and invoke the coding skill/i,
+    );
+    expect(completion, 'the handoff names the distribution command').toContain('ai-workflow workspace distribute --plan <directory>');
   });
 });
 
@@ -188,13 +200,17 @@ describe('plan-to-tasks splits a workspace plan (REQ-004 / AC-007, AC-023)', () 
     expect(text, 'the plan-to-tasks skill is shipped').not.toBeNull();
     const workspace = section(text ?? '', '## Workspace split');
     expect(workspace, 'the Workspace split section exists').not.toBe('');
+    expect(section(text ?? '', '## Decomposition rules'), 'repository phases load their authority before computation').toContain(
+      'Read [the execution-order reference](references/execution-order.md) before computing phases or previewing the graph',
+    );
+    const order = section((await readShipped(EXECUTION_ORDER_REFERENCE)) ?? '', '## Workspace repositories');
+    expect(order, 'repository phase derivation still follows the declared order').toContain("derives each repository's phases from the declared order");
 
     expectFragments(
       workspace,
       [
         'repo',
         'to every task',
-        "derives each repository's phases from the declared order",
         'repository-internal task DAG',
         'repository phases',
         'critical path'
@@ -204,8 +220,12 @@ describe('plan-to-tasks splits a workspace plan (REQ-004 / AC-007, AC-023)', () 
   });
 
   it('ships the workspace.yaml write point and the reserved root entry tasks', async () => {
-    const workspace = section((await readShipped(PLAN_TO_TASKS_SKILL)) ?? '', '## Workspace split');
+    const skill = (await readShipped(PLAN_TO_TASKS_SKILL)) ?? '';
+    const workspace = section(skill, '## Workspace split');
     expect(workspace, 'the Workspace split section exists').not.toBe('');
+    expect(workspace, 'workspace splitting follows the shared manifest write step').toContain("Write `workspace.yaml` at the Task file contract's manifest step");
+    const writeOrder = section(skill, '## Task file contract');
+    expectFragments(writeOrder, ['workspace.yaml', 'after the task triplets and their pair records', 'before the final', 'ai-workflow plan validate --plan <directory>'], 'the manifest write order');
 
     expectFragments(
       workspace,
@@ -214,8 +234,6 @@ describe('plan-to-tasks splits a workspace plan (REQ-004 / AC-007, AC-023)', () 
         'reserved',
         'root entry',
         'its tasks',
-        'after the task triplets and their pair records',
-        'before the final',
         'ai-workflow plan validate --plan <directory>',
         'workspace_repos',
         'unchanged'
@@ -306,14 +324,16 @@ describe('planning owns the workspace split handoff and exempts a root-only plan
     expect(text, 'the planning skill is shipped').not.toBeNull();
     const workspace = section(text ?? '', '## Workspace planning');
     expect(workspace, 'the Workspace planning section exists').not.toBe('');
+    expect(workspace, 'Planning retains its no-slice boundary').toContain('never distributes or writes a slice');
+    expect(workspace, 'the completion checklist owns the workspace handoff').toContain('the Completion checklist owns the split and session handoff');
+    const completion = flatten(section(text ?? '', '## Completion checklist'));
 
     expectFragments(
-      flatten(workspace),
+      completion,
       [
         'at least one non-root participating repository',
         'plan-to-tasks',
-        'before implementation',
-        'never distributes or writes a slice'
+        'before implementation'
       ],
       'the planning workspace split handoff'
     );
@@ -321,14 +341,17 @@ describe('planning owns the workspace split handoff and exempts a root-only plan
       flatten(workspace),
       'Planning no longer hands distribution to a separate split session',
     ).not.toContain('split session owns distribution');
+    expect(completion, 'the completion handoff also excludes a separate split session').not.toContain('split session owns distribution');
   });
 
   it('exempts a workspace plan that declares only the reserved workspace root entry', async () => {
-    const workspace = section((await readShipped(PLANNING_SKILL)) ?? '', '## Workspace planning');
+    const skill = (await readShipped(PLANNING_SKILL)) ?? '';
+    const workspace = section(skill, '## Workspace planning');
     expect(workspace, 'the Workspace planning section exists').not.toBe('');
+    expect(workspace, 'the completion checklist owns root-only routing').toContain('the Completion checklist owns the split and session handoff');
 
     expectFragments(
-      flatten(workspace),
+      flatten(section(skill, '## Completion checklist')),
       ['workspace_repos', 'reserved workspace root entry', 'implemented unsplit'],
       'the planning root-only workspace exemption'
     );

@@ -1,133 +1,218 @@
-# Parent workspace execution reference
+# Workspace execution reference
 
-This reference details the parent workspace execution route summarized in `SKILL.md`.
-It applies only to a frozen plan that declares at least one participating non-root
-repository matched to the current root's `.gitmodules`.
+This required reference supplies parent, root-delivery, independent slice and
+finalization procedures. Apply it with `SKILL.md`'s shared gates and record lifecycle.
 
 ## Activation and preflight
 
-This activation requires both a matching `.gitmodules` and a participating frozen plan;
-a project with child repositories but an ordinary or root-only plan keeps its usual
-route. Preflight validates every participant name and path, the original parent
-plan, each slice, each repository's own contract, task scopes and the frozen
-schedule with read-only Git. The preflight refuses a missing or divergent slice, a
-wrong declaration, an ancestor Git root, a detached or dirty source, an escaped or
-nested-submodule write scope, a malformed record or an invalid schedule, and it
-creates no new coding worktree or implementation record. A claimed child repository
-that cannot be matched is a refusal, not a fallback to running its tasks in the root.
-Clarifications may reuse shared leaf handling, but no ordinary packet is burdened
-with workspace-only fields.
+Parent activation requires the main skill's frozen non-root participant matched
+to `.gitmodules`. Its ordinary, non-participating and root-only exemptions preserve
+worktree, ordering, review, record and completion semantics. Refuse claimed
+workspaces with absent, mismatched or escaped declarations; no fallback runs child
+tasks in the root.
+
+Before creating a worktree or implementation record, confirm the delivery gate with
+`ai-workflow workspace status --plan <directory>` against the original absolute
+parent plan directory, after approved preparation if needed. Require `valid: true`,
+validated frozen `tasks/execution-order.yaml` and every child slice `present`.
+Status is filesystem-only; preflight validates participant names/paths, parent plan,
+slices, each repository's contract, scopes and schedule with read-only Git. Refuse
+wrong declarations, ancestor Git roots, detached/dirty sources, escaped or
+nested-submodule write scopes, malformed records, invalid schedules and
+missing/divergent slices before any coding worktree or record.
+
+If splitting is needed, direct to the parent root for plan-to-tasks with the absolute
+parent plan directory; parent Coding uses Approved preparation below. For existing
+split artifacts, request repair of the named divergence and a rerun of
+`ai-workflow workspace distribute --plan <directory>` against that same directory.
+Never repair frozen inputs in coding. Shared leaf clarification handling adds no
+workspace-only fields to ordinary packets.
 
 ## Approved preparation
 
-When the parent Coding session enters with a frozen child-participating workspace
-plan and no task set, it invokes `plan-to-tasks` as its `preparation procedure`
-for the `approved preparation`. That procedure shows the full approval preview,
-obtains `approval`, writes and validates the complete task triplets, the schedule
-and the manifest, runs `ai-workflow workspace distribute --plan <directory>`
-against the absolute parent plan directory, and `returns control` to the same
-parent Coding session; the preparation never launches a child host process, a
-nested splitter or a sibling session, and distribution still precedes any
-implementation state. Valid existing split artifacts are reused `byte-unchanged`.
-A `partial` or invalid task set or a `divergent` slice stops with a `repair
-request`; the preparation does not regenerate them. Declining approval creates no
-tasks, no slices, no worktrees and no implementation records. A `standalone`
-plan-to-tasks invocation still ends after its own handoff.
+Before any implementation state, parent Coding runs approved preparation and
+distribution against the absolute parent plan. With no task set, invoke
+`plan-to-tasks` as the `preparation procedure`: show the full approval preview,
+obtain approval, write complete task triplets/pair records, schedule and
+`workspace.yaml`, run `ai-workflow plan validate --plan <directory>`, then
+`ai-workflow workspace distribute --plan <directory>`. Distribution writes slices
+only after read-only preconditions pass; preparation returns control to the same
+parent Coding session to continue implementation. Reuse valid split artifacts
+byte-unchanged; partial/invalid tasks or divergent slices stop with a repair request,
+never regeneration. Declining approval creates no tasks, no slices, no worktrees
+and no implementation records. Standalone plan-to-tasks ends after its own handoff.
 
 ## Phase dispatch and delivery barriers
 
-The original parent `tasks/execution-order.yaml` is the only global task schedule.
-Process its phases in file order, dispatch the independent tasks of the current
-phase concurrently, and await and verify the whole phase before any serial task
-commit; a whole phase that is awaited and verified prevents one task's success from
-standing in for the phase. Contended shared build outputs may be serialized within
-the phase without changing the frozen order. Neither a recomputed DAG nor a slice's
-filtered phase numbering grants dispatch authority.
+The primary parent session directly dispatches native leaf agents as the only
+dispatcher: no nested coordinator, no splitter sub-agent, no child host process,
+no sibling session, scheduler service or provider API executor, and no remote sessions.
+This route never requires a manual child session.
 
-After a repository's last task phase, complete its review and delivery gate as a
-delivery barrier before a dependent repository advances; a repository may span
-several global phases, and its filtered slice schedule must not run ahead of the
-active parent phase. The primary records the delivered facts and releases dependents
-only after the delivery commit is captured.
+The original parent `tasks/execution-order.yaml` is the only global task schedule.
+Apply the main scheduling rules: file order, concurrent independent tasks with
+Test first, the whole phase awaited and verified, then serial scoped task commits
+through Git Operator in listed order. Shared build contention permits serialization
+within the phase only. No missing-schedule serial fallback or recomputation from
+`depends_on` or filtered slice phases.
+
+After a repository's last task phase, complete its per-repository delivery review
+and repository delivery gate, record delivered facts and capture its delivery commit
+before dependent repositories advance. A repository may span global phases; its
+filtered slice schedule cannot run ahead of the active parent phase.
 
 ## Repository worktrees and commits
 
-Each active repository owns exactly one run-owned worktree per active repository at
-`<source-root>/.worktrees/<planId>` on branch `ai-workflow/<planId>`, and the parent
-worktree is not a container for child implementation: its submodule directories stay
-empty. Git Operator creates and owns that worktree, verifies the repository's actual
-Git common directory so a matching directory name does not prove identity, and
-materializes the repository's ignored state. Scoped task commits are checked for
-exact parentage and both endpoints of a rename, and every commit contains only the
-task's exact write scope. A genuinely unchanged task records verified no-change
-evidence against an exact HEAD and creates no empty commit. Delivery integration is
-non-fast-forward, and only run-owned worktrees and branches are cleaned up.
+Git Operator creates one run-owned worktree per active repository at
+`<source-root>/.worktrees/<planId>` on branch `ai-workflow/<planId>` and verifies
+its actual Git common directory; directory names alone prove no identity.
+The parent worktree is not a container for child implementation: submodule
+directories stay empty; child edits stay in its own worktree. Materialize each
+repository's entire ignored state under the main policy, excluding `.worktrees/`.
+Verify every serial task commit's exact write scope, parentage and both rename
+endpoints. A genuinely unchanged task records exact verified HEAD evidence without
+an empty commit. Integrate delivery non-fast-forward and clean up only run-owned
+worktrees/branches, preserving unrelated user state.
 
 ## Packet contract
 
-Every packet states the exact absolute parent plan/root, the source repository, the
-local slice plan, the coding worktree, the phase/task identifier, the assigned
-REQ/AC, the relative and resolved read/write scope, the permitted commands, the
-output paths and the upstream delivery evidence. Every command runs with an explicit
-workdir, and every path is an absolute path rather than one inherited from the
-parent's cwd. A leaf explicitly reads that repository's own `.ai-workflow/AGENTS.md`,
-`MEMORY.md` and navigation. A native permission denial is a blocker, not permission
-to create a different worktree or bypass the host.
+Every packet carries exact absolute parent plan/root, source repository, local
+slice plan, coding worktree, phase/task ID, assigned REQ/AC, relative and resolved
+read/write scope, permitted commands, output paths and upstream delivery evidence.
+Every command uses an explicit workdir and every packet path is an absolute path, never
+resolved against inherited parent cwd. Each leaf explicitly
+reads that repository's own `.ai-workflow/AGENTS.md`, `MEMORY.md`,
+`.ai-workflow/index/navigation.json` and `.ai-workflow/index/navigation.md`.
+A native permission denial is a blocker, never permission to bypass the host or
+create a different worktree.
 
 ## Review and checkpoint record
 
-After a repository's last task phase the primary dispatches a per-repository delivery
-review and repository delivery gate for that repository's task scope; finalization
-later has its own separate finalization review and does not re-review delivered
-tasks. Resolve findings through the existing repair-selection gate and one bounded
-aggregate repair.
+Delivery review covers that repository's tasks; the separate finalization review
+does not re-review delivered tasks. Apply the main simultaneous review/repair gate
+with one bounded aggregate repair. Findings requiring changes in a delivered child
+need out-of-scope support or a new plan; never reopen that child.
 
-Each repository keeps the single `implementation.yaml` record; there is no extra run
-record, ledger or manifest, and no new top-level status beyond `in-progress` and
-`completed`. The record carries an `execution` anchor with its `purpose` (`tasks`
-versus `finalization`), canonical `source_root`, `repository`, absolute `worktree`,
-`branch`, `target_branch` and repository-local `base_commit`. Typed `task_checkpoints`
-distinguish a writing task that stores `kind: commit` with its full commit SHA from a
-verified unchanged task that stores `kind: no-change` with the exact HEAD SHA. A
-purpose-scoped `reviewed_commit` records the exact reviewed HEAD and cannot be reused
-for another purpose or a changed HEAD; a different purpose does not authorize it again.
+The single `implementation.yaml` follows the main lifecycle, with no extra run
+record, ledger or manifest. Workspace fields are:
 
-Write checkpoints only through the filesystem-only command
-`ai-workflow workspace checkpoint --plan <directory> --repo <name>`, called by the
-primary only after the required Git evidence. Identical repeated events are
-idempotent, and a refusal leaves the prior record byte-unchanged.
+| Field | Evidence |
+| --- | --- |
+| `execution` | Anchor with `purpose` (`tasks` versus `finalization`), canonical `source_root`, `repository`, absolute `worktree`, `branch`, `target_branch` and repository-local `base_commit`. |
+| `task_checkpoints` | `kind: commit` with the task's full commit SHA after scope/parentage/rename checks, or `kind: no-change` with the exact verified HEAD SHA. |
+| `reviewed_commit` | Purpose-scoped exact reviewed HEAD; cannot be reused for another purpose or a changed HEAD. A different purpose does not authorize it again. |
+
+Only the primary writes checkpoints, after Git evidence, through filesystem-only
+`ai-workflow workspace checkpoint --plan <directory> --repo <name>` into that
+repository's single record. It accepts exactly one `start`, `task`, `reviewed`,
+`delivered` or `finalized` JSON event on stdin. Refuse unknown fields, wrong types,
+wrong plan/repository, unauthorized task IDs, contradictory duplicates, invalid
+transitions or malformed full SHAs before writing. Identical repeats are idempotent;
+refusal leaves the prior record byte-unchanged.
+
+## Workspace root sessions
+
+For parent `workspace.yaml` with `role: workspace` and a non-root participant,
+apply preflight's delivery gate before any worktree or record and require the
+current project root to equal the absolute `workspace_root`. Execute root delivery
+only when `next_repository` is `workspace` and
+`workspace_root_entry.tasks_delivered` is false; otherwise hand off the reported
+next repository or finalize when ready.
+
+Select only `task.repo: workspace` tasks. Filter parent phases in memory, preserving
+file order and removing empty phases; never edit `tasks/execution-order.yaml` or
+recompute the DAG. Execute only these root tasks in the root worktree with normal
+validation/review, never siblings; parent orchestration retains its global schedule.
+After passing, merge, perform owned cleanup and apply the main record table's root
+delivery row. Report the root SHA, rerun parent status and hand off `next_repository`.
+
+When `tasks_delivered` is true, skip delivered root tasks and siblings.
+Finalization-only executes zero tasks, never reruns root reviews and uses the
+finalization gate below. For no root tasks, apply the main record table's implicit delivery.
+
+## Slice sessions
+
+Read the independent slice manifest `workspace.yaml` before any other slice step.
+Run parent status against the original absolute parent plan; require `valid: true`,
+this repository as `next_repository` and its slice `present`. The absolute current
+project directory must equal reported workspace root plus declared repository path.
+A mismatch refuses before any branch, worktree or implementation record, with bounded
+support naming expected/actual repositories. Invalid status, wrong delivery position
+or missing/divergent slices likewise refuse before a worktree or record.
+
+With no slice `workspace.yaml` in a participating repository's plan directory, report
+the missing manifest and stop before creating a worktree or implementation record.
+Direct to a parent-root session to rerun
+`ai-workflow workspace distribute --plan <directory>` with the same absolute parent
+workspace plan directory as the repair.
+
+A matching session implements only its slice tasks inside that repository, including
+edits, notes and records; never edit siblings or the workspace root. Complete with
+`ai-workflow plan validate` for the slice, `ai-workflow notes validate` for local
+notes and a same-change `MEMORY.md` update. Record/report its delivery commit SHA
+to the workspace orchestrator; the root pins it later.
+
+Rerun `ai-workflow workspace status --plan <directory>` against the absolute parent
+plan, then hand off the next repository, path, session and copyable prompt in frozen
+delivery order: workdir `<repository-root>`, local plan `<repository-plan-directory>`,
+original parent `<workspace-plan-directory>`. `next_repository: workspace` hands off
+a root delivery session for pending root tasks; null with `ready_for_finalization` and
+`workspace_root_entry.tasks_delivered` true hands off a new root finalization session.
+A child never finalizes by itself.
 
 ## Recovery
 
-The supported recovery boundary is automatic resume only at a clean, fully checkpointed phase boundary or
-a verified repository delivery boundary. On entry, verify recorded SHAs, history,
-scopes, worktree registration, target refs and ownership before trusting progress.
-A dirty partial phase, a commit-without-checkpoint gap, unknown future-phase progress,
-uncertain review results or a contradictory record stops with a bounded support
-request instead of redispatch. Recorded tasks are identified and not blindly
-dispatched again. Reconstructing a lost merge completion requires an exact reviewed
-head, the target baseline, expected merge parentage and owned-cleanup evidence;
-otherwise it stops. An occupied different-run worktree is never adopted, and
-simultaneous primaries over the same run are unsupported.
+Automatic resume is limited to a clean, fully checkpointed phase boundary or a
+verified repository delivery boundary. Verify recorded SHAs, history, scopes,
+worktree registration, target refs and ownership. Dirty partial-phase residue,
+commit-without-checkpoint gaps, unknown future-phase progress, uncertain review
+results, contradictory records or unrelated target drift stop with bounded support
+or recovery instead of redispatch. Never blindly redispatch recorded tasks.
+Lost merge completion requires exact reviewed head, target baseline, expected merge
+parentage and owned-cleanup evidence; otherwise stop. Never adopt a different-run
+worktree; simultaneous primaries over one run are unsupported.
 
-## Finalization
+## Workspace finalization
 
-After all children are delivered and the root tasks are delivered, the same-parent
-session finalizes directly; it does not reopen itself in a new root session. Git
-Operator verifies the entire authorized batch of delivery commits read-only in their
-source repositories before any index mutation, then pins the exact finalized gitlink
-tree, and a completed reentry is read-only and idempotent. A finalization review
-finding that would require changes in an already delivered child is an out-of-scope
-support request or a new plan, not permission to reopen that child.
+`all slices are completed` is insufficient. Run parent
+`ai-workflow workspace status --plan <directory>` using absolute
+`<workspace-plan-directory>`. Require `valid: true` (plan, tasks, schedule and
+manifest pass distribution's validation), every child slice `present` and record
+`completed` with matching `plan_id` and full lowercase 40- or 64-hex
+`delivery_commit`, `ready_for_finalization: true` and
+`workspace_root_entry.tasks_delivered: true`.
 
-## Non-goals
+Before any index mutation, Git Operator verifies the entire authorized batch of
+child delivery SHAs and any `root_tasks_commit` (or completed root delivery evidence)
+with read-only Git in each source repository: `git cat-file -e <sha>^{commit}` checks
+existence, not reachability from refs. Any missing commit stops and stages nothing; a missing
+second SHA must not leave the first pointer staged. These authorized workspace/source
+reads are the read-only exception to worktree confinement, with no sibling writes
+or checkout rewrites.
 
-- There is no nested coordinator and no splitter sub-agent: the primary parent
-  session is the only dispatcher and directly dispatches native leaf agents.
-- There are no remote sessions, no provider API executor and no separate child
-  host process.
-- No fallback that runs child tasks in the root: a claimed workspace that cannot be
-  matched to `.gitmodules` is refused rather than silently executed as a
-  single-repository task set.
-- No change to ordinary or root-only single-repository worktree, task ordering,
-  review, implementation-record or completion semantics.
+After every commit exists, pin the exact final gitlink tree using
+`git update-index --cacheinfo 160000,<sha>,<path>` inside the clean workspace worktree
+with empty submodule directories. The run stages only authorized pointer paths and
+workspace-root files, never submodule working trees or unrelated paths. Moving a
+submodule checkout after pinning is out of scope; run only the plan's authorized
+cross-repository acceptance checks read-only, without automatic checkout or publishing.
+Complete the separate finalization review before merge/owned cleanup, then apply
+the main record table, including read-only idempotent completed reentry.
+
+After all children are delivered and root tasks delivered, same-parent finalization
+runs directly in the correct already-running parent/root session without reopening
+itself. Only another repository session reports this bounded request; substitute
+actual absolute paths, quote arguments with spaces (including command arguments),
+and use the user's language:
+
+```text
+Finalize the parent workspace plan <workspace-plan-directory> in the already-running parent session at <workspace-root>: invoke the coding skill for finalization-only, run ai-workflow workspace status --plan <workspace-plan-directory> against the original parent plan, require valid true with present and completed child slices, ready_for_finalization and workspace_root_entry.tasks_delivered true. Execute zero tasks, skip delivered root tasks and siblings, preserve root_tasks_commit and started_at, and verify the entire delivery-commit batch read-only before Git Operator pins any pointer.
+```
+
+## Note ownership
+
+Cross-repository references stay plain plan-ID text; a note never links into another
+repository's files. The workspace root owns the decision (what/why); each repository
+owns its delivered facts (what shipped). Each updates only its own `MEMORY.md` and
+notes; the root never rewrites a child's delivered facts commit. Apply main Note
+Maintenance, including its scoped reads and mechanical/local-edit exemptions.

@@ -5,48 +5,33 @@ description: Initialize ai-workflow in a project, or upgrade an existing adoptio
 
 # Setup AI Workflow
 
-## Outcome
+## Scope and context
 
-Set up ai-workflow with the locally installed `ai-workflow` CLI: first-time initialization for a project that has not adopted ai-workflow yet, or an upgrade that completes missing management files and directories in an existing project. Run an upgrade only when the user explicitly authorizes it. Report every result. Do not invoke external orchestrators or provider APIs.
-
-## Project context
+Use the locally installed `ai-workflow` CLI for user-authorized project initialization or upgrade. Do not invoke external orchestrators or provider APIs.
 
 Before acting, explicitly read the project's `.ai-workflow/AGENTS.md`, `MEMORY.md`, `.ai-workflow/index/navigation.json` and `.ai-workflow/index/navigation.md`, or receive them through complete context injection. A Markdown link or an inherited parent read does not load them into this session. The project contract applies to the whole project and to every participating agent.
 
-## Routine preflight and authorization
+Obtain the exact project path; ask for it if the user did not provide one.
 
-Installing the shared synchronization entry authorizes only the narrow routine preflight that
-patches the project's management files (the marked workflow instructions); it does not run this
-setup workflow or first adoption by itself. A first-time initialization, and any upgrade of an
-existing adoption, remain explicit user-authorized actions and are never inferred from finding
-an existing `.ai-workflow/` directory.
+## Authorization and entry points
 
-The synchronization entry and this setup workflow perform no Git operation. They write only the
-managed workflow instruction files inside the actual project root or coding worktree and never
-expand into product scope.
+Installing the shared synchronization entry authorizes only the narrow routine preflight that patches the project's management files (the marked workflow instructions). It does not run setup or authorize first adoption or upgrade; both remain explicit user-authorized actions, never inferred from an existing `.ai-workflow/` directory.
 
-## Required inputs
+Determine whether the project already adopted ai-workflow, then use only the matching entry point:
 
-- The exact project path. Ask for it if the user did not provide one.
-- For an existing project, the user's explicit authorization to upgrade. Never infer it from the presence of an existing `.ai-workflow/` directory.
+| Project state and authorization | Command |
+| --- | --- |
+| First-time setup, no existing adoption | Run `ai-workflow init <project>` once. |
+| Existing adoption, only after the user explicitly authorizes an upgrade | Run `ai-workflow init <project> --upgrade`. |
 
-## Workflow
+Upgrade fills in missing project-contract and notes management files and directories, preserves existing MEMORY, navigation, plans and note bodies, and stops without writing while prerequisites or rule conflicts remain.
 
-1. Determine whether the project has already adopted ai-workflow.
-2. First-time setup: run `ai-workflow init <project>` once. This is the only entry point for a project without an existing adoption.
-3. Existing project: only after the user explicitly authorizes it, run `ai-workflow init <project> --upgrade`. The upgrade fills in missing project-contract and notes management files and directories, preserves existing MEMORY, navigation, plans and note bodies, and stops without writing while prerequisites or rule conflicts remain.
-4. Do not scan or modify project files directly. Do not edit `AGENTS.md`, `CLAUDE.md`, `MEMORY.md`, `.ai-workflow/`, project templates, note bodies or any configuration directly; the CLI owns all writes.
-5. Treat only a zero exit status and parseable JSON as success. A non-zero exit status means the setup did not complete: return the CLI's error and do not claim otherwise.
-6. Report every `created` path from the JSON response, and for an upgrade also report every `skipped` path. Never present a skipped or failed path as created.
+## Writes and results
 
-## Failure handling
+The synchronization entry and setup perform no Git operation. They write only managed workflow instruction files inside the actual project root or coding worktree and never expand into product scope.
 
-If the CLI command fails, return its error and do not claim that initialization completed. Do not retry with another path, overwrite conflicts, resolve rule conflicts outside the authorized scope, or install a different ai-workflow release without the user's direction.
+Do not scan or modify project files directly. Do not edit `AGENTS.md`, `CLAUDE.md`, `MEMORY.md`, `.ai-workflow/`, project templates, note bodies or any configuration directly; the CLI owns all writes.
 
-## Completion checklist
+Treat only a zero exit status and parseable JSON as success. Report every `created` path from the JSON response, and for an upgrade also every `skipped` path. Never present a skipped or failed path as created.
 
-- The command was `ai-workflow init <project>` for a first-time setup, or `ai-workflow init <project> --upgrade` after explicit user authorization for an existing project.
-- The command completed with a zero exit status and parseable JSON.
-- The JSON output was parseable and reported accurately, distinguishing `created` from `skipped`.
-- Every `created` path was reported, and for an upgrade every `skipped` path was reported too.
-- Managed files were not edited directly.
+On failure, return the CLI error and do not claim initialization completed. Do not retry with another path, overwrite conflicts, resolve rule conflicts outside the authorized scope, or install a different ai-workflow release without the user's direction.

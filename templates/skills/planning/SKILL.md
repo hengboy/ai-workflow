@@ -24,31 +24,21 @@ If the project root or goal is missing, ask for that information before drafting
 
 ## Navigation-first context
 
-Before repository context work, directly read `.ai-workflow/AGENTS.md`, `MEMORY.md`, `.ai-workflow/index/navigation.json` and `.ai-workflow/index/navigation.md`. The project contract applies to the whole project and to every participating agent. Treat absent `MEMORY.md` as a recorded legal state. For a known feature run `ai-workflow context locate --project <absolute-project-root> --feature <id> --verify`, then read only its exact `read_order`. `<absolute-project-root>` is the normalized project directory path, never its directory name. Do not search the repository. If locate returns `missing_index`, `miss`, `stale` or `invalid`, request File Explorer with the original goal, status/reason and authorized module roots. Keep each task `read_scope` to the fixed context (`.ai-workflow/AGENTS.md`, `MEMORY.md`, both navigation files) plus exact locator paths; it must not contain `src/`, `tests/` or the project root. Add relevant notes and governance files only as exact bounded paths.
+Before repository context work, directly read the fixed context: `.ai-workflow/AGENTS.md`, `MEMORY.md`, `.ai-workflow/index/navigation.json` and `.ai-workflow/index/navigation.md`. The contract governs the whole project and every participating agent; record absent `MEMORY.md` as a legal state.
+
+For a known feature run `ai-workflow context locate --project <absolute-project-root> --feature <id> --verify`, then read only its exact `read_order`. The root argument is the normalized project directory path, never its directory name. Do not search. For `missing_index`, `miss`, `stale` or `invalid`, request File Explorer with the original goal, status/reason and authorized module roots.
+
+Each task's `read_scope` is fixed context plus exact locator paths and exact bounded paths for relevant notes/governance; it must not contain `src/`, `tests/` or the project root.
 
 ## Work-boundary synchronization
 
-When this skill session begins, invoke the shared native synchronization entry for the actual
-project root exactly once:
+At skill session start, invoke exactly once for the actual project root:
 `ai-workflow sync-hook --host <current-host> --phase --project <actual-root>`.
-It prints the raw gate JSON: the top-level `decision` is `allow`, `deny` or `skip`, the nested
-`report` (absent for `skip` or an actor exemption) carries `status`, `verified` and `proceed`,
-and the process exits 0 even when it denies. Follow `decision` rather than the exit code: `deny`
-or a `conflict` or `failed` `report.status` stops the phase, a warning `report.status` proceeds
-with visible context but makes no freshness claim, and `skip` means no adoption was found. The
-manual `ai-workflow sync [project]` command instead prints a `SyncReport` with `status`,
-`verified` and `proceed` and no `decision`. The installed host entry passes the native JSON
-payload to `ai-workflow sync-hook --host <host>` on stdin and must not be run by hand without it.
+Later steps, phases and native host events reuse that root's stored result with no source request; a missing, corrupt or unreadable check allows with visible no-freshness context.
 
-- Later planning steps, execution phases and native host events in this skill session reuse the
-  stored result for the actual root instead of synchronizing again, and a missing, corrupt or
-  unreadable stored check allows with a visible no-freshness context rather than retrieving the
-  source.
-- After a safe patch changes the project contract or owned workflow rules, re-read the updated
-  `.ai-workflow/AGENTS.md` before ordinary work continues.
-- Frozen `spec.md`, `plan.md` and task files are never synchronization input; when new authority
-  contradicts the frozen scope, stop and return a bounded support request instead of broadening
-  scope.
+The raw gate JSON has top-level `decision` (`allow`, `deny`, `skip`) and nested `report` fields `status`, `verified`, `proceed` (no report for `skip` or actor exemption). It exits 0 even on denial: `deny` or `report.status` of `conflict`/`failed` stops the phase; warnings proceed visibly without claiming freshness; `skip` means no adoption. Manual `ai-workflow sync [project]` returns a `SyncReport` with those report fields and no `decision`. The installed stdin form `ai-workflow sync-hook --host <host>` requires the native JSON payload; never run it by hand without that payload.
+
+After a safe patch changes the contract or owned workflow rules, re-read updated `.ai-workflow/AGENTS.md` before ordinary work. Frozen `spec.md`, `plan.md` and task files are never synchronization input; contradictory new authority stops the phase with a bounded support request, never a broader frozen scope.
 
 ## Workspace planning
 
@@ -58,30 +48,15 @@ A workspace plan names the participating repositories and their dependency order
 
 Read each child's context through that child's own root: that repository's `own project contract` (`.ai-workflow/AGENTS.md`), its `MEMORY.md`, and `navigation through that repository's root`. Never substitute the workspace root's contract for a child's; each participating repository's own project contract governs that repository.
 
-Write the `workspace_repos` declaration into the frozen `plan.md` frontmatter. Each entry carries `name`, the `.gitmodules` submodule `section name` that distribution verifies against the declaration, a repository-relative `path` and `depends_on`, the names of participants that must be delivered first; the list declares exactly one `reserved` `workspace` `root entry` with `path: .` and an empty `depends_on`. State the `per-repository delivery boundary` in the plan: every task belongs to one repository, task scopes are repository-relative, no task depends on a task in another repository, and every task of a repository is delivered strictly after every task of the repositories it depends on.
-
-Root-owned tasks are a delivery prefix for children that depend on `workspace`; pointer finalization is a distinct later gate, not a root dependency on children. Root delivery keeps the same implementation record in-progress with `root_tasks_commit` until finalization. Plan exact schedule validation: every task once, dependencies strictly earlier, same-repository parallel write scopes disjoint, and the declared repository order enforced. Coding filters root phases in memory without editing the frozen schedule or recomputing the DAG.
-
-When cross-repository acceptance evidence is required, name its owner, exact authorized commands and evidence in the plan. Finalization consumes validated parent workspace status with `ready_for_finalization` and root `tasks_delivered` true, then verifies all delivery commits exist in their source repositories through authorized read-only Git before pinning. Authorize these read-only workspace/source checks explicitly; they grant no sibling writes, automatic checkout changes or publishing.
+Freeze `workspace_repos` and the `per-repository delivery boundary` using the mandatory plan template below. Its Workspace repositories and Workspace finalization sections define repository fields, root-prefix delivery, schedule constraints, cross-repository evidence and finalization authority; preserve those constraints in the plan.
 
 The workflow `stops before freezing` when a participating child `is not an initialized ai-workflow project` (missing `.ai-workflow/AGENTS.md`). Report the offending child and the repair `ai-workflow init <child> --upgrade`; never freeze a workspace plan whose participating child is uninitialized.
 
-Planning `schedules each repository's note` and `MEMORY.md` work `in that repository`, through that repository's own notes and memory rather than the workspace root. Planning `hands off` the split and the repository distribution step to plan-to-tasks, which runs `ai-workflow workspace distribute --plan <directory>` after the frozen plan is split into tasks; planning never distributes or writes a slice itself.
-
-A workspace plan that declares at least one non-root participating repository must be split by plan-to-tasks before implementation; that split is the `approved preparation` the fresh parent Coding session runs before any implementation state, ending with `ai-workflow workspace distribute --plan <directory>`. A workspace plan whose `workspace_repos` declares only the reserved workspace root entry may be implemented unsplit. Planning itself never distributes or writes a slice.
+Planning `schedules each repository's note` and `MEMORY.md` work `in that repository`, through its own notes and memory. Planning never distributes or writes a slice; the Completion checklist owns the split and session handoff.
 
 ## Clarification loop
 
-Ask the highest-priority clarifying question per turn. Pick the unanswered item whose ambiguity would change the most downstream work:
-
-- goal and measurable outcome;
-- explicit non-goals;
-- actors and primary/alternate scenarios;
-- functional requirements;
-- acceptance criteria and observable evidence;
-- compatibility, performance, privacy and platform constraints;
-- invalid inputs, failures, cancellation and recovery;
-- validation layers and what must fail before implementation (RED).
+Ask the highest-priority clarifying question per turn: choose the unanswered inventory item whose ambiguity changes the most downstream work. Consider measurable goals, non-goals, actors and primary/alternate scenarios, functional requirements, AC/evidence, compatibility/performance/privacy/platform constraints, invalid inputs/failures/cancellation/recovery, validation layers and RED criteria.
 
 Apply a business-relevance gate before asking any question:
 
@@ -98,11 +73,9 @@ Do not bundle unrelated questions. Reflect the answer into the working inventory
 
 ## Requirement quality checklist
 
-Before requesting confirmation, verify that:
+Before requesting confirmation, assemble the complete goals, non-goals, REQ/AC inventory, scenarios, constraints, error boundaries and verification matrix. Verify that:
 
-- every requirement has one stable, continuous `REQ-###` identifier;
-- every acceptance criterion has one stable, continuous `AC-###` identifier;
-- each REQ maps to at least one AC and every AC names observable behavior;
+- each requirement and AC has one stable, continuous `REQ-###` or `AC-###` identifier; each REQ maps to at least one AC and every AC names observable behavior;
 - behavior uses Given/When/Then where sequence or state matters;
 - errors include boundary values and at least one counterexample;
 - non-goals prevent likely scope expansion;
@@ -118,7 +91,7 @@ Before requesting confirmation, verify that:
 
 ## Confirmation gate
 
-Show the complete goals, non-goals, REQ/AC inventory, scenarios, constraints, error boundaries and verification matrix in one preview. Ask for explicit approval. Until approval:
+Show that complete inventory in one preview and ask for explicit approval. Until approval:
 
 - do not create the plan directory;
 - do not write or overwrite `spec.md` or `plan.md`;
@@ -127,64 +100,49 @@ Show the complete goals, non-goals, REQ/AC inventory, scenarios, constraints, er
 
 Material user changes invalidate the preview and require a new complete preview.
 
-## Draft and review workflow
-
-After approval:
-
-1. Draft both documents in memory, every side of each: the English `spec.md` and `plan.md`, their Chinese `spec.zh.md` and `plan.zh.md` prose sides, and the `spec.i18n.yaml` and `plan.i18n.yaml` consistency records. You must not write drafts, snapshots or any other planning artifacts to a system temporary directory (or any temporary path outside the plan directory). If SHA-256 calculation requires filesystem input, write `spec.md` and `plan.md` directly under `.ai-workflow/plans/<planId>/`, re-read them there for the digest, and then make any required content or frontmatter updates in that same plan directory before freezing; never use a temporary directory as an intermediate location.
-2. Ask Spec Review exactly once to check coverage, testability, contradictions, read/write bounds, sequencing, rollback and role assignment.
-3. Treat any error finding as a failed gate. Revise the draft, show the full changed inventory and obtain renewed user approval; after that repair, continue to the next step without invoking Spec Review again.
-4. Only after the single review has passed (or its findings have been repaired and accepted) write all six frozen files atomically in `.ai-workflow/plans/<planId>/`: the frontmattered English `spec.md` and `plan.md`, the no-frontmatter Chinese `spec.zh.md` and `plan.zh.md`, and the `spec.i18n.yaml` and `plan.i18n.yaml` consistency records. A missing Chinese side or consistency record is an incomplete triplet, not a smaller deliverable: never freeze `spec.md` or `plan.md` without its `.zh.md` and `.i18n.yaml`. When provisional files were materialized for SHA-256 calculation, update or replace those same files in the plan directory and do not copy them through a temporary directory.
-5. Re-read all six files and verify their shared plan ID, counts, frozen status and content digests.
-6. Record the pair with `ai-workflow plan pairing --plan <directory> --write spec plan`, then verify the complete frozen triplet with `ai-workflow plan validate --plan <directory>`. `plan validate` is a hard completion gate, not an optional check: when it reports a missing `.zh.md` or `.i18n.yaml`, a wrong switcher, a structure mismatch or a stale digest, repair the offending side, re-record and run the gate again until it passes. Do not report completion, and do not hand off to Plan-to-tasks or Coding, while any triplet is incomplete.
-
-The planning primary agent owns document writes. Spec Review is read-only.
-
-Planning artifacts live under `.ai-workflow/plans/<planId>/`, which is gitignored. Planning creates no Git commit: do not dispatch Git Operator and do not stage or commit `spec.md`, `plan.md` or any other planning artifact. Leave them as local, untracked files.
-
 ## Document contract
 
-Write to `.ai-workflow/plans/<YYYYMMDD-english-slug>/`:
+The six-file deliverable lives at `.ai-workflow/plans/<YYYYMMDD-english-slug>/`:
 
 - `spec.md` + `spec.zh.md` + `spec.i18n.yaml`: goal, non-goals, scenarios, continuous REQ/AC, Given/When/Then evidence, RED criteria, boundary counterexamples and validation layers.
 - `plan.md` + `plan.zh.md` + `plan.i18n.yaml`: every REQ/AC mapping, implementation order, exact or bounded read/write paths, checks, compatibility, rollback and responsible native role.
 
-Each of these is a complete bilingual triplet: the English main document and its `.zh.md` Chinese prose side, plus an `.i18n.yaml` consistency record for the pair. Only the English side carries the YAML frontmatter (`plan_id`, `status: frozen`, `created_at`, `supersedes`, counts and `digest`). The `.zh.md` side has no frontmatter; it starts with the same English title followed by `[English](<doc>.md) | 中文`, while the English side follows its title with `English | [中文](<doc>.zh.md)`. Both sides differ only in prose; mirror headings, structure, tables, lists and link targets, and never treat `.i18n.yaml` as a third prose side.
+Each document is a complete bilingual triplet. Only English carries YAML frontmatter (`plan_id`, `status: frozen`, `created_at`, nullable `supersedes`, `requirement_count`, `acceptance_criteria_count`, `digest`) and supplies machine REQ/AC IDs, counts and digests. The Chinese `.zh.md` has no frontmatter; it starts with the same English title followed by `[English](<doc>.md) | 中文`. English follows its title with `English | [中文](<doc>.zh.md)`. Mirror headings, structure, tables, lists and link targets; only prose differs. The `.i18n.yaml` is a consistency record, never a third prose side.
 
 Plan steps use `Responsible role`; `plan.md` itself does not require a
 `surface` attribute. Surface routing is added only to generated task files.
 
-Before drafting, read [the specification template](references/spec.md) and [the implementation plan template](references/plan.md). Preserve their contracts while replacing the illustrative example content with the approved requirements and repository-specific evidence.
+Before drafting, read [the specification template](references/spec.md), [the implementation plan template](references/plan.md) and [the frozen-plan digest protocol](references/digest.md). Preserve their contracts; replace illustrative content with approved requirements and repository-specific evidence. A changed frozen requirement creates a new plan ID; never edit a frozen plan in place.
+
+## Draft and review workflow
+
+After approval:
+
+1. Draft both documents in memory with all sides defined above. You must not write drafts, snapshots or other planning artifacts to a system temporary directory or any path outside the plan directory. If SHA-256 calculation requires filesystem input, materialize `spec.md` and `plan.md` directly in `.ai-workflow/plans/<planId>/`, re-read them there for the digest, and update or replace those same files there before freezing; no outside intermediate copies.
+2. Ask Spec Review exactly once to check coverage, testability, contradictions, read/write bounds, sequencing, rollback and role assignment.
+3. Any error finding fails the gate: revise the draft, show the full changed inventory and obtain renewed user approval, then continue without invoking Spec Review again.
+4. Only after the review passes or its findings are repaired and accepted, finalize both language sides, set each English `digest: ""`, calculate and fill it using the mandatory digest protocol, and write all six frozen files atomically in the plan directory. A missing `.zh.md` or `.i18n.yaml` is an incomplete triplet; never freeze either English document without both companions.
+5. Re-read all six files; verify shared plan ID, counts, frozen status and content digests.
+6. Record the pair with `ai-workflow plan pairing --plan <directory> --write spec plan`, then run `ai-workflow plan validate --plan <directory>`. This is a hard completion gate: repair missing companions, wrong switchers, structure mismatches or stale digests, re-record and revalidate until it passes. No completion or Plan-to-tasks/Coding handoff while any triplet is incomplete.
+
+The planning primary owns writes; Spec Review is read-only. Planning artifacts are gitignored local, untracked files. Planning creates no Git commit: do not dispatch Git Operator and do not stage or commit any planning artifact.
 
 ## Agent Notes
 
-Planning schedules note work; the change that lands a decision owns its record and lifecycle transition. Read `.ai-workflow/notes/AGENTS.md` for the entry points and `.ai-workflow/notes/README.md`; that README is the single source for note format, lifecycle, supersession and archive governance. Do not restate those governance rules here.
-
-`MEMORY.md` records the current standards (how) while notes record why; keep them consistent in the same change.
+Planning schedules note work; the landing change owns its record and lifecycle transition. Read `.ai-workflow/notes/AGENTS.md` and `.ai-workflow/notes/README.md`, the single source for note format, lifecycle, supersession and archive governance. `MEMORY.md` records current standards (how), notes record why; keep them consistent in the same change without restating governance here.
 
 When a change affects architecture, module boundaries or ownership, public protocols or schemas, cross-cutting standards, workflow or agent rules, behavior, testing strategy, configuration or a persistent format, the `plan.md` must contain an explicit step that adds or updates the relevant note, and the plan must align `MEMORY.md` with that note in the same change. Major unimplemented work is scheduled as `proposed`; a change that lands a decision moves its note to `implemented` and rewrites the body to delivered facts. Purely mechanical or local edits that change none of the above may be exempt.
 
-## Frozen-plan digest protocol
-
-Use the normative convention in [the digest protocol](references/digest.md). Write both English frontmatters with `digest: ""`, calculate each file's SHA-256 over its exact UTF-8 bytes with only that digest line blanked, and replace the values; the English bytes are the only digest source and the Chinese side never affects the digest. After both language sides are final and the digests are written, record the pair with `ai-workflow plan pairing --plan <directory> --write spec plan`, then verify the complete frozen triplet with `ai-workflow plan validate --plan <directory>` before finishing. `plan validate` and `plan pairing` are the shared verification entry points for frozen planning artifacts. Do not invent or calculate a digest from the completed self-referential file.
-
-Both frontmatters contain `plan_id`, `status: frozen`, `created_at`, nullable `supersedes`, REQ count, AC count and a content digest. A changed frozen requirement creates a new plan ID; never edit a frozen plan in place.
-
 ## Completion checklist
 
-- The user approved the final full inventory.
+- The user approved the final full inventory, including any repaired review findings.
 - Every non-mechanical plan schedules its note maintenance and aligns `MEMORY.md`; purely mechanical changes are exempt.
-- Spec Review ran exactly once; it either passed or all of its findings were repaired and included in the user's final approval.
-- `spec` and `plan` are frozen bilingual triplets: `spec.md`/`spec.zh.md`/`spec.i18n.yaml` and `plan.md`/`plan.zh.md`/`plan.i18n.yaml` all exist.
-- Both English documents share the same plan ID and counts, and both `.zh.md` sides mirror their English structure.
-- The pair is recorded in `spec.i18n.yaml` and `plan.i18n.yaml`, and `ai-workflow plan validate --plan <directory>` passes.
-- Digests match the frozen English bytes.
+- The six-file contract and single-review workflow are complete: shared plan ID/counts, mirrored structure, matching English digests, recorded pairs and passing `ai-workflow plan validate --plan <directory>`.
 - Planning ends at the frozen plan and never starts implementation: report the absolute project or workspace root, the frozen plan directory and the `plan validate` result, then route by `workspace_repos`.
-  - When the plan declares at least one non-root participating repository, report each participant's name, path and `depends_on` order and tell the user to start a new session at <workspace-root> and invoke the coding skill with the absolute frozen plan directory. That parent Coding session runs the `approved preparation` (split + distribution) before implementation: it invokes plan-to-tasks as its `preparation procedure`, and after the task triplets, schedule and manifest validate it runs `ai-workflow workspace distribute --plan <directory>`, then continues implementation in the same session. The planning session itself creates no task, slice, worktree, implementation record or commit.
-  - For an ordinary plan or a root-only workspace plan whose `workspace_repos` declares only the reserved workspace root entry, tell the user to start a new session and invoke the coding skill to implement it.
+  - A plan declaring at least one non-root participating repository must be split by plan-to-tasks before implementation. Report each participant's name, path and `depends_on` order and tell the user to start a new session at <workspace-root> and invoke the coding skill with the absolute frozen plan directory. Before any implementation state, that parent Coding session runs the `approved preparation`: plan-to-tasks as its `preparation procedure`, task triplets/schedule/manifest validation, then `ai-workflow workspace distribute --plan <directory>`. It continues implementation in the same session.
+  - An ordinary plan or a root-only workspace plan whose `workspace_repos` declares only the reserved workspace root entry may be implemented unsplit: tell the user to start a new session and invoke the coding skill to implement it.
   - Provide a concise copyable prompt in a text fence, written in the user's language and naming the actual absolute project or workspace root and frozen plan directory with no illustrative placeholders; for a child-participating workspace plan, for example:
     ```text
     Start a new session at <workspace-root> and invoke the coding skill with the frozen plan directory <absolute plan directory>. Run the approved preparation: split and validate the task set, then run ai-workflow workspace distribute --plan <absolute plan directory> before implementation.
     ```
-- No Git commit was created for `spec.md` or `plan.md`; both remain gitignored local artifacts under `.ai-workflow/plans/<planId>/`.
-- No task, workflow, run or code file was created.
+- The planning session created no task, slice, worktree, implementation record, workflow, run, code file or commit.

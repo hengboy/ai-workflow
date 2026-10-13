@@ -16,7 +16,7 @@ Replace every placeholder and illustrative entry below. Remove this instruction 
 
 ## Bilingual shape
 
-The English `spec.md` mirrors the structure of `spec.zh.md`. The Chinese side has no YAML frontmatter and starts with the same English title followed by the Chinese switcher:
+Apply Planning's [Document contract](../SKILL.md#document-contract). The Chinese `spec.zh.md` starts as follows, with no YAML frontmatter:
 
 ```markdown
 # Specification
@@ -25,8 +25,6 @@ The English `spec.md` mirrors the structure of `spec.zh.md`. The Chinese side ha
 
 （中文正文，结构镜像英文侧；无 YAML frontmatter。）
 ```
-
-Only the English `spec.md` carries the YAML frontmatter with `plan_id`, `status: frozen`, counts and `digest: ""`. The Chinese bytes never affect the digest.
 
 ## Goal
 

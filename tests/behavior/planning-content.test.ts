@@ -50,7 +50,7 @@ describe('native prompt contracts', () => {
     const messageSkill = await readFile(packagePath('templates', 'skills', 'git-message', 'SKILL.md'), 'utf8');
     expect(messageSkill).toMatch(/^name: git-message$/m);
     expect(messageSkill).toMatch(/Conventional Commits/i);
-    expect(messageSkill).toMatch(/must not run any Git mutation/i);
+    expect(messageSkill).toMatch(/Text only: do not alter files,[^\n]*or run any Git mutation/i);
 
     const operator = await readFile(packagePath('templates', 'agents', 'git-operator.md'), 'utf8');
     expect(operator).toMatch(/before every direct commit.*invoke.*\$git-message/is);
@@ -129,6 +129,10 @@ describe('native prompt contracts', () => {
     expect(digest).toContain('digest: ""');
     expect(digest).toMatch(/UTF-8/);
     expect(digest).toMatch(/sha-?256/i);
+    const planning = await readFile(join(skillRoot, 'planning', 'SKILL.md'), 'utf8');
+    expect(planning, 'the digest authority must be read before drafting').toMatch(
+      /Before drafting, read [^\n]*\[the frozen-plan digest protocol\]\(references\/digest\.md\)/,
+    );
     for (const skill of ['planning', 'plan-to-tasks']) {
       const contents = await readFile(join(skillRoot, skill, 'SKILL.md'), 'utf8');
       expect(contents).toMatch(/frozen-plan digest protocol/i);
@@ -192,11 +196,11 @@ describe('native prompt contracts', () => {
     expect(maintainer).toMatch(/exact changed paths.*validation evidence/is);
   });
   it('describes optional risk-based coding review', async () => {
-    const coding = await readFile(packagePath('templates', 'skills', 'coding', 'SKILL.md'), 'utf8');
+    const coding = (await readFile(packagePath('templates', 'skills', 'coding', 'SKILL.md'), 'utf8')).replace(/\s+/g, ' ');
     expect(coding).toMatch(/review.*risk|risk.*review/is);
-    expect(coding).toMatch(/present the findings to the user.*selected repairs|repairing all findings/is);
-    expect(coding).toMatch(/Do not merge\s+the\s+temporary\s+branch\s+or\s+worktree\s+until\s+the\s+user's\s+repair\s+choice\s+is\s+resolved/i);
-    expect(coding).toMatch(/does not trigger a second Spec Review or Standards Review/is);
+    expect(coding).toMatch(/Present every finding from both axes together for the user's choice of selected repairs or repairing all findings/i);
+    expect(coding).toMatch(/user's choice of selected repairs or repairing all findings\. Resolve that choice before merge/i);
+    expect(coding).toMatch(/repair never triggers a second Spec Review or Standards Review/i);
   });
   it('documents --project as a project root path with relative and absolute examples', async () => {
     const readme = await readFile(packagePath('README.md'), 'utf8');
@@ -238,6 +242,10 @@ describe('native prompt contracts', () => {
     expect(maintainer).toMatch(/may not run Git/i);
   });
   it('adds the project contract to the task template fixed context', async () => {
+    const skill = await readFile(packagePath('templates', 'skills', 'plan-to-tasks', 'SKILL.md'), 'utf8');
+    expect(skill, 'task fields and scopes are loaded before drafting').toMatch(
+      /Before drafting, read \[the task template\]\(references\/task\.md\) for the full field, bilingual and body contract/,
+    );
     const taskTemplate = await readFile(packagePath('templates', 'skills', 'plan-to-tasks', 'references', 'task.md'), 'utf8');
     const readScopes = [...taskTemplate.matchAll(/^read_scope:\s*(\[.*\])$/gm)].map((match) => match[1]);
     expect(readScopes.length).toBeGreaterThanOrEqual(2);
@@ -267,15 +275,18 @@ describe('native prompt contracts', () => {
       /\.zh\.md[\s\S]{0,4000}?digest[\s\S]{0,4000}?plan pairing[\s\S]{0,2000}?plan validate/i
     );
   });
-  // REQ-001: the numbered planning workflow itself must carry the triplet and the
-  // validation gate, so an agent following the steps cannot stop at spec.md/plan.md.
+  // REQ-001: the numbered workflow requires every side in the Document contract
+  // and the validation gate, so it cannot stop at spec.md/plan.md.
   it('makes the bilingual triplet and the plan validate gate ordered planning workflow steps', async () => {
     const text = await readFile(packagePath('templates', 'skills', 'planning', 'SKILL.md'), 'utf8');
     const workflow = text.match(/## Draft and review workflow[\s\S]*?(?=\n## |$)/)?.[0] ?? '';
+    const contract = text.match(/## Document contract[\s\S]*?(?=\n## |$)/)?.[0] ?? '';
 
     expect(workflow, 'the workflow section exists').not.toBe('');
+    expect(workflow, 'drafting requires every side defined by the document contract').toMatch(/Draft both documents in memory with all sides defined above/i);
+    expect(workflow, 'the workflow writes the complete six-file deliverable').toMatch(/write all six frozen files atomically/i);
     for (const file of ['spec.zh.md', 'plan.zh.md', 'spec.i18n.yaml', 'plan.i18n.yaml']) {
-      expect(workflow, `the workflow names ${file}`).toContain(file);
+      expect(contract, `the required document contract names ${file}`).toContain(file);
     }
     expect(workflow, 'the workflow records the pair').toMatch(/ai-workflow plan pairing --plan[^\n]*--write spec plan/);
     expect(workflow, 'the workflow validates the triplet').toMatch(/ai-workflow plan validate --plan/);

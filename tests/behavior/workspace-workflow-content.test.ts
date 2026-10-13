@@ -54,11 +54,30 @@ function expectFragments(haystack: string, fragments: readonly string[], scope: 
   }
 }
 
+const workspaceReadGates = {
+  '## Slice sessions': /Explicitly read `references\/workspace\.md` and the slice manifest `workspace\.yaml` before any other slice step/i,
+  '## Workspace root sessions': /explicitly read `references\/workspace\.md` before creating a worktree or implementation record/i,
+  '## Parent workspace execution': /Explicitly read `references\/workspace\.md` before approved preparation or any implementation state/i,
+  '## Workspace finalization': /Explicitly read `references\/workspace\.md` before finalization or pointer\/index mutation/i,
+  '## Note ownership': /Explicitly read `references\/workspace\.md` before workspace note maintenance/i,
+};
+
+async function workspaceDetail(heading: string, gateHeading: keyof typeof workspaceReadGates): Promise<string> {
+  const skill = await readShipped(CODING_SKILL);
+  expect(skill, 'the coding skill is shipped').not.toBeNull();
+  const gate = section(skill ?? '', gateHeading);
+  expect(gate, `${gateHeading} exists in the main skill`).not.toBe('');
+  expect(flatten(gate), `${gateHeading} explicitly loads its detail before acting`).toMatch(workspaceReadGates[gateHeading]);
+  const reference = await readShipped(WORKSPACE_REFERENCE);
+  expect(reference, 'the mandatory workspace reference is shipped').not.toBeNull();
+  const detail = section(reference ?? '', heading);
+  expect(detail, `${heading} exists in the workspace reference`).not.toBe('');
+  return detail;
+}
+
 describe('coding implements a slice inside its own repository (REQ-007 / AC-014, AC-015)', () => {
   it('ships a Slice sessions section that refuses a mismatched slice before any worktree or record', async () => {
-    const text = await readShipped(CODING_SKILL);
-    expect(text, 'the coding skill is shipped').not.toBeNull();
-    const slice = section(text ?? '', '## Slice sessions');
+    const slice = await workspaceDetail('## Slice sessions', '## Slice sessions');
     expect(slice, 'the Slice sessions section exists').not.toBe('');
 
     expectFragments(
@@ -67,16 +86,18 @@ describe('coding implements a slice inside its own repository (REQ-007 / AC-014,
         'slice manifest',
         'workspace.yaml',
         'refuses',
-        'does not match',
         'before creating a worktree',
         'implementation record'
       ],
       'the Slice sessions identity refusal'
     );
+    expect(flatten(slice), 'a repository identity mismatch refuses before any branch, worktree or record').toMatch(
+      /project directory must equal reported workspace root plus declared repository path\. A mismatch refuses before any branch, worktree or implementation record/i,
+    );
   });
 
   it('implements only the slice tasks inside that repository and reports the delivery commit', async () => {
-    const slice = section((await readShipped(CODING_SKILL)) ?? '', '## Slice sessions');
+    const slice = await workspaceDetail('## Slice sessions', '## Slice sessions');
     expect(slice, 'the Slice sessions section exists').not.toBe('');
 
     expectFragments(
@@ -87,7 +108,7 @@ describe('coding implements a slice inside its own repository (REQ-007 / AC-014,
   });
 
   it('completes a slice with slice plan validate, repository notes validate and MEMORY', async () => {
-    const slice = section((await readShipped(CODING_SKILL)) ?? '', '## Slice sessions');
+    const slice = await workspaceDetail('## Slice sessions', '## Slice sessions');
     expect(slice, 'the Slice sessions section exists').not.toBe('');
 
     expectFragments(
@@ -100,16 +121,14 @@ describe('coding implements a slice inside its own repository (REQ-007 / AC-014,
 
 describe('workspace finalization pins delivery commits through Git Operator (REQ-009 / AC-018, AC-019)', () => {
   it('ships a Workspace finalization section that verifies completed slices and pins pointers', async () => {
-    const text = await readShipped(CODING_SKILL);
-    expect(text, 'the coding skill is shipped').not.toBeNull();
-    const finalization = section(text ?? '', '## Workspace finalization');
+    const finalization = await workspaceDetail('## Workspace finalization', '## Workspace finalization');
     expect(finalization, 'the Workspace finalization section exists').not.toBe('');
 
     expectFragments(
       flatten(finalization),
       [
         'all slices are completed',
-        'delivery commit',
+        'delivery_commit',
         'read-only Git',
         'source repository',
         'workspace worktree',
@@ -124,7 +143,7 @@ describe('workspace finalization pins delivery commits through Git Operator (REQ
   });
 
   it('reports finalization readiness and finalizes in the already-running parent session without reopening it', async () => {
-    const finalization = section((await readShipped(CODING_SKILL)) ?? '', '## Workspace finalization');
+    const finalization = await workspaceDetail('## Workspace finalization', '## Workspace finalization');
     expect(finalization, 'the Workspace finalization section exists').not.toBe('');
 
     expectFragments(
@@ -176,9 +195,7 @@ describe('workspace finalization pins delivery commits through Git Operator (REQ
 
 describe('decision records stay in their owning repository (REQ-010 / AC-020)', () => {
   it('ships a Note ownership section splitting workspace-root and child notes as plain plan-ID text', async () => {
-    const text = await readShipped(CODING_SKILL);
-    expect(text, 'the coding skill is shipped').not.toBeNull();
-    const ownership = section(text ?? '', '## Note ownership');
+    const ownership = await workspaceDetail('## Note ownership', '## Note ownership');
     expect(ownership, 'the Note ownership section exists').not.toBe('');
 
     expectFragments(
@@ -247,13 +264,20 @@ describe('plan-to-tasks completes a workspace split by distributing slices (REQ-
   });
 
   it('runs distribution after the task triplets, pair records and plan validate, then reports each slice state', async () => {
-    const workspace = section((await readShipped(PLAN_TO_TASKS_SKILL)) ?? '', '## Workspace split');
+    const skill = (await readShipped(PLAN_TO_TASKS_SKILL)) ?? '';
+    const workspace = section(skill, '## Workspace split');
     expect(workspace, 'the Workspace split section exists').not.toBe('');
+    expect(workspace, 'workspace splitting follows the shared manifest write step').toContain("Write `workspace.yaml` at the Task file contract's manifest step");
+    expect(flatten(section(skill, '## Task file contract')), 'manifest creation follows task pairs and precedes validation').toMatch(
+      /Write `tasks\/execution-order\.yaml` and, for a workspace, `workspace\.yaml` after the task triplets and their pair records, before the final `ai-workflow plan validate --plan <directory>`/,
+    );
+    expect(flatten(workspace), 'distribution follows manifest creation and passing validation').toMatch(
+      /After `workspace\.yaml` is written and the final `ai-workflow plan validate --plan <directory>` passes, the split runs `ai-workflow workspace distribute --plan <directory>`/,
+    );
 
     expectFragments(
       flatten(workspace),
       [
-        'after the task triplets and their pair records',
         'ai-workflow plan validate --plan <directory>',
         'ai-workflow workspace distribute --plan <directory>',
         'slice state',
@@ -346,28 +370,30 @@ describe('coding gates an undistributed workspace plan (REQ-002, REQ-003 / AC-00
   it('refuses an undistributed cross-repository workspace plan using workspace status before any worktree or record', async () => {
     const text = await readShipped(CODING_SKILL);
     expect(text, 'the coding skill is shipped').not.toBeNull();
-    const coding = flatten(text ?? '');
+    const coding = flatten(section(text ?? '', '## Parent workspace execution'));
+    expect(coding, 'the workspace route retains activation and the root-only exemption').toMatch(
+      /at least one participating non-root repository.*root-only.*unsplit/i,
+    );
+    const preflight = flatten(await workspaceDetail('## Activation and preflight', '## Parent workspace execution'));
 
     expectFragments(
-      coding,
+      preflight,
       [
-        'at least one non-root participating repository',
         'workspace status --plan <directory>',
-        'before creating a worktree',
         'implementation record',
         'plan-to-tasks',
         'ai-workflow workspace distribute --plan <directory>',
-        'root-only',
-        'unsplit'
+        'root-only'
       ],
       'the coding workspace handoff gate'
+    );
+    expect(preflight, 'status is required before creating a worktree or implementation record').toMatch(
+      /Before creating a worktree or implementation record, confirm the delivery gate with `ai-workflow workspace status --plan <directory>`/i,
     );
   });
 
   it('refuses a participating repository with no slice manifest and names the distribute repair', async () => {
-    const text = await readShipped(CODING_SKILL);
-    expect(text, 'the coding skill is shipped').not.toBeNull();
-    const slice = section(text ?? '', '## Slice sessions');
+    const slice = await workspaceDetail('## Slice sessions', '## Slice sessions');
     expect(slice, 'the Slice sessions section exists').not.toBe('');
 
     expectFragments(
@@ -407,9 +433,7 @@ describe('the shipped contract states the workspace split rule (REQ-004 / AC-007
 
 describe('coding distinguishes Workspace root sessions', () => {
   it('selects only the root-owned tasks of the parent plan in frozen file order without editing the schedule', async () => {
-    const text = await readShipped(CODING_SKILL);
-    expect(text, 'the coding skill is shipped').not.toBeNull();
-    const root = section(text ?? '', '## Workspace root sessions');
+    const root = await workspaceDetail('## Workspace root sessions', '## Workspace root sessions');
     expect(root, 'the Workspace root sessions section exists').not.toBe('');
 
     expectFragments(
@@ -420,14 +444,18 @@ describe('coding distinguishes Workspace root sessions', () => {
   });
 
   it('gates root task delivery before a worktree and runs finalization-only with no new status', async () => {
-    const root = section((await readShipped(CODING_SKILL)) ?? '', '## Workspace root sessions');
+    const root = await workspaceDetail('## Workspace root sessions', '## Workspace root sessions');
     expect(root, 'the Workspace root sessions section exists').not.toBe('');
 
     expectFragments(
-      flatten(root),
-      ['delivery gate', 'before creating a worktree', 'skip', 'root_tasks_commit', 'finalization-only', 'zero task', 'no new status'],
+      flatten(root).toLowerCase(),
+      ['delivery gate', 'before any worktree or record', 'skip', 'finalization-only', 'zero task'],
       'the Workspace root session delivery gate'
     );
+    expect(flatten(root), 'root delivery applies the shared record lifecycle').toContain("apply the main record table's root delivery row");
+    const record = section((await readShipped(CODING_SKILL)) ?? '', '## Implementation Record');
+    const delivery = record.split('\n').find((line) => line.startsWith('| Child-participating root task delivery |')) ?? '';
+    expectFragments(delivery, ['root_tasks_commit', 'no new status'], 'the root delivery record row');
   });
 });
 
@@ -510,10 +538,8 @@ describe('finalization coverage stays out of the task DAG (REQ-007 / AC-009)', (
 
 describe('coding defines the approved preparation returned by plan-to-tasks (REQ-001 / AC-001)', () => {
   it('defines the approved preparation that returns control without starting another session', async () => {
-    const text = await readShipped(CODING_SKILL);
-    expect(text, 'the coding skill is shipped').not.toBeNull();
-    const parent = section(text ?? '', '## Parent workspace execution');
-    expect(parent, 'the Parent workspace execution section exists').not.toBe('');
+    const parent = await workspaceDetail('## Approved preparation', '## Parent workspace execution');
+    expect(parent, 'the approved preparation section exists').not.toBe('');
     const flat = flatten(parent);
 
     expectFragments(
@@ -524,25 +550,26 @@ describe('coding defines the approved preparation returned by plan-to-tasks (REQ
         'preparation procedure',
         'returns control',
         'approval',
-        'ai-workflow workspace distribute --plan <directory>',
-        'no child host process',
-        'no sibling session'
+        'ai-workflow workspace distribute --plan <directory>'
       ],
       'the approved preparation definition'
     );
-    expect(flat, 'the parent route keeps the original global schedule').toMatch(/global (?:task )?schedule/i);
+    const dispatch = flatten(await workspaceDetail('## Phase dispatch and delivery barriers', '## Parent workspace execution'));
+    expectFragments(dispatch, ['no child host process', 'no sibling session'], 'the parent dispatch boundary');
+    expect(dispatch, 'the parent route keeps the original global schedule').toMatch(/global (?:task )?schedule/i);
   });
 
   it('reuses valid split artifacts, refuses divergent ones and keeps distribution before implementation', async () => {
-    const parent = flatten(section((await readShipped(CODING_SKILL)) ?? '', '## Parent workspace execution'));
-    expect(parent, 'the Parent workspace execution section exists').not.toBe('');
+    const parent = flatten(await workspaceDetail('## Approved preparation', '## Parent workspace execution'));
+    expect(parent, 'the approved preparation section exists').not.toBe('');
 
     expectFragments(
-      parent,
+      parent.toLowerCase(),
       ['reuse', 'declin', 'no tasks', 'repair request', 'implementation state'],
       'the parent preparation refusal boundary'
     );
-    expect(parent, 'the parent route drops the manual child-session permission handoff').toMatch(
+    const dispatch = flatten(await workspaceDetail('## Phase dispatch and delivery barriers', '## Parent workspace execution'));
+    expect(dispatch, 'the parent route drops the manual child-session permission handoff').toMatch(
       /(?:no|not|never|without)[^.]{0,60}?manual[^.]{0,40}?child[- ]?session/i,
     );
   });

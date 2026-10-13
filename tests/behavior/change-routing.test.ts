@@ -147,8 +147,15 @@ describe('change routing guidance', () => {
 
     const coding = flatten(codingText);
     expect(coding, 'the coding session performs the approved preparation').toMatch(/approved preparation/i);
-    expect(coding, 'distribution still precedes implementation').toContain(
+    expect(flatten(section(codingText, '## Parent workspace execution')), 'workspace preparation loads its authority before implementation').toMatch(
+      /Explicitly read `references\/workspace\.md` before approved preparation or any implementation state/i,
+    );
+    const preparation = flatten(section(await read('templates/skills/coding/references/workspace.md'), '## Approved preparation'));
+    expect(preparation, 'distribution still precedes implementation').toContain(
       'ai-workflow workspace distribute --plan <directory>',
+    );
+    expect(preparation, 'preparation and distribution precede any implementation state').toMatch(
+      /Before any implementation state, parent Coding runs approved preparation and distribution/i,
     );
     expect(coding, 'the completion checklist records the handoff').toMatch(
       /A planned change without a frozen plan ended the session after Planning/i,

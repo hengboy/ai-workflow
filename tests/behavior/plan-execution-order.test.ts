@@ -60,8 +60,13 @@ describe('plan-to-tasks freezes and previews the execution order (REQ-001, REQ-0
   it('states the phase derivation rule and the ordered write with the validate gate', async () => {
     const skill = (await readShipped(SKILL_PARTS)) ?? '';
 
-    expect(skill, 'the skill states how a phase is derived').toContain('one greater than the latest phase of its dependencies');
-    expect(skill, 'the skill states the equal-depth parallel rule').toContain('tasks at the same depth form one parallel group');
+    const decomposition = section(skill, '## Decomposition rules');
+    expect(decomposition, 'the phase authority is read before computation or preview').toContain(
+      'Read [the execution-order reference](references/execution-order.md) before computing phases or previewing the graph',
+    );
+    const derivation = section((await readShipped(REFERENCE_PARTS)) ?? '', '## Derivation rule');
+    expect(derivation, 'the required reference states how a phase is derived').toContain('one greater than the latest phase of its dependencies');
+    expect(derivation, 'the required reference states the equal-depth parallel rule').toContain('tasks at the same depth form one parallel group');
 
     const writeLine = skill
       .split('\n')

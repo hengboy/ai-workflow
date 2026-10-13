@@ -224,19 +224,20 @@ describe('implementation record guidance', () => {
 /**
  * REQ-006: the workspace execution record reuses the single `implementation.yaml` per
  * repository and adds a purpose-scoped execution anchor, typed task checkpoints and a
- * purpose-scoped reviewed commit. The contract text may live in the coding skill or its
- * detailed workspace reference, so both are combined.
+ * purpose-scoped reviewed commit. The main lifecycle and the explicitly loaded workspace
+ * record section jointly own this contract.
  */
 describe('workspace execution record contract', () => {
   async function workspaceRecordText(): Promise<string> {
     const coding = await codingSkill();
-    let reference = '';
-    try {
-      reference = await readFile(packagePath('templates', 'skills', 'coding', 'references', 'workspace.md'), 'utf8');
-    } catch {
-      reference = '';
-    }
-    return flatten(`${coding}\n${reference}`);
+    const lifecycle = coding.match(/## Implementation Record[\s\S]*?(?=\n## |$)/)?.[0] ?? '';
+    expect(flatten(lifecycle), 'workspace record detail is loaded before any record operation').toMatch(
+      /`references\/workspace\.md`; explicitly read it before any workspace record operation/,
+    );
+    const reference = await readFile(packagePath('templates', 'skills', 'coding', 'references', 'workspace.md'), 'utf8');
+    const record = reference.match(/## Review and checkpoint record[\s\S]*?(?=\n## |$)/)?.[0] ?? '';
+    expect(record, 'the workspace reference owns the checkpoint record section').not.toBe('');
+    return flatten(`${lifecycle}\n${record}`);
   }
 
   it('keeps the single implementation.yaml as the only workspace run record', async () => {

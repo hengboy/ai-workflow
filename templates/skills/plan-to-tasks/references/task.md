@@ -16,7 +16,7 @@ English | [中文](task-NNN-slug.zh.md)
 
 ## Bilingual shape
 
-Each task is a complete bilingual triplet under `tasks/`: the English main document `tasks/task-NNN-slug.md`, the Chinese prose side `tasks/task-NNN-slug.zh.md`, and the `tasks/task-NNN-slug.i18n.yaml` consistency record. Only `tasks/task-NNN-slug.md` is the task document used for enumeration; `.zh.md` and `.i18n.yaml` are its companions and are never enumerated as tasks.
+Each task is a complete bilingual triplet under `tasks/`: `task-NNN-slug.md`, `task-NNN-slug.zh.md` and `task-NNN-slug.i18n.yaml`. Only the English `.md` is used for task enumeration, routing and dependency checks; companions are never enumerated as tasks.
 
 The Chinese `.zh.md` side has no YAML frontmatter and starts with `# Task` followed by the Chinese switcher:
 
@@ -28,7 +28,20 @@ The Chinese `.zh.md` side has no YAML frontmatter and starts with `# Task` follo
 （中文正文，结构镜像英文侧；无 YAML frontmatter。）
 ```
 
-Frontmatter (`id`, `requirements`, `acceptance_criteria`, `depends_on`, `repo`, `surface`, `read_scope`, `write_scope`, `test_commands`) lives only on the English `task-NNN-slug.md` side. Both sides mirror headings, structure, tables, lists and link targets, differing only in prose.
+Frontmatter lives only on the English side. Mirror headings, structure, tables, lists and link targets; only prose differs. Use both switchers shown above.
+
+## Field contract
+
+Replace every placeholder with usable values for all applicable fields:
+
+- `id`: sequential `task-001-short-slug`, `task-002-short-slug` IDs.
+- `requirements`, `acceptance_criteria`: assigned frozen REQ/AC IDs; explain intentional shared coverage.
+- `depends_on`: task IDs justified by data, contract, ordering or overlapping-write constraints, subject to Repository scope below.
+- `repo`: the conditional repository assignment below; remove the illustrative field for a non-workspace plan.
+- `surface`: non-empty `backend|frontend|cross-stack|test|docs|research|documentation`, converted from the plan's `Responsible role`. `research` delegates every technology, project, concept, topic or keyword research request to Researcher, whether or not links are supplied; `documentation` routes non-code documentation and index maintenance to Documentation Maintainer.
+- `read_scope`: fixed context (`.ai-workflow/AGENTS.md`, `MEMORY.md`, both navigation files) plus exact locator paths and exact bounded note/governance paths. Never use `src/`, `tests/` or the project root.
+- `write_scope`: exact enough for filesystem enforcement; never `.`, the project root, `**`, unresolved placeholders or broad directories with unclear ownership.
+- `test_commands`: assigned validation commands; state expected evidence in the body. Place frontend/backend checks on their responsible tasks and add integration work only when cross-stack behavior requires it.
 
 ## Objective
 
@@ -44,7 +57,7 @@ A task never declares a `cross-repository` `depends_on`: every dependency names 
 
 ## Finalization coverage
 
-Root finalization criteria declared by the plan's `workspace_finalization` `never become` tasks: they stay root-owned and are not assigned to any repository. A task must not claim a `finalization-only` AC; finalization coverage is validated separately from the task DAG.
+Root finalization criteria declared by `workspace_finalization` `never become` tasks: they remain root-owned, are not assigned to any repository and are not sliced. Finalization ACs must be disjoint from task ACs; requirements may overlap. A task must not claim a `finalization-only` AC. Complete plan coverage is the union of task and separately validated finalization coverage.
 
 ## Implementation notes
 
