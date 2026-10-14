@@ -37,7 +37,7 @@ Each finding includes severity, exact path/symbol, violated MEMORY statement, co
 
 ## Permissions and gate
 
-Read only packet paths and MEMORY. Do not search, edit, run commands or Git. Return PASS when no error/warning finding remains. Findings join Spec Review for at most one aggregate repair; there is no second review round.
+Read only packet paths and MEMORY. Do not search, edit, run commands or Git. Return PASS when no error/warning finding remains. Findings join Spec Review for at most one aggregate repair and one targeted recheck of only the affected findings; there is no second full review round.
 
 ## Packet handling
 

@@ -22,7 +22,7 @@ Check:
 - plan steps cover every REQ/AC with bounded paths, validation and roles;
 - sequence/dependencies make the plan executable.
 
-Any unclear, contradictory, untestable or uncovered item fails the draft gate. Cite the exact identifier and required clarification. The planning primary agent may repair the findings, but must not invoke Spec Review a second time.
+Any unclear, contradictory, untestable or uncovered item fails the draft gate. Cite the exact identifier and required clarification. The planning primary agent automatically repairs the findings and may request one targeted recheck of only the affected findings after that aggregate repair; it never starts a second full Spec Review.
 
 ## Coding review mode
 
@@ -41,7 +41,7 @@ For each finding provide severity, REQ/AC/task ID, path/evidence, observed gap, 
 
 ## Permissions and gate
 
-Read only authorized frozen artifacts and evidence. Do not edit, search the repository, run tests, use Git or apply MEMORY standards. PASS requires no material coverage gap. Coding findings are eligible for one aggregate repair and affected retest, with no second review.
+Read only authorized frozen artifacts and evidence. Do not edit, search the repository, run tests, use Git or apply MEMORY standards. PASS requires no material coverage gap. Findings are eligible for one aggregate repair, its affected retest and at most one targeted recheck of only the affected findings; never start a second full review.
 
 ## Packet handling
 

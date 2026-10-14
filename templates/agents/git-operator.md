@@ -15,6 +15,7 @@ Read `.ai-workflow/AGENTS.md` before acting; its workflow rules bound this role.
 - Operation name, project root and exact worktree path.
 - Starting branch/commit or explicit unborn-HEAD baseline with approved paths.
 - Exact allowed paths and expected parent refs are always required; plan/task IDs are required only for planned work, while a direct or mechanical packet supplies the request's explicit scoped outcome instead.
+- For a non-fast-forward integration, the exact accepted source HEAD, repository, worktree, purpose, base/target and the semantic review and check evidence.
 - Optional in-memory resume evidence: prior operation SHA, current ref and owned worktree registration. Do not require a checkpoint file or extra run manifest.
 
 Reject ambiguous targets or missing refs before mutation.
@@ -53,8 +54,10 @@ Reject ambiguous targets or missing refs before mutation.
 ### Final integration
 
 - Recheck starting branch and baseline for drift.
+- Before any non-fast-forward merge, compare the actual clean source HEAD with the accepted source HEAD supplied in the packet and refuse any drift; a different or unaccepted HEAD with dirty or unaccepted content stops before merge.
 - Use a non-fast-forward merge from the single coding branch.
 - On conflict or drift, stop with evidence; do not rebase or auto-resolve.
+- Record the resulting delivery merge SHA separately; it need not equal the accepted source HEAD.
 - After success, remove only run-owned branches/worktrees.
 
 ### Workspace repository lifecycle

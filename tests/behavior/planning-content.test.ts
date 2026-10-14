@@ -32,13 +32,16 @@ describe('native prompt contracts', () => {
     expect(text).toMatch(/Do not present options merely to outsource an engineering decision/i);
     expect(text).toMatch(/stop asking questions.*complete confirmation preview/i);
   });
-  it('specifies a single spec review followed by repair without a second review', async () => {
+  it('runs one full spec review, repairs in scope, and permits at most one affected-finding recheck before final confirmation', async () => {
     const text = await readFile(packagePath('templates', 'skills', 'planning', 'SKILL.md'), 'utf8');
-    expect(text).toMatch(/Spec Review exactly once/i);
-    expect(text).toMatch(/without invoking Spec Review again/i);
+    expect(text).toMatch(/(?:one|single|exactly one)[^.\n]{0,24}full[^.\n]{0,24}Spec Review/i);
+    expect(text).toMatch(/targeted recheck/i);
     expect(text).not.toMatch(/Spec Review passed the exact written content/i);
     const reviewer = await readFile(packagePath('templates', 'agents', 'spec-review.md'), 'utf8');
-    expect(reviewer).toMatch(/must not invoke Spec Review a second time/i);
+    expect(reviewer).toMatch(/targeted recheck/i);
+    expect(reviewer, 'a permitted targeted recheck is not a second full review').not.toMatch(
+      /must not invoke Spec Review a second time/i,
+    );
   });
   it('keeps approved planning drafts out of temporary directories while allowing digest writes in the final plan directory', async () => {
     const text = await readFile(packagePath('templates', 'skills', 'planning', 'SKILL.md'), 'utf8');
@@ -195,12 +198,17 @@ describe('native prompt contracts', () => {
     expect(maintainer).toMatch(/primary orchestrator\s+directly\s+dispatches\s+Git\s+Operator/i);
     expect(maintainer).toMatch(/exact changed paths.*validation evidence/is);
   });
-  it('describes optional risk-based coding review', async () => {
+  it('routes review by change class and boundary and repairs the aggregate findings automatically', async () => {
     const coding = (await readFile(packagePath('templates', 'skills', 'coding', 'SKILL.md'), 'utf8')).replace(/\s+/g, ' ');
-    expect(coding).toMatch(/review.*risk|risk.*review/is);
-    expect(coding).toMatch(/Present every finding from both axes together for the user's choice of selected repairs or repairing all findings/i);
-    expect(coding).toMatch(/user's choice of selected repairs or repairing all findings\. Resolve that choice before merge/i);
-    expect(coding).toMatch(/repair never triggers a second Spec Review or Standards Review/i);
+    expect(coding).toMatch(/simultaneous[^.]{0,160}?(?:Spec|Standards)|(?:Spec|Standards)[^.]{0,160}?simultaneous/i);
+    expect(coding).toMatch(/automatic\w*[^.]{0,200}?(?:aggregate|one)[^.]{0,120}?repair|aggregate[^.]{0,160}?repair/i);
+    expect(coding, 'removes the routine selected-versus-all repair choice').not.toMatch(
+      /user's choice of selected repairs or repairing all findings|choice of selected repairs or repairing all findings/i,
+    );
+    expect(coding).toMatch(/targeted recheck/i);
+    expect(coding, 'a targeted recheck is not a second full review').not.toMatch(
+      /repair never triggers a second Spec Review or Standards Review/i,
+    );
   });
   it('documents --project as a project root path with relative and absolute examples', async () => {
     const readme = await readFile(packagePath('README.md'), 'utf8');

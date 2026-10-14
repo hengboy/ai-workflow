@@ -59,7 +59,7 @@ Before drafting, read [the task template](references/task.md) for the full field
 
 ## Coverage and DAG checks
 
-Before previewing, verify complete coverage with no unknown REQ/AC or duplicate task IDs, dependencies naming proposed tasks, an acyclic graph and no parallel overlapping or unknown write scopes. Each task must produce one coherent Git commit with tests proving its AC; screenshot-producing tests name the plan's `screenshot/` directory. Apply the mandatory execution-order reference to the complete graph.
+Before previewing, verify complete coverage with no unknown REQ/AC or duplicate task IDs, dependencies naming proposed tasks, an acyclic graph and no parallel overlapping or unknown write scopes. Each task must produce one coherent Git commit with tests proving its AC; screenshot-producing tests name the plan's `screenshot/` directory. Apply the mandatory execution-order reference to the complete graph. Plan-to-tasks dispatches neither review axis: it starts no Spec Review, no Standards Review and no per-task review trigger.
 
 ## Approval preview
 

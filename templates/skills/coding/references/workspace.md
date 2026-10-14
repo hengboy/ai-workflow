@@ -90,8 +90,9 @@ create a different worktree.
 
 Delivery review covers that repository's tasks; the separate finalization review
 does not re-review delivered tasks. Apply the main simultaneous review/repair gate
-with one bounded aggregate repair. Findings requiring changes in a delivered child
-need out-of-scope support or a new plan; never reopen that child.
+with one bounded aggregate repair and at most one targeted recheck of only the
+affected axes. Findings requiring changes in a delivered child need out-of-scope
+support or a new plan; never reopen that child.
 
 The single `implementation.yaml` follows the main lifecycle, with no extra run
 record, ledger or manifest. Workspace fields are:
@@ -100,7 +101,7 @@ record, ledger or manifest. Workspace fields are:
 | --- | --- |
 | `execution` | Anchor with `purpose` (`tasks` versus `finalization`), canonical `source_root`, `repository`, absolute `worktree`, `branch`, `target_branch` and repository-local `base_commit`. |
 | `task_checkpoints` | `kind: commit` with the task's full commit SHA after scope/parentage/rename checks, or `kind: no-change` with the exact verified HEAD SHA. |
-| `reviewed_commit` | Purpose-scoped exact reviewed HEAD; cannot be reused for another purpose or a changed HEAD. A different purpose does not authorize it again. |
+| `reviewed_commit` | Written only after the aggregate repair, fresh checks, any targeted recheck and closure are accepted; a purpose-scoped exact reviewed HEAD that cannot be reused for another purpose or a changed HEAD. A different purpose does not authorize it again. |
 
 Only the primary writes checkpoints, after Git evidence, through filesystem-only
 `ai-workflow workspace checkpoint --plan <directory> --repo <name>` into that
