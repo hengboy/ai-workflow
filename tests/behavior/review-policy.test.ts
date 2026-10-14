@@ -15,6 +15,18 @@ const SPEC_REVIEW = 'templates/agents/spec-review.md';
 const STANDARDS_REVIEW = 'templates/agents/standards-review.md';
 const GIT_OPERATOR = 'templates/agents/git-operator.md';
 
+// Owners that publish the findings-closure policy in English. The generated contract is
+// the generic authority; the coding skill is the closure actor; the rest are the tracked
+// local mirror and the delivered memory, README and implemented-note alignment.
+const CLOSURE_OWNERS: ReadonlyArray<readonly [string, string]> = [
+  ['templates/project/AGENTS.md', 'the generated project contract'],
+  ['templates/skills/coding/SKILL.md', 'the coding skill'],
+  ['.ai-workflow/AGENTS.md', 'the tracked project contract mirror'],
+  ['MEMORY.md', 'project MEMORY'],
+  ['README.md', 'README'],
+  ['.ai-workflow/notes/implemented/process/2026-10-14-review-boundaries-and-repair.md', 'the implemented review-policy note'],
+];
+
 async function read(path: string): Promise<string> {
   return readFile(packagePath(path), 'utf8');
 }
@@ -31,6 +43,19 @@ function anyMatch(text: string, patterns: RegExp[]): boolean {
 
 function joined(...texts: string[]): string {
   return texts.join(' ');
+}
+
+/**
+ * The findings-closure region around an anchor clause, not the whole document, so an
+ * unrelated mention elsewhere cannot satisfy or mask the requirement.
+ */
+function closureWindow(text: string, anchor: RegExp, before = 500, after = 1400): string {
+  const flat = flatten(text);
+  const match = anchor.exec(flat);
+  if (!match) return '';
+  const start = Math.max(0, match.index - before);
+  const end = Math.min(flat.length, match.index + after);
+  return flat.slice(start, end);
 }
 
 describe('review boundary routing (REQ-001 / AC-001, AC-002)', () => {
@@ -190,6 +215,26 @@ describe('automatic aggregate repair (REQ-003 / AC-004, AC-005)', () => {
       ]),
       'unavailable or failing required evidence remains blocking',
     ).toBe(true);
+  });
+
+  it('requires a reasoned disposition for retained warnings and for demonstrably unsupported or duplicate findings', async () => {
+    const advisoryClause = /warnings?[^.]{0,90}?advisory[^.]{0,200}?(?:reason\w*|disposition|never masks?)/i;
+    const unsupportedOrDuplicateDisposition = [
+      /(?:unsupported|duplicate)[^.]{0,220}?(?:reason\w*|disposition)/i,
+      /(?:reason\w*|disposition)[^.]{0,220}?(?:unsupported|duplicate)/i,
+      /(?:not|never|without)[^.]{0,160}?silen(?:tly|ced?)\s+(?:drop|discard|omit)/i,
+    ];
+
+    for (const [path, label] of CLOSURE_OWNERS) {
+      const text = await read(path);
+      expect(text, `${label} keeps the advisory closure clause`).toMatch(advisoryClause);
+      const closure = closureWindow(text, /warnings?[^.]{0,90}?advisory/i);
+      expect(closure, `${label} publishes one findings-closure region`).not.toBe('');
+      expect(
+        anyMatch(closure, unsupportedOrDuplicateDisposition),
+        `${label} requires a reasoned disposition for demonstrably unsupported or duplicate findings instead of silently dropping them`,
+      ).toBe(true);
+    }
   });
 });
 

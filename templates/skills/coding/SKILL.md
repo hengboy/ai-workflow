@@ -180,7 +180,7 @@ without asking which findings to fix and with no separate routine selection. Tes
 authors required test changes before the implementation role edits production code;
 authorized commands may collect missing evidence. An unfulfilled AC, a cited
 required-standard violation or missing required evidence is a blocker. Warnings are
-advisory and must carry a reasoned disposition; a warning never masks a blocker.
+advisory and must carry a reasoned disposition; a warning never masks a blocker. Demonstrably unsupported or duplicate findings also require reasoned dispositions and must not be silently dropped.
 
 Each boundary permits at most one targeted recheck batch after the one aggregate
 repair: dispatch only the affected axes, and when both axes are affected, dispatch
