@@ -3552,7 +3552,7 @@
         "tests/integration/workspace-finalization-git.test.ts",
         "tests/integration/workspace-status-cli.test.ts"
       ],
-      "shared_entry": false
+      "shared_entry": true
     },
     {
       "id": "project-template-sync",
@@ -3652,7 +3652,7 @@
         "tests/unit/project-template-source.test.ts",
         "tests/unit/project-template-sync.test.ts"
       ],
-      "shared_entry": false
+      "shared_entry": true
     },
     {
       "id": "workspace-coding-orchestration",
@@ -3955,7 +3955,67 @@
         "tests/behavior/change-routing.test.ts",
         "tests/install/skill-installation.test.ts"
       ],
-      "shared_entry": false
+      "shared_entry": true
+    },
+    {
+      "id": "review-boundaries-and-repair",
+      "name": "review-boundaries-and-repair",
+      "aliases": [
+        "review boundaries and repair"
+      ],
+      "module_root": "root",
+      "entries": [
+        "templates/agents/git-operator.md",
+        "templates/agents/spec-review.md",
+        "templates/agents/standards-review.md",
+        "templates/project/AGENTS.md",
+        "templates/skills/coding/SKILL.md",
+        "templates/skills/coding/references/workspace.md",
+        "templates/skills/plan-to-tasks/SKILL.md",
+        "templates/skills/planning/SKILL.md"
+      ],
+      "symbols": [],
+      "related_files": [
+        ".ai-workflow/AGENTS.md",
+        "MEMORY.md",
+        "README.md",
+        ".ai-workflow/notes/implemented/process/2026-10-14-review-boundaries-and-repair.md",
+        ".ai-workflow/notes/implemented/process/2026-10-14-review-boundaries-and-repair.zh.md",
+        ".ai-workflow/notes/implemented/process/2026-09-22-change-routing.md",
+        ".ai-workflow/notes/implemented/process/2026-09-23-planning-coding-session-boundary.md",
+        ".ai-workflow/notes/implemented/process/2026-10-14-automatic-implementation-commit.md",
+        ".ai-workflow/notes/implemented/feature/2026-10-09-workspace-coding-orchestration.md"
+      ],
+      "tests": [
+        "tests/behavior/planning-content.test.ts",
+        "tests/behavior/review-policy.test.ts"
+      ],
+      "depends_on": [],
+      "relations": [],
+      "owner_role": "shared",
+      "responsibility": "Delivered class-boundary review and repair policy: the change class is the only routine review trigger with Direct and Mechanical changes dispatching neither axis, Planning dispatching the Spec Review only and plan-to-tasks neither, one simultaneous full Spec/Standards pair after implementation and required checks before integration, an automatic one aggregate in-scope repair with at most one affected-axis targeted recheck, separate execution Status and review Verdict, and the accepted clean source HEAD compared by Git Operator before a distinct non-fast-forward delivery merge",
+      "read_scope": [
+        ".ai-workflow/AGENTS.md",
+        ".ai-workflow/notes/implemented/feature/2026-10-09-workspace-coding-orchestration.md",
+        ".ai-workflow/notes/implemented/process/2026-09-22-change-routing.md",
+        ".ai-workflow/notes/implemented/process/2026-09-23-planning-coding-session-boundary.md",
+        ".ai-workflow/notes/implemented/process/2026-10-14-automatic-implementation-commit.md",
+        ".ai-workflow/notes/implemented/process/2026-10-14-review-boundaries-and-repair.md",
+        ".ai-workflow/notes/implemented/process/2026-10-14-review-boundaries-and-repair.zh.md",
+        "MEMORY.md",
+        "README.md",
+        "templates/agents/git-operator.md",
+        "templates/agents/spec-review.md",
+        "templates/agents/standards-review.md",
+        "templates/project/AGENTS.md",
+        "templates/skills/coding/SKILL.md",
+        "templates/skills/coding/references/workspace.md",
+        "templates/skills/plan-to-tasks/SKILL.md",
+        "templates/skills/planning/SKILL.md",
+        "tests/behavior/planning-content.test.ts",
+        "tests/behavior/review-policy.test.ts"
+      ],
+      "shared_entry": true
     }
   ]
 }
