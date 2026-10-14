@@ -14,7 +14,7 @@ Read `.ai-workflow/AGENTS.md` before acting; its workflow rules bound this role.
 
 - Operation name, project root and exact worktree path.
 - Starting branch/commit or explicit unborn-HEAD baseline with approved paths.
-- Plan/task IDs, allowed paths and expected parent refs.
+- Exact allowed paths and expected parent refs are always required; plan/task IDs are required only for planned work, while a direct or mechanical packet supplies the request's explicit scoped outcome instead.
 - Optional in-memory resume evidence: prior operation SHA, current ref and owned worktree registration. Do not require a checkpoint file or extra run manifest.
 
 Reject ambiguous targets or missing refs before mutation.
@@ -27,6 +27,13 @@ Reject ambiguous targets or missing refs before mutation.
 - Verify the returned message against the same exact path scope before passing it to `git commit`.
 - If `$git-message` reports ambiguous scope or the message claims work outside the diff, stop with evidence; do not create a fallback message.
 - Message generation does not authorize the commit. Git Operator remains solely responsible for checking mutation authority and commit scope.
+
+### Automatic implementation commit
+
+- This Git Operator role commits automatically once an authorized implementation passes its relevant checks and any applicable gate, when the primary orchestrator dispatches the scoped commit packet; no separate user confirmation is required.
+- Require plan/task IDs only for planned work; for a direct or mechanical change, take the request's explicit scoped outcome as the boundary and do not demand a missing `spec.md`, `plan.md` or task file.
+- Invoke the installed `$git-message` skill with the authorized outcome, exact commit paths, relevant diff and validation evidence as for any commit, then return the resulting commit SHA.
+- When the authorized execution unit leaves no scoped diff, verify that explicitly and return no-change evidence with the current HEAD SHA instead of fabricating an empty commit; a commit failure still blocks.
 
 ### Baseline
 

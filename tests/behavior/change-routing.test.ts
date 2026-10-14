@@ -217,3 +217,82 @@ describe('change routing guidance', () => {
     }
   });
 });
+
+// Behavior boundary: the shipped instruction text is the public contract that decides
+// whether an implementation is committed automatically through Git Operator and whether
+// a run may report `done` without a successful commit. Direct and mechanical execution
+// units keep the same commit requirement as planned work.
+describe('automatic implementation commit', () => {
+  // "Automatic delegation to Git Operator" in one period-delimited thought.
+  const automaticGitOperator =
+    /automatic\w*[^.]{0,160}?Git Operator|Git Operator[^.]{0,160}?automatic\w*/i;
+
+  function sentencesWith(text: string, pattern: RegExp): string[] {
+    return text.split(/(?<=[.!?])\s+/).filter((sentence) => pattern.test(sentence));
+  }
+
+  it('requires an automatic Git Operator commit and a commit-backed done gate on planned, direct and mechanical routes', async () => {
+    const contract = flatten(await read('templates/project/AGENTS.md'));
+    const coding = await read('templates/skills/coding/SKILL.md');
+    const codingFlat = flatten(coding);
+    const commitInstruction = flatten(section(coding, '## Verification and Commit'));
+    const checklist = flatten(section(coding, '## Completion checklist'));
+    const gate = `${commitInstruction} ${checklist}`;
+    const operator = flatten(await read('templates/agents/git-operator.md'));
+
+    // 1. The project contract and the Coding commit instructions make the
+    //    implementation commit an automatic delegation to Git Operator.
+    expect(
+      contract,
+      'the project contract states the implementation commit is automatically delegated to Git Operator',
+    ).toMatch(automaticGitOperator);
+    expect(
+      commitInstruction,
+      'Coding Verification and Commit states the implementation commit is automatically delegated to Git Operator',
+    ).toMatch(automaticGitOperator);
+
+    // 2. The automatic commit covers planned, direct and mechanical changes.
+    const automaticCommits = sentencesWith(
+      codingFlat,
+      /automatic\w*[^.]{0,200}?(?:commit|Git Operator)/i,
+    );
+    for (const changeClass of ['planned', 'direct', 'mechanical']) {
+      expect(
+        automaticCommits.some((sentence) => new RegExp(changeClass, 'i').test(sentence)),
+        `the automatic Git Operator commit explicitly covers ${changeClass} changes`,
+      ).toBe(true);
+    }
+
+    // 3. An already authorized implementation needs no separate commit confirmation.
+    expect(
+      gate,
+      'Coding removes a separate user confirmation before committing an already authorized implementation',
+    ).toMatch(/(?:no|without|never)[^.]{0,100}?confirm\w*/i);
+    expect(
+      gate,
+      'the no-extra-confirmation rule names the already authorized implementation',
+    ).toMatch(/authoriz\w*/i);
+
+    // 4. The done gate is backed by a successful commit and names its SHA; a failed
+    //    or blocked commit cannot return done.
+    expect(checklist, 'the completion checklist gates done on the commit result').toMatch(
+      /(?:done|complete)[^.]{0,200}?commit|commit[^.]{0,200}?(?:done|complete)/i,
+    );
+    expect(checklist, 'the success gate names the commit SHA').toMatch(
+      /commit[^.]{0,80}?SHA|SHA[^.]{0,80}?commit/i,
+    );
+    expect(checklist, 'a failed or blocked commit prevents done').toMatch(
+      /commit[^.]{0,140}?(?:fail\w*|block\w*)|(?:fail\w*|block\w*)[^.]{0,140}?commit/i,
+    );
+
+    // 5. The Completion checklist and the Git Operator role agree on the automatic commit.
+    expect(
+      checklist,
+      'the completion checklist and the Git Operator role agree that the commit happens automatically',
+    ).toMatch(automaticGitOperator);
+    expect(
+      operator,
+      'the Git Operator role documents the automatic implementation commit',
+    ).toMatch(automaticGitOperator);
+  });
+});
