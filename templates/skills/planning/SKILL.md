@@ -116,14 +116,18 @@ Before drafting, read [the specification template](references/spec.md), [the imp
 
 ## Draft and review workflow
 
+Draft, review and repair happen before final approval; freezing happens only after it.
+
+1. Draft both documents in memory with all sides defined above. You must not write drafts, snapshots or other planning artifacts to a system temporary directory or any path outside the plan directory. The primary reads existing `MEMORY.md` directly while drafting and never dispatches a routine Standards Review.
+2. Run one full Spec Review before presenting the final confirmation preview, with exactly one dispatch, to check coverage, testability, contradictions, read/write bounds, sequencing, rollback and role assignment.
+3. The primary automatically repairs every in-scope finding within the settled intent, without asking which findings to fix. If a repair affects a finding, dispatch at most one targeted recheck of only the affected findings with the original labels, the repair diff and fresh evidence; never start a second full review. A material user change after review invalidates this reviewed draft: stop its freeze and establish a new planning boundary and Plan ID instead of reusing stale review evidence or reviewing the same boundary again.
+4. Only after the draft review and any in-scope repair or targeted recheck are accepted, show the complete final inventory in one preview and obtain explicit approval.
+
 After approval:
 
-1. Draft both documents in memory with all sides defined above. You must not write drafts, snapshots or other planning artifacts to a system temporary directory or any path outside the plan directory. If SHA-256 calculation requires filesystem input, materialize `spec.md` and `plan.md` directly in `.ai-workflow/plans/<planId>/`, re-read them there for the digest, and update or replace those same files there before freezing; no outside intermediate copies.
-2. Ask Spec Review exactly once to check coverage, testability, contradictions, read/write bounds, sequencing, rollback and role assignment.
-3. Any error finding fails the gate: revise the draft, show the full changed inventory and obtain renewed user approval, then continue without invoking Spec Review again.
-4. Only after the review passes or its findings are repaired and accepted, finalize both language sides, set each English `digest: ""`, calculate and fill it using the mandatory digest protocol, and write all six frozen files atomically in the plan directory. A missing `.zh.md` or `.i18n.yaml` is an incomplete triplet; never freeze either English document without both companions.
-5. Re-read all six files; verify shared plan ID, counts, frozen status and content digests.
-6. Record the pair with `ai-workflow plan pairing --plan <directory> --write spec plan`, then run `ai-workflow plan validate --plan <directory>`. This is a hard completion gate: repair missing companions, wrong switchers, structure mismatches or stale digests, re-record and revalidate until it passes. No completion or Plan-to-tasks/Coding handoff while any triplet is incomplete.
+5. Materialize `spec.md` and `plan.md` directly in `.ai-workflow/plans/<planId>/`; if SHA-256 calculation requires filesystem input, re-read them there for the digest and update or replace those same files there before freezing. Finalize both language sides, set each English `digest: ""`, calculate and fill it using the mandatory digest protocol, and write all six frozen files atomically in the plan directory. A missing `.zh.md` or `.i18n.yaml` is an incomplete triplet; never freeze either English document without both companions.
+6. Re-read all six files; verify shared plan ID, counts, frozen status and content digests.
+7. Record the pair with `ai-workflow plan pairing --plan <directory> --write spec plan`, then run `ai-workflow plan validate --plan <directory>`. This is a hard completion gate: repair missing companions, wrong switchers, structure mismatches or stale digests, re-record and revalidate until it passes. No completion or Plan-to-tasks/Coding handoff while any triplet is incomplete.
 
 The planning primary owns writes; Spec Review is read-only. Planning artifacts are gitignored local, untracked files. Planning creates no Git commit: do not dispatch Git Operator and do not stage or commit any planning artifact.
 

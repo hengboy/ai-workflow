@@ -1,6 +1,6 @@
 ---
 name: coding
-description: Implements a scoped coding change, directly or from a frozen plan, with test-driven development and risk-proportional review.
+description: Implements a scoped coding change, directly or from a frozen plan, with test-driven development and class-based review.
 ---
 
 # Coding
@@ -127,7 +127,8 @@ phase with bounded support instead of broader scope.
   `.ai-workflow/plans/` and dependencies stay visible and single-source at the project root;
   `MEMORY.md`, navigation and notes arrive through Git. Every coding execution unit
   implements, validates and commits inside that single worktree; merge/remove only
-  its owned worktree and branch. Planning, TDD and review depth stay risk-proportional.
+  its owned worktree and branch. Planning and TDD depth stay risk-proportional while
+  review boundaries follow the change class.
 - Create a Todo list before editing and keep it current. Each step must state its
   scope, acceptance evidence and commit point.
 - Use a Todo list when it improves clarity; keep it proportional to the change.
@@ -162,13 +163,33 @@ typecheck, lint, build or integration checks. Report changed paths and every res
 Self-check once per step and dispatch Git Operator for its scoped commit, retaining
 the split-plan whole-phase barrier and serial commits.
 
-After implementation, run relevant validation. For a planned or other larger or
-high-risk change, the dual-axis review runs exactly once: delegate Spec Review and
-Standards Review simultaneously in one parallel batch with identical evidence,
+After implementation, run relevant validation. An ordinary planned change, split
+or unsplit, runs one simultaneous full Spec Review and Standards Review batch after
+implementation and its required checks and before integration: delegate Spec Review
+and Standards Review simultaneously in one parallel batch with identical evidence,
 never Spec first and Standards after Spec completes. This is the review-side
 exception to serial dispatch; request Test as useful. Spec Review checks frozen
 requirements and acceptance criteria; Standards Review checks `MEMORY.md`.
-A direct or mechanical change runs the relevant checks without the dual-axis review.
+There is no per-task, per-phase or per-commit review trigger, and no undefined
+larger or high-risk trigger beyond the change class. A direct or mechanical change
+runs the relevant checks without the dual-axis review.
+
+The primary aggregates both axes' findings and automatically delegates one aggregate
+repair for evidenced defects within the frozen acceptance and existing write scope,
+without asking which findings to fix and with no separate routine selection. Test
+authors required test changes before the implementation role edits production code;
+authorized commands may collect missing evidence. An unfulfilled AC, a cited
+required-standard violation or missing required evidence is a blocker. Warnings are
+advisory and must carry a reasoned disposition; a warning never masks a blocker. Demonstrably unsupported or duplicate findings also require reasoned dispositions and must not be silently dropped.
+
+Each boundary permits at most one targeted recheck batch after the one aggregate
+repair: dispatch only the affected axes, and when both axes are affected, dispatch
+them simultaneously in one batch. The recheck binds the original finding labels, the
+repair diff, the affected REQ/AC or `MEMORY.md` clauses and fresh evidence including
+repair-induced regressions; it never starts a second full repository review.
+Reviewers stay read-only and Test runs the commands. An unresolved blocker or an
+unavailable recheck stops as `blocked` or `failed` with bounded support; there is no
+second repair or review loop.
 
 Once an authorized implementation passes the relevant checks and any applicable
 gate, the primary automatically delegates the scoped local commit to the
@@ -178,12 +199,15 @@ implementation, a no-scoped-diff execution unit returns Git Operator's verified
 no-change evidence with the current HEAD SHA instead of an empty commit, and a
 failed or blocked commit is reported as `blocked` or `failed`, never `done`.
 
-Present every finding from both axes together for the user's choice of selected
-repairs or repairing all findings. Resolve that choice before merge; repair never
-triggers a second Spec Review or Standards Review. After all steps and the applicable
-gate, Git Operator merges the temporary branch, reruns affected checks and removes
-only the owned worktree/branch. Never stage unrelated user changes, expand scope,
-search outside the packet, publish or edit frozen planning artifacts.
+Before a non-fast-forward integration of the temporary branch, the primary supplies
+the exact accepted source HEAD, repository, worktree, purpose, base and target plus
+the semantic review and check evidence. Git Operator alone compares the actual clean
+source HEAD with that accepted HEAD and refuses drift before merge; the resulting
+delivery merge SHA is recorded separately and need not equal the source HEAD. After
+all steps and the applicable gate, Git Operator merges the temporary branch, reruns
+affected checks and removes only the owned worktree/branch. Never stage unrelated
+user changes, expand scope, search outside the packet, publish or edit frozen
+planning artifacts.
 
 ## Note Maintenance
 
