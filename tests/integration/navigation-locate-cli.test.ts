@@ -306,4 +306,37 @@ describe('generated project locate and refresh (Step 5 fixtures)', () => {
     const validation = await exec('pnpm', ['exec', 'tsx', 'src/cli.ts', 'context', 'validate', '--project', project, '--all']);
     expect(JSON.parse(validation.stdout)).toEqual({ valid: true, errors: [] });
   });
+
+  it('initializes and locates a route file with a dollar-prefixed dynamic segment', async () => {
+    const route = 'apps/case/src/pages/case/detail/$caseId/index.tsx';
+    const { project, index } = await initProject({
+      [route]: 'export default function CaseDetail(): void {}\n'
+    });
+    const feature = index.features.find((entry) => entry.entries.includes(route));
+    expect(feature).toBeDefined();
+
+    const validation = await exec('pnpm', ['exec', 'tsx', 'src/cli.ts', 'context', 'validate', '--project', project, '--all']);
+    expect(JSON.parse(validation.stdout)).toEqual({ valid: true, errors: [] });
+
+    await expect(locate(project, '--feature', feature!.id, '--verify')).resolves.toMatchObject({
+      status: 'hit', feature: feature!.id, entries: [route], fallback_required: false
+    });
+  });
+
+  it('locates a generated barrel star re-export feature with verification', async () => {
+    const { project } = await initProject({
+      'src/schema.ts': 'export interface Profile { name: string; }\n',
+      'src/index.ts': "export * from './schema.js';\n",
+      'src/use.ts': "import type { Profile } from './index.js';\nexport function useProfile(value: Profile): void { void value; }\n"
+    });
+
+    const validation = await exec('pnpm', ['exec', 'tsx', 'src/cli.ts', 'context', 'validate', '--project', project, '--all']);
+    expect(JSON.parse(validation.stdout)).toEqual({ valid: true, errors: [] });
+
+    const located = await locate(project, '--feature', 'src', '--verify');
+    expect(located).toMatchObject({ status: 'hit', feature: 'src', fallback_required: false });
+    const readOrder = (located as { read_order: string[] }).read_order;
+    expect(readOrder).toContain('src/schema.ts');
+    expect(readOrder).toContain('src/index.ts');
+  });
 });

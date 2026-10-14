@@ -29,11 +29,11 @@ function isWithin(root: string, target: string): boolean {
 }
 
 function concreteDirectory(path: string): boolean {
-  return path.length > 0 && path !== '.' && !isAbsolute(path) && !path.endsWith('/') && !path.split('/').some((segment) => segment === '.' || segment === '..' || segment.length === 0) && !/[?*[\]{}$<>]/.test(path);
+  return path.length > 0 && path !== '.' && !isAbsolute(path) && !path.endsWith('/') && !path.split('/').some((segment) => segment === '.' || segment === '..' || segment.length === 0) && !/[?*[\]{}<>]/.test(path);
 }
 
 function exactFilePath(path: string): boolean {
-  return path.length > 0 && !isAbsolute(path) && !path.endsWith('/') && !path.split('/').some((segment) => segment === '.' || segment === '..' || segment.length === 0) && !/[?*[\]{}$<>]/.test(path);
+  return path.length > 0 && !isAbsolute(path) && !path.endsWith('/') && !path.split('/').some((segment) => segment === '.' || segment === '..' || segment.length === 0) && !/[?*[\]{}<>]/.test(path);
 }
 
 function hasOneTarget(target: FallbackTarget): boolean {

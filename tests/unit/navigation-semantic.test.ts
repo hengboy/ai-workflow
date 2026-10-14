@@ -301,6 +301,58 @@ describe('navigation re-export recognition', () => {
   });
 });
 
+// A barrel `export * from './schema.js'` re-exports the definition file's symbols
+// without declaring them itself, so the relation stays pointed at the barrel.
+function starReexportNavigation(): NavigationIndex {
+  return {
+    version: 1,
+    module_roots: [{ id: 'src', path: 'src', owner_role: 'shared', responsibility: 'source', language: 'typescript', entry_kinds: ['exported-symbol'] }],
+    features: [{
+      id: 'src', name: 'src', aliases: [], module_root: 'src',
+      entries: ['src/schema.ts', 'src/use.ts'],
+      symbols: [
+        { file: 'src/schema.ts', name: 'Profile', kind: 'interface', visibility: 'public' },
+        { file: 'src/use.ts', name: 'useProfile', kind: 'function', visibility: 'public' }
+      ],
+      related_files: ['src/index.ts'], tests: [], depends_on: [],
+      relations: [{ kind: 'imports', from: 'src/use.ts#useProfile', to: 'src/index.ts#Profile' }],
+      owner_role: 'shared', responsibility: 'source',
+      read_scope: ['src/index.ts', 'src/schema.ts', 'src/use.ts'], shared_entry: false
+    }]
+  };
+}
+
+async function starReexportProject(index = starReexportNavigation()): Promise<string> {
+  const project = await temporary('ai-workflow-navigation-semantic-star-');
+  await mkdir(join(project, 'src'), { recursive: true });
+  await mkdir(join(project, '.ai-workflow/index'), { recursive: true });
+  await writeFile(join(project, 'src/schema.ts'), 'export interface Profile { name: string; }\n');
+  await writeFile(join(project, 'src/index.ts'), "export * from './schema.js';\n");
+  await writeFile(join(project, 'src/use.ts'), "import type { Profile } from './index.js';\nexport function useProfile(value: Profile): void { void value; }\n");
+  await writeFile(join(project, '.ai-workflow/index/navigation.json'), `${JSON.stringify(index)}\n`);
+  await writeFile(join(project, '.ai-workflow/index/navigation.md'), renderNavigation(index));
+  return project;
+}
+
+describe('navigation barrel star re-export recognition', () => {
+  it('accepts full validation and feature verification through a star re-export', async () => {
+    const project = await starReexportProject();
+
+    await expect(validateContext(project)).resolves.toMatchObject({ valid: true, errors: [] });
+    await expect(verifyNavigation(project, 'src')).resolves.toMatchObject({ valid: true, errors: [] });
+  });
+
+  it('still marks the feature stale when the barrel target no longer exports the type', async () => {
+    const project = await starReexportProject();
+    await writeFile(join(project, 'src/schema.ts'), 'export interface Renamed { name: string; }\n');
+
+    const result = await verifyNavigation(project, 'src');
+
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((error) => error.includes('Profile'))).toBe(true);
+  });
+});
+
 function projectRootNavigation(): NavigationIndex {
   return {
     version: 1,

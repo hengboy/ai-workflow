@@ -42,6 +42,17 @@ describe('navigation fallback authorization', () => {
     if (result.status === 'blocked') expect(result.reason).toMatch(error);
   });
 
+  it('authorizes a dollar-prefixed segment in a module root and known path', async () => {
+    const project = await temporary('ai-workflow-navigation-fallback-');
+    await mkdir(join(project, 'apps/case/src/pages/case/detail/$caseId'), { recursive: true });
+    await writeFile(join(project, 'apps/case/src/pages/case/detail/$caseId/index.tsx'), 'export default function CaseDetail(): void {}\n');
+
+    await expect(authorizeFallback(project, packet({
+      module_roots: ['apps/case/src/pages/case/detail/$caseId'],
+      known_paths: ['apps/case/src/pages/case/detail/$caseId/index.tsx']
+    }))).resolves.toEqual({ status: 'authorized', module_roots: ['apps/case/src/pages/case/detail/$caseId'] });
+  });
+
   it('blocks a module-root symlink that resolves outside the project', async () => {
     const project = await temporary('ai-workflow-navigation-fallback-');
     const outside = await temporary('ai-workflow-navigation-outside-');

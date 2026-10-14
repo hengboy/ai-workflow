@@ -54,7 +54,10 @@ describe('navigation index contract', () => {
   it.each([
     ['src/', /exact regular file/i],
     ['src/**/*.ts', /exact regular file/i],
-    ['${SOURCE_FILE}', /exact regular file/i]
+    ['${SOURCE_FILE}', /exact regular file/i],
+    ['apps/case/src/pages/[caseId]/index.tsx', /exact regular file/i],
+    ['apps/case/src/pages/<caseId>/index.tsx', /exact regular file/i],
+    ['apps/case/src/pages/?.tsx', /exact regular file/i]
   ])('rejects non-exact read scope path %s', async (path, error) => {
     const project = await projectWithNavigation({
       ...navigation,

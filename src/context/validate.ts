@@ -32,7 +32,7 @@ export interface NavigationRefreshCandidate {
 }
 
 function isExactPath(path: string): boolean {
-  return path.length > 0 && !isAbsolute(path) && !path.endsWith('/') && !path.split('/').some((segment) => segment === '.' || segment === '..' || segment.length === 0) && !/[?*[\]{}$<>]/.test(path);
+  return path.length > 0 && !isAbsolute(path) && !path.endsWith('/') && !path.split('/').some((segment) => segment === '.' || segment === '..' || segment.length === 0) && !/[?*[\]{}<>]/.test(path);
 }
 
 function isWithin(root: string, target: string): boolean {
@@ -133,7 +133,7 @@ function conventionalJavaTestRoot(modulePath: string, files: DiscoveredFile[]): 
   return files.some((file) => file.path === root || file.path.startsWith(`${root}/`)) ? root : undefined;
 }
 
-function declarations(source: ts.SourceFile): Map<string, Array<{ kind: string; exported: boolean }>> {
+function declarations(source: ts.SourceFile, includeDefault = true): Map<string, Array<{ kind: string; exported: boolean }>> {
   const result = new Map<string, Array<{ kind: string; exported: boolean }>>();
   const add = (name: string | undefined, kind: string, exported: boolean): void => {
     if (!name) return;
@@ -143,6 +143,7 @@ function declarations(source: ts.SourceFile): Map<string, Array<{ kind: string; 
   };
   const exported = (node: ts.Node): boolean => ts.canHaveModifiers(node) && Boolean(ts.getModifiers(node)?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword));
   for (const statement of source.statements) {
+    if (!includeDefault && ts.canHaveModifiers(statement) && ts.getModifiers(statement)?.some((modifier) => modifier.kind === ts.SyntaxKind.DefaultKeyword)) continue;
     const visibility = exported(statement);
     if (ts.isFunctionDeclaration(statement)) add(statement.name?.text, 'function', visibility);
     else if (ts.isClassDeclaration(statement)) add(statement.name?.text, 'class', visibility);
@@ -165,17 +166,21 @@ function relationKey(relation: { kind: string; from: string; to: string }): stri
   return `${relation.kind} ${relation.from} -> ${relation.to}`;
 }
 
+function moduleFileCandidates(file: string, specifier: string): string[] {
+  const base = join(dirname(file), specifier).replace(/\\/g, '/').replace(/\.(?:js|jsx|mjs|cjs|ts|tsx)$/, '');
+  return [
+    `${base}.ts`, `${base}.tsx`, `${base}.js`, `${base}.jsx`, `${base}.mjs`, `${base}.cjs`,
+    `${base}/index.ts`, `${base}/index.tsx`, `${base}/index.js`, `${base}/index.jsx`, `${base}/index.mjs`, `${base}/index.cjs`
+  ];
+}
+
 function directImports(file: string, source: ts.SourceFile, files: Set<string>): Map<string, { file: string; name: string }> {
   const bindings = new Map<string, { file: string; name: string }>();
   for (const statement of source.statements) {
     if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier) || !statement.importClause?.namedBindings || !ts.isNamedImports(statement.importClause.namedBindings)) continue;
     const specifier = statement.moduleSpecifier.text;
     if (!specifier.startsWith('.')) continue;
-    const base = join(dirname(file), specifier).replace(/\\/g, '/').replace(/\.(?:js|jsx|mjs|cjs|ts|tsx)$/, '');
-    const target = [
-      `${base}.ts`, `${base}.tsx`, `${base}.js`, `${base}.jsx`, `${base}.mjs`, `${base}.cjs`,
-      `${base}/index.ts`, `${base}/index.tsx`, `${base}/index.js`, `${base}/index.jsx`, `${base}/index.mjs`, `${base}/index.cjs`
-    ].find((candidate) => files.has(candidate));
+    const target = moduleFileCandidates(file, specifier).find((candidate) => files.has(candidate));
     if (!target) continue;
     for (const imported of statement.importClause.namedBindings.elements) bindings.set(imported.name.text, { file: target, name: imported.propertyName?.text ?? imported.name.text });
   }
@@ -270,6 +275,32 @@ function relationReference(value: string): { file: string; name: string } | unde
   return { file: value.slice(0, separator), name: value.slice(separator + 1) };
 }
 
+async function starExportDeclarations(project: string, file: string, source: ts.SourceFile, name: string, visited = new Set<string>()): Promise<Array<{ kind: string; exported: boolean }>> {
+  const realFile = await realpath(join(project, file));
+  if (name === 'default' || visited.has(realFile)) return [];
+  visited.add(realFile);
+  const realProject = await realpath(project);
+  const result: Array<{ kind: string; exported: boolean }> = [];
+  for (const statement of source.statements) {
+    if (!ts.isExportDeclaration(statement) || statement.exportClause || !statement.moduleSpecifier || !ts.isStringLiteral(statement.moduleSpecifier)) continue;
+    const specifier = statement.moduleSpecifier.text;
+    if (!specifier.startsWith('./') && !specifier.startsWith('../')) continue;
+    for (const candidate of moduleFileCandidates(file, specifier)) {
+      const target = resolve(project, candidate);
+      let exportedSource: ts.SourceFile;
+      try {
+        if (!isWithin(project, target) || !(await lstat(target)).isFile() || !isWithin(realProject, await realpath(target))) continue;
+        exportedSource = ts.createSourceFile(candidate, await readFile(target, 'utf8'), ts.ScriptTarget.Latest, true);
+      } catch { continue; }
+      const exported = (declarations(exportedSource, false).get(name) ?? []).filter((declaration) => declaration.exported);
+      if (exported.length) result.push(...exported);
+      else result.push(...await starExportDeclarations(project, candidate, exportedSource, name, visited));
+      break;
+    }
+  }
+  return result;
+}
+
 async function validateTypeScriptSymbol(project: string, file: string, name: string, kind: string | undefined, visibility: 'public' | 'private' | undefined, errors: string[]): Promise<void> {
   const source = ts.createSourceFile(file, await readFile(join(project, file), 'utf8'), ts.ScriptTarget.Latest, true);
   const candidates = declarations(source).get(name) ?? [];
@@ -283,7 +314,8 @@ async function validateTypeScriptSymbol(project: string, file: string, name: str
   };
   visit(source);
   const allCandidates = [...candidates, ...(nested.get(name) ?? [])];
-  const exists = allCandidates.some((candidate) => (!kind || !syntaxKinds.has(kind) || candidate.kind === kind) && (visibility !== 'public' || candidate.exported));
+  let exists = allCandidates.some((candidate) => (!kind || !syntaxKinds.has(kind) || candidate.kind === kind) && (visibility !== 'public' || candidate.exported));
+  if (!exists && visibility === 'public') exists = (await starExportDeclarations(project, file, source, name)).some((candidate) => !kind || !syntaxKinds.has(kind) || candidate.kind === kind);
   if (!exists) errors.push(`Navigation index is stale: ${file} no longer contains ${name}`);
 }
 

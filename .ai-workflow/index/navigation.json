@@ -1673,6 +1673,9 @@
         }
       ],
       "related_files": [
+        ".ai-workflow/notes/implemented/bug-fix/2026-10-14-frontend-navigation-validation.i18n.yaml",
+        ".ai-workflow/notes/implemented/bug-fix/2026-10-14-frontend-navigation-validation.md",
+        ".ai-workflow/notes/implemented/bug-fix/2026-10-14-frontend-navigation-validation.zh.md",
         "src/cli.ts"
       ],
       "tests": [],
@@ -3007,6 +3010,9 @@
       "owner_role": "shared",
       "responsibility": "Discovered typescript module at src",
       "read_scope": [
+        ".ai-workflow/notes/implemented/bug-fix/2026-10-14-frontend-navigation-validation.i18n.yaml",
+        ".ai-workflow/notes/implemented/bug-fix/2026-10-14-frontend-navigation-validation.md",
+        ".ai-workflow/notes/implemented/bug-fix/2026-10-14-frontend-navigation-validation.zh.md",
         "src/cli.ts",
         "src/context/discovery/adapters.ts",
         "src/context/discovery/builder.ts",
