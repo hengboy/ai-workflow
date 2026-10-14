@@ -31,7 +31,13 @@ Never run Planning to restate a request with clear, bounded intent, and never
 label a change direct to skip required checks or evidence. Ask the user only
 when these rules cannot classify the request. A direct or mechanical change
 still executes as one coding execution unit with its worktree and Git Operator
-commit; only the planning artifacts and the dual-axis review are skipped.
+commit; that same automatic commit gate covers planned, direct and mechanical
+changes alike, and only the planning artifacts and the dual-axis review are
+skipped. Once an authorized implementation passes its relevant checks and any
+applicable gate, the primary automatically delegates the scoped local commit to
+the `git-operator` sub-agent (Git Operator), with no separate commit
+confirmation; the mandate is implementation completion, so a planning-only
+session still ends at its handoff.
 
 ## Delegation and Scheduling
 
@@ -164,6 +170,14 @@ exception to serial dispatch; request Test as useful. Spec Review checks frozen
 requirements and acceptance criteria; Standards Review checks `MEMORY.md`.
 A direct or mechanical change runs the relevant checks without the dual-axis review.
 
+Once an authorized implementation passes the relevant checks and any applicable
+gate, the primary automatically delegates the scoped local commit to the
+`git-operator` sub-agent (Git Operator) for planned, direct and mechanical
+changes, with no separate user confirmation; this commit completes the
+implementation, a no-scoped-diff execution unit returns Git Operator's verified
+no-change evidence with the current HEAD SHA instead of an empty commit, and a
+failed or blocked commit is reported as `blocked` or `failed`, never `done`.
+
 Present every finding from both axes together for the user's choice of selected
 repairs or repairing all findings. Resolve that choice before merge; repair never
 triggers a second Spec Review or Standards Review. After all steps and the applicable
@@ -249,7 +263,16 @@ repository ownership and plain plan-ID references; also apply Note Maintenance a
   and test evidence from a completed red -> green slice.
 - Every slice was verified, self-checked once, and committed before the next
   slice began; commits contain only that slice's scoped changes.
+- The primary automatically delegated the scoped local commit to the
+  `git-operator` sub-agent (Git Operator) once the relevant checks and any
+  applicable gate passed, and recorded the returned commit SHA or, for a
+  no-scoped-diff execution unit, Git Operator's verified no-change evidence with
+  the current HEAD SHA; a failed or blocked commit was reported as `blocked` or
+  `failed`, never as `done`.
 - Negative cases and failure output are reported truthfully.
 - Screenshots remain under `.ai-workflow/plans/<planId>/screenshot/`.
 - Every non-mechanical change updated its relevant note and `ai-workflow notes validate` passed.
-- Return `done` only when all scoped checks pass; otherwise return `blocked` or `failed` with support requests.
+- Return `done` only when all scoped checks pass and the `git-operator`
+  sub-agent (Git Operator) returned the scoped commit SHA or verified no-change
+  evidence with the current HEAD SHA; otherwise return `blocked` or `failed`
+  with support requests.

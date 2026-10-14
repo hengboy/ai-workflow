@@ -3914,6 +3914,48 @@
         "tests/unit/workspace-execution.test.ts"
       ],
       "shared_entry": false
+    },
+    {
+      "id": "automatic-implementation-commit",
+      "name": "automatic-implementation-commit",
+      "aliases": [
+        "automatic implementation commit"
+      ],
+      "module_root": "root",
+      "entries": [
+        "templates/agents/git-operator.md",
+        ".ai-workflow/notes/implemented/process/2026-10-14-automatic-implementation-commit.md"
+      ],
+      "symbols": [],
+      "related_files": [
+        "templates/skills/coding/SKILL.md",
+        "templates/project/AGENTS.md",
+        ".ai-workflow/AGENTS.md",
+        "README.md",
+        "MEMORY.md",
+        ".ai-workflow/notes/implemented/process/2026-10-14-automatic-implementation-commit.zh.md"
+      ],
+      "tests": [
+        "tests/behavior/change-routing.test.ts",
+        "tests/install/skill-installation.test.ts"
+      ],
+      "depends_on": [],
+      "relations": [],
+      "owner_role": "shared",
+      "responsibility": "Automatic implementation commit: an authorized planned, direct or mechanical implementation is committed locally by the git-operator sub-agent with no separate confirmation, and done requires the commit SHA while a failed or blocked commit is reported as blocked or failed",
+      "read_scope": [
+        ".ai-workflow/AGENTS.md",
+        ".ai-workflow/notes/implemented/process/2026-10-14-automatic-implementation-commit.md",
+        ".ai-workflow/notes/implemented/process/2026-10-14-automatic-implementation-commit.zh.md",
+        "MEMORY.md",
+        "README.md",
+        "templates/agents/git-operator.md",
+        "templates/project/AGENTS.md",
+        "templates/skills/coding/SKILL.md",
+        "tests/behavior/change-routing.test.ts",
+        "tests/install/skill-installation.test.ts"
+      ],
+      "shared_entry": false
     }
   ]
 }
