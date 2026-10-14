@@ -212,3 +212,137 @@ describe('parent workspace execution route', () => {
     );
   });
 });
+
+/**
+ * The whitespace-normalized text of one level-two section, so a required rule must
+ * appear inside its own normative section instead of an unrelated whole-file mention.
+ */
+function normalizedSection(text: string, heading: string): string {
+  const marker = `\n## ${heading}\n`;
+  const start = text.indexOf(marker);
+  if (start === -1) return '';
+  const body = text.slice(start + marker.length);
+  const next = body.indexOf('\n## ');
+  const section = next === -1 ? body : body.slice(0, next);
+  return section.replace(/\s+/g, ' ').trim();
+}
+
+function anyPattern(text: string, patterns: RegExp[]): boolean {
+  return patterns.some((pattern) => pattern.test(text));
+}
+
+/**
+ * REQ-001 / REQ-002 / REQ-003: the shipped completed-session boundary. A role session
+ * that returned execution Status `done` is finished, so the first and every later
+ * same-role delegation starts a new native session with bounded current context. This
+ * reads the delivered contract template, its tracked mirror and Coding's delegation
+ * guidance as public prompt artifacts; it is static delivered-content evidence, not
+ * host runtime enforcement.
+ */
+describe('fresh sub-agent sessions for completed roles (REQ-001, REQ-002, REQ-003)', () => {
+  it('requires a fresh native session with bounded current context for later same-role work after Status done', async () => {
+    const contractRaw = await readFile(packagePath('templates', 'project', 'AGENTS.md'), 'utf8');
+    const mirrorRaw = await readFile(packagePath('.ai-workflow', 'AGENTS.md'), 'utf8');
+    const codingRaw = await readFile(packagePath('templates', 'skills', 'coding', 'SKILL.md'), 'utf8');
+
+    // AC-004: the tracked project contract stays equal to its template source.
+    expect(
+      mirrorRaw.replace(/\s+/g, ' ').trim(),
+      'the tracked .ai-workflow/AGENTS.md mirror equals templates/project/AGENTS.md',
+    ).toBe(contractRaw.replace(/\s+/g, ' ').trim());
+
+    const orchestration = normalizedSection(contractRaw, 'Orchestration');
+    const delegation = normalizedSection(codingRaw, 'Delegation and Scheduling');
+    const normative = `${orchestration} ${delegation}`;
+
+    // The completed-session rule must be present in each normative section, not just
+    // anywhere in the file.
+    for (const [name, section] of [
+      ['contract ## Orchestration', orchestration],
+      ['Coding ## Delegation and Scheduling', delegation],
+    ] as const) {
+      expect(section, `${name} states the completed-session rule`).not.toBe('');
+      expect(
+        anyPattern(section, [
+          /status\s*`?done`?[^.]{0,140}?session[^.]{0,90}?(?:finished|over|ends?|complete)/i,
+          /`?done`?[^.]{0,140}?(?:ends?|finishes?)[^.]{0,90}?session/i,
+        ]),
+        `${name} ends the session once Status done is returned`,
+      ).toBe(true);
+      expect(
+        anyPattern(section, [
+          /(?:later|subsequent|any later|next)[^.]{0,160}?(?:same (?:named )?role)[^.]{0,180}?new native (?:sub-agent )?session/i,
+          /(?:same (?:named )?role)[^.]{0,180}?(?:start|use|dispatch|delegat\w+)[^.]{0,90}?new native (?:sub-agent )?session/i,
+        ]),
+        `${name} starts a new native session for later same-role work`,
+      ).toBe(true);
+      expect(
+        anyPattern(section, [
+          /never[^.]{0,140}?(?:reuse|resume)[^.]{0,140}?completed session/i,
+          /(?:do not|don't|not)[^.]{0,140}?(?:reuse|resume)[^.]{0,140}?completed session/i,
+          /completed session[^.]{0,140}?(?:is )?(?:never|not)[^.]{0,90}?(?:reused|resumed|reopened)/i,
+        ]),
+        `${name} forbids reusing or resuming the completed session`,
+      ).toBe(true);
+      expect(
+        anyPattern(section, [/continuation field/i, /reuse or resume/i]),
+        `${name} prohibits passing the completed session to a continuation mechanism`,
+      ).toBe(true);
+    }
+
+    // AC-002: the same boundary covers later authorized implementation, repair,
+    // verification or recheck, documentation and Git delegations.
+    expect(
+      normative,
+      'the rule states a shared boundary across later work',
+    ).toMatch(/same boundary|this boundary|same rule|same requirement|fresh session/i);
+    for (const term of ['task', 'repair', 'verification', 'recheck', 'documentation', 'Git']) {
+      expect(normative, `the boundary covers later ${term} work`).toMatch(new RegExp(`\\b${term}`, 'i'));
+    }
+
+    // AC-003: a fresh session receives the bounded current context, not the whole
+    // previous conversation.
+    expect(
+      anyPattern(normative, [/current (?:required )?(?:project )?context/i, /current project contract/i]),
+      'the fresh session receives the current required project context',
+    ).toBe(true);
+    expect(normative, 'the handoff names the project contract').toMatch(/\bcontract\b/i);
+    expect(normative, 'the handoff names MEMORY').toMatch(/\bMEMORY\b/);
+    expect(
+      normative,
+      'the handoff names both navigation files',
+    ).toMatch(/navigation\.json|navigation\.md|both navigation/i);
+    expect(
+      anyPattern(normative, [/current (?:task )?(?:goal|objective|packet)/i, /task (?:goal|objective)/i]),
+      'the handoff names the current task goal',
+    ).toBe(true);
+    expect(normative, 'the handoff names the exact read/write scopes').toMatch(/read\/write scope|exact scopes/i);
+    expect(normative, 'the handoff names the permitted commands').toMatch(/permitted commands/i);
+    expect(
+      anyPattern(normative, [
+        /(?:relevant|current)[^.]{0,160}?(?:handoff |accepted )?evidence/i,
+        /actionable findings?/i,
+        /accepted (?:results?|evidence)/i,
+      ]),
+      'the handoff carries relevant accepted evidence or actionable findings',
+    ).toBe(true);
+    expect(
+      normative,
+      'the whole previous conversation is excluded from the handoff',
+    ).toMatch(
+      /(?:instead of|not|rather than)[^.]{0,160}?entire (?:previous |prior )?conversation|(?:instead of|not|rather than)[^.]{0,160}?(?:whole|entire) previous conversation/i,
+    );
+
+    // AC-003: the rationale is completed-task context accumulation degrading
+    // effectiveness, with no measured performance claim.
+    expect(normative, 'the rationale names completed-task context accumulation').toMatch(
+      /(?:completed[- ]task|accumulated|previous)[^.]{0,100}?context[^.]{0,140}?accumulat/i,
+    );
+    expect(normative, 'the rationale names degrading effectiveness').toMatch(
+      /(?:degrad\w+|impair\w+|reduc\w+)[^.]{0,100}?effectiveness|effectiveness[^.]{0,100}?(?:degrad|impair|reduc)/i,
+    );
+    expect(normative, 'no measured performance gain is claimed').not.toMatch(
+      /(?:we measured|measured a|benchmark shows?|proven to improve|empirically (?:better|improves?))/i,
+    );
+  });
+});

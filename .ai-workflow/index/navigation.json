@@ -4016,6 +4016,51 @@
         "tests/behavior/review-policy.test.ts"
       ],
       "shared_entry": true
+    },
+    {
+      "id": "fresh-subagent-sessions",
+      "name": "fresh-subagent-sessions",
+      "aliases": [
+        "fresh sub-agent sessions",
+        "completed session boundary"
+      ],
+      "module_root": "root",
+      "entries": [
+        "templates/project/AGENTS.md",
+        "templates/skills/coding/SKILL.md",
+        ".ai-workflow/notes/implemented/process/2026-10-14-fresh-subagent-sessions.md"
+      ],
+      "symbols": [],
+      "related_files": [
+        ".ai-workflow/AGENTS.md",
+        "README.md",
+        "MEMORY.md",
+        ".ai-workflow/notes/implemented/process/2026-10-14-fresh-subagent-sessions.zh.md",
+        ".ai-workflow/notes/implemented/process/2026-10-14-fresh-subagent-sessions.i18n.yaml"
+      ],
+      "tests": [
+        "tests/behavior/coding-v2-content.test.ts",
+        "tests/behavior/review-policy.test.ts",
+        "tests/install/skill-installation.test.ts"
+      ],
+      "depends_on": [],
+      "relations": [],
+      "owner_role": "shared",
+      "responsibility": "Completed sub-agent session boundary: once a delegated session returns execution Status `done` it is finished, so every later same-role implementation, repair, verification or recheck, documentation and Git delegation starts a new native session with the current contract, MEMORY, both navigation files and the bounded task packet instead of reusing or resuming the completed session or copying the previous conversation",
+      "read_scope": [
+        ".ai-workflow/AGENTS.md",
+        ".ai-workflow/notes/implemented/process/2026-10-14-fresh-subagent-sessions.i18n.yaml",
+        ".ai-workflow/notes/implemented/process/2026-10-14-fresh-subagent-sessions.md",
+        ".ai-workflow/notes/implemented/process/2026-10-14-fresh-subagent-sessions.zh.md",
+        "MEMORY.md",
+        "README.md",
+        "templates/project/AGENTS.md",
+        "templates/skills/coding/SKILL.md",
+        "tests/behavior/coding-v2-content.test.ts",
+        "tests/behavior/review-policy.test.ts",
+        "tests/install/skill-installation.test.ts"
+      ],
+      "shared_entry": true
     }
   ]
 }
