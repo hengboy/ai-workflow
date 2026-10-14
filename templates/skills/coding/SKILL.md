@@ -65,6 +65,19 @@ session still ends at its handoff.
 - The primary orchestrator directly dispatches Git Operator for every per-step
   commit, merge and finalization, using the prescribed `git-commit` conventions.
   Git operations are allowed only through Git Operator, including inspection.
+- Once a sub-agent returns execution Status `done`, its session is finished. Any
+  later work delegated to the same named role must start a new native sub-agent
+  session; never reuse or resume the completed session, including by passing its
+  identifier to a continuation field or any other continuation mechanism.
+- The same boundary covers later authorized implementation, repair, verification or
+  recheck, documentation and Git work, grants no new authority, and never treats a
+  `done` result as review PASS.
+- Give the new session the current required project context, `MEMORY.md`, both
+  navigation files, the project contract, the current task goal, exact read/write
+  scopes, permitted commands and relevant accepted results or actionable findings
+  instead of the entire previous conversation. Completed-task context can
+  accumulate and degrade effectiveness; a fresh session limits that accumulation,
+  and no measured performance gain is claimed.
 
 ## Surface routing
 
