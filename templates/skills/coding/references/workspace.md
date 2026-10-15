@@ -30,17 +30,29 @@ workspace-only fields to ordinary packets.
 
 ## Approved preparation
 
-Before any implementation state, parent Coding runs approved preparation and
+For a frozen child-participating plan with no task set or incomplete slices, the parent
+Coding session runs approved preparation as its bounded recovery path; a plan whose
+planning session already completed the chain does not need it. Before any
+implementation state, parent Coding runs approved preparation and
 distribution against the absolute parent plan. With no task set, invoke
 `plan-to-tasks` as the `preparation procedure`: show the full approval preview,
 obtain approval, write complete task triplets/pair records, schedule and
 `workspace.yaml`, run `ai-workflow plan validate --plan <directory>`, then
 `ai-workflow workspace distribute --plan <directory>`. Distribution writes slices
 only after read-only preconditions pass; preparation returns control to the same
-parent Coding session to continue implementation. Reuse valid split artifacts
-byte-unchanged; partial/invalid tasks or divergent slices stop with a repair request,
-never regeneration. Declining approval creates no tasks, no slices, no worktrees
-and no implementation records. Standalone plan-to-tasks ends after its own handoff.
+parent Coding session to continue implementation. The task set freezes only after
+the distribution succeeded for every participating repository with
+`ai-workflow workspace status --plan <directory>` valid and every participating slice
+present, and no implementation state begins while the task set is unfrozen. Reuse valid
+split artifacts byte-unchanged; partial/invalid tasks or divergent slices stop with a
+repair request, never regeneration. Declining approval creates no tasks, no slices, no
+worktrees and no implementation records. Standalone plan-to-tasks ends after its own handoff.
+
+For a plan whose planning session already completed the chain, the slices are present:
+verify the delivery gate (`ai-workflow workspace status --plan <directory>` with every
+participating slice present) before any worktree or implementation record, implement
+without repeating the preparation, and start no implementation state while the task set
+is unfrozen.
 
 ## Phase dispatch and delivery barriers
 

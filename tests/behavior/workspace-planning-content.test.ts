@@ -134,7 +134,7 @@ describe('planning declares and freezes a workspace plan (REQ-002 / AC-003, AC-0
     );
   });
 
-  it('schedules per-repository note work and hands off the distribution step', async () => {
+  it('schedules per-repository note work and owns the chained split in the Completion checklist', async () => {
     const skill = (await readShipped(PLANNING_SKILL)) ?? '';
     const workspace = section(skill, '## Workspace planning');
     expect(workspace, 'the Workspace planning section exists').not.toBe('');
@@ -150,10 +150,19 @@ describe('planning declares and freezes a workspace plan (REQ-002 / AC-003, AC-0
     );
     expect(workspace, 'workspace planning routes the handoff to its owner').toContain('the Completion checklist owns the split and session handoff');
     const completion = flatten(section(skill, '## Completion checklist'));
-    expect(completion, 'the distribution handoff starts the parent Coding session').toMatch(
-      /tell the user to start a new session at <workspace-root> and invoke the coding skill/i,
+    expect(completion, 'the Completion checklist automatically chains plan-to-tasks after the freeze').toMatch(
+      /automatic\w*[^.]{0,160}plan-to-tasks[^.]{0,160}preparation procedure/i,
     );
-    expect(completion, 'the handoff names the distribution command').toContain('ai-workflow workspace distribute --plan <directory>');
+    expect(completion, 'the chain runs in this planning session before the handoff').toMatch(
+      /(?:this|the same) session/i,
+    );
+    expect(completion, 'the completion states the freeze gate before the handoff').toMatch(
+      /frozen only after[^.]{0,240}(?:slice|repository|distribution)/i,
+    );
+    expect(completion, 'the completion reports every participant slice state').toContain('slice state');
+    expect(completion, 'the chained split still distributes every participating slice').toContain(
+      'ai-workflow workspace distribute --plan <directory>',
+    );
   });
 });
 
@@ -326,6 +335,9 @@ describe('planning owns the workspace split handoff and exempts a root-only plan
     expect(workspace, 'the Workspace planning section exists').not.toBe('');
     expect(workspace, 'Planning retains its no-slice boundary').toContain('never distributes or writes a slice');
     expect(workspace, 'the completion checklist owns the workspace handoff').toContain('the Completion checklist owns the split and session handoff');
+    expect(workspace, 'the Workspace planning section names the automatic plan-to-tasks chain').toMatch(
+      /automatic\w*[^.]{0,160}plan-to-tasks[^.]{0,160}(?:preparation|split|procedure)/i,
+    );
     const completion = flatten(section(text ?? '', '## Completion checklist'));
 
     expectFragments(
@@ -358,8 +370,8 @@ describe('planning owns the workspace split handoff and exempts a root-only plan
   });
 });
 
-describe('planning completion routes a workspace plan to a parent Coding session and a root-only plan to coding (REQ-004 / AC-007)', () => {
-  it('ends a cross-repository workspace plan with a new session at the workspace root that invokes coding to run the approved preparation', async () => {
+describe('planning completion chains the split and routes to a new coding session (REQ-001, REQ-004 / AC-001, AC-005)', () => {
+  it('chains the split before a new session at the workspace root that implements the frozen plan', async () => {
     const text = await readShipped(PLANNING_SKILL);
     expect(text, 'the planning skill is shipped').not.toBeNull();
     const completion = section(text ?? '', '## Completion checklist');
@@ -370,23 +382,49 @@ describe('planning completion routes a workspace plan to a parent Coding session
       flat,
       [
         'at least one non-root participating repository',
+        'plan-to-tasks',
+        'preparation procedure',
+        'plan validate',
+        'name',
+        'path',
+        'depends_on',
+        'slice state',
         'new session',
         '<workspace-root>',
         'invoke the coding skill',
-        'frozen plan directory',
-        'approved preparation',
-        'ai-workflow workspace distribute --plan <directory>',
-        'name',
-        'path',
-        'depends_on'
+        'frozen plan directory'
       ],
       'the workspace planning completion handoff'
+    );
+    expect(flat, 'the chain runs in the same planning session before the handoff').toMatch(
+      /(?:this|the same) session/i,
+    );
+    expect(flat, 'the task set freezes only after every participating repository received its slice').toMatch(
+      /frozen only after[^.]{0,240}(?:slice|repository|distribution)/i,
+    );
+    expect(flat, 'the completion requires the workspace status gate with every slice present').toMatch(
+      /(?:workspace status[^.]{0,200}valid|valid[^.]{0,160}workspace status)/i,
     );
     expect(flat, 'the superseded do-not-invoke-coding instruction is removed').not.toMatch(/do not invoke coding/i);
     expect(
       flat,
       'Planning no longer routes the new session to plan-to-tasks as its skill',
     ).not.toMatch(/invoke plan-to-tasks with the absolute frozen plan directory/i);
+  });
+
+  it('gives no implementation prompt on a declined approval or a refused distribution', async () => {
+    const completion = flatten(section((await readShipped(PLANNING_SKILL)) ?? '', '## Completion checklist'));
+    expect(completion, 'the Completion checklist section exists').not.toBe('');
+
+    expect(completion, 'a declined approval produces no implementation prompt').toMatch(
+      /declin\w*[^.]{0,400}(?:no implementation|without an? implementation|not frozen|repairable)/i,
+    );
+    expect(completion, 'a refused distribution produces no implementation prompt').toMatch(
+      /refus\w*[^.]{0,400}(?:no implementation|without an? implementation|not frozen|repairable)/i,
+    );
+    expect(completion, 'no implementation state begins while the task set is unfrozen').toMatch(
+      /unfrozen|not frozen|no implementation (?:prompt|state)/i,
+    );
   });
 
   it('preserves the root-only or ordinary route to a coding session', async () => {

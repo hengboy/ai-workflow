@@ -33,6 +33,35 @@ function frontmatter(text: string): string {
   return text.split(/^---$/m)[1] ?? '';
 }
 
+/**
+ * Every Markdown bullet or paragraph containing `anchor`, whitespace-normalized.
+ * Blocks split on blank lines and on top-level list-item and heading starts, so one
+ * paragraph or list item is isolated from its siblings; an unrelated accurate
+ * paragraph in the same document cannot satisfy or hide a scoped defect.
+ */
+function blocksContaining(text: string, anchor: string | RegExp): string[] {
+  const blocks: string[] = [];
+  let current: string[] = [];
+  const flush = (): void => {
+    if (current.length > 0) {
+      blocks.push(current.join('\n'));
+      current = [];
+    }
+  };
+  for (const line of text.split('\n')) {
+    if (line.trim() === '') {
+      flush();
+      continue;
+    }
+    if (/^(?:#{1,6}\s|[-*]\s|\d+\.\s)/.test(line)) flush();
+    current.push(line);
+  }
+  flush();
+  return blocks
+    .filter((block) => (typeof anchor === 'string' ? block.includes(anchor) : anchor.test(block)))
+    .map((block) => flatten(block));
+}
+
 describe('change routing guidance', () => {
   it('classifies direct, mechanical and planned changes in the project contract', async () => {
     const contract = await read('templates/project/AGENTS.md');
@@ -132,8 +161,11 @@ describe('change routing guidance', () => {
       /new session at (?:that )?workspace root/i,
     );
     expect(routing, 'the new session invokes the coding skill').toMatch(/invoke (?:the )?coding\b/i);
-    expect(routing, 'plan-to-tasks remains the preparation procedure invoked by the parent session').toMatch(
+    expect(routing, 'plan-to-tasks remains the preparation procedure named by the routing').toMatch(
       /plan-to-tasks/i,
+    );
+    expect(routing, 'the coding session does not repeat the already-completed preparation').toMatch(
+      /(?:already|without repeating|does not repeat|previously)[^.]{0,160}(?:preparation|split|distribut)|(?:preparation|split|distribut)[^.]{0,160}(?:already|without repeating|does not repeat|previously)/i,
     );
     expect(routing, 'the superseded plan-to-tasks session entry is replaced').not.toMatch(
       /start a new session at (?:that )?workspace root and invoke the plan-to-tasks skill/i,
@@ -187,7 +219,7 @@ describe('change routing guidance', () => {
     expect(planningMetadata, 'planning metadata names its entry scope').toMatch(/new or ambiguous feature/i);
   });
 
-  it('routes the child-participating handoff to a coding session that prepares and distributes, not a standalone plan-to-tasks session', async () => {
+  it('hands the child-participating workspace root session to the coding skill after the automatic chain completes', async () => {
     const documents = [
       { label: 'templates/project/AGENTS.md', text: await read('templates/project/AGENTS.md') },
       { label: 'README.md', text: await read('README.md') },
@@ -198,18 +230,22 @@ describe('change routing guidance', () => {
       const sessionIndex = flat.search(/new session at (?:the )?workspace root/i);
       expect(sessionIndex, `${label} states the child-participating handoff as a new session at the workspace root`).toBeGreaterThanOrEqual(0);
       const handoff = flat.slice(sessionIndex, sessionIndex + 400);
+      // The chain may be described before or around the handoff sentence, so the
+      // chain assertions run against everything outside the handoff window.
+      const outside = `${flat.slice(0, sessionIndex)} ${flat.slice(sessionIndex + 400)}`;
 
-      const codingIndex = handoff.search(/coding skill/i);
-      const planToTasksIndex = handoff.search(/plan-to-tasks/i);
-      expect(codingIndex, `${label} invokes the coding skill at the workspace root for the child-participating handoff`).toBeGreaterThanOrEqual(0);
-      expect(planToTasksIndex, `${label} names plan-to-tasks as the preparation procedure`).toBeGreaterThanOrEqual(0);
-      expect(
-        codingIndex,
-        `${label} does not enter a standalone plan-to-tasks session: the workspace-root session invokes the coding skill before plan-to-tasks`,
-      ).toBeLessThan(planToTasksIndex);
-      expect(handoff, `${label} states plan-to-tasks as the preparation`).toMatch(/preparation/i);
-      expect(handoff, `${label} distributes the slices before implementation`).toMatch(/workspace distribute\b/i);
-      expect(handoff, `${label} distributes the slices before implementation`).toMatch(/before implementation/i);
+      // The window after the anchor is the coding handoff that implements the frozen plan.
+      expect(handoff, `${label} invokes the coding skill at the workspace root`).toMatch(/coding skill/i);
+      expect(handoff, `${label} hands off implementation of the frozen plan`).toMatch(
+        /(?:implement\w*[^.]{0,200}frozen plan|frozen plan[^.]{0,200}implement\w*)/i,
+      );
+
+      // The automatic chain completes before that handoff.
+      expect(outside, `${label} runs the plan-to-tasks preparation before the handoff`).toMatch(/plan-to-tasks/i);
+      expect(outside, `${label} distributes the slices before the handoff`).toMatch(/workspace distribute\b/i);
+      expect(outside, `${label} freezes the task set only after the full distribution`).toMatch(
+        /frozen only after|freezes only after|freeze gate|not frozen until/i,
+      );
 
       // The ordinary and root-only routes stay represented.
       expect(flat, `${label} keeps the ordinary or root-only route`).toMatch(/ordinary or root-only/i);
@@ -294,5 +330,76 @@ describe('automatic implementation commit', () => {
       operator,
       'the Git Operator role documents the automatic implementation commit',
     ).toMatch(automaticGitOperator);
+  });
+});
+
+// Behavior boundary: the shipped normative guidance for a child-participating workspace
+// plan. Two independent consistency regressions lock the causal order of the automatic
+// chain (SPEC-2/STD-02) and the recovery-only default for the parent Coding session's
+// preparation (SPEC-1/STD-01). Each assertion is scoped to the paragraph that carries the
+// rule, so another accurate paragraph in the same document cannot hide the defect.
+describe('post-planning workspace chaining guidance is causally consistent', () => {
+  it('invokes the automatic split immediately after the frozen pair validates, not after its own artifacts', async () => {
+    const documents = [
+      { label: 'templates/project/AGENTS.md', text: await read('templates/project/AGENTS.md') },
+      { label: '.ai-workflow/AGENTS.md', text: await read('.ai-workflow/AGENTS.md') },
+      { label: 'README.md', text: await read('README.md') },
+      { label: 'MEMORY.md', text: await read('MEMORY.md') },
+    ];
+
+    for (const { label, text } of documents) {
+      const blocks = blocksContaining(text, 'split by plan-to-tasks before implementation');
+      expect(blocks.length, `${label} states the split-before-implementation rule`).toBeGreaterThan(0);
+
+      for (const block of blocks) {
+        // The automatic split is triggered by the frozen spec/plan pair passing
+        // `plan validate`; the split then writes its own artifacts and distribution follows.
+        expect(
+          block,
+          `${label} invokes the automatic split only after the frozen pair passes plan validate`,
+        ).toMatch(
+          /(?:(?:immediately|right|directly)\s+after|as soon as)[^.;]{0,160}?(?:frozen|spec\.md\/plan\.md|spec\/plan pair|plan pair)[^.;]{0,160}?(?:plan validate|validat)/i,
+        );
+        // It must not describe the split as starting only once its own written artifacts exist.
+        expect(
+          block,
+          `${label} does not start the split only after its own task artifacts are written`,
+        ).not.toMatch(
+          /(?:split|plan-to-tasks)[^.;]{0,160}?\bafter\b\s+(?:the\s+|its\s+)?(?:task (?:triplets|documents|artifacts)|pair records|three task documents|workspace\.yaml)/i,
+        );
+      }
+    }
+  });
+
+  it('defaults the parent Coding session to the delivery gate and scopes preparation to the recovery case', async () => {
+    const documents = [
+      { label: 'templates/project/AGENTS.md', text: await read('templates/project/AGENTS.md') },
+      { label: '.ai-workflow/AGENTS.md', text: await read('.ai-workflow/AGENTS.md') },
+      { label: 'README.md', text: await read('README.md') },
+    ];
+
+    for (const { label, text } of documents) {
+      const blocks = blocksContaining(text, /one primary parent Coding session|Parent workspace coding orchestration/i);
+      expect(blocks.length, `${label} states the parent workspace coding orchestration`).toBeGreaterThan(0);
+
+      for (const block of blocks) {
+        // Default: after the automatic chain, the parent Coding session verifies the
+        // delivery gate and does not repeat the completed preparation.
+        expect(
+          block,
+          `${label} defaults the parent Coding session to verifying the delivery gate without repeating the preparation`,
+        ).toMatch(
+          /(?:verif\w*|confirm\w*|check\w*|validat\w*|ensur\w*)[^.;]{0,160}?(?:delivery (?:gate|barrier)|distributed slices?|every participating slice present|workspace status|slice presence)|without repeating[^.;]{0,160}?(?:preparation|split|distribution)|(?:does not|never|without)[^.;]{0,80}?repeat/i,
+        );
+        // Recovery only: invoking the preparation or distribution is bound to a plan with
+        // no task set or incomplete slices.
+        expect(
+          block,
+          `${label} scopes invoking preparation or distribution to the no-task-set or incomplete-slices recovery case`,
+        ).toMatch(
+          /(?:no task set|missing task set|without a task set|incomplete slices?|slices? (?:are )?incomplete|partial slices?)[^.;]{0,220}?(?:plan-to-tasks|preparation procedure|preparation|distribut)|(?:plan-to-tasks|preparation procedure|preparation)[^.;]{0,220}?(?:no task set|missing task set|incomplete slices?|partial slices?)/i,
+        );
+      }
+    }
   });
 });
