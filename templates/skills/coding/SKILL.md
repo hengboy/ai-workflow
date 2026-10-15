@@ -21,11 +21,15 @@ When a planned change has no frozen plan, run Planning first, freeze and validat
 `spec.md` and `plan.md`, then end the session. Follow the `planning` skill's
 `## Completion checklist` for the full report and copyable prompt. A plan with at least one
 non-root participating repository hands off to a new session at that workspace root
-to invoke the coding skill with the absolute frozen plan directory; it runs
-plan-to-tasks preparation and distribution. Ordinary or root-only plans hand off
-to a new coding session. Do not start implementation in that planning session: no
-worktree, no implementation record, no implementation or review dispatch, and no
-commit. The new session implements within the frozen plan.
+to invoke the coding skill with the absolute frozen plan directory to implement the
+frozen plan, because its planning session already ran the plan-to-tasks preparation
+procedure and distributed the slices; the coding session verifies the delivery gate
+(`ai-workflow workspace status --plan <directory>` with every participating slice
+present) before any worktree or implementation record and implements without repeating
+the completed preparation. Ordinary or root-only plans hand off to a new coding session.
+Do not start implementation in that planning session: no worktree, no implementation
+record, no implementation or review dispatch, and no commit. The new session implements
+within the frozen plan.
 
 Never run Planning to restate a request with clear, bounded intent, and never
 label a change direct to skip required checks or evidence. Ask the user only

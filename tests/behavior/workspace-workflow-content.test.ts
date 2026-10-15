@@ -364,6 +364,30 @@ describe('plan-to-tasks completes a workspace split by distributing slices (REQ-
       'the plan-to-tasks root-only workspace exemption'
     );
   });
+
+  it('freezes the task set only after the full distribution and keeps a refusal repairable', async () => {
+    const workspace = section((await readShipped(PLAN_TO_TASKS_SKILL)) ?? '', '## Workspace split');
+    expect(workspace, 'the Workspace split section exists').not.toBe('');
+    const flat = flatten(workspace);
+
+    expect(flat, 'the split freezes the task set only after the full distribution').toMatch(
+      /(?:frozen|freezes|becomes frozen) only after[^.]{0,240}(?:distribut|slice|repository|every)/i,
+    );
+    expect(flat, 'the freeze gate requires every participating slice present').toMatch(
+      /every participating (?:repository|slice)[^.]{0,160}(?:present|slice)/i,
+    );
+    expect(flat, 'the task set is frozen only after the workspace status validity').toMatch(
+      /workspace status[^.]{0,200}valid|valid[^.]{0,160}workspace status/i,
+    );
+    expect(flat, 'a refused distribution leaves the task set not frozen').toMatch(
+      /not (?:yet )?frozen|remains unfrozen|stays unfrozen/i,
+    );
+    expectFragments(
+      flat,
+      ['plan pairing', '--write --all', 'plan validate', 'never regenerat'],
+      'the pre-freeze repair and no-regeneration path'
+    );
+  });
 });
 
 describe('coding gates an undistributed workspace plan (REQ-002, REQ-003 / AC-004, AC-005, AC-006)', () => {
@@ -492,6 +516,12 @@ describe('plan-to-tasks supports a preparation invocation that returns to the pa
       /same parent Coding session/i,
     );
     expect(skill, 'the preparation shows the existing approval preview').toMatch(/approval preview/i);
+    expect(skill, 'the planning session invokes the preparation automatically after the freeze').toMatch(
+      /(?:automatic\w*[^.]{0,200}planning session|planning session[^.]{0,200}automatic\w*)/i,
+    );
+    expect(skill, 'the automatic preparation starts immediately after a child-participating workspace plan freezes').toMatch(
+      /immediately after[^.]{0,200}freez/i,
+    );
   });
 
   it('declining the approval creates no tasks, slices, worktrees or implementation records', async () => {
@@ -571,6 +601,23 @@ describe('coding defines the approved preparation returned by plan-to-tasks (REQ
     const dispatch = flatten(await workspaceDetail('## Phase dispatch and delivery barriers', '## Parent workspace execution'));
     expect(dispatch, 'the parent route drops the manual child-session permission handoff').toMatch(
       /(?:no|not|never|without)[^.]{0,60}?manual[^.]{0,40}?child[- ]?session/i,
+    );
+  });
+
+  it('scopes the recovery preparation to a missing task set or incomplete slices and freezes only after full distribution', async () => {
+    const parent = flatten(await workspaceDetail('## Approved preparation', '## Parent workspace execution'));
+    expect(parent, 'the approved preparation section exists').not.toBe('');
+
+    expect(parent, 'recovery preparation covers a missing task set or incomplete slices').toMatch(
+      /no task set[^.]{0,200}incomplete slices|incomplete slices[^.]{0,200}no task set/i,
+    );
+    expect(parent, 'the recovery path freezes the task set only after the full distribution').toMatch(
+      /(?:frozen|freezes) only after|freeze gate|not frozen until/i,
+    );
+
+    const reference = flatten((await readShipped(WORKSPACE_REFERENCE)) ?? '');
+    expect(reference, 'a chain-completed plan verifies the delivery gate and does not repeat the preparation').toMatch(
+      /(?:without repeating|does not repeat|already (?:ran|completed|prepared|split|distributed))[^.]{0,200}(?:preparation|split|distribution)|(?:preparation|split|distribution)[^.]{0,200}(?:already|without repeating)/i,
     );
   });
 });

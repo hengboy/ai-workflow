@@ -4067,6 +4067,80 @@
         "tests/install/skill-installation.test.ts"
       ],
       "shared_entry": true
+    },
+    {
+      "id": "post-planning-auto-split-distribution",
+      "name": "post-planning-auto-split-distribution",
+      "aliases": [
+        "post-planning automatic split distribution"
+      ],
+      "module_root": "root",
+      "entries": [
+        "templates/skills/planning/SKILL.md",
+        "templates/skills/plan-to-tasks/SKILL.md",
+        "templates/skills/coding/SKILL.md",
+        "templates/skills/coding/references/workspace.md"
+      ],
+      "symbols": [],
+      "related_files": [
+        "templates/project/AGENTS.md",
+        ".ai-workflow/AGENTS.md",
+        "README.md",
+        "MEMORY.md",
+        ".ai-workflow/notes/implemented/process/2026-10-15-post-planning-auto-split-distribution.md",
+        ".ai-workflow/notes/implemented/process/2026-10-15-post-planning-auto-split-distribution.zh.md",
+        ".ai-workflow/notes/implemented/process/2026-10-15-post-planning-auto-split-distribution.i18n.yaml",
+        ".ai-workflow/notes/implemented/process/2026-09-23-planning-coding-session-boundary.md",
+        ".ai-workflow/notes/implemented/process/2026-09-23-planning-coding-session-boundary.zh.md",
+        ".ai-workflow/notes/implemented/process/2026-09-23-planning-coding-session-boundary.i18n.yaml",
+        ".ai-workflow/notes/implemented/process/2026-10-02-workspace-distribute-handoff.md",
+        ".ai-workflow/notes/implemented/process/2026-10-02-workspace-distribute-handoff.zh.md",
+        ".ai-workflow/notes/implemented/process/2026-10-02-workspace-distribute-handoff.i18n.yaml",
+        ".ai-workflow/notes/implemented/bug-fix/2026-10-08-workspace-session-handoff.md",
+        ".ai-workflow/notes/implemented/bug-fix/2026-10-08-workspace-session-handoff.zh.md",
+        ".ai-workflow/notes/implemented/bug-fix/2026-10-08-workspace-session-handoff.i18n.yaml",
+        ".ai-workflow/notes/implemented/feature/2026-10-09-workspace-coding-orchestration.md",
+        ".ai-workflow/notes/implemented/feature/2026-10-09-workspace-coding-orchestration.zh.md",
+        ".ai-workflow/notes/implemented/feature/2026-10-09-workspace-coding-orchestration.i18n.yaml"
+      ],
+      "tests": [
+        "tests/behavior/change-routing.test.ts",
+        "tests/behavior/workspace-planning-content.test.ts",
+        "tests/behavior/workspace-workflow-content.test.ts"
+      ],
+      "depends_on": [],
+      "relations": [],
+      "owner_role": "shared",
+      "responsibility": "Delivered post-planning automatic chaining for a child-participating workspace plan: immediately after the frozen pair passes plan validate the planning session invokes the plan-to-tasks preparation procedure in the same session, writes and validates the task set, runs workspace distribute for every participating repository and freezes it only after workspace status reports valid with every participating slice present, then hands off to a new session at the workspace root that invokes the coding skill to implement the frozen plan, while a declined approval or refused distribution gives no implementation prompt and ordinary, root-only and non-.gitmodules routes stay unchanged",
+      "read_scope": [
+        ".ai-workflow/AGENTS.md",
+        ".ai-workflow/notes/implemented/bug-fix/2026-10-08-workspace-session-handoff.i18n.yaml",
+        ".ai-workflow/notes/implemented/bug-fix/2026-10-08-workspace-session-handoff.md",
+        ".ai-workflow/notes/implemented/bug-fix/2026-10-08-workspace-session-handoff.zh.md",
+        ".ai-workflow/notes/implemented/feature/2026-10-09-workspace-coding-orchestration.i18n.yaml",
+        ".ai-workflow/notes/implemented/feature/2026-10-09-workspace-coding-orchestration.md",
+        ".ai-workflow/notes/implemented/feature/2026-10-09-workspace-coding-orchestration.zh.md",
+        ".ai-workflow/notes/implemented/process/2026-09-23-planning-coding-session-boundary.i18n.yaml",
+        ".ai-workflow/notes/implemented/process/2026-09-23-planning-coding-session-boundary.md",
+        ".ai-workflow/notes/implemented/process/2026-09-23-planning-coding-session-boundary.zh.md",
+        ".ai-workflow/notes/implemented/process/2026-10-02-workspace-distribute-handoff.i18n.yaml",
+        ".ai-workflow/notes/implemented/process/2026-10-02-workspace-distribute-handoff.md",
+        ".ai-workflow/notes/implemented/process/2026-10-02-workspace-distribute-handoff.zh.md",
+        ".ai-workflow/notes/implemented/process/2026-10-15-post-planning-auto-split-distribution.i18n.yaml",
+        ".ai-workflow/notes/implemented/process/2026-10-15-post-planning-auto-split-distribution.md",
+        ".ai-workflow/notes/implemented/process/2026-10-15-post-planning-auto-split-distribution.zh.md",
+        "MEMORY.md",
+        "README.md",
+        "templates/project/AGENTS.md",
+        "templates/skills/coding/SKILL.md",
+        "templates/skills/coding/references/workspace.md",
+        "templates/skills/plan-to-tasks/SKILL.md",
+        "templates/skills/planning/SKILL.md",
+        "tests/behavior/change-routing.test.ts",
+        "tests/behavior/workspace-planning-content.test.ts",
+        "tests/behavior/workspace-workflow-content.test.ts"
+      ],
+      "shared_entry": true
     }
   ]
 }

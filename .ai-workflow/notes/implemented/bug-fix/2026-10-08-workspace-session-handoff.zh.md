@@ -34,3 +34,4 @@ Status: implemented
 - 本记录部分取代 [规划与编码的会话边界记录](../process/2026-09-23-planning-coding-session-boundary.md) 中的无条件单会话交接事实，并为 [工作区拆分分发交接记录](../process/2026-10-02-workspace-distribute-handoff.md) 增添上下文；两份记录都保留其决定与理由，且其当前交接事实指向本记录。
 - 本记录仅针对子仓库的就绪与仅作参考的 `next_repository` 事实，被 [工作区执行一致性记录](./2026-10-08-workspace-execution-consistency.md) 部分取代；该记录记载了清单校验、冻结顺序的 `next_repository`、根条目的 `tasks_delivered`/`delivery_commit` 与 `root_tasks_commit`；本记录保留其条件式交接决定与理由，且其当前交付边界事实指向该记录。
 - [工作区编码编排记录](../feature/2026-10-09-workspace-coding-orchestration.md) 以已交付的父会话准备、按仓库 worktree、检查点命令与分离评审部分取代本记录的交接措辞；本记录保留其条件式交接决定与理由。
+- 2026-10-15 [规划后自动拆分分发记录](../process/2026-10-15-post-planning-auto-split-distribution.md) 部分取代本记录的条件式交接措辞：规划会话现在会在新的编码会话之前在同一会话中执行拆分与分发，因此当前交接事实指向该记录；本记录保留其条件式交接决定与理由。

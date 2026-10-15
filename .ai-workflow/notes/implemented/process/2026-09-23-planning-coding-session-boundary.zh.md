@@ -28,3 +28,4 @@ Status: implemented
 - [变更分流](./2026-09-22-change-routing.md)仍负责 direct、mechanical 与 planned 的分类；本记录只补上 Planning 到 Coding 的交接。
 - [项目契约与 Agent Notes 记录](./2026-09-16-project-contract-and-agent-notes.md)仍然有效。2026-10-08 [工作区会话交接记录](../bug-fix/2026-10-08-workspace-session-handoff.md)部分取代本记录中无条件的单会话交接事实；本记录保留其边界决定与理由，其当前交接事实指向该记录。
 - [工作区编码编排记录](../feature/2026-10-09-workspace-coding-orchestration.md) 以父会话准备、按仓库 worktree、检查点与定稿分离部分取代本记录的交接事实；本记录保留其边界决定与理由。
+- 2026-10-15 [规划后自动拆分分发记录](./2026-10-15-post-planning-auto-split-distribution.md) 部分取代本记录中针对子仓库参与工作区计划的交接事实：规划会话现在会在新的编码会话之前链式执行拆分与分发，因此当前交接事实指向该记录，而本记录保留其边界决定与理由。

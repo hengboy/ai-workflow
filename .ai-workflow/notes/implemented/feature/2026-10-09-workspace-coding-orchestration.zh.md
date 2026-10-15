@@ -35,3 +35,4 @@ Planning 可以冻结一份跨仓库工作区计划，技能也可以指向新�
 - 三主机原生验收在本次运行中没有被完整演示。它需要每个主机——OpenCode、Claude Code 与 Codex——使用一次性夹具和一次性主机 HOME 启动真实的父原生会话，而本次可用运行没有完成该父会话派发冒烟。针对已交付范围，自动化 CLI、真实 Git 与内容覆盖是完整的，但原生父到叶子的工具轨迹仍是一个未决且被明确报告的缺口与阻塞项；不可用的认证或信任不会被转换为通过。
 - 本记录部分取代 [子模块工作区交付记录](../architecture/2026-09-30-submodule-workspace.md)、[规划与编码的会话边界记录](../process/2026-09-23-planning-coding-session-boundary.md)、[工作区拆分分发交接记录](../process/2026-10-02-workspace-distribute-handoff.md)、[工作区会话交接记录](../bug-fix/2026-10-08-workspace-session-handoff.md) 与 [工作区执行一致性记录](../bug-fix/2026-10-08-workspace-execution-consistency.md) 中的手动逐仓库会话措辞。每份记录都保留其决定、理由与证据边界，且其当前执行事实指向本记录。
 - 普通与仅根条目行为不变：没有 `.gitmodules` 的项目、带 `.gitmodules` 项目中的普通计划，以及仅根条目工作区计划都保持其直接、机械、免拆分或拆分路径、单 worktree 生命周期、记录形态与 CLI 输出，并且不新增子仓库专用工件或命令。
+- 2026-10-15 [规划后自动拆分分发记录](../process/2026-10-15-post-planning-auto-split-distribution.md) 部分取代本记录的准备工作措辞：规划会话现在链式执行 plan-to-tasks 准备与分发，因此父 Coding 的获批准备成为没有任务集或不完整切片计划的有界恢复路径；本记录保留其激活、worktree、检查点与评审决定。
