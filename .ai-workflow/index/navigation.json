@@ -4141,6 +4141,58 @@
         "tests/behavior/workspace-workflow-content.test.ts"
       ],
       "shared_entry": true
+    },
+    {
+      "id": "notes-governance",
+      "name": "notes-governance",
+      "aliases": [],
+      "module_root": "root",
+      "entries": [
+        "templates/project/notes/README.md",
+        "templates/skills/coding/SKILL.md",
+        "templates/skills/planning/SKILL.md",
+        "templates/skills/plan-to-tasks/SKILL.md",
+        "templates/agents/documentation-maintainer.md",
+        "templates/agents/standards-review.md"
+      ],
+      "symbols": [],
+      "related_files": [
+        "README.md",
+        "MEMORY.md",
+        ".ai-workflow/notes/README.md",
+        ".ai-workflow/notes/implemented/process/2026-10-16-note-rationale-and-retention.md",
+        ".ai-workflow/notes/implemented/process/2026-10-16-note-rationale-and-retention.zh.md",
+        ".ai-workflow/notes/implemented/process/2026-10-16-note-rationale-and-retention.i18n.yaml",
+        ".ai-workflow/notes/implemented/process/2026-09-16-project-contract-and-agent-notes.md",
+        ".ai-workflow/notes/implemented/process/2026-09-16-project-contract-and-agent-notes.zh.md",
+        ".ai-workflow/notes/implemented/process/2026-09-16-project-contract-and-agent-notes.i18n.yaml"
+      ],
+      "tests": [
+        "tests/behavior/notes-content.test.ts"
+      ],
+      "depends_on": [],
+      "relations": [],
+      "owner_role": "shared",
+      "responsibility": "Governs Agent Notes creation by lasting decision rationale that code, tests and existing documentation cannot explain, and defines the keep, archive and delete retention outcomes, with the notes README as the single authoritative source.",
+      "read_scope": [
+        ".ai-workflow/notes/README.md",
+        ".ai-workflow/notes/implemented/process/2026-09-16-project-contract-and-agent-notes.i18n.yaml",
+        ".ai-workflow/notes/implemented/process/2026-09-16-project-contract-and-agent-notes.md",
+        ".ai-workflow/notes/implemented/process/2026-09-16-project-contract-and-agent-notes.zh.md",
+        ".ai-workflow/notes/implemented/process/2026-10-16-note-rationale-and-retention.i18n.yaml",
+        ".ai-workflow/notes/implemented/process/2026-10-16-note-rationale-and-retention.md",
+        ".ai-workflow/notes/implemented/process/2026-10-16-note-rationale-and-retention.zh.md",
+        "MEMORY.md",
+        "README.md",
+        "templates/agents/documentation-maintainer.md",
+        "templates/agents/standards-review.md",
+        "templates/project/notes/README.md",
+        "templates/skills/coding/SKILL.md",
+        "templates/skills/plan-to-tasks/SKILL.md",
+        "templates/skills/planning/SKILL.md",
+        "tests/behavior/notes-content.test.ts"
+      ],
+      "shared_entry": true
     }
   ]
 }

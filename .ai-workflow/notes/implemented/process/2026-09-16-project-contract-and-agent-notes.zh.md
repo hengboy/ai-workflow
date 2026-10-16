@@ -39,3 +39,4 @@ Status: implemented
 - 归档是不可逆的字节冻结：封存后修改、移动、删除，或传入已被修改的历史文件，都会被 validate 与 `--seal` 拒绝；代价是历史 note 的出站链接可能过时且不再修复。
 - 落地时 notes 树为空：加入本记录前 `notes list` 返回空列表，因此当时没有需要保留、合并或交叉链接的既有记录。此后 2026-09-17 的一次性迁移把五篇既有 ADR 记录补齐为 implemented notes 并建立交叉链接，见[迁移退役 ADR 记录到 notes](./2026-09-17-migrate-retired-adr-records-to-notes.md)；本次升级自身没有转换、读取或删除历史文件。
 - 单一来源与用户历史的取舍是明确的：项目契约、notes 规范与导航 JSON 各自只有一个权威位置，而用户已有的本地历史文件保留原字节但不再是受支持的工作流输入。
+- 本记录确立的 note 创建与保留义务被 2026-10-16 的[note 理由与保留记录](./2026-10-16-note-rationale-and-retention.md)部分细化：现在只有代码、测试与现有文档无法充分解释的持久决定理由才需要 note，保留、归档与删除结果位于 `.ai-workflow/notes/README.md`，而本记录的项目契约与 notes 机制决定保持不变。

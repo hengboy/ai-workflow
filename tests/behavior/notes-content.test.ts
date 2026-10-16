@@ -2,10 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { readFile } from 'node:fs/promises';
 import { packagePath } from '../../src/utils/schema.js';
 
-// REQ-008 / AC-015: installed skills and roles must load the project contract and
-// route note governance through the single-source README instead of restating or
-// reviving the retired ADR mechanism. These assertions cover non-omittable entry
-// points and constraints only; they do not prove semantic correctness.
+// REQ-001..REQ-004 / AC-001..AC-008: note creation is governed by lasting decision
+// rationale that code, tests and existing documentation cannot adequately explain, and
+// active records are kept, archived or deleted by future-guidance value. These are
+// structural content checks over the shipped templates; they do not prove that a
+// recorded rationale is truthful or sufficient, which semantic review establishes.
 const WORKFLOW_ARTIFACTS = [
   'templates/skills/planning/SKILL.md',
   'templates/skills/plan-to-tasks/SKILL.md',
@@ -28,8 +29,29 @@ const NOTES_GOVERNANCE_CONSUMERS = [
 const PROJECT_CONTRACT = '.ai-workflow/AGENTS.md';
 const NOTES_README = '.ai-workflow/notes/README.md';
 
+// An unconditional universal creation trigger requires a note for every non-mechanical
+// change, decision, plan or task and contradicts the lasting-rationale criterion. The
+// patterns cover every spelling the shipped consumers carry today.
+const UNIVERSAL_CREATION_TRIGGERS: readonly RegExp[] = [
+  /Every non-mechanical (?:change|decision) adds or updates a relevant note/i,
+  /Every non-mechanical (?:change|decision|plan|task)[^.\n]{0,80}(?:note|triplet)/i,
+  /\bnon-mechanical (?:change|decision|plan|task)\b[^.\n]{0,60}\b(?:includes?|requires?|needs?|adds?|updates?)\b[^.\n]{0,40}\bnote\b/i,
+];
+
+const OLD_UNIVERSAL_SENTENCE =
+  'Every non-mechanical change adds or updates at least one relevant note triplet in the same change.';
+
 async function read(path: string): Promise<string> {
   return readFile(packagePath(path), 'utf8');
+}
+
+// Extract a single level-two section so a rule is asserted where it is authored.
+function levelTwoSection(text: string, heading: string): string {
+  const start = text.indexOf(heading);
+  if (start < 0) return '';
+  const rest = text.slice(start + heading.length);
+  const next = rest.search(/\n## /);
+  return next < 0 ? rest : rest.slice(0, next);
 }
 
 describe('agent notes workflow content', () => {
@@ -105,10 +127,140 @@ describe('agent notes workflow content', () => {
     }
   });
 
-  it('requires a landing change to maintain its note and run the mechanical validator', async () => {
+  it('specifies lasting decision rationale as the note creation criterion', async () => {
+    const governance = await read('templates/project/notes/README.md');
+    const maintenance = levelTwoSection(governance, '## Maintenance and lifecycle');
+
+    expect(maintenance, 'creation is governed by lasting decision rationale').toMatch(
+      /lasting\s+(?:decision\s+)?rationale/i,
+    );
+    expect(maintenance, 'code, tests and existing documentation cannot adequately explain it').toMatch(
+      /code[^.\n]{0,80}tests?[^.\n]{0,140}(?:documentation|docs)[^.\n]{0,120}(?:cannot|can ?not|can't)[^.\n]{0,40}explain/i,
+    );
+    expect(governance, 'the unconditional every-non-mechanical triplet sentence is removed').not.toContain(
+      OLD_UNIVERSAL_SENTENCE,
+    );
+  });
+
+  it('names behavior changes, file counts and added tests as insufficient on their own', async () => {
+    const governance = await read('templates/project/notes/README.md');
+    const maintenance = levelTwoSection(governance, '## Maintenance and lifecycle');
+
+    expect(maintenance, 'behavior changes, file counts and added tests alone are insufficient').toMatch(
+      /behavior changes?[^.\n]{0,140}(?:file counts?|added tests?)[^.\n]{0,180}(?:insufficient|not (?:by themselves )?sufficient|do(?:es)? not (?:alone )?(?:require|justify)|are not enough)/i,
+    );
+  });
+
+  it('exempts local, mechanical, UI, copy and formatting changes without lasting rationale', async () => {
+    const governance = await read('templates/project/notes/README.md');
+    const maintenance = levelTwoSection(governance, '## Maintenance and lifecycle');
+
+    expect(maintenance, 'the exemption names local, mechanical, UI, copy and formatting changes').toMatch(
+      /local[^.\n]{0,200}(?:UI|copy|formatting)[^.\n]{0,200}(?:exempt|not required|no note)/i,
+    );
+    expect(maintenance, 'the exemption applies without such lasting rationale').toMatch(
+      /without[^.\n]{0,80}(?:such\s+)?(?:lasting\s+)?rationale|no lasting rationale|unless[^.\n]{0,80}rationale/i,
+    );
+  });
+
+  it('requires reusing the owning note and a new note for a changed decision', async () => {
+    const governance = await read('templates/project/notes/README.md');
+    const maintenance = levelTwoSection(governance, '## Maintenance and lifecycle');
+
+    expect(maintenance, 'reuse the existing note that owns the same decision').toMatch(
+      /reuse[^.\n]{0,80}note|existing note that owns|owns the same decision/i,
+    );
+    expect(maintenance, 'shipped facts stay current in the same change').toMatch(
+      /keep[^.\n]{0,120}facts[^.\n]{0,120}current|facts[^.\n]{0,80}current/i,
+    );
+    expect(maintenance, 'a changed recorded decision or lasting rationale requires a new note').toMatch(
+      /changed[^.\n]{0,80}decision[^.\n]{0,120}new note/i,
+    );
+  });
+
+  it('defines the keep, archive and delete retention outcomes in the archive policy', async () => {
+    const governance = await read('templates/project/notes/README.md');
+    const archive = levelTwoSection(governance, '## Archive policy');
+
+    expect(archive, 'keep a record while guidance such as alternatives, guarantees or reintroduction remains').toMatch(
+      /alternatives[^.\n]{0,120}ownership[^.\n]{0,160}(?:guarantees|data semantics|reintroduction)/i,
+    );
+    expect(archive, 'archive only a completed implemented decision with historical value but little guidance').toMatch(
+      /little future guidance|historical (?:decision )?value/i,
+    );
+    expect(archive, 'delete an active implemented record limited to small UI or mechanical detail').toMatch(
+      /delet\w*[^.\n]{0,140}(?:UI|purely mechanical|mechanical change)/i,
+    );
+    expect(archive, 'age, length and quotas never select an outcome').toMatch(
+      /age[^.\n]{0,40}length[^.\n]{0,40}quotas/i,
+    );
+  });
+
+  it('protects substantive decisions from size-based deletion', async () => {
+    const governance = await read('templates/project/notes/README.md');
+    const archive = levelTwoSection(governance, '## Archive policy');
+
+    expect(archive, 'a small bug fix, performance change or capability decision is not deletion-eligible for size alone').toMatch(
+      /bug fix[^.\n]{0,120}(?:performance|capabilit)[^.\n]{0,160}(?:does not qualify|not qualify|merely because|is small)/i,
+    );
+  });
+
+  it('preserves rejected-retention, authorized-deletion and frozen-archive boundaries', async () => {
+    const governance = await read('templates/project/notes/README.md');
+    const archive = levelTwoSection(governance, '## Archive policy');
+
+    expect(archive, 'a rejected record is retained only while it prevents a plausible, meaningful mistake').toMatch(
+      /rejected[^.\n]{0,160}(?:prevent|plausible|meaningful mistake)/i,
+    );
+    expect(archive, 'an obsolete proposal is rejected instead of archived').toMatch(
+      /reject obsolete proposals? instead/i,
+    );
+    expect(archive, 'authorized deletion removes the complete triplet and repairs inbound links').toMatch(
+      /delet\w*[^.\n]{0,160}complete triplet[^.\n]{0,160}inbound links/i,
+    );
+    expect(archive, 'sealed archive prohibitions still apply').toMatch(
+      /sealed[^.\n]{0,120}(?:do not|never)[^.\n]{0,80}(?:modify|rewrite|delete|reorder)/i,
+    );
+  });
+
+  it('keeps the five consumers on the authoritative README without a universal creation trigger', async () => {
+    for (const path of NOTES_GOVERNANCE_CONSUMERS) {
+      const text = await read(path);
+      expect(text, `${path} points at ${NOTES_README}`).toContain(NOTES_README);
+      for (const trigger of UNIVERSAL_CREATION_TRIGGERS) {
+        expect.soft(text, `${path} carries no universal creation trigger ${trigger.source}`).not.toMatch(trigger);
+      }
+    }
+  });
+
+  it('keeps each consumer note maintenance responsibility', async () => {
+    const coding = await read('templates/skills/coding/SKILL.md');
+    expect(coding, 'coding runs the notes validator').toMatch(/ai-workflow notes validate/i);
+    expect(coding, 'coding lands the implemented transition').toMatch(/\bimplemented\b/i);
+
+    const maintainer = await read('templates/agents/documentation-maintainer.md');
+    expect(maintainer, 'maintainer owns supersession decisions').toMatch(/supersession|supersess/i);
+    expect(maintainer, 'maintainer keeps complete bilingual triplets').toMatch(/bilingual triplet/i);
+
+    const standards = await read('templates/agents/standards-review.md');
+    expect(standards, 'standards review keeps its notes-rules pointer').toMatch(/notes rules/i);
+
+    const planning = await read('templates/skills/planning/SKILL.md');
+    expect(planning, 'planning keeps MEMORY alignment').toMatch(/align[^.\n]{0,40}MEMORY\.md|MEMORY\.md[^.\n]{0,80}align/i);
+
+    const planToTasks = await read('templates/skills/plan-to-tasks/SKILL.md');
+    expect(planToTasks, 'plan-to-tasks requires a note update for a decision that lands one').toMatch(
+      /note update|update[^.\n]{0,40}note/i,
+    );
+  });
+
+  it('maintains and validates existing notes under the README-governed criterion', async () => {
     const coding = await read('templates/skills/coding/SKILL.md');
     expect(coding, 'coding runs the notes validator').toMatch(/notes validate/i);
     expect(coding, 'coding transitions proposed work to implemented').toMatch(/\bimplemented\b/i);
+    expect(coding, 'coding defers the note criterion to the authoritative README').toMatch(
+      /README[^.\n]{0,160}(?:single source|governance|criteri(?:on|a)|rationale)/i,
+    );
 
     const maintainer = await read('templates/agents/documentation-maintainer.md');
     expect(maintainer, 'maintainer owns supersession decisions').toMatch(/supersess/i);
