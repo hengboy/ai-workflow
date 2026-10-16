@@ -55,7 +55,7 @@ Before drafting, read [the task template](references/task.md) for the full field
 - Map every REQ and AC to task coverage or separately declared workspace finalization coverage; explain intentional shared coverage.
 - Declare dependencies only for data, contract, ordering or overlapping-write constraints.
 - Ask File Explorer for exact paths when an entry, call chain or dependency is unknown.
-- A task landing a non-mechanical decision includes its note update, lifecycle transition and the `ai-workflow notes validate` check; purely mechanical tasks are exempt.
+- A task landing a lasting decision whose rationale code, tests and existing documentation cannot adequately explain includes its note update, lifecycle transition and the `ai-workflow notes validate` check; local, mechanical, UI, copy and formatting changes without such lasting rationale are exempt.
 
 ## Coverage and DAG checks
 

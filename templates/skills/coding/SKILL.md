@@ -229,7 +229,7 @@ planning artifacts.
 ## Note Maintenance
 
 - Before landing a change, load `.ai-workflow/AGENTS.md`, `.ai-workflow/notes/AGENTS.md` and `.ai-workflow/notes/README.md`; the README is the single source for note format, lifecycle, supersession and archive governance.
-- Every non-mechanical change adds or updates a relevant note in the same change, including behavior, architecture, cross-file contracts, processes, testing strategy, configuration or persistent formats. Purely mechanical or local edits changing none of these may be exempt.
+- Create or update a note only for a lasting decision whose rationale code, tests and existing documentation cannot adequately explain; behavior changes, file counts and added tests are insufficient on their own, and local, mechanical, UI, copy and formatting changes without such lasting rationale are exempt. Reuse a still-accurate note that owns the same decision and keep its facts current in the same change; record a changed decision or lasting rationale as a new linked note.
 - When a decision lands, move its record to `implemented` and rewrite its body as delivered facts, not only its status. A changed decision or rationale requires a new note; assess related active-note supersession within scope.
 - Add relevant notes and governance to explicit bounded read/write scopes, never the entire notes history. After landing the note, run `ai-workflow notes validate --project <absolute-project-root>` and report the result.
 
@@ -312,7 +312,7 @@ repository ownership and plain plan-ID references; also apply Note Maintenance a
   `failed`, never as `done`.
 - Negative cases and failure output are reported truthfully.
 - Screenshots remain under `.ai-workflow/plans/<planId>/screenshot/`.
-- Every non-mechanical change updated its relevant note and `ai-workflow notes validate` passed.
+- Any lasting decision that required a note updated its relevant record and `ai-workflow notes validate` passed; changes without such lasting rationale added no note.
 - Return `done` only when all scoped checks pass and the `git-operator`
   sub-agent (Git Operator) returned the scoped commit SHA or verified no-change
   evidence with the current HEAD SHA; otherwise return `blocked` or `failed`
