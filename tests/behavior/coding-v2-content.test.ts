@@ -417,18 +417,17 @@ describe('fresh sub-agent sessions for completed roles (REQ-001, REQ-002, REQ-00
 });
 
 /**
- * REQ-001 / REQ-002 (plan 20261017-orchestrator-context-boundaries): the shipped
- * orchestrator-context bounds. Delegated returns keep the contractual Markdown shape
- * but cap evidence entries to a path plus a one-sentence conclusion, prohibit embedded
- * bodies, stream large outputs to a gitignored reports log digested by a fresh
- * read-only session, and keep the primary at decision level; fixed context and frozen
- * plan files travel as absolute paths plus version anchors only, read once by the
- * primary and self-read by each leaf. This reads the delivered SKILL.md and
+ * The shipped orchestrator-context bounds. Delegated returns keep the contractual
+ * Markdown shape but cap evidence entries to a path plus a one-sentence conclusion,
+ * prohibit embedded bodies, stream large outputs to a gitignored reports log digested
+ * by a fresh read-only session, and keep the primary at decision level; fixed context
+ * and frozen plan files travel as absolute paths plus version anchors only, read once
+ * by the primary and self-read by each leaf. This reads the delivered SKILL.md and
  * workspace.md sections as public prompt artifacts; it is static delivered-content
  * evidence, not host runtime enforcement.
  */
-describe('orchestrator context boundaries (plan 20261017-orchestrator-context-boundaries) (REQ-001, REQ-002)', () => {
-  // AC-001: the delivered result-envelope text.
+describe('orchestrator context bounds: delegated evidence caps and path-based frozen-input transport', () => {
+  // The delivered result-envelope text.
   it('bounds delegated evidence entries to one-sentence path conclusions', async () => {
     const envelope = await codedEnvelopeText();
 
@@ -444,7 +443,7 @@ describe('orchestrator context boundaries (plan 20261017-orchestrator-context-bo
     );
   });
 
-  // AC-001: the prohibition on embedded bodies.
+  // The prohibition on embedded bodies.
   it('prohibits embedded diffs, logs, JSON bodies and code blocks in evidence entries', async () => {
     const envelope = await codedEnvelopeText();
 
@@ -456,7 +455,7 @@ describe('orchestrator context boundaries (plan 20261017-orchestrator-context-bo
     );
   });
 
-  // AC-001: the gitignored report-log location for large outputs.
+  // The gitignored report-log location for large outputs.
   it('writes large outputs to the gitignored reports log and never commits them', async () => {
     const envelope = await codedEnvelopeText();
 
@@ -468,7 +467,7 @@ describe('orchestrator context boundaries (plan 20261017-orchestrator-context-bo
     );
   });
 
-  // AC-001: the fresh read-only digest session.
+  // The fresh read-only digest session.
   it('digests large outputs through a fresh read-only session that returns one bounded conclusion', async () => {
     const envelope = await codedEnvelopeText();
 
@@ -485,7 +484,7 @@ describe('orchestrator context boundaries (plan 20261017-orchestrator-context-bo
     );
   });
 
-  // AC-001: the decision-level primary output and its exemptions.
+  // The decision-level primary output and its exemptions.
   it('keeps the primary output at decision level with handoff, support and final-report exemptions', async () => {
     const envelope = await codedEnvelopeText();
 
@@ -498,7 +497,7 @@ describe('orchestrator context boundaries (plan 20261017-orchestrator-context-bo
     expect(envelope, 'the final report is exempt').toMatch(/final report/i);
   });
 
-  // AC-002: path-plus-anchor packet transport.
+  // Path-plus-anchor packet transport.
   it('transports fixed context and frozen plan files as absolute paths plus version anchors only', async () => {
     const injection = await codedInjectionText();
 
@@ -514,7 +513,7 @@ describe('orchestrator context boundaries (plan 20261017-orchestrator-context-bo
     );
   });
 
-  // AC-002: the preserved packet fields.
+  // The preserved packet fields.
   it('preserves the existing packet fields under path-plus-anchor transport', async () => {
     const injection = await codedInjectionText();
 
@@ -530,7 +529,7 @@ describe('orchestrator context boundaries (plan 20261017-orchestrator-context-bo
     }
   });
 
-  // AC-002: the read-once reusable primary prefix.
+  // The read-once reusable primary prefix.
   it('reads the fixed context once at session start as a reusable prefix', async () => {
     const injection = await codedInjectionText();
 
@@ -543,7 +542,7 @@ describe('orchestrator context boundaries (plan 20261017-orchestrator-context-bo
     );
   });
 
-  // AC-002: the leaf self-read of fixed context and frozen plan files.
+  // The leaf self-read of fixed context and frozen plan files.
   it('requires each leaf to read its own repository fixed context and the frozen plan files', async () => {
     const injection = await codedInjectionText();
 
@@ -555,7 +554,7 @@ describe('orchestrator context boundaries (plan 20261017-orchestrator-context-bo
     );
   });
 
-  // AC-002: the plan-referenced indexed-feature locator route.
+  // The plan-referenced indexed-feature locator route.
   it('routes plan-referenced indexed features through context locate and read_order', async () => {
     const injection = await codedInjectionText();
 
@@ -565,7 +564,7 @@ describe('orchestrator context boundaries (plan 20261017-orchestrator-context-bo
     expect(injection, 'the leaf reads the exact read_order paths').toMatch(/read_order/);
   });
 
-  // AC-002: no full re-injection alternative mode.
+  // No full re-injection alternative mode.
   it('provides no full re-injection alternative mode', async () => {
     const injection = await codedInjectionText();
 
@@ -581,12 +580,12 @@ async function codingSkillSection(heading: string): Promise<string> {
   return normalizedSection(text, heading);
 }
 
-/** REQ-001/AC-001 envelope text: Coding's delegation rules plus the workspace packet contract. */
+/** Envelope text: Coding's delegation rules plus the workspace packet contract. */
 async function codedEnvelopeText(): Promise<string> {
   return [await codingSkillSection('Delegation and Scheduling'), await workspaceSection('## Packet contract')].join(' ');
 }
 
-/** REQ-002/AC-002 injection text: Coding's preconditions and delegation rules plus the workspace packet contract. */
+/** Injection text: Coding's preconditions and delegation rules plus the workspace packet contract. */
 async function codedInjectionText(): Promise<string> {
   return [
     await codingSkillSection('Preconditions'),
@@ -596,9 +595,9 @@ async function codedInjectionText(): Promise<string> {
 }
 
 /**
- * REQ-003 (plan 20261017-orchestrator-context-boundaries): the checkpoint-boundary
- * active-rebuild protocol for checkpointed workspace execution. The primary may
- * rebuild context only at a clean, fully checkpointed phase boundary or a verified
+ * The checkpoint-boundary active-rebuild protocol for checkpointed workspace
+ * execution. The primary may rebuild context only at a clean, fully checkpointed phase
+ * boundary or a verified
  * repository delivery boundary, re-deriving state from the frozen files instead of
  * conversation history and verifying recorded checkpoint SHAs, status drift and
  * checkpoint coverage before continuing. This reads the delivered `## Recovery`
@@ -606,8 +605,8 @@ async function codedInjectionText(): Promise<string> {
  * as public prompt artifacts; it is static delivered-content evidence, not host
  * runtime enforcement.
  */
-describe('checkpoint-boundary active rebuild (plan 20261017-orchestrator-context-boundaries) (REQ-003, AC-003)', () => {
-  // AC-003: the active rebuild and its boundary conditions.
+describe('checkpoint-boundary active rebuild protocol', () => {
+  // The active rebuild and its boundary conditions.
   it('allows an active rebuild only at a clean checkpointed phase or verified delivery boundary', async () => {
     const recovery = await workspaceSection('## Recovery');
 
@@ -622,7 +621,7 @@ describe('checkpoint-boundary active rebuild (plan 20261017-orchestrator-context
     );
   });
 
-  // AC-003: state is re-derived from the frozen files, never from conversation history.
+  // State is re-derived from the frozen files, never from conversation history.
   it('re-derives state from the frozen files and never from conversation history', async () => {
     const recovery = await workspaceSection('## Recovery');
 
@@ -637,7 +636,7 @@ describe('checkpoint-boundary active rebuild (plan 20261017-orchestrator-context
     );
   });
 
-  // AC-003: verification before continuing.
+  // Verification before continuing.
   it('verifies recorded checkpoint SHAs, status drift and checkpoint coverage before continuing', async () => {
     const recovery = await workspaceSection('## Recovery');
 
@@ -652,7 +651,7 @@ describe('checkpoint-boundary active rebuild (plan 20261017-orchestrator-context
     expect(recovery, 'only then does the rebuild continue').toMatch(/only then/i);
   });
 
-  // AC-003: the clean-boundary restriction prohibiting discarded context.
+  // The clean-boundary restriction prohibiting discarded context.
   it('prohibits discarding context at a dirty, partial or uncheckpointed boundary', async () => {
     const recovery = await workspaceSection('## Recovery');
 
@@ -668,7 +667,7 @@ describe('checkpoint-boundary active rebuild (plan 20261017-orchestrator-context
     expect(recovery, 'the restricted cases include unknown progress').toMatch(/unknown[^.]{0,60}progress/i);
   });
 
-  // AC-003: finish in-flight tasks, then restart; otherwise report blocked.
+  // Finish in-flight tasks, then restart; otherwise report blocked.
   it('completes in-flight tasks to the nearest verified boundary and restarts, or reports blocked', async () => {
     const recovery = await workspaceSection('## Recovery');
 
@@ -683,7 +682,7 @@ describe('checkpoint-boundary active rebuild (plan 20261017-orchestrator-context
     );
   });
 
-  // AC-003: the resumed session follows the frozen schedule with no DAG recompute.
+  // The resumed session follows the frozen schedule with no DAG recompute.
   it('follows the frozen schedule and never recomputes the DAG or skips tasks', async () => {
     const recovery = await workspaceSection('## Recovery');
 
@@ -698,7 +697,7 @@ describe('checkpoint-boundary active rebuild (plan 20261017-orchestrator-context
     );
   });
 
-  // AC-003: the ordinary-plan exclusion.
+  // The ordinary-plan exclusion.
   it('keeps ordinary split or unsplit plans on the existing fresh-session recovery without an active-rebuild rule', async () => {
     const recovery = await workspaceSection('## Recovery');
 
@@ -710,7 +709,7 @@ describe('checkpoint-boundary active rebuild (plan 20261017-orchestrator-context
     );
   });
 
-  // AC-003: the parent workspace guidance cross-references the reference protocol.
+  // The parent workspace guidance cross-references the reference protocol.
   it('cross-references the checkpoint-boundary active rebuild from the parent workspace guidance', async () => {
     const coding = (await readFile(packagePath('templates', 'skills', 'coding', 'SKILL.md'), 'utf8')).replace(/\s+/g, ' ');
 
@@ -724,16 +723,15 @@ describe('checkpoint-boundary active rebuild (plan 20261017-orchestrator-context
 });
 
 /**
- * REQ-004 / AC-004 (plan 20261017-orchestrator-context-boundaries): this run's
- * feature-branch directive is run-scoped and carried by the frozen plan and the
- * handoff only, so the synchronization-managed templates and the project contract
+ * This run's feature-branch directive is run-scoped and carried by the frozen plan and
+ * the handoff only, so the synchronization-managed templates and the project contract
  * must not carry a general mandatory "create a feature branch from main" rule. The
  * assertion passes on compliant text; its RED is demonstrated by mutating a copy of a
  * managed file outside the repository. This reads the delivered prompt artifacts as
  * public content; it is static delivered-content evidence, not host runtime
  * enforcement.
  */
-describe('no synchronization-managed feature-branch rule (plan 20261017-orchestrator-context-boundaries) (REQ-004, AC-004)', () => {
+describe('no synchronization-managed feature-branch rule', () => {
   it('keeps a general mandatory feature-branch rule out of the synchronization-managed templates and contract', async () => {
     // Tolerant patterns for a mandatory general rule; both require an explicit
     // `feature branch` phrase, so legitimate unrelated wording cannot match.
@@ -763,17 +761,16 @@ describe('no synchronization-managed feature-branch rule (plan 20261017-orchestr
 });
 
 /**
- * REQ-005 / AC-005 (plan 20261017-orchestrator-context-boundaries): the project
- * contract and its tracked mirror gain the minimal rule text for the result-envelope
- * evidence bounds and the checkpoint-boundary active rebuild, staying
+ * The project contract and its tracked mirror gain the minimal rule text for the
+ * result-envelope evidence bounds and the checkpoint-boundary active rebuild, staying
  * whitespace-normalized equal in full. These are focused content assertions on the
  * delivered contract text; they are static delivered-content evidence, not host
  * runtime enforcement.
  */
-describe('contract context-boundary rules (plan 20261017-orchestrator-context-boundaries) (REQ-005, AC-005)', () => {
+describe('contract context-boundary rules', () => {
   const contractPaths = ['templates/project/AGENTS.md', '.ai-workflow/AGENTS.md'];
 
-  // AC-005: the result-envelope evidence bound.
+  // The result-envelope evidence bound.
   it('bounds each Evidence entry to an absolute artifact or report reference path with at most one sentence and no embedded bodies', async () => {
     for (const path of contractPaths) {
       const text = (await readFile(packagePath(path), 'utf8')).replace(/\s+/g, ' ');
@@ -797,7 +794,7 @@ describe('contract context-boundary rules (plan 20261017-orchestrator-context-bo
     }
   });
 
-  // AC-005: the checkpoint-boundary active rebuild.
+  // The checkpoint-boundary active rebuild.
   it('allows an active rebuild only at a clean checkpointed phase or verified delivery boundary, derived from records and never conversation history', async () => {
     for (const path of contractPaths) {
       const text = (await readFile(packagePath(path), 'utf8')).replace(/\s+/g, ' ');
