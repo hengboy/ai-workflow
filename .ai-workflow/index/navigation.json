@@ -4283,6 +4283,46 @@
         "tests/behavior/planning-content.test.ts"
       ],
       "shared_entry": true
+    },
+    {
+      "id": "orchestrator-context-boundaries",
+      "name": "orchestrator-context-boundaries",
+      "aliases": [],
+      "module_root": "root",
+      "entries": [
+        "templates/skills/coding/SKILL.md",
+        "templates/skills/coding/references/workspace.md",
+        "templates/project/AGENTS.md",
+        ".ai-workflow/notes/implemented/process/2026-10-17-orchestrator-context-boundaries.md"
+      ],
+      "symbols": [],
+      "related_files": [
+        ".ai-workflow/AGENTS.md",
+        "MEMORY.md",
+        ".ai-workflow/notes/implemented/process/2026-10-17-orchestrator-context-boundaries.zh.md",
+        ".ai-workflow/notes/implemented/process/2026-10-17-orchestrator-context-boundaries.i18n.yaml"
+      ],
+      "tests": [
+        "tests/behavior/coding-v2-content.test.ts",
+        "tests/behavior/review-policy.test.ts"
+      ],
+      "depends_on": [],
+      "relations": [],
+      "owner_role": "shared",
+      "responsibility": "Bounds orchestrator context growth in delegated coding: delegated sub-agent results return absolute artifact paths or report references with one-sentence conclusions and route large outputs to a gitignored reports log digested by a fresh read-only session, the frozen fixed context and plan files travel as absolute paths plus version anchors with a read-once primary prefix and leaf self-reads, and a checkpointed workspace run may actively rebuild state from the frozen files and records only at clean, fully checkpointed phase or verified repository delivery boundaries with read-only SHA and drift verification.",
+      "read_scope": [
+        ".ai-workflow/AGENTS.md",
+        ".ai-workflow/notes/implemented/process/2026-10-17-orchestrator-context-boundaries.i18n.yaml",
+        ".ai-workflow/notes/implemented/process/2026-10-17-orchestrator-context-boundaries.md",
+        ".ai-workflow/notes/implemented/process/2026-10-17-orchestrator-context-boundaries.zh.md",
+        "MEMORY.md",
+        "templates/project/AGENTS.md",
+        "templates/skills/coding/SKILL.md",
+        "templates/skills/coding/references/workspace.md",
+        "tests/behavior/coding-v2-content.test.ts",
+        "tests/behavior/review-policy.test.ts"
+      ],
+      "shared_entry": true
     }
   ]
 }
