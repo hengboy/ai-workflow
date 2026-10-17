@@ -415,3 +415,182 @@ describe('fresh sub-agent sessions for completed roles (REQ-001, REQ-002, REQ-00
     );
   });
 });
+
+/**
+ * REQ-001 / REQ-002 (plan 20261017-orchestrator-context-boundaries): the shipped
+ * orchestrator-context bounds. Delegated returns keep the contractual Markdown shape
+ * but cap evidence entries to a path plus a one-sentence conclusion, prohibit embedded
+ * bodies, stream large outputs to a gitignored reports log digested by a fresh
+ * read-only session, and keep the primary at decision level; fixed context and frozen
+ * plan files travel as absolute paths plus version anchors only, read once by the
+ * primary and self-read by each leaf. This reads the delivered SKILL.md and
+ * workspace.md sections as public prompt artifacts; it is static delivered-content
+ * evidence, not host runtime enforcement.
+ */
+describe('orchestrator context boundaries (plan 20261017-orchestrator-context-boundaries) (REQ-001, REQ-002)', () => {
+  // AC-001: the delivered result-envelope text.
+  it('bounds delegated evidence entries to one-sentence path conclusions', async () => {
+    const envelope = await codedEnvelopeText();
+
+    expect(envelope, 'the envelope names the `### Evidence` entry').toMatch(/### Evidence/);
+    expect(
+      envelope,
+      'an evidence entry carries the absolute path of the produced artifact or an explicit report reference',
+    ).toMatch(
+      /absolute (?:file )?path[^.]{0,80}(?:or an? explicit report reference|or a report reference)|(?:artifact|report) (?:absolute )?path/i,
+    );
+    expect(envelope, 'the conclusion is capped at one sentence').toMatch(
+      /at most one sentence|one[- ]sentence cap|single sentence/i,
+    );
+  });
+
+  // AC-001: the prohibition on embedded bodies.
+  it('prohibits embedded diffs, logs, JSON bodies and code blocks in evidence entries', async () => {
+    const envelope = await codedEnvelopeText();
+
+    for (const body of ['diff', 'log', 'JSON', 'code block']) {
+      expect(envelope, `the evidence bound names ${body} bodies`).toMatch(new RegExp(`\\b${body}s?\\b`, 'i'));
+    }
+    expect(envelope, 'embedded bodies are prohibited in evidence entries').toMatch(
+      /(?:no |not |never |prohibit|forbid|must not )[^.]{0,160}embedded[^.]{0,160}(?:diff|log|JSON|code)/i,
+    );
+  });
+
+  // AC-001: the gitignored report-log location for large outputs.
+  it('writes large outputs to the gitignored reports log and never commits them', async () => {
+    const envelope = await codedEnvelopeText();
+
+    expect(envelope, 'large outputs are written under the plan directory reports log').toMatch(
+      /<plan-directory>\/reports\/<taskId>\.log/i,
+    );
+    expect(envelope, 'the reports path is gitignored and never committed').toMatch(
+      /(?:gitignore[d]?|git-ignored)[^.]{0,140}(?:never committed|not committed|never commit|not commit)|(?:never|not) committ?ed[^.]{0,140}(?:gitignore|reports)/i,
+    );
+  });
+
+  // AC-001: the fresh read-only digest session.
+  it('digests large outputs through a fresh read-only session that returns one bounded conclusion', async () => {
+    const envelope = await codedEnvelopeText();
+
+    expect(envelope, 'a fresh read-only sub-agent session is dispatched').toMatch(
+      /fresh[^.]{0,100}read-only[^.]{0,80}(?:sub-agent )?session|read-only[^.]{0,100}fresh[^.]{0,80}(?:sub-agent )?session/i,
+    );
+    expect(envelope, 'a file-explorer session is bound to the report path').toMatch(
+      /file-explorer[^.]{0,140}report/i,
+    );
+    expect(envelope, 'a test session serves a required command verdict').toMatch(/`?test`?[^.]{0,100}verdict/i);
+    expect(envelope, 'the digest returns one bounded conclusion').toMatch(/one bounded conclusion/i);
+    expect(envelope, 'the raw content never enters the primary context').toMatch(
+      /raw (?:content|output)[^.]{0,140}never enters the primary|never enters the primary[^.]{0,140}context/i,
+    );
+  });
+
+  // AC-001: the decision-level primary output and its exemptions.
+  it('keeps the primary output at decision level with handoff, support and final-report exemptions', async () => {
+    const envelope = await codedEnvelopeText();
+
+    expect(envelope, 'the primary output stays at decision level').toMatch(/decision level/i);
+    for (const term of ['dispatched', 'verdict', 'checkpoint']) {
+      expect(envelope, `the decision-level set names ${term}`).toMatch(new RegExp(`\\b${term}\\b`, 'i'));
+    }
+    expect(envelope, 'the handoff copyable prompt is exempt').toMatch(/copyable prompt/i);
+    expect(envelope, 'bounded support or recovery requests are exempt').toMatch(/bounded (?:support|recovery)/i);
+    expect(envelope, 'the final report is exempt').toMatch(/final report/i);
+  });
+
+  // AC-002: path-plus-anchor packet transport.
+  it('transports fixed context and frozen plan files as absolute paths plus version anchors only', async () => {
+    const injection = await codedInjectionText();
+
+    expect(injection, 'fixed context and plan files travel as absolute paths plus version anchors').toMatch(
+      /absolute paths?[^.]{0,80}(?:plus|and|with)[^.]{0,60}anchors?|anchors? only/i,
+    );
+    expect(injection, 'fixed context uses the worktree baseline commit or blob anchor').toMatch(
+      /worktree baseline commit|baseline commit|blob anchor|blob hash/i,
+    );
+    expect(injection, 'frozen plan files use the frozen digest').toMatch(/frozen digest/i);
+    expect(injection, 'their content is never inlined').toMatch(
+      /(?:never|not) inlined?|content (?:is )?never inlined/i,
+    );
+  });
+
+  // AC-002: the preserved packet fields.
+  it('preserves the existing packet fields under path-plus-anchor transport', async () => {
+    const injection = await codedInjectionText();
+
+    for (const field of [
+      'REQ/AC',
+      'task goal',
+      'exact scopes',
+      'permitted commands',
+      'upstream delivery evidence',
+      'output paths',
+    ]) {
+      expect(injection, `the packet keeps the ${field} field`).toContain(field);
+    }
+  });
+
+  // AC-002: the read-once reusable primary prefix.
+  it('reads the fixed context once at session start as a reusable prefix', async () => {
+    const injection = await codedInjectionText();
+
+    expect(injection, 'fixed context is read once at session start').toMatch(
+      /(?:read|reads|reading)[^.]{0,100}once[^.]{0,80}session start|once at (?:the )?session start/i,
+    );
+    expect(injection, 'the fixed context is a reusable prefix').toMatch(/reusable prefix/i);
+    expect(injection, 'content is not re-injected per task').toMatch(
+      /(?:not|never|does not|doesn't) (?:re-inject|re-injects|reinject)[^.]{0,140}(?:per task|for each task|each task)/i,
+    );
+  });
+
+  // AC-002: the leaf self-read of fixed context and frozen plan files.
+  it('requires each leaf to read its own repository fixed context and the frozen plan files', async () => {
+    const injection = await codedInjectionText();
+
+    expect(injection, 'each leaf reads its own repository fixed context').toMatch(
+      /(?:each )?leaf[^.]{0,160}(?:its own|own)[^.]{0,80}(?:fixed context|AGENTS\.md)/i,
+    );
+    expect(injection, 'each leaf reads the frozen plan files per the packet contract').toMatch(
+      /leaf[^.]{0,160}frozen plan files|frozen plan files[^.]{0,160}leaf/i,
+    );
+  });
+
+  // AC-002: the plan-referenced indexed-feature locator route.
+  it('routes plan-referenced indexed features through context locate and read_order', async () => {
+    const injection = await codedInjectionText();
+
+    expect(injection, 'the leaf uses context locate with --verify').toMatch(
+      /ai-workflow context locate --project <root> --feature <id> --verify/,
+    );
+    expect(injection, 'the leaf reads the exact read_order paths').toMatch(/read_order/);
+  });
+
+  // AC-002: no full re-injection alternative mode.
+  it('provides no full re-injection alternative mode', async () => {
+    const injection = await codedInjectionText();
+
+    expect(injection, 'a full re-injection alternative mode is not provided').toMatch(
+      /(?:no|not|never)[^.]{0,100}(?:full )?re-injection[^.]{0,160}(?:alternative|mode|provided)|(?:full )?re-injection[^.]{0,160}(?:is not provided|not provided|no alternative)/i,
+    );
+  });
+});
+
+/** Whitespace-normalized SKILL.md level-two section, or '' when the heading is absent. */
+async function codingSkillSection(heading: string): Promise<string> {
+  const text = await readFile(packagePath('templates', 'skills', 'coding', 'SKILL.md'), 'utf8');
+  return normalizedSection(text, heading);
+}
+
+/** REQ-001/AC-001 envelope text: Coding's delegation rules plus the workspace packet contract. */
+async function codedEnvelopeText(): Promise<string> {
+  return [await codingSkillSection('Delegation and Scheduling'), await workspaceSection('## Packet contract')].join(' ');
+}
+
+/** REQ-002/AC-002 injection text: Coding's preconditions and delegation rules plus the workspace packet contract. */
+async function codedInjectionText(): Promise<string> {
+  return [
+    await codingSkillSection('Preconditions'),
+    await codingSkillSection('Delegation and Scheduling'),
+    await workspaceSection('## Packet contract'),
+  ].join(' ');
+}

@@ -82,6 +82,23 @@ session still ends at its handoff.
   instead of the entire previous conversation. Completed-task context can
   accumulate and degrade effectiveness; a fresh session limits that accumulation,
   and no measured performance gain is claimed.
+- Delegated sub-agent results keep the `## Output checklist` Markdown shape —
+  `### Status`, `### Summary`, `### Evidence` and `### Support Requests`; File Explorer
+  keeps `### Found Paths` — and add upper bounds: each `### Evidence` entry carries the
+  absolute path of the produced artifact or an explicit report reference plus at most one
+  sentence of conclusion, with no embedded diffs, logs, JSON bodies or code blocks.
+- Large outputs such as test logs, `workspace status` JSON and build output are written
+  to `<plan-directory>/reports/<taskId>.log`, where `<plan-directory>` is the writing
+  repository's own plan directory, or each repository's slice plan directory in workspace
+  mode; the writing leaf writes it inside its packet-authorized output paths, and the
+  reports path is gitignored and never committed.
+- When the primary must digest such an output, it dispatches a fresh read-only sub-agent
+  session (for example `file-explorer` bound to the report path, or `test` when a command
+  verdict is required) that returns one bounded conclusion; the raw content never enters
+  the primary's context.
+- The primary's own output stays at decision level (dispatched, verdict, checkpoint),
+  exempting the handoff copyable prompt, bounded support or recovery requests and the
+  final report, which keep their required content.
 
 ## Surface routing
 
@@ -149,6 +166,16 @@ phase with bounded support instead of broader scope.
 - Create a Todo list before editing and keep it current. Each step must state its
   scope, acceptance evidence and commit point.
 - Use a Todo list when it improves clarity; keep it proportional to the change.
+- Packets transport the frozen fixed context and the frozen plan files as absolute
+  paths plus version anchors only: the worktree baseline commit or blob anchor for
+  fixed context and the frozen digest for plan files; their content is never inlined.
+- Read the fixed context once at session start as a reusable prefix and do not
+  re-inject content per task.
+- Each leaf explicitly reads its own repository's fixed context and the frozen plan
+  files per the packet contract; for a plan-referenced indexed feature it runs
+  `ai-workflow context locate --project <root> --feature <id> --verify` and reads the
+  exact paths in its `read_order` output.
+- No full re-injection alternative mode is provided.
 
 ## Procedure
 

@@ -89,14 +89,22 @@ worktrees/branches, preserving unrelated user state.
 ## Packet contract
 
 Every packet carries exact absolute parent plan/root, source repository, local
-slice plan, coding worktree, phase/task ID, assigned REQ/AC, relative and resolved
-read/write scope, permitted commands, output paths and upstream delivery evidence.
+slice plan, coding worktree, phase/task ID, assigned REQ/AC, task goal, exact scopes,
+relative and resolved read/write scope, permitted commands, output paths and upstream
+delivery evidence.
 Every command uses an explicit workdir and every packet path is an absolute path, never
 resolved against inherited parent cwd. Each leaf explicitly
 reads that repository's own `.ai-workflow/AGENTS.md`, `MEMORY.md`,
 `.ai-workflow/index/navigation.json` and `.ai-workflow/index/navigation.md`.
 A native permission denial is a blocker, never permission to bypass the host or
 create a different worktree.
+
+Return envelopes keep the delegated Markdown shape with `### Status`, `### Summary`,
+`### Evidence` and `### Support Requests` and add upper bounds: an `### Evidence`
+entry carries the absolute path of the produced artifact or an explicit report
+reference plus at most one sentence of conclusion, with no embedded diffs, logs,
+JSON bodies or code blocks. Large outputs belong in
+`<plan-directory>/reports/<taskId>.log`, a gitignored path that is never committed.
 
 ## Review and checkpoint record
 
