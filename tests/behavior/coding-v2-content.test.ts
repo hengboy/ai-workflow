@@ -415,3 +415,413 @@ describe('fresh sub-agent sessions for completed roles (REQ-001, REQ-002, REQ-00
     );
   });
 });
+
+/**
+ * The shipped orchestrator-context bounds. Delegated returns keep the contractual
+ * Markdown shape but cap evidence entries to a path plus a one-sentence conclusion,
+ * prohibit embedded bodies, stream large outputs to a gitignored reports log digested
+ * by a fresh read-only session, and keep the primary at decision level; fixed context
+ * and frozen plan files travel as absolute paths plus version anchors only, read once
+ * by the primary and self-read by each leaf. This reads the delivered SKILL.md and
+ * workspace.md sections as public prompt artifacts; it is static delivered-content
+ * evidence, not host runtime enforcement.
+ */
+describe('orchestrator context bounds: delegated evidence caps and path-based frozen-input transport', () => {
+  // The delivered result-envelope text.
+  it('bounds delegated evidence entries to one-sentence path conclusions', async () => {
+    const envelope = await codedEnvelopeText();
+
+    expect(envelope, 'the envelope names the `### Evidence` entry').toMatch(/### Evidence/);
+    expect(
+      envelope,
+      'an evidence entry carries the absolute path of the produced artifact or an explicit report reference',
+    ).toMatch(
+      /absolute (?:file )?path[^.]{0,80}(?:or an? explicit report reference|or a report reference)|(?:artifact|report) (?:absolute )?path/i,
+    );
+    expect(envelope, 'the conclusion is capped at one sentence').toMatch(
+      /at most one sentence|one[- ]sentence cap|single sentence/i,
+    );
+  });
+
+  // The prohibition on embedded bodies.
+  it('prohibits embedded diffs, logs, JSON bodies and code blocks in evidence entries', async () => {
+    const envelope = await codedEnvelopeText();
+
+    for (const body of ['diff', 'log', 'JSON', 'code block']) {
+      expect(envelope, `the evidence bound names ${body} bodies`).toMatch(new RegExp(`\\b${body}s?\\b`, 'i'));
+    }
+    expect(envelope, 'embedded bodies are prohibited in evidence entries').toMatch(
+      /(?:no |not |never |prohibit|forbid|must not )[^.]{0,160}embedded[^.]{0,160}(?:diff|log|JSON|code)/i,
+    );
+  });
+
+  // The gitignored report-log location for large outputs.
+  it('writes large outputs to the gitignored reports log and never commits them', async () => {
+    const envelope = await codedEnvelopeText();
+
+    expect(envelope, 'large outputs are written under the plan directory reports log').toMatch(
+      /<plan-directory>\/reports\/<taskId>\.log/i,
+    );
+    expect(envelope, 'the reports path is gitignored and never committed').toMatch(
+      /(?:gitignore[d]?|git-ignored)[^.]{0,140}(?:never committed|not committed|never commit|not commit)|(?:never|not) committ?ed[^.]{0,140}(?:gitignore|reports)/i,
+    );
+  });
+
+  // The fresh read-only digest session.
+  it('digests large outputs through a fresh read-only session that returns one bounded conclusion', async () => {
+    const envelope = await codedEnvelopeText();
+
+    expect(envelope, 'a fresh read-only sub-agent session is dispatched').toMatch(
+      /fresh[^.]{0,100}read-only[^.]{0,80}(?:sub-agent )?session|read-only[^.]{0,100}fresh[^.]{0,80}(?:sub-agent )?session/i,
+    );
+    expect(envelope, 'a file-explorer session is bound to the report path').toMatch(
+      /file-explorer[^.]{0,140}report/i,
+    );
+    expect(envelope, 'a test session serves a required command verdict').toMatch(/`?test`?[^.]{0,100}verdict/i);
+    expect(envelope, 'the digest returns one bounded conclusion').toMatch(/one bounded conclusion/i);
+    expect(envelope, 'the raw content never enters the primary context').toMatch(
+      /raw (?:content|output)[^.]{0,140}never enters the primary|never enters the primary[^.]{0,140}context/i,
+    );
+  });
+
+  // The decision-level primary output and its exemptions.
+  it('keeps the primary output at decision level with handoff, support and final-report exemptions', async () => {
+    const envelope = await codedEnvelopeText();
+
+    expect(envelope, 'the primary output stays at decision level').toMatch(/decision level/i);
+    for (const term of ['dispatched', 'verdict', 'checkpoint']) {
+      expect(envelope, `the decision-level set names ${term}`).toMatch(new RegExp(`\\b${term}\\b`, 'i'));
+    }
+    expect(envelope, 'the handoff copyable prompt is exempt').toMatch(/copyable prompt/i);
+    expect(envelope, 'bounded support or recovery requests are exempt').toMatch(/bounded (?:support|recovery)/i);
+    expect(envelope, 'the final report is exempt').toMatch(/final report/i);
+  });
+
+  // Path-plus-anchor packet transport.
+  it('transports fixed context and frozen plan files as absolute paths plus version anchors only', async () => {
+    const injection = await codedInjectionText();
+
+    expect(injection, 'fixed context and plan files travel as absolute paths plus version anchors').toMatch(
+      /absolute paths?[^.]{0,80}(?:plus|and|with)[^.]{0,60}anchors?|anchors? only/i,
+    );
+    expect(injection, 'fixed context uses the worktree baseline commit or blob anchor').toMatch(
+      /worktree baseline commit|baseline commit|blob anchor|blob hash/i,
+    );
+    expect(injection, 'frozen plan files use the frozen digest').toMatch(/frozen digest/i);
+    expect(injection, 'their content is never inlined').toMatch(
+      /(?:never|not) inlined?|content (?:is )?never inlined/i,
+    );
+  });
+
+  // The preserved packet fields.
+  it('preserves the existing packet fields under path-plus-anchor transport', async () => {
+    const injection = await codedInjectionText();
+
+    for (const field of [
+      'REQ/AC',
+      'task goal',
+      'exact scopes',
+      'permitted commands',
+      'upstream delivery evidence',
+      'output paths',
+    ]) {
+      expect(injection, `the packet keeps the ${field} field`).toContain(field);
+    }
+  });
+
+  // The read-once reusable primary prefix.
+  it('reads the fixed context once at session start as a reusable prefix', async () => {
+    const injection = await codedInjectionText();
+
+    expect(injection, 'fixed context is read once at session start').toMatch(
+      /(?:read|reads|reading)[^.]{0,100}once[^.]{0,80}session start|once at (?:the )?session start/i,
+    );
+    expect(injection, 'the fixed context is a reusable prefix').toMatch(/reusable prefix/i);
+    expect(injection, 'content is not re-injected per task').toMatch(
+      /(?:not|never|does not|doesn't) (?:re-inject|re-injects|reinject)[^.]{0,140}(?:per task|for each task|each task)/i,
+    );
+  });
+
+  // The leaf self-read of fixed context and frozen plan files.
+  it('requires each leaf to read its own repository fixed context and the frozen plan files', async () => {
+    const injection = await codedInjectionText();
+
+    expect(injection, 'each leaf reads its own repository fixed context').toMatch(
+      /(?:each )?leaf[^.]{0,160}(?:its own|own)[^.]{0,80}(?:fixed context|AGENTS\.md)/i,
+    );
+    expect(injection, 'each leaf reads the frozen plan files per the packet contract').toMatch(
+      /leaf[^.]{0,160}frozen plan files|frozen plan files[^.]{0,160}leaf/i,
+    );
+  });
+
+  // The plan-referenced indexed-feature locator route.
+  it('routes plan-referenced indexed features through context locate and read_order', async () => {
+    const injection = await codedInjectionText();
+
+    expect(injection, 'the leaf uses context locate with --verify').toMatch(
+      /ai-workflow context locate --project <root> --feature <id> --verify/,
+    );
+    expect(injection, 'the leaf reads the exact read_order paths').toMatch(/read_order/);
+  });
+
+  // No full re-injection alternative mode.
+  it('provides no full re-injection alternative mode', async () => {
+    const injection = await codedInjectionText();
+
+    expect(injection, 'a full re-injection alternative mode is not provided').toMatch(
+      /(?:no|not|never)[^.]{0,100}(?:full )?re-injection[^.]{0,160}(?:alternative|mode|provided)|(?:full )?re-injection[^.]{0,160}(?:is not provided|not provided|no alternative)/i,
+    );
+  });
+});
+
+/** Whitespace-normalized SKILL.md level-two section, or '' when the heading is absent. */
+async function codingSkillSection(heading: string): Promise<string> {
+  const text = await readFile(packagePath('templates', 'skills', 'coding', 'SKILL.md'), 'utf8');
+  return normalizedSection(text, heading);
+}
+
+/** Envelope text: Coding's delegation rules plus the workspace packet contract. */
+async function codedEnvelopeText(): Promise<string> {
+  return [await codingSkillSection('Delegation and Scheduling'), await workspaceSection('## Packet contract')].join(' ');
+}
+
+/** Injection text: Coding's preconditions and delegation rules plus the workspace packet contract. */
+async function codedInjectionText(): Promise<string> {
+  return [
+    await codingSkillSection('Preconditions'),
+    await codingSkillSection('Delegation and Scheduling'),
+    await workspaceSection('## Packet contract'),
+  ].join(' ');
+}
+
+/**
+ * The checkpoint-boundary active-rebuild protocol for checkpointed workspace
+ * execution. The primary may rebuild context only at a clean, fully checkpointed phase
+ * boundary or a verified
+ * repository delivery boundary, re-deriving state from the frozen files instead of
+ * conversation history and verifying recorded checkpoint SHAs, status drift and
+ * checkpoint coverage before continuing. This reads the delivered `## Recovery`
+ * section of `references/workspace.md` and the parent workspace guidance in `SKILL.md`
+ * as public prompt artifacts; it is static delivered-content evidence, not host
+ * runtime enforcement.
+ */
+describe('checkpoint-boundary active rebuild protocol', () => {
+  // The active rebuild and its boundary conditions.
+  it('allows an active rebuild only at a clean checkpointed phase or verified delivery boundary', async () => {
+    const recovery = await workspaceSection('## Recovery');
+
+    expect(recovery, 'the primary may actively rebuild context').toMatch(
+      /active rebuild|actively rebuild (?:its |the )?context/i,
+    );
+    expect(recovery, 'the rebuild happens at a clean, fully checkpointed phase boundary').toMatch(
+      /clean,? fully checkpointed phase boundar|clean[^.]{0,60}checkpointed[^.]{0,60}phase boundar/i,
+    );
+    expect(recovery, 'the rebuild happens at a verified repository delivery boundary').toMatch(
+      /verified repository delivery boundar/i,
+    );
+  });
+
+  // State is re-derived from the frozen files, never from conversation history.
+  it('re-derives state from the frozen files and never from conversation history', async () => {
+    const recovery = await workspaceSection('## Recovery');
+
+    expect(recovery, 'state is re-derived from the frozen files').toMatch(
+      /re-?deriv\w+[^.]{0,140}frozen files|frozen files[^.]{0,140}re-?deriv/i,
+    );
+    for (const source of ['tasks/execution-order.yaml', 'task files', 'implementation.yaml', 'workspace status']) {
+      expect(recovery, `the derived state names "${source}"`).toContain(source);
+    }
+    expect(recovery, 'state is never taken from conversation history').toMatch(
+      /(?:never|not|instead of|rather than)[^.]{0,120}conversation history|conversation history[^.]{0,120}(?:never|not)/i,
+    );
+  });
+
+  // Verification before continuing.
+  it('verifies recorded checkpoint SHAs, status drift and checkpoint coverage before continuing', async () => {
+    const recovery = await workspaceSection('## Recovery');
+
+    expect(recovery, 'recorded checkpoint SHAs are matched against Git objects').toMatch(
+      /SHAs?[^.]{0,140}(?:match|verified|exist)[^.]{0,140}Git objects?|Git objects?[^.]{0,140}SHAs?/i,
+    );
+    expect(recovery, 'the checks are read-only').toMatch(/read-only/i);
+    expect(recovery, 'workspace status shows no drift').toMatch(/workspace status[^.]{0,140}no drift|no drift/i);
+    expect(recovery, 'no commit lacks a checkpoint').toMatch(
+      /no commit[^.]{0,100}(?:lacks|without|missing)|commit lacks a checkpoint|commit-without-checkpoint/i,
+    );
+    expect(recovery, 'only then does the rebuild continue').toMatch(/only then/i);
+  });
+
+  // The clean-boundary restriction prohibiting discarded context.
+  it('prohibits discarding context at a dirty, partial or uncheckpointed boundary', async () => {
+    const recovery = await workspaceSection('## Recovery');
+
+    expect(recovery, 'discarding context is prohibited').toMatch(
+      /(?:prohibit|forbid|never|not)[^.]{0,140}discard\w*|discard\w*[^.]{0,140}(?:prohibit|forbid|never|not)/i,
+    );
+    expect(recovery, 'the restricted cases include a dirty or partial phase').toMatch(
+      /dirty (?:or partial|partial[- ]phase)|partial phase/i,
+    );
+    expect(recovery, 'the restricted cases include a commit-without-checkpoint gap').toMatch(
+      /commit-without-checkpoint|commit without a checkpoint/i,
+    );
+    expect(recovery, 'the restricted cases include unknown progress').toMatch(/unknown[^.]{0,60}progress/i);
+  });
+
+  // Finish in-flight tasks, then restart; otherwise report blocked.
+  it('completes in-flight tasks to the nearest verified boundary and restarts, or reports blocked', async () => {
+    const recovery = await workspaceSection('## Recovery');
+
+    expect(recovery, 'context pressure can appear mid-phase').toMatch(/context pressure/i);
+    expect(recovery, 'the primary first completes in-flight tasks').toMatch(/in-flight tasks/i);
+    expect(recovery, 'the nearest verified boundary lists validation, commit and checkpoint').toMatch(
+      /validation[^.]{0,60}commit[^.]{0,60}checkpoint/i,
+    );
+    expect(recovery, 'the session restarts at that boundary').toMatch(/restart/i);
+    expect(recovery, 'an unreachable clean boundary reports blocked with bounded support').toMatch(
+      /blocked[^.]{0,140}bounded support|bounded support[^.]{0,140}blocked/i,
+    );
+  });
+
+  // The resumed session follows the frozen schedule with no DAG recompute.
+  it('follows the frozen schedule and never recomputes the DAG or skips tasks', async () => {
+    const recovery = await workspaceSection('## Recovery');
+
+    expect(recovery, 'a resumed session follows the frozen schedule').toMatch(
+      /frozen schedule|frozen execution order/i,
+    );
+    expect(recovery, 'the DAG is never recomputed').toMatch(
+      /(?:never|not)[^.]{0,100}recomput\w*[^.]{0,60}DAG|never recompute the DAG/i,
+    );
+    expect(recovery, 'tasks are never skipped').toMatch(
+      /(?:never|not)[^.]{0,80}skip\w*[^.]{0,60}tasks?|tasks?[^.]{0,80}skipped/i,
+    );
+  });
+
+  // The ordinary-plan exclusion.
+  it('keeps ordinary split or unsplit plans on the existing fresh-session recovery without an active-rebuild rule', async () => {
+    const recovery = await workspaceSection('## Recovery');
+
+    expect(recovery, 'ordinary split or unsplit plans keep the existing fresh-session recovery').toMatch(
+      /ordinary[^.]{0,160}(?:split|unsplit)[^.]{0,200}(?:fresh-session recovery|existing recovery|existing fresh-session)/i,
+    );
+    expect(recovery, 'ordinary plans carry no active-rebuild rule').toMatch(
+      /(?:no|without|never)[^.]{0,140}active-?rebuild|active-?rebuild[^.]{0,160}(?:applies only|only for|does not apply|never applies)|ordinary[^.]{0,240}active-?rebuild/i,
+    );
+  });
+
+  // The parent workspace guidance cross-references the reference protocol.
+  it('cross-references the checkpoint-boundary active rebuild from the parent workspace guidance', async () => {
+    const coding = (await readFile(packagePath('templates', 'skills', 'coding', 'SKILL.md'), 'utf8')).replace(/\s+/g, ' ');
+
+    expect(
+      coding,
+      'the parent workspace guidance links references/workspace.md with the checkpoint-boundary active rebuild',
+    ).toMatch(
+      /(?:references\/workspace\.md[^.]{0,200}(?:active rebuild|checkpoint[- ]boundary)|(?:active rebuild|checkpoint[- ]boundary)[^.]{0,200}references\/workspace\.md)/i,
+    );
+  });
+});
+
+/**
+ * This run's feature-branch directive is run-scoped and carried by the frozen plan and
+ * the handoff only, so the synchronization-managed templates and the project contract
+ * must not carry a general mandatory "create a feature branch from main" rule. The
+ * assertion passes on compliant text; its RED is demonstrated by mutating a copy of a
+ * managed file outside the repository. This reads the delivered prompt artifacts as
+ * public content; it is static delivered-content evidence, not host runtime
+ * enforcement.
+ */
+describe('no synchronization-managed feature-branch rule', () => {
+  it('keeps a general mandatory feature-branch rule out of the synchronization-managed templates and contract', async () => {
+    // Tolerant patterns for a mandatory general rule; both require an explicit
+    // `feature branch` phrase, so legitimate unrelated wording cannot match.
+    const forbidden = [
+      /(?:create|creates|creating|use|uses|start|starts|work on)[^.]{0,80}\bfeature[- ]branch\b[^.]{0,80}(?:from|off|based on)\s+main/i,
+      /\bfeature[- ]branch\b[^.]{0,80}\b(?:mandatory|required|must|always)\b/i,
+    ];
+    for (const path of [
+      'templates/project/AGENTS.md',
+      '.ai-workflow/AGENTS.md',
+      'templates/skills/coding/SKILL.md',
+      'templates/skills/coding/references/workspace.md',
+      'templates/project/notes/AGENTS.md',
+      'templates/project/notes/README.md',
+      'templates/project/notes/implemented/AGENTS.md',
+      'templates/project/notes/archived/AGENTS.md',
+    ]) {
+      const text = (await readFile(packagePath(path), 'utf8')).replace(/\s+/g, ' ');
+      for (const pattern of forbidden) {
+        expect(
+          text,
+          `${path} carries no general mandatory feature-branch rule`,
+        ).not.toMatch(pattern);
+      }
+    }
+  });
+});
+
+/**
+ * The project contract and its tracked mirror gain the minimal rule text for the
+ * result-envelope evidence bounds and the checkpoint-boundary active rebuild, staying
+ * whitespace-normalized equal in full. These are focused content assertions on the
+ * delivered contract text; they are static delivered-content evidence, not host
+ * runtime enforcement.
+ */
+describe('contract context-boundary rules', () => {
+  const contractPaths = ['templates/project/AGENTS.md', '.ai-workflow/AGENTS.md'];
+
+  // The result-envelope evidence bound.
+  it('bounds each Evidence entry to an absolute artifact or report reference path with at most one sentence and no embedded bodies', async () => {
+    for (const path of contractPaths) {
+      const text = (await readFile(packagePath(path), 'utf8')).replace(/\s+/g, ' ');
+      expect(text, `${path} keeps the ### Evidence entry heading`).toMatch(/### Evidence/);
+      expect(
+        text,
+        `${path} names the absolute path of the produced artifact or an explicit report reference`,
+      ).toMatch(
+        /absolute (?:file )?path[^.]{0,140}(?:artifact|report reference)|(?:artifact|report reference)[^.]{0,140}absolute (?:file )?path|(?:artifact|report) (?:absolute )?path[^.]{0,100}report reference/i,
+      );
+      expect(text, `${path} names an explicit report reference`).toMatch(/\breport reference\b/i);
+      expect(text, `${path} caps the conclusion at at most one sentence`).toMatch(
+        /at most one sentence|one[- ]sentence cap|single[- ]sentence cap/i,
+      );
+      expect(
+        text,
+        `${path} prohibits embedded diffs, logs, JSON bodies or code blocks in Evidence entries`,
+      ).toMatch(
+        /(?:prohibit|forbid|never|must not|do not|no )[\s\S]{0,240}?(?:diff|log|JSON|code block)s?/i,
+      );
+    }
+  });
+
+  // The checkpoint-boundary active rebuild.
+  it('allows an active rebuild only at a clean checkpointed phase or verified delivery boundary, derived from records and never conversation history', async () => {
+    for (const path of contractPaths) {
+      const text = (await readFile(packagePath(path), 'utf8')).replace(/\s+/g, ' ');
+      expect(text, `${path} allows an active context rebuild`).toMatch(
+        /active rebuild|actively rebuild (?:its |the )?context/i,
+      );
+      expect(text, `${path} names the checkpoint boundary`).toMatch(/\bcheckpoint/i);
+      expect(
+        text,
+        `${path} restricts an active rebuild to a clean, fully checkpointed phase boundary or a verified repository delivery boundary`,
+      ).toMatch(
+        /clean,? fully checkpointed[^.]{0,100}(?:phase |repository )?boundar|verified repository delivery boundar/i,
+      );
+      expect(
+        text,
+        `${path} re-derives state from the frozen files and implementation records`,
+      ).toMatch(
+        /re-?deriv\w+[^.]{0,200}(?:frozen files|implementation records)|(?:frozen files|implementation records)[^.]{0,200}re-?deriv/i,
+      );
+      expect(text, `${path} never takes state from conversation history`).toMatch(
+        /(?:never|not|instead of|rather than)[^.]{0,180}conversation history|conversation history[^.]{0,180}(?:never|not)/i,
+      );
+      expect(text, `${path} requires read-only SHA and drift verification before continuing`).toMatch(
+        /read-only[\s\S]{0,240}?(?:SHA|drift)|(?:SHA|drift)[\s\S]{0,240}?read-only/i,
+      );
+      expect(text, `${path} verifies recorded checkpoint SHAs`).toMatch(/\bSHAs?\b/i);
+      expect(text, `${path} checks for no drift`).toMatch(/\bdrift\b/i);
+    }
+  });
+});

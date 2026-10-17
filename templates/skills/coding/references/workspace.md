@@ -89,14 +89,22 @@ worktrees/branches, preserving unrelated user state.
 ## Packet contract
 
 Every packet carries exact absolute parent plan/root, source repository, local
-slice plan, coding worktree, phase/task ID, assigned REQ/AC, relative and resolved
-read/write scope, permitted commands, output paths and upstream delivery evidence.
+slice plan, coding worktree, phase/task ID, assigned REQ/AC, task goal, exact scopes,
+relative and resolved read/write scope, permitted commands, output paths and upstream
+delivery evidence.
 Every command uses an explicit workdir and every packet path is an absolute path, never
 resolved against inherited parent cwd. Each leaf explicitly
 reads that repository's own `.ai-workflow/AGENTS.md`, `MEMORY.md`,
 `.ai-workflow/index/navigation.json` and `.ai-workflow/index/navigation.md`.
 A native permission denial is a blocker, never permission to bypass the host or
 create a different worktree.
+
+Return envelopes keep the delegated Markdown shape with `### Status`, `### Summary`,
+`### Evidence` and `### Support Requests` and add upper bounds: an `### Evidence`
+entry carries the absolute path of the produced artifact or an explicit report
+reference plus at most one sentence of conclusion, with no embedded diffs, logs,
+JSON bodies or code blocks. Large outputs belong in
+`<plan-directory>/reports/<taskId>.log`, a gitignored path that is never committed.
 
 ## Review and checkpoint record
 
@@ -184,6 +192,23 @@ or recovery instead of redispatch. Never blindly redispatch recorded tasks.
 Lost merge completion requires exact reviewed head, target baseline, expected merge
 parentage and owned-cleanup evidence; otherwise stop. Never adopt a different-run
 worktree; simultaneous primaries over one run are unsupported.
+
+For a workspace execution with checkpoint records (parent orchestration and
+slices), the primary may perform an active rebuild of its context only at a clean,
+fully checkpointed phase boundary or a verified repository delivery boundary. It
+re-derives state from the frozen files (`tasks/execution-order.yaml`, task files,
+each repository's `implementation.yaml` and the `workspace status` projection),
+never from conversation history. Before continuing, verify that recorded checkpoint
+SHAs match Git objects through read-only checks, that `workspace status` shows no
+drift and that no commit lacks a checkpoint; only then does it continue.
+
+Discarding context at a dirty or partial phase, a commit-without-checkpoint gap or
+unknown progress is prohibited. When context pressure appears mid-phase, the primary
+first completes in-flight tasks to the nearest verified boundary (validation,
+commit, checkpoint) and restarts there; if it cannot reach a clean boundary it
+reports `blocked` with bounded support. A resumed session follows the frozen
+schedule and never recomputes the DAG or skips tasks. Ordinary split or unsplit plans
+keep the existing fresh-session recovery with no active-rebuild rule.
 
 ## Workspace finalization
 
