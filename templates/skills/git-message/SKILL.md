@@ -23,7 +23,7 @@ Use Conventional Commits 1.0.0:
 `<type>(<optional scope>): <Chinese summary>`
 
 - Choose the narrowest accurate type from `feat`, `fix`, `docs`, `test`, `refactor`, `build`, `ci`, or `chore`; add a scope only when it materially clarifies the affected product area.
-- Write a concise Chinese summary of the delivered result, not the work process, with no ending punctuation or claim outside the authorized diff. Task IDs must not replace a meaningful result summary.
+- Write a concise Chinese summary of the delivered result, not the work process, with no ending punctuation or claim outside the authorized diff. The message stands alone for a reader who never sees the plan: the subject states the delivered result in durable product terms, and neither the subject, body nor footer carries a transient plan-internal identifier such as a task ID, step number, phase number, `REQ`/`AC` ID or plan directory name.
 - Breaking changes require both `!` and a `BREAKING CHANGE:` footer. Add a Chinese body only when it materially clarifies motivation, compatibility, or validation; keep the subject sufficient on its own.
 
 Read [the commit message template](references/commit-message.md) when a body or breaking-change footer is needed. Replace its illustrative example with claims supported by the authorized diff and reported validation.

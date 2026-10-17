@@ -25,7 +25,7 @@ Reject ambiguous targets or missing refs before mutation.
 ### Commit message generation
 
 - Before every direct commit, invoke the installed `$git-message` skill with the authorized outcome, exact commit paths, relevant diff and validation evidence.
-- Verify the returned message against the same exact path scope before passing it to `git commit`.
+- Verify the returned message against the same exact path scope before passing it to `git commit`, and check its self-containment: a message that carries a transient plan-internal identifier such as a task ID, step number, phase number, `REQ`/`AC` ID or plan directory name is rejected with evidence instead of being passed to `git commit`.
 - If `$git-message` reports ambiguous scope or the message claims work outside the diff, stop with evidence; do not create a fallback message.
 - Message generation does not authorize the commit. Git Operator remains solely responsible for checking mutation authority and commit scope.
 

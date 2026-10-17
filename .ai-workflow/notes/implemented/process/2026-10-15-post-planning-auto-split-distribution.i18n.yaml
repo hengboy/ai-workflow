@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 # ai-workflow notes pairing --project <project-root> --write .ai-workflow/notes/implemented/process/2026-10-15-post-planning-auto-split-distribution.md
-2026-10-15-post-planning-auto-split-distribution.md: fc49bf2b89e2f5f607f55d88274ec1f5fba4ad8f
-2026-10-15-post-planning-auto-split-distribution.zh.md: 4a3604050859560404102d2ffc117b4de4b3d584
+2026-10-15-post-planning-auto-split-distribution.md: b6f1a306b4ba7388640cc3aa9001fc8b7a12cfc6
+2026-10-15-post-planning-auto-split-distribution.zh.md: 821e7c3a5c4dd98855823a1e823d0d86b3f1c263

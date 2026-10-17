@@ -89,6 +89,75 @@ describe('v2 coding guidance', () => {
     expect(coding).not.toMatch(/\bADRs?\b/);
     expect(coding).not.toMatch(/ai-workflow\s+adr\b|\.ai-workflow\/adr\b/i);
   });
+
+  // the project contract carries the durable comment rule, including
+  // class- and type-level documentation comments, and its tracked mirror stays
+  // byte-identical to the shipped template.
+  it('requires durable code comments in the project contract and its tracked mirror', async () => {
+    const contractBytes = await readFile(packagePath('templates/project/AGENTS.md'));
+    const mirrorBytes = await readFile(packagePath('.ai-workflow/AGENTS.md'));
+    expect(
+      mirrorBytes.equals(contractBytes),
+      'the tracked .ai-workflow/AGENTS.md mirror equals templates/project/AGENTS.md byte-for-byte',
+    ).toBe(true);
+
+    for (const path of ['templates/project/AGENTS.md', '.ai-workflow/AGENTS.md']) {
+      const text = await readFile(packagePath(path), 'utf8');
+      const section = normalizedSection(text, 'Shared context and maintenance');
+      expect(section, `${path} carries the shared-context maintenance section`).not.toBe('');
+      expect(section, `${path} names code comments`).toMatch(/\bcomments?\b/i);
+      expect(section, `${path} covers class- and type-level documentation comments`).toMatch(
+        /class- and type-level documentation comments|documentation comments[^.]{0,60}class/i,
+      );
+      expect(section, `${path} forbids transient plan-internal identifiers`).toMatch(
+        /transient plan-internal identifiers?/i,
+      );
+      expect(section, `${path} names the identifier set`).toMatch(
+        /task IDs?[^.]{0,140}step numbers?[^.]{0,140}phase numbers?[^.]{0,220}(?:REQ|AC)[^.]{0,140}plan director/i,
+      );
+      expect(section, `${path} requires comments to describe durable behavior or rationale`).toMatch(
+        /durable (?:behavior|rationale|project terms|terms)|(?:behavior|rationale)[^.]{0,120}durable/i,
+      );
+    }
+  });
+
+  // the coding skill carries the same comment rule, explicitly covering
+  // class- and type-level documentation comments and the no-rewrite boundary.
+  it('requires durable code comments in the coding skill', async () => {
+    const coding = await readFile(packagePath('templates', 'skills', 'coding', 'SKILL.md'), 'utf8');
+    expect(coding, 'the coding skill names code comments').toMatch(/\bcomments?\b/i);
+    expect(coding, 'the coding skill covers class- and type-level documentation comments').toMatch(
+      /class- and type-level documentation comments|documentation comments[^.]{0,60}class/i,
+    );
+    expect(coding, 'the coding skill forbids transient plan-internal identifiers').toMatch(
+      /transient plan-internal identifiers?/i,
+    );
+    expect(coding, 'the coding skill names the identifier set').toMatch(
+      /task IDs?[^.]{0,140}step numbers?[^.]{0,140}phase numbers?[^.]{0,220}(?:REQ|AC)[^.]{0,140}plan director/i,
+    );
+    expect(coding, 'the coding skill requires durable behavior or rationale').toMatch(
+      /durable (?:behavior|rationale|project terms|terms)|(?:behavior|rationale)[^.]{0,120}durable/i,
+    );
+    expect(coding, 'unrelated existing comments are not rewritten').toMatch(
+      /(?:unrelated )?existing comments?[^.]{0,120}not rewritten|not rewritten[^.]{0,120}comments?/i,
+    );
+  });
+
+  // Standards Review checks delivered notes and code comments for
+  // transient plan-internal identifiers, governed by the notes README.
+  it('requires the Standards Review to check delivered notes and comments for transient identifiers', async () => {
+    const standards = await readFile(packagePath('templates/agents/standards-review.md'), 'utf8');
+    const checklist = normalizedSection(standards, 'Review checklist');
+    expect(checklist, 'the review checklist section exists').not.toBe('');
+
+    expect(checklist, 'delivered notes and code comments are checked').toMatch(
+      /notes?[\s\S]{0,160}comments?|comments?[\s\S]{0,160}notes?/i,
+    );
+    expect(checklist, 'transient plan-internal identifiers are the checked class').toMatch(
+      /transient plan-internal identifiers?/i,
+    );
+    expect(checklist, 'the notes README governs note content').toMatch(/README/i);
+  });
 });
 
 /** Whitespace-normalized coding skill text so fragments match across source wrapping. */

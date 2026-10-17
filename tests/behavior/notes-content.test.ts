@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
+import { join, relative } from 'node:path';
 import { packagePath } from '../../src/utils/schema.js';
 
 // REQ-001..REQ-004 / AC-001..AC-008: note creation is governed by lasting decision
@@ -52,6 +53,48 @@ function levelTwoSection(text: string, heading: string): string {
   const rest = text.slice(start + heading.length);
   const next = rest.search(/\n## /);
   return next < 0 ? rest : rest.slice(0, next);
+}
+
+// the self-containment governance has one source, the notes README,
+// and its generated local mirror must stay byte-identical to the shipped template.
+const NOTES_README_MIRRORS = [
+  'templates/project/notes/README.md',
+  '.ai-workflow/notes/README.md',
+];
+
+// concrete transient plan-internal identifier patterns a
+// note body must not carry. The placeholder vocabulary (`task-NNN-slug`, `REQ-###`)
+// carries no digits and so is deliberately not matched.
+const TRANSIENT_IDENTIFIER_PATTERNS: readonly RegExp[] = [
+  // task-NNN with digits; the placeholder `task-NNN-slug` stays allowed.
+  /\btask-\d+/i,
+  // a numbered task, step or phase in English.
+  /\btasks?\s+\d+/i,
+  /\bsteps?\s+\d+/i,
+  /\bphases?\s+\d+/i,
+  // a numbered step or phase in Chinese (步骤 1 / 阶段 2).
+  /步骤\s*\d+/,
+  /阶段\s*\d+/,
+  // REQ-### or AC-### with digits; the placeholders `REQ-###` / `AC-###` stay allowed.
+  /\b(?:REQ|AC)-\d+/,
+  // an eight-digit-date plan directory name such as `20261017-...`.
+  /\b20\d{6}-/,
+];
+
+// every markdown body under an active lifecycle, recursively and in a
+// deterministic order.
+async function markdownFilesUnder(root: string): Promise<string[]> {
+  const entries = await readdir(root, { withFileTypes: true });
+  const files: string[] = [];
+  for (const entry of entries) {
+    const full = join(root, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...(await markdownFilesUnder(full)));
+    } else if (entry.isFile() && entry.name.endsWith('.md')) {
+      files.push(full);
+    }
+  }
+  return files;
 }
 
 describe('agent notes workflow content', () => {
@@ -301,5 +344,83 @@ describe('agent notes workflow content', () => {
     expect(standardsReview, 'Standards Review uses the spec only as input, not as a standards source').toMatch(
       /do not[^.\n]{0,60}use the spec as a standards source/i,
     );
+  });
+
+  // the README is the single governance source for the
+  // self-containment rule, its durable-term guidance and the sanctioned exception, and
+  // the generated local mirror must match the template byte-for-byte.
+  it('governs self-contained note bodies and mirrors the notes README byte-for-byte', async () => {
+    const templateReadme = await readFile(packagePath('templates/project/notes/README.md'));
+    const localReadme = await readFile(packagePath('.ai-workflow/notes/README.md'));
+    expect(
+      localReadme.equals(templateReadme),
+      'the tracked .ai-workflow/notes/README.md mirror equals templates/project/notes/README.md byte-for-byte',
+    ).toBe(true);
+
+    for (const path of NOTES_README_MIRRORS) {
+      const governance = await readFile(packagePath(path), 'utf8');
+      const maintenance = levelTwoSection(governance, '## Maintenance and lifecycle').replace(/\s+/g, ' ');
+
+      expect(maintenance, `${path} states a note stays self-contained after its plan is gone`).toMatch(
+        /self-contained[^.]{0,200}(?:plan is gone|after (?:its|the) plan)|understandable after (?:its|the) plan|understandable without the plan/i,
+      );
+      expect(maintenance, `${path} names the transient identifier set`).toMatch(
+        /task IDs?[^.]{0,140}step numbers?[^.]{0,140}phase numbers?[^.]{0,220}(?:REQ|AC)[^.]{0,140}plan director/i,
+      );
+      expect(maintenance, `${path} anchors note bodies to durable terms, not those identifiers`).toMatch(
+        /(?:never|no|not)[^.]{0,100}(?:carry|anchor|reference|use)[^.]{0,100}(?:transient|identifiers?)/i,
+      );
+      expect(maintenance, `${path} gives durable-term guidance naming behavior, paths, symbols, guarantees and ownership`).toMatch(
+        /\bbehavior\b[^.]{0,160}\bpaths\b[^.]{0,160}\bsymbols\b[^.]{0,160}\bguarantees\b[^.]{0,160}\bownership\b/i,
+      );
+      expect(maintenance, `${path} names validation evidence as a durable term`).toMatch(/validation evidence/i);
+      expect(maintenance, `${path} keeps the workspace cross-repository plain plan-ID exception`).toMatch(
+        /workspace[^.]{0,160}plain plan-ID[^.]{0,160}(?:only|sanctioned|exception)|plain plan-ID[^.]{0,160}(?:only|sanctioned) exception/i,
+      );
+      expect(maintenance, `${path} cleans an existing active note by rewriting its anchor durably`).toMatch(
+        /existing[^.]{0,140}note[^.]{0,180}clean[^.]{0,180}rewrit/i,
+      );
+      expect(maintenance, `${path} preserves decision, alternatives, consequences and evidence claims`).toMatch(
+        /preserv[^.]{0,180}decision[^.]{0,220}alternatives[^.]{0,220}consequences[^.]{0,220}evidence/i,
+      );
+      expect(maintenance, `${path} updates both language sides and re-records the pair`).toMatch(
+        /both language sides|both sides[^.]{0,140}(?:change|update)|re-record/i,
+      );
+      expect(maintenance, `${path} never cleans sealed archived notes`).toMatch(
+        /archiv[^.]{0,180}(?:never|not)[^.]{0,100}clean|sealed[^.]{0,100}never cleaned|never clean[^.]{0,100}archiv/i,
+      );
+    }
+  });
+
+  // the active notes tree is scanned for concrete transient
+  // plan-internal identifier patterns. The placeholder vocabulary (`task-NNN-slug`,
+  // `REQ-###`) is not an identifier and stays allowed.
+  it('keeps active note bodies free of concrete transient plan-internal identifiers', async () => {
+    const activeRoots = ['proposed', 'implemented', 'rejected'];
+    const files: string[] = [];
+    for (const lifecycle of activeRoots) {
+      files.push(...(await markdownFilesUnder(packagePath('.ai-workflow', 'notes', lifecycle))));
+    }
+    files.sort();
+
+    for (const placeholder of ['task-NNN-slug', 'task-NNN-slug.md', 'REQ-###', 'AC-###']) {
+      for (const pattern of TRANSIENT_IDENTIFIER_PATTERNS) {
+        expect(pattern.test(placeholder), `the scan ignores the placeholder "${placeholder}"`).toBe(false);
+      }
+    }
+
+    const offenders: string[] = [];
+    for (const file of files) {
+      const body = await readFile(file, 'utf8');
+      for (const pattern of TRANSIENT_IDENTIFIER_PATTERNS) {
+        const match = body.match(pattern);
+        if (match) offenders.push(`${relative(packagePath(), file)} matches ${pattern} -> "${match[0]}"`);
+      }
+    }
+
+    expect(
+      offenders,
+      `active note bodies must not carry concrete transient plan-internal identifiers:\n${offenders.join('\n')}`,
+    ).toEqual([]);
   });
 });

@@ -28,7 +28,7 @@ Frozen `spec.md`, `plan.md` and `tasks/*.md` documents were single-language: the
 ## Consequences
 
 - A planning document is a complete pair or it is invalid: a missing `.zh.md` or `.i18n.yaml`, a wrong switcher, a diverging structure, a stale recorded hash and an orphan sidecar all fail `ai-workflow plan validate` with the offending path and reason.
-- Existing single-language plans under `.ai-workflow/plans/` fail the new validation by design and are neither migrated nor exempted. The plan directory `20260917-bilingual-planning-artifacts` is itself such a legacy artifact: it was frozen before this change, executes as an unsplit plan, generates no task files and must not be re-validated with the new `plan validate` after landing.
+- Existing single-language plans under `.ai-workflow/plans/` fail the new validation by design and are neither migrated nor exempted. The plan that landed this decision was itself frozen before the change, so it is such a legacy artifact: it executes as an unsplit plan, generates no task files and must not be re-validated with the new `plan validate` after landing.
 - The digest protocol and the `plan validate` success output shape are preserved, so readers that only need `plan_id`, counts and digests keep working, and no digest-protocol migration is required.
 - Drift is caught by the recorded pair hashes rather than by the digest: a Chinese-only edit leaves the English `digest` matching and is reported as `out-of-sync` until `ai-workflow plan pairing --plan <directory> --write --all` re-records the bytes.
 - Structure is compared mechanically but meaning is not: semantic review still owns faithfulness, terminology and natural wording.

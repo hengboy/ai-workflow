@@ -172,6 +172,11 @@ or implementation shape; avoid same-algorithm expectations, internal collaborato
 mocks and constant-only assertions.
 Never weaken assertions, suppress failures or add unrelated compatibility layers.
 
+Code comments, including class- and type-level documentation comments, describe
+durable behavior or rationale and never carry transient plan-internal identifiers
+such as task IDs, step numbers, phase numbers, `REQ`/`AC` IDs or plan directory
+names. Unrelated existing comments are not rewritten.
+
 ## Verification and Commit
 
 Choose checks/commits by risk and repository practice. Run the narrowest relevant

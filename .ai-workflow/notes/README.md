@@ -29,6 +29,10 @@ Planning schedules record maintenance. Major unimplemented work belongs in propo
 
 Keep implemented facts such as paths, symbols, defaults and implementation structure current with code in the same change. Rewrite current facts rather than appending a running log. Reuse the existing note that owns the same decision instead of duplicating it; record only a changed recorded decision or its lasting rationale as a new note linked to the prior one.
 
+A note stays self-contained after its plan is gone: a note body describes the delivered result, decision or behavior in durable project terms such as behavior, paths, symbols, guarantees, ownership and validation evidence, and never anchors to transient plan-internal identifiers such as task IDs, step numbers, phase numbers, `REQ`/`AC` IDs or plan directory names. The workspace cross-repository plain plan-ID note reference is the only sanctioned exception.
+
+An existing active note that still carries such an identifier is cleaned by rewriting the anchor into a durable description while preserving its decision, alternatives, consequences and evidence claims; both language sides change together and the pair is re-recorded. Cleanup happens when the note is next maintained or in an authorized bounded cleanup pass. Archived notes are sealed and never cleaned.
+
 For every new note, search related active notes within an authorized scope and assess full, partial or no supersession. Partial supersession retains and cross-links the records. Full consolidation may delete the old active note only after the current owner preserves all unique rationale, alternatives, consequences, verification requirements and known coverage gaps, and repairs inbound links. Alternatively retain history under the archive policy. Removing only part of an implementation must not be described as removing the entire capability.
 
 ## Archive policy

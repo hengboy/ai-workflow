@@ -26,5 +26,5 @@ Status: implemented
 
 - 该规则作为提示指引发布在 `templates/skills/planning/SKILL.md`、`templates/skills/plan-to-tasks/SKILL.md`、`templates/skills/coding/SKILL.md` 与 `templates/skills/coding/references/workspace.md`、`templates/project/AGENTS.md` 与 `.ai-workflow/AGENTS.md`、`README.md`、根 `MEMORY.md` 以及权威 navigation 中，因此不引入任何 schema、配置、状态或数据迁移。
 - `tests/behavior/workspace-planning-content.test.ts`、`tests/behavior/change-routing.test.ts` 与 `tests/behavior/workspace-workflow-content.test.ts` 中的聚焦已发布内容测试锁定该链式流程、冻结门禁以及不变的普通、仅根条目与非 `.gitmodules` 路径；它们证明的是已发布的提示指引，而不是主机运行时强制。
-- 更早的规划边界 `20261015-workspace-task-freeze-after-distribution` 被取代并在本次交付前删除，其被接受的冻结门禁语义并入本记录。
+- 更早的、本应在分发之后才冻结任务集的规划边界被取代并在本次交付前删除，其被接受的冻结门禁语义并入本记录。
 - 本记录部分取代 [规划与编码的会话边界记录](./2026-09-23-planning-coding-session-boundary.md)、[工作区拆分分发交接记录](./2026-10-02-workspace-distribute-handoff.md)、[工作区会话交接记录](../bug-fix/2026-10-08-workspace-session-handoff.md) 与 [工作区编码编排记录](../feature/2026-10-09-workspace-coding-orchestration.md) 中的交接事实；每份记录都保留其决定、理由与证据边界，且其当前交接事实指向本记录。

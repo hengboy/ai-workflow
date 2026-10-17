@@ -31,9 +31,9 @@ Status: implemented
 
 ## Consequences
 
-- 已交付策略由 shipped-content 测试守护：`tests/behavior/review-policy.test.ts` 与 `tests/behavior/planning-content.test.ts` 中被替换的断言以 RED 运行，40 项检查中 13 项失败、27 项通过，随后在一次聚合修复后 40/40 通过。Step 1 产品提交为 `3a7083eb7f4f16501b8d189a605592e649a0247a`，其父提交为 `739f54414f77e887d022ebb7976d34bf22d941c9`。这些是静态 shipped-content 断言，不证明真实的模型行为。
-- Step 1 回归还运行了 behavior/install 批次，为 23 个文件、281 项检查通过且退出码 0，以及有范围的 project-sync 批次，为 5 个文件、68 项检查通过且退出码 0；两者都是静态 shipped-content 与兼容性守护，而非真实行为。
-- Step 2 夹具轨迹在 `<coding-worktree>/tests/.review-policy-smoke/` 下的可丢弃夹具中演练了该策略：一个 Spec-only 边界与一个 both-axes 边界各自运行一次并行的完整评审对、一次无选择提示的自动本地修复与一次定向复核；Spec-only 用例只复核 Spec，both-axes 用例在一次并行批次中复核 Spec 与 Standards。真实的主代理原生派发、Test 命令与 Git Operator 比较均已执行，而种子、需求文本与验收措辞是合成的用例数据，且未创建任何中心记录或运行时凭据。Git Operator 在文档提交之前移除了这些自有夹具。
+- 已交付策略由 shipped-content 测试守护：`tests/behavior/review-policy.test.ts` 与 `tests/behavior/planning-content.test.ts` 中被替换的断言以 RED 运行，40 项检查中 13 项失败、27 项通过，随后在一次聚合修复后 40/40 通过。落地该策略的产品提交为 `3a7083eb7f4f16501b8d189a605592e649a0247a`，其父提交为 `739f54414f77e887d022ebb7976d34bf22d941c9`。这些是静态 shipped-content 断言，不证明真实的模型行为。
+- 同一回归还运行了 behavior/install 批次，为 23 个文件、281 项检查通过且退出码 0，以及有范围的 project-sync 批次，为 5 个文件、68 项检查通过且退出码 0；两者都是静态 shipped-content 与兼容性守护，而非真实行为。
+- 另一条夹具轨迹在 `<coding-worktree>/tests/.review-policy-smoke/` 下的可丢弃夹具中演练了该策略：一个 Spec-only 边界与一个 both-axes 边界各自运行一次并行的完整评审对、一次无选择提示的自动本地修复与一次定向复核；Spec-only 用例只复核 Spec，both-axes 用例在一次并行批次中复核 Spec 与 Standards。真实的主代理原生派发、Test 命令与 Git Operator 比较均已执行，而种子、需求文本与验收措辞是合成的用例数据，且未创建任何中心记录或运行时凭据。Git Operator 在文档提交之前移除了这些自有夹具。
 - 同一轨迹覆盖了有界门禁与范围用例：一次未解决的 Test-gate 失败扣下了验收与集成且没有修复循环，一个提议的越界文件被归类为有界的范围决策而非被授予，没有任何文件被编辑，且 Git 证实其不存在。在 Git 用例中，Git Operator 比较了已接受来源 HEAD 与实际候选 HEAD，并在任何 checkout 或 merge 之前拒绝漂移，而已接受来源 HEAD `778abe50f857d054ed28af7d6b1cdfa75f2eb152` 产生了不同的非快进交付合并 `00e8c9596d824527b819e560381caf82cbfa88cf`，其交付 SHA 与来源 HEAD 不同。
 - 该轨迹证明至少一个真实可用的宿主：OpenCode 原生主代理运行了这些有界的常规评审、修复与门禁用例。Claude Code 与 Codex 未被演练，没有真实的 HOME 角色文件被刷新，既有的三宿主原生覆盖缺口保持为明确的限制而非被声称通过；规划用户确认与子仓库参与的工作区会话均未在这些 smoke 中运行，仅由静态回归测试覆盖。
 - 四个相关的活动笔记保留其独立的决策与理据：[变更分流](./2026-09-22-change-routing.md)负责分类，[规划与编码的会话边界](./2026-09-23-planning-coding-session-boundary.md)负责 Planning 到 Coding 的交接，[自动实施提交](./2026-10-14-automatic-implementation-commit.md)负责自动本地提交，[父级工作区编码编排](../feature/2026-10-09-workspace-coding-orchestration.md)负责父级工作区执行。本记录不取代其中任何一个：它记录的只是对先前存在于已发布技能与角色中的评审选择与不复核规则的替换，并保留全部四条交叉链接、其独有理由、归属与覆盖缺口，且不改写其历史。
