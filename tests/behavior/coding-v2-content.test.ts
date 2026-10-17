@@ -722,3 +722,109 @@ describe('checkpoint-boundary active rebuild (plan 20261017-orchestrator-context
     );
   });
 });
+
+/**
+ * REQ-004 / AC-004 (plan 20261017-orchestrator-context-boundaries): this run's
+ * feature-branch directive is run-scoped and carried by the frozen plan and the
+ * handoff only, so the synchronization-managed templates and the project contract
+ * must not carry a general mandatory "create a feature branch from main" rule. The
+ * assertion passes on compliant text; its RED is demonstrated by mutating a copy of a
+ * managed file outside the repository. This reads the delivered prompt artifacts as
+ * public content; it is static delivered-content evidence, not host runtime
+ * enforcement.
+ */
+describe('no synchronization-managed feature-branch rule (plan 20261017-orchestrator-context-boundaries) (REQ-004, AC-004)', () => {
+  it('keeps a general mandatory feature-branch rule out of the synchronization-managed templates and contract', async () => {
+    // Tolerant patterns for a mandatory general rule; both require an explicit
+    // `feature branch` phrase, so legitimate unrelated wording cannot match.
+    const forbidden = [
+      /(?:create|creates|creating|use|uses|start|starts|work on)[^.]{0,80}\bfeature[- ]branch\b[^.]{0,80}(?:from|off|based on)\s+main/i,
+      /\bfeature[- ]branch\b[^.]{0,80}\b(?:mandatory|required|must|always)\b/i,
+    ];
+    for (const path of [
+      'templates/project/AGENTS.md',
+      '.ai-workflow/AGENTS.md',
+      'templates/skills/coding/SKILL.md',
+      'templates/skills/coding/references/workspace.md',
+      'templates/project/notes/AGENTS.md',
+      'templates/project/notes/README.md',
+      'templates/project/notes/implemented/AGENTS.md',
+      'templates/project/notes/archived/AGENTS.md',
+    ]) {
+      const text = (await readFile(packagePath(path), 'utf8')).replace(/\s+/g, ' ');
+      for (const pattern of forbidden) {
+        expect(
+          text,
+          `${path} carries no general mandatory feature-branch rule`,
+        ).not.toMatch(pattern);
+      }
+    }
+  });
+});
+
+/**
+ * REQ-005 / AC-005 (plan 20261017-orchestrator-context-boundaries): the project
+ * contract and its tracked mirror gain the minimal rule text for the result-envelope
+ * evidence bounds and the checkpoint-boundary active rebuild, staying
+ * whitespace-normalized equal in full. These are focused content assertions on the
+ * delivered contract text; they are static delivered-content evidence, not host
+ * runtime enforcement.
+ */
+describe('contract context-boundary rules (plan 20261017-orchestrator-context-boundaries) (REQ-005, AC-005)', () => {
+  const contractPaths = ['templates/project/AGENTS.md', '.ai-workflow/AGENTS.md'];
+
+  // AC-005: the result-envelope evidence bound.
+  it('bounds each Evidence entry to an absolute artifact or report reference path with at most one sentence and no embedded bodies', async () => {
+    for (const path of contractPaths) {
+      const text = (await readFile(packagePath(path), 'utf8')).replace(/\s+/g, ' ');
+      expect(text, `${path} keeps the ### Evidence entry heading`).toMatch(/### Evidence/);
+      expect(
+        text,
+        `${path} names the absolute path of the produced artifact or an explicit report reference`,
+      ).toMatch(
+        /absolute (?:file )?path[^.]{0,140}(?:artifact|report reference)|(?:artifact|report reference)[^.]{0,140}absolute (?:file )?path|(?:artifact|report) (?:absolute )?path[^.]{0,100}report reference/i,
+      );
+      expect(text, `${path} names an explicit report reference`).toMatch(/\breport reference\b/i);
+      expect(text, `${path} caps the conclusion at at most one sentence`).toMatch(
+        /at most one sentence|one[- ]sentence cap|single[- ]sentence cap/i,
+      );
+      expect(
+        text,
+        `${path} prohibits embedded diffs, logs, JSON bodies or code blocks in Evidence entries`,
+      ).toMatch(
+        /(?:prohibit|forbid|never|must not|do not|no )[\s\S]{0,240}?(?:diff|log|JSON|code block)s?/i,
+      );
+    }
+  });
+
+  // AC-005: the checkpoint-boundary active rebuild.
+  it('allows an active rebuild only at a clean checkpointed phase or verified delivery boundary, derived from records and never conversation history', async () => {
+    for (const path of contractPaths) {
+      const text = (await readFile(packagePath(path), 'utf8')).replace(/\s+/g, ' ');
+      expect(text, `${path} allows an active context rebuild`).toMatch(
+        /active rebuild|actively rebuild (?:its |the )?context/i,
+      );
+      expect(text, `${path} names the checkpoint boundary`).toMatch(/\bcheckpoint/i);
+      expect(
+        text,
+        `${path} restricts an active rebuild to a clean, fully checkpointed phase boundary or a verified repository delivery boundary`,
+      ).toMatch(
+        /clean,? fully checkpointed[^.]{0,100}(?:phase |repository )?boundar|verified repository delivery boundar/i,
+      );
+      expect(
+        text,
+        `${path} re-derives state from the frozen files and implementation records`,
+      ).toMatch(
+        /re-?deriv\w+[^.]{0,200}(?:frozen files|implementation records)|(?:frozen files|implementation records)[^.]{0,200}re-?deriv/i,
+      );
+      expect(text, `${path} never takes state from conversation history`).toMatch(
+        /(?:never|not|instead of|rather than)[^.]{0,180}conversation history|conversation history[^.]{0,180}(?:never|not)/i,
+      );
+      expect(text, `${path} requires read-only SHA and drift verification before continuing`).toMatch(
+        /read-only[\s\S]{0,240}?(?:SHA|drift)|(?:SHA|drift)[\s\S]{0,240}?read-only/i,
+      );
+      expect(text, `${path} verifies recorded checkpoint SHAs`).toMatch(/\bSHAs?\b/i);
+      expect(text, `${path} checks for no drift`).toMatch(/\bdrift\b/i);
+    }
+  });
+});
