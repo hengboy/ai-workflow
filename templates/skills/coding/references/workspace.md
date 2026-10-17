@@ -193,6 +193,23 @@ Lost merge completion requires exact reviewed head, target baseline, expected me
 parentage and owned-cleanup evidence; otherwise stop. Never adopt a different-run
 worktree; simultaneous primaries over one run are unsupported.
 
+For a workspace execution with checkpoint records (parent orchestration and
+slices), the primary may perform an active rebuild of its context only at a clean,
+fully checkpointed phase boundary or a verified repository delivery boundary. It
+re-derives state from the frozen files (`tasks/execution-order.yaml`, task files,
+each repository's `implementation.yaml` and the `workspace status` projection),
+never from conversation history. Before continuing, verify that recorded checkpoint
+SHAs match Git objects through read-only checks, that `workspace status` shows no
+drift and that no commit lacks a checkpoint; only then does it continue.
+
+Discarding context at a dirty or partial phase, a commit-without-checkpoint gap or
+unknown progress is prohibited. When context pressure appears mid-phase, the primary
+first completes in-flight tasks to the nearest verified boundary (validation,
+commit, checkpoint) and restarts there; if it cannot reach a clean boundary it
+reports `blocked` with bounded support. A resumed session follows the frozen
+schedule and never recomputes the DAG or skips tasks. Ordinary split or unsplit plans
+keep the existing fresh-session recovery with no active-rebuild rule.
+
 ## Workspace finalization
 
 `all slices are completed` is insufficient. Run parent

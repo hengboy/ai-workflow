@@ -305,7 +305,8 @@ and projects with `.gitmodules` running a non-participating plan gain no workspa
 prerequisites; root-only plans may be implemented unsplit. Claimed workspaces with
 absent, mismatched or escaped declarations are refused, with no child-in-root fallback.
 Explicitly read `references/workspace.md` before approved preparation or any
-implementation state, then follow its parent execution and recovery procedure.
+implementation state, then follow its parent execution and recovery procedure,
+including the checkpoint-boundary active rebuild in `references/workspace.md`.
 
 ## Slice sessions
 

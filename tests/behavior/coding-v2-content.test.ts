@@ -594,3 +594,131 @@ async function codedInjectionText(): Promise<string> {
     await workspaceSection('## Packet contract'),
   ].join(' ');
 }
+
+/**
+ * REQ-003 (plan 20261017-orchestrator-context-boundaries): the checkpoint-boundary
+ * active-rebuild protocol for checkpointed workspace execution. The primary may
+ * rebuild context only at a clean, fully checkpointed phase boundary or a verified
+ * repository delivery boundary, re-deriving state from the frozen files instead of
+ * conversation history and verifying recorded checkpoint SHAs, status drift and
+ * checkpoint coverage before continuing. This reads the delivered `## Recovery`
+ * section of `references/workspace.md` and the parent workspace guidance in `SKILL.md`
+ * as public prompt artifacts; it is static delivered-content evidence, not host
+ * runtime enforcement.
+ */
+describe('checkpoint-boundary active rebuild (plan 20261017-orchestrator-context-boundaries) (REQ-003, AC-003)', () => {
+  // AC-003: the active rebuild and its boundary conditions.
+  it('allows an active rebuild only at a clean checkpointed phase or verified delivery boundary', async () => {
+    const recovery = await workspaceSection('## Recovery');
+
+    expect(recovery, 'the primary may actively rebuild context').toMatch(
+      /active rebuild|actively rebuild (?:its |the )?context/i,
+    );
+    expect(recovery, 'the rebuild happens at a clean, fully checkpointed phase boundary').toMatch(
+      /clean,? fully checkpointed phase boundar|clean[^.]{0,60}checkpointed[^.]{0,60}phase boundar/i,
+    );
+    expect(recovery, 'the rebuild happens at a verified repository delivery boundary').toMatch(
+      /verified repository delivery boundar/i,
+    );
+  });
+
+  // AC-003: state is re-derived from the frozen files, never from conversation history.
+  it('re-derives state from the frozen files and never from conversation history', async () => {
+    const recovery = await workspaceSection('## Recovery');
+
+    expect(recovery, 'state is re-derived from the frozen files').toMatch(
+      /re-?deriv\w+[^.]{0,140}frozen files|frozen files[^.]{0,140}re-?deriv/i,
+    );
+    for (const source of ['tasks/execution-order.yaml', 'task files', 'implementation.yaml', 'workspace status']) {
+      expect(recovery, `the derived state names "${source}"`).toContain(source);
+    }
+    expect(recovery, 'state is never taken from conversation history').toMatch(
+      /(?:never|not|instead of|rather than)[^.]{0,120}conversation history|conversation history[^.]{0,120}(?:never|not)/i,
+    );
+  });
+
+  // AC-003: verification before continuing.
+  it('verifies recorded checkpoint SHAs, status drift and checkpoint coverage before continuing', async () => {
+    const recovery = await workspaceSection('## Recovery');
+
+    expect(recovery, 'recorded checkpoint SHAs are matched against Git objects').toMatch(
+      /SHAs?[^.]{0,140}(?:match|verified|exist)[^.]{0,140}Git objects?|Git objects?[^.]{0,140}SHAs?/i,
+    );
+    expect(recovery, 'the checks are read-only').toMatch(/read-only/i);
+    expect(recovery, 'workspace status shows no drift').toMatch(/workspace status[^.]{0,140}no drift|no drift/i);
+    expect(recovery, 'no commit lacks a checkpoint').toMatch(
+      /no commit[^.]{0,100}(?:lacks|without|missing)|commit lacks a checkpoint|commit-without-checkpoint/i,
+    );
+    expect(recovery, 'only then does the rebuild continue').toMatch(/only then/i);
+  });
+
+  // AC-003: the clean-boundary restriction prohibiting discarded context.
+  it('prohibits discarding context at a dirty, partial or uncheckpointed boundary', async () => {
+    const recovery = await workspaceSection('## Recovery');
+
+    expect(recovery, 'discarding context is prohibited').toMatch(
+      /(?:prohibit|forbid|never|not)[^.]{0,140}discard\w*|discard\w*[^.]{0,140}(?:prohibit|forbid|never|not)/i,
+    );
+    expect(recovery, 'the restricted cases include a dirty or partial phase').toMatch(
+      /dirty (?:or partial|partial[- ]phase)|partial phase/i,
+    );
+    expect(recovery, 'the restricted cases include a commit-without-checkpoint gap').toMatch(
+      /commit-without-checkpoint|commit without a checkpoint/i,
+    );
+    expect(recovery, 'the restricted cases include unknown progress').toMatch(/unknown[^.]{0,60}progress/i);
+  });
+
+  // AC-003: finish in-flight tasks, then restart; otherwise report blocked.
+  it('completes in-flight tasks to the nearest verified boundary and restarts, or reports blocked', async () => {
+    const recovery = await workspaceSection('## Recovery');
+
+    expect(recovery, 'context pressure can appear mid-phase').toMatch(/context pressure/i);
+    expect(recovery, 'the primary first completes in-flight tasks').toMatch(/in-flight tasks/i);
+    expect(recovery, 'the nearest verified boundary lists validation, commit and checkpoint').toMatch(
+      /validation[^.]{0,60}commit[^.]{0,60}checkpoint/i,
+    );
+    expect(recovery, 'the session restarts at that boundary').toMatch(/restart/i);
+    expect(recovery, 'an unreachable clean boundary reports blocked with bounded support').toMatch(
+      /blocked[^.]{0,140}bounded support|bounded support[^.]{0,140}blocked/i,
+    );
+  });
+
+  // AC-003: the resumed session follows the frozen schedule with no DAG recompute.
+  it('follows the frozen schedule and never recomputes the DAG or skips tasks', async () => {
+    const recovery = await workspaceSection('## Recovery');
+
+    expect(recovery, 'a resumed session follows the frozen schedule').toMatch(
+      /frozen schedule|frozen execution order/i,
+    );
+    expect(recovery, 'the DAG is never recomputed').toMatch(
+      /(?:never|not)[^.]{0,100}recomput\w*[^.]{0,60}DAG|never recompute the DAG/i,
+    );
+    expect(recovery, 'tasks are never skipped').toMatch(
+      /(?:never|not)[^.]{0,80}skip\w*[^.]{0,60}tasks?|tasks?[^.]{0,80}skipped/i,
+    );
+  });
+
+  // AC-003: the ordinary-plan exclusion.
+  it('keeps ordinary split or unsplit plans on the existing fresh-session recovery without an active-rebuild rule', async () => {
+    const recovery = await workspaceSection('## Recovery');
+
+    expect(recovery, 'ordinary split or unsplit plans keep the existing fresh-session recovery').toMatch(
+      /ordinary[^.]{0,160}(?:split|unsplit)[^.]{0,200}(?:fresh-session recovery|existing recovery|existing fresh-session)/i,
+    );
+    expect(recovery, 'ordinary plans carry no active-rebuild rule').toMatch(
+      /(?:no|without|never)[^.]{0,140}active-?rebuild|active-?rebuild[^.]{0,160}(?:applies only|only for|does not apply|never applies)|ordinary[^.]{0,240}active-?rebuild/i,
+    );
+  });
+
+  // AC-003: the parent workspace guidance cross-references the reference protocol.
+  it('cross-references the checkpoint-boundary active rebuild from the parent workspace guidance', async () => {
+    const coding = (await readFile(packagePath('templates', 'skills', 'coding', 'SKILL.md'), 'utf8')).replace(/\s+/g, ' ');
+
+    expect(
+      coding,
+      'the parent workspace guidance links references/workspace.md with the checkpoint-boundary active rebuild',
+    ).toMatch(
+      /(?:references\/workspace\.md[^.]{0,200}(?:active rebuild|checkpoint[- ]boundary)|(?:active rebuild|checkpoint[- ]boundary)[^.]{0,200}references\/workspace\.md)/i,
+    );
+  });
+});
