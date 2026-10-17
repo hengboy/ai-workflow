@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 # ai-workflow notes pairing --project <project-root> --write .ai-workflow/notes/implemented/process/2026-09-17-bilingual-planning-artifacts.md
-2026-09-17-bilingual-planning-artifacts.md: f02d68fb55ee7c714f7e43bb58d573ca431c5732
-2026-09-17-bilingual-planning-artifacts.zh.md: 8e9dc555217e0161390bd1eebb0780b166f31102
+2026-09-17-bilingual-planning-artifacts.md: 874afcebfede588a18469baf4c576cdc5eed37bd
+2026-09-17-bilingual-planning-artifacts.zh.md: 0ce6e31d8d9f69266b9640dc9b2d9b0c5d809925

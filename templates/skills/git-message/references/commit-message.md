@@ -12,6 +12,8 @@
 
 Omit the scope, body, and footer when the verified change does not require them.
 
+The subject and body stand alone for a reader who never sees the plan and keep out the transient plan-internal identifiers, such as task IDs, step numbers, phase numbers, `REQ`/`AC` IDs and plan directory names.
+
 ## Example
 
 For a compatible installer change that preserves nested skill resources:

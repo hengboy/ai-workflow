@@ -26,6 +26,7 @@ Read `.ai-workflow/AGENTS.md` before reviewing; its workflow rules bound this ro
 - Note consistency: a lasting decision whose rationale code, tests and existing documentation cannot adequately explain is captured in a relevant note, `MEMORY.md` agrees with its referenced notes rules, and no decision is revived from the retired mechanism.
 - Note integrity: an implemented note describes delivered facts; a status-only transition is not delivery proof; supersession preserves unique rationale, alternatives, consequences and verification requirements for partial and full consolidation, and sealed history is not rewritten to accept change.
 - Notes and planning artifacts are always complete bilingual triplets; no configuration selects their languages. Structural elements, field names, fixed headings and status values remain English. A missing `.zh.md` side or `.i18n.yaml` record, or a mismatch between the two sides, is a merge-blocking violation.
+- Durable artifacts: delivered notes and code comments, including class- and type-level documentation comments, describe durable behavior, paths, symbols, guarantees, ownership or validation evidence and never carry transient plan-internal identifiers such as task IDs, step numbers, phase numbers, `REQ`/`AC` IDs or plan directory names; such an identifier in a delivered note or comment is an error finding with a concrete correction, not style taste. Existing active notes that still carry one are cleaned under `.ai-workflow/notes/README.md`, and that README governs note content.
 
 ## Note consistency checks
 

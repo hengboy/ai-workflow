@@ -10,6 +10,7 @@ This contract applies to the entire project and every participating agent, inclu
 - Navigation JSON is authoritative. Update `MEMORY.md` and `.ai-workflow/index/navigation.json` immediately when architecture, ownership, agent responsibilities, public symbols, paths or workflow rules change. Regenerate and validate `navigation.md` in the same change.
 - Fixed task context includes this contract, MEMORY and both navigation files. Add relevant notes and governance files to explicit bounded read/write scopes; do not require every task to read the entire history.
 - Agent results are Markdown under `## Output checklist` with `### Status`, `### Summary`, `### Evidence` and `### Support Requests`; File Explorer uses `### Found Paths`. JSON envelopes are prohibited; v2 manifest JSON is unchanged.
+- Durable artifacts stay self-contained after their plan is gone: note bodies, commit messages and code comments, including class- and type-level documentation comments, describe the delivered result, decision or behavior in durable project terms and never carry transient plan-internal identifiers such as task IDs, step numbers, phase numbers, `REQ`/`AC` IDs or plan directory names. Existing active notes that still carry such identifiers are cleaned under `.ai-workflow/notes/README.md` maintenance, and the workspace cross-repository plain plan-ID note reference is the only sanctioned exception.
 
 ## Agent Notes
 

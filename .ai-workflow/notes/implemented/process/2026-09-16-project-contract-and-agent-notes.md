@@ -8,7 +8,7 @@ English | [中文](2026-09-16-project-contract-and-agent-notes.zh.md)
 
 Before this change, ai-workflow wrote the full workflow contract into the global instruction files of all three hosts and used numbered records under `.ai-workflow/adr/` as its proposal and decision mechanism. This caused three concrete problems. First, contract loading depended on host behavior: the project side had no independent, complete, readable authority contract, the global block grew ever longer, and there was no clear repair entry when the contract was missing. Second, the decision records' format, lifecycle, supersession and sealing rules were scattered across role files, skills and the language injection, with no single governance source, so the rules drifted easily. Third, numbered records were immutable after `accepted`, so one record could not express the evolution from proposal to implementation, nor distinguish a current decision from sealed content retained only as history.
 
-This change, under the approved frozen plan `20260916-project-contract-and-agent-notes`, moved the full project contract into `.ai-workflow/AGENTS.md` and fully replaced the previous decision-record mechanism with in-project Agent Notes, with no compatibility path.
+This change, under its approved frozen plan, moved the full project contract into `.ai-workflow/AGENTS.md` and fully replaced the previous decision-record mechanism with in-project Agent Notes, with no compatibility path.
 
 ## Decision
 

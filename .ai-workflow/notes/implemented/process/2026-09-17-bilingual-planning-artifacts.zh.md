@@ -28,7 +28,7 @@ Status: implemented
 ## Consequences
 
 - 一份规划文档要么是完整配对，要么无效：缺失 `.zh.md` 或 `.i18n.yaml`、切换器错误、结构分歧、记录哈希过期以及孤儿伴生文件，都会让 `ai-workflow plan validate` 失败并给出问题路径与原因。
-- `.ai-workflow/plans/` 下已有的单语计划按设计无法通过新校验，既不迁移也不放行。计划目录 `20260917-bilingual-planning-artifacts` 本身就是这样一件历史遗留：它在本次变更前冻结、按 unsplit 计划执行、不生成 task 文件，落地后不得用新的 `plan validate` 复验。
+- `.ai-workflow/plans/` 下已有的单语计划按设计无法通过新校验，既不迁移也不放行。落地本决定的计划本身在本次变更前冻结，因此它就是这样一件历史遗留：它按 unsplit 计划执行、不生成 task 文件，落地后不得用新的 `plan validate` 复验。
 - 摘要协议与 `plan validate` 的成功输出形状保持不变，因此只需要 `plan_id`、计数与摘要的读者继续可用，且无需进行摘要协议迁移。
 - 漂移由记录配对哈希而非摘要捕获：只改中文侧时英文 `digest` 仍然匹配，直到 `ai-workflow plan pairing --plan <目录> --write --all` 重记字节前都会报告为 `out-of-sync`。
 - 结构被机械比对，含义没有：忠实度、术语与自然措辞仍由语义审阅负责。

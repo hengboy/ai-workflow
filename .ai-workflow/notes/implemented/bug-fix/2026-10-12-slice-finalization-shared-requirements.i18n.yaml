@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 # ai-workflow notes pairing --project <project-root> --write .ai-workflow/notes/implemented/bug-fix/2026-10-12-slice-finalization-shared-requirements.md
-2026-10-12-slice-finalization-shared-requirements.md: 0d2324ea84f455831173ddc0051a065fa08beef6
-2026-10-12-slice-finalization-shared-requirements.zh.md: 906bda384b7968c3c74f41fa64e7d02267c4718c
+2026-10-12-slice-finalization-shared-requirements.md: f551bbe35eaf0355dfd0665bf218fcf65904d51a
+2026-10-12-slice-finalization-shared-requirements.zh.md: 7470303bc3d31234611adce91016338b317073f7

@@ -394,4 +394,77 @@ describe('native prompt contracts', () => {
     }
     expect(violations, 'shipped plan pairing instructions must match the CLI contract').toEqual([]);
   });
+  // the git-message contract requires a standalone message that states
+  // the delivered result in durable product terms and carries no transient plan-internal
+  // identifier in its subject, body or footer.
+  it('requires the git-message contract to state a standalone delivered result', async () => {
+    const messageSkill = await readFile(packagePath('templates/skills/git-message/SKILL.md'), 'utf8');
+    const contract = sectionOf(messageSkill, '## Message contract');
+
+    expect(contract, 'the message contract section exists').not.toBe('');
+    expect(contract, 'the subject states the delivered result').toMatch(/delivered result/i);
+    expect(contract, 'the message stands alone for a reader who never sees the plan').toMatch(
+      /stand(?:s)? alone|standalone|self-contained/i,
+    );
+    expect(contract, 'the identifier set is named').toMatch(
+      /task IDs?[^.]{0,140}step numbers?[^.]{0,140}phase numbers?[^.]{0,220}(?:REQ|AC)[^.]{0,140}plan director/i,
+    );
+    expect(contract, 'neither the subject, body nor footer carries such an identifier').toMatch(
+      /subject[^.]{0,100}body[^.]{0,100}footer/i,
+    );
+    expect(contract, 'the transient plan-internal identifier class is named').toMatch(
+      /transient plan-internal identifiers?/i,
+    );
+    // The existing Conventional Commit type/scope and Chinese summary conventions stay.
+    expect(messageSkill, 'the Conventional Commit convention stays').toMatch(/Conventional Commits/i);
+    expect(messageSkill, 'the type list stays').toMatch(/feat[^\n]{0,60}fix[^\n]{0,60}docs/);
+    expect(messageSkill, 'the Chinese summary convention stays').toMatch(/Chinese summary/i);
+  });
+  // the commit-message reference repeats the standalone rule for both
+  // the subject and the body.
+  it('requires the commit-message reference to keep the subject and body standalone', async () => {
+    const reference = await readFile(
+      packagePath('templates/skills/git-message/references/commit-message.md'),
+      'utf8',
+    );
+    expect(reference, 'the reference keeps its template and example').toMatch(/## Template[\s\S]*## Example/);
+    expect(reference, 'the subject and body stand alone').toMatch(/stand(?:s)? alone|standalone|self-contained/i);
+    expect(reference, 'the subject and body are named').toMatch(/subject[^.]{0,100}body|body[^.]{0,100}subject/i);
+    expect(reference, 'the transient plan-internal identifiers are kept out').toMatch(
+      /transient plan-internal identifiers?|plan-internal identifiers?/i,
+    );
+  });
+  // Git Operator verifies the returned message for self-containment
+  // and rejects a violating message with evidence before it reaches `git commit`.
+  it('requires Git Operator to reject a message carrying a transient plan-internal identifier', async () => {
+    const operator = await readFile(packagePath('templates/agents/git-operator.md'), 'utf8');
+    const generation = sectionOf(operator, '### Commit message generation');
+
+    expect(generation, 'the commit message generation section exists').not.toBe('');
+    expect(generation, 'the returned message is checked for self-containment').toMatch(
+      /self-contain|stand(?:s)? alone/i,
+    );
+    expect(generation, 'the transient plan-internal identifier class is named').toMatch(
+      /transient plan-internal identifiers?/i,
+    );
+    expect(generation, 'a violating message is rejected with evidence').toMatch(
+      /reject\w*[^.]{0,200}evidence|evidence[^.]{0,160}reject/i,
+    );
+    expect(generation, 'a violating message is not passed to git commit').toMatch(
+      /(?:instead of|never|not)[^.]{0,120}git commit/i,
+    );
+  });
 });
+
+/**
+ * the whitespace-normalized text of one level-two section, so a
+ * contract rule is asserted where it is authored.
+ */
+function sectionOf(text: string, heading: string): string {
+  const marker = `\n${heading}\n`;
+  const start = text.indexOf(marker);
+  if (start === -1) return '';
+  const body = text.slice(start + marker.length);
+  const next = body.search(/\n#{2,6} /);
+  return (next === -1 ? body : body.slice(0, next)).replace(/\s+/g, ' ').trim();
+}
