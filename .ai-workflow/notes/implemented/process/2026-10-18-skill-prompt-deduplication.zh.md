@@ -13,7 +13,7 @@ Status: implemented
 - **重复簇登记与等价规则。** 在每个范围内的提示文件中，每个已登记的重复簇只保留一条权威表述，并保留其原有规范内容。删除与合并只移除重复、复述与样板，绝不删除各自不同的规范内容。固定发布内容测试套件所断言的每一句都逐字保留，且 `tests/` 下没有任何文件被修改。
 - **强制语气政策。** 规范性表述使用 `must`、`required`、`never` 或 `only`。范围内的提示文件中不出现 `should`、`consider`、`try to`、`when it improves` 与 `if possible` 等柔性模糊词，而 `may` 仅保留在真正的许可或可选字段语境中。
 - **三处强化。** 编码技能的 `## Preconditions` 一节陈述强制的 Todo 列表规则，取代一条条件式条目并并入按比例的范围从句。编码技能的 `## Verification and Commit` 一节在需要命令裁决时要求派发 Test，取代原先的宽松表述。编码工作区参考把主动重建门槛表述为 `must not ... except at`，同时保留 `active rebuild` 关键词。
-- **逐簇删除记录。** 每个簇的有界前后物理行数是验收证据：
+- **逐簇删除记录。** 每个簇的有界前后行数是验收证据：
   - 编码技能 `## Work-boundary synchronization`：23 → 7 物理行；保留单次 `ai-workflow sync-hook --host <host> --phase --project <root>` 调用、技能启动时一次性的节奏、存储结果复用与决策路由，删除手动同步与 stdin 载荷的复述。
   - 编码技能分流段尾部：删除已定请求的复述。
   - 编码技能 `## Delegation and Scheduling`：两条全新会话条目合并为一条，保留全部从句。
@@ -22,8 +22,8 @@ Status: implemented
   - 编码技能工作区路由各节（`## Parent workspace execution`、`## Workspace finalization`）：裁去冗余的尾部从句。
   - 编码技能 `## Verification and Commit`：删除重复的引入段，并把 Test 派发改为必需。
   - 编码工作区参考 `templates/skills/coding/references/workspace.md`：激活、评审与恢复的复述各收敛为一条表述，并强化主动重建门槛。
-  - 规划技能 `templates/skills/planning/SKILL.md` 的 `## Work-boundary synchronization`：9 → 4 内容行，并移除 agent-notes 治理的复述。
-  - 计划转任务技能 `templates/skills/plan-to-tasks/SKILL.md`：分发后冻结规则缩减为一条带文件内引用的权威表述，裁去结果与调用模式的复述，且 `## Work-boundary synchronization` 为 9 → 4 内容行。
+  - 规划技能 `templates/skills/planning/SKILL.md` 的 `## Work-boundary synchronization`：5 → 4 内容行，并移除 agent-notes 治理的复述。
+  - 计划转任务技能 `templates/skills/plan-to-tasks/SKILL.md`：分发后冻结规则缩减为一条带文件内引用的权威表述，裁去结果与调用模式的复述，且 `## Work-boundary synchronization` 为 5 → 4 内容行。
   - 九个代理解模板：`## Packet handling` 块各由 10 行内容压缩为 4 行内容（共删除 54 行），同时保留精确的绝对任务包路径、显式的逐命令 workdir、子仓库契约自读与 `no nested dispatch`；`## Output checklist` 块各失去两行冗余空行（共删除 18 行）。
   - git-operator 代理 `templates/agents/git-operator.md`：重复的定稿条目合并为单条权威指针提交表述（删除 5 行），保留整批 `git cat-file -e <sha>^{commit}` 存在性检查、绝不暂存部分批次规则以及精确的 `git update-index --cacheinfo 160000,<sha>,<path>` 指针写入命令。
   - 轻触文件（git-message、setup-ai-workflow、sync-ai-workflow 与 switch-profile 技能及其参考，以及规划与计划转任务的参考）：保持不变，因为在不动被断言句子的前提下不存在可移除的冗余。
