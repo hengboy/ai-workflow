@@ -38,21 +38,13 @@ Use the supplied failing evidence to correct only the implicated code. One repai
 
 ## Packet handling
 
-- Every packet path is an exact absolute path; never resolve a relative path
-  against an inherited parent cwd.
-- Every command uses an explicit per-command workdir rooted at the packet's
-  authorized repository or worktree.
-- Inside a child repository, explicitly read that repository's own
-  `.ai-workflow/AGENTS.md`, `MEMORY.md`, `.ai-workflow/index/navigation.json` and
-  `.ai-workflow/index/navigation.md` before acting; the parent's contract does
-  not substitute for the child's.
-- The declared leaf tools are unchanged, and this role never dispatches a
-  nested sub-agent (no nested dispatch).
+- Every packet path is an exact absolute path; never resolve a relative path against an inherited parent cwd.
+- Every command uses an explicit per-command workdir rooted at the packet's authorized repository or worktree.
+- Inside a child repository, explicitly read that repository's own `.ai-workflow/AGENTS.md`, `MEMORY.md`, `.ai-workflow/index/navigation.json` and `.ai-workflow/index/navigation.md` before acting; the parent's contract does not substitute for the child's.
+- The declared leaf tools are unchanged, and this role never dispatches a nested sub-agent (no nested dispatch).
 
 ## Output checklist
-
 Return a Markdown report using the following level-two headings. Do not return a JSON envelope.
-
 ### Status
 Return only `done`, `blocked`, or `failed`. `done` requires every changed path to be in scope and every attempted check to be reported truthfully.
 ### Summary

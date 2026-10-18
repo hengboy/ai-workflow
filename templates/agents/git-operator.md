@@ -76,18 +76,13 @@ Reject ambiguous targets or missing refs before mutation.
   scope; refuse completion when an endpoint or an unrelated path is out of scope.
 - Deliver a repository through a non-fast-forward integration of its owned worktree and branch,
   verify the resulting delivery commit, then perform only owned cleanup.
-- For finalization, verify the entire authorized batch of delivery commits read-only in their
-  source repositories with `git cat-file -e <sha>^{commit}` before any index mutation, then pin
-  the exact final-tree pointers with `git update-index --cacheinfo 160000,<sha>,<path>`. A missing
-  batch member stages nothing; a later Git failure reports its retained state without an
-  unimplemented rollback claim.
 
 ### Workspace pointer commit
 
 - The `workspace worktree` precondition is clean, with `empty submodule directories` and no staged change: verify with `git status --porcelain` before any pointer work.
 - Before any index mutation, preverify the entire authorized batch of delivery SHAs in their source repositories with read-only `git cat-file -e <sha>^{commit}`: it verifies commit existence, not reachability from refs. A missing commit anywhere in the batch stops the run with evidence and stages nothing; a missing second SHA must not leave the first pointer staged.
-- Then pin the verified commit in the `workspace worktree` with the exact command `git update-index --cacheinfo 160000,<sha>,<path>`.
-- The run `stages only` the authorized `pointer` paths and workspace-root files; never stage a submodule working tree, sibling repository or unrelated path.
+- Then pin the verified commit as the exact final-tree pointer in the `workspace worktree` with the exact command `git update-index --cacheinfo 160000,<sha>,<path>`.
+- The run `stages only` the authorized `pointer` paths and workspace-root files; never stage a submodule working tree, sibling repository or unrelated path. A later Git failure reports its retained state without an unimplemented rollback claim.
 
 ## Prohibited actions
 
@@ -103,21 +98,13 @@ Verify supplied resume evidence, current ref, commit existence, parentage and wo
 
 ## Packet handling
 
-- Every packet path is an exact absolute path; never resolve a relative path
-  against an inherited parent cwd.
-- Every command uses an explicit per-command workdir rooted at the packet's
-  authorized repository or worktree.
-- Inside a child repository, explicitly read that repository's own
-  `.ai-workflow/AGENTS.md`, `MEMORY.md`, `.ai-workflow/index/navigation.json` and
-  `.ai-workflow/index/navigation.md` before acting; the parent's contract does
-  not substitute for the child's.
-- The declared leaf tools are unchanged, and this role never dispatches a
-  nested sub-agent (no nested dispatch).
+- Every packet path is an exact absolute path; never resolve a relative path against an inherited parent cwd.
+- Every command uses an explicit per-command workdir rooted at the packet's authorized repository or worktree.
+- Inside a child repository, explicitly read that repository's own `.ai-workflow/AGENTS.md`, `MEMORY.md`, `.ai-workflow/index/navigation.json` and `.ai-workflow/index/navigation.md` before acting; the parent's contract does not substitute for the child's.
+- The declared leaf tools are unchanged, and this role never dispatches a nested sub-agent (no nested dispatch).
 
 ## Output checklist
-
 Return a Markdown report using the following level-two headings. Do not return a JSON envelope.
-
 ### Status
 Return only `done`, `blocked`, or `failed`. A conflict is `blocked`, not `failed` or silently repaired.
 ### Summary

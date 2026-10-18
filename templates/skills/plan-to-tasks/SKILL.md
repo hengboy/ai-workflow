@@ -7,14 +7,14 @@ description: Preview and freeze executable task files from a confirmed plan.
 
 ## Outcome
 
-Convert one frozen spec/plan pair into an approved, immutable task DAG that coding can execute. This skill only previews and writes task documents; it does not generate or run a workflow. A workspace split also completes when the split session hands each participating repository its slice, and its task set becomes frozen only after that full distribution succeeds for every participating repository.
+Convert one frozen spec/plan pair into an approved, immutable task DAG that coding can execute. This skill only previews and writes task documents; it does not generate or run a workflow. A workspace split also completes when the split session hands each participating repository its slice, per the freeze gate in `## Workspace split`.
 
 ## Invocation modes
 
 This skill supports two invocation modes over the same preview, validation and write procedure:
 
 - A `standalone` invocation is a user-started plan-to-tasks session. It ends after its handoff: the completion report and the copyable next-Coding prompt below are its final output, and it starts no Coding work.
-- A `preparation procedure` invocation runs inside an already-running session over a frozen child-participating workspace plan with no task set. The `planning session` automatically invokes it `immediately after` a child-participating workspace plan freezes and its frozen pair passes `plan validate`, and the `parent Coding session` invokes it as its bounded recovery path when a frozen plan has no task set or incomplete slices. After the full `approval preview`, approval, writing, validation and distribution below, it `returns control` to the `same parent Coding session` (or the chaining planning session) for implementation. It launches no child host process and no sibling session.
+- A `preparation procedure` invocation runs inside an already-running session over a frozen child-participating workspace plan with no task set. The `planning session` automatically invokes it `immediately after` a child-participating workspace plan freezes and its frozen pair passes `plan validate`, and the `parent Coding session` invokes it as its bounded recovery path when a frozen plan has no task set or incomplete slices. After the full `approval preview`, approval, writing, validation and distribution below, it `returns control` to the `same parent Coding session` (or the chaining planning session) for implementation.
 
 Declining the approval creates no tasks, no slices, no worktrees and no implementation records; a declined `approval preview` reports only managed synchronization changes, and those are reported separately. Valid existing split artifacts are reused `byte-unchanged`. A `partial` or invalid task set and a `divergent` slice stop with a `repair request`; never `regenerate` them.
 
@@ -37,13 +37,10 @@ Route note format, lifecycle, supersession and archive governance through `.ai-w
 
 ## Work-boundary synchronization
 
-At skill session start, invoke exactly once for the actual project root:
-`ai-workflow sync-hook --host <current-host> --phase --project <actual-root>`.
+At skill session start, invoke exactly once for the actual project root: `ai-workflow sync-hook --host <current-host> --phase --project <actual-root>`.
+Follow `decision`, not the exit code (0 even on denial): `deny` or a `conflict`/`failed` `report.status` stops the split; warnings proceed without a freshness claim; `skip` means no adoption.
 Later steps, split phases and native host events reuse that root's stored result with no source request; a missing, corrupt or unreadable check allows with visible no-freshness context.
-
-The raw gate JSON has top-level `decision` (`allow`, `deny`, `skip`) and nested `report` fields `status`, `verified`, `proceed` (no report for `skip` or actor exemption). It exits 0 even on denial: `deny` or `report.status` of `conflict`/`failed` stops the split; warnings proceed visibly without claiming freshness; `skip` means no adoption. Manual `ai-workflow sync [project]` returns a `SyncReport` with those report fields and no `decision`. The installed stdin form `ai-workflow sync-hook --host <host>` requires the native JSON payload; never run it by hand without that payload.
-
-After a safe patch changes the contract or owned workflow rules, read updated `.ai-workflow/AGENTS.md` again before ordinary work. Frozen spec/plan/task bytes are immutable and never synchronization input; contradictory authority stops the split with a bounded support request, never a broader scope.
+After a safe patch changes the contract or owned workflow rules, read `.ai-workflow/AGENTS.md` again before ordinary work; frozen spec/plan/task bytes are immutable and never synchronization input, and contradictory authority stops the split with a bounded support request.
 
 ## Decomposition rules
 
@@ -87,7 +84,7 @@ After approval, follow the mandatory task template and this write order:
 4. Run the final `ai-workflow plan validate --plan <directory>` over the written artifacts. Missing or invalid execution order blocks completion. Only after it passes, complete any workspace distribution below.
 5. A child-participating workspace task set is not frozen by that validation alone: it becomes frozen only after the distribution below succeeds for every participating repository with `ai-workflow workspace status --plan <directory>` valid and every participating slice present. Until then repair the cause, re-record changed task artifacts with `ai-workflow plan pairing --plan <directory> --write --all`, revalidate with `ai-workflow plan validate --plan <directory>` and rerun the distribution; never regenerate the task set.
 
-Never modify frozen `spec.md` or `plan.md`; task files are immutable once the task set is frozen, a changed task after the freeze requires a new version, and a child-participating workspace task set is not frozen until the distribution below succeeds, so before that freeze repair it through `ai-workflow plan pairing --plan <directory> --write --all` and `ai-workflow plan validate --plan <directory>` and rerun the distribution rather than regenerating it. They remain local, untracked artifacts in the plan's gitignored `.ai-workflow/` directory. Plan-to-tasks creates no Git commit: do not dispatch Git Operator and do not stage or commit task files.
+Never modify frozen `spec.md` or `plan.md`; task files are immutable once the task set is frozen, and a changed task after the freeze requires a new version. They remain local, untracked artifacts in the plan's gitignored `.ai-workflow/` directory. Plan-to-tasks creates no Git commit: do not dispatch Git Operator and do not stage or commit task files.
 
 ## Workspace split
 

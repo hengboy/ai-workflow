@@ -31,9 +31,7 @@ Do not start implementation in that planning session: no worktree, no implementa
 record, no implementation or review dispatch, and no commit. The new session implements
 within the frozen plan.
 
-Never run Planning to restate a request with clear, bounded intent, and never
-label a change direct to skip required checks or evidence. Ask the user only
-when these rules cannot classify the request. A direct or mechanical change
+A direct or mechanical change
 still executes as one coding execution unit with its worktree and Git Operator
 commit; that same automatic commit gate covers planned, direct and mechanical
 changes alike, and only the planning artifacts and the dual-axis review are
@@ -69,13 +67,13 @@ session still ends at its handoff.
 - The primary orchestrator directly dispatches Git Operator for every per-step
   commit, merge and finalization, using the prescribed `git-commit` conventions.
   Git operations are allowed only through Git Operator, including inspection.
-- Once a sub-agent returns execution Status `done`, its session is finished. Any
+- Once a sub-agent returns execution Status `done`, its session is finished; any
   later work delegated to the same named role must start a new native sub-agent
-  session; never reuse or resume the completed session, including by passing its
-  identifier to a continuation field or any other continuation mechanism.
-- The same boundary covers later authorized implementation, repair, verification or
-  recheck, documentation and Git work, grants no new authority, and never treats a
-  `done` result as review PASS.
+  session, and the same boundary covers later authorized task, implementation,
+  repair, verification or recheck, documentation and Git work, grants no new
+  authority, never treats a `done` result as review PASS, and never reuses or
+  resumes the completed session, including by passing its identifier to a
+  continuation field or any other continuation mechanism.
 - Give the new session the current required project context, `MEMORY.md`, both
   navigation files, the project contract, the current task goal, exact read/write
   scopes, permitted commands and relevant accepted results or actionable findings
@@ -118,27 +116,11 @@ use this mapping:
 
 ## Work-boundary synchronization
 
-When this skill session begins, invoke the shared native synchronization entry
-for the actual project root exactly once:
-`ai-workflow sync-hook --host <current-host> --phase --project <actual-root>`.
-Raw JSON has top-level `decision` (`allow`, `deny`, `skip`) and nested `report`
-with `status`, `verified`, `proceed` (absent for `skip` or actor exemption). Follow
-`decision`, not the exit code, which is 0 even on denial: `deny` or a `conflict` or
-`failed` `report.status` stops; warnings proceed visibly without freshness claims;
-`skip` means no adoption.
-The manual `ai-workflow sync [project]` returns a `SyncReport` with `status`,
-`verified`, `proceed` and no `decision`. The installed stdin form
-`ai-workflow sync-hook --host <host>` requires the native JSON payload; never run
-it by hand without that payload.
-
-Later steps, phases and native host events reuse the actual root's stored result.
-A missing, corrupt or unreadable check allows with visible no-freshness context
-and no source retrieval. Preflight writes only managed instructions in the actual
-root or coding worktree, with no Git or product edits. After a safe patch changes
-the contract or owned rules, re-read `.ai-workflow/AGENTS.md` or inject the returned
-authority before ordinary work. Frozen `spec.md`, `plan.md`, tasks and write scopes
-never change; contradictions stop the
-phase with bounded support instead of broader scope.
+At this skill session's start, invoke the shared native entry exactly once for the actual project root: `ai-workflow sync-hook --host <current-host> --phase --project <actual-root>`.
+Follow `decision`, not the exit code (0 even on denial): `deny` or a `conflict`/`failed` `report.status` stops the phase; warnings proceed without a freshness claim; `skip` means no adoption.
+Later steps, phases and native host events reuse the actual root's stored result; a missing, corrupt or unreadable check allows with visible no-freshness context and no source request.
+Preflight writes only managed instructions in the actual root or coding worktree, with no Git or product edit.
+After a safe patch changes the contract or owned rules, re-read `.ai-workflow/AGENTS.md` before ordinary work; frozen `spec.md`, `plan.md`, tasks and write scopes never change, and contradictions stop the phase with bounded support.
 
 ## Preconditions
 
@@ -163,9 +145,8 @@ phase with bounded support instead of broader scope.
   implements, validates and commits inside that single worktree; merge/remove only
   its owned worktree and branch. Planning and TDD depth stay risk-proportional while
   review boundaries follow the change class.
-- Create a Todo list before editing and keep it current. Each step must state its
-  scope, acceptance evidence and commit point.
-- Use a Todo list when it improves clarity; keep it proportional to the change.
+- Create a Todo list before editing and keep it current, proportional to the
+  change. Each step must state its scope, acceptance evidence and commit point.
 - Packets transport the frozen fixed context and the frozen plan files as absolute
   paths plus version anchors only: the worktree baseline commit or blob anchor for
   fixed context and the frozen digest for plan files; their content is never inlined.
@@ -209,16 +190,15 @@ names. Unrelated existing comments are not rewritten.
 Choose checks/commits by risk and repository practice. Run the narrowest relevant
 test after each slice, then all declared validation commands, including required
 typecheck, lint, build or integration checks. Report changed paths and every result.
-Self-check once per step and dispatch Git Operator for its scoped commit, retaining
-the split-plan whole-phase barrier and serial commits.
 
 After implementation, run relevant validation. An ordinary planned change, split
 or unsplit, runs one simultaneous full Spec Review and Standards Review batch after
 implementation and its required checks and before integration: delegate Spec Review
 and Standards Review simultaneously in one parallel batch with identical evidence,
 never Spec first and Standards after Spec completes. This is the review-side
-exception to serial dispatch; request Test as useful. Spec Review checks frozen
-requirements and acceptance criteria; Standards Review checks `MEMORY.md`.
+exception to serial dispatch; dispatch Test when a command verdict is required. Spec
+Review checks frozen requirements and acceptance criteria; Standards Review checks
+`MEMORY.md`.
 There is no per-task, per-phase or per-commit review trigger, and no undefined
 larger or high-risk trigger beyond the change class. A direct or mechanical change
 runs the relevant checks without the dual-axis review.
@@ -287,8 +267,7 @@ Completion follows final merge and cleanup of only the owned worktree and branch
 | Root finalization | Stay `in-progress` through interruption; after final merge and owned cleanup, set `status: completed`, `completed_at` and final workspace `commit`, retaining root delivery evidence. |
 | Completed root finalization reentry | Verify matching `plan_id`, full final commit and delivery/pointer evidence read-only. Report without a new worktree, record rewrite or task reexecution; invalid/unavailable evidence requires bounded support. |
 
-Workspace execution adds the fields and checkpoint-only write protocol in
-`references/workspace.md`; explicitly read it before any workspace record operation.
+Workspace execution adds its fields and the checkpoint-only write protocol in `references/workspace.md`; explicitly read it before any workspace record operation.
 
 ## Workspace root sessions
 
@@ -302,11 +281,10 @@ Activate only when the frozen plan declares at least one participating non-root
 repository matched to the current root's `.gitmodules`. Ordinary plans, root-only
 plans whose `workspace_repos` declares only the reserved workspace root entry,
 and projects with `.gitmodules` running a non-participating plan gain no workspace
-prerequisites; root-only plans may be implemented unsplit. Claimed workspaces with
-absent, mismatched or escaped declarations are refused, with no child-in-root fallback.
-Explicitly read `references/workspace.md` before approved preparation or any
-implementation state, then follow its parent execution and recovery procedure,
-including the checkpoint-boundary active rebuild in `references/workspace.md`.
+prerequisites; root-only plans may be implemented unsplit. Explicitly read
+`references/workspace.md` before approved preparation or any implementation state,
+then follow its parent execution and recovery procedure, including the
+checkpoint-boundary active rebuild in `references/workspace.md`.
 
 ## Slice sessions
 
@@ -318,9 +296,8 @@ slice scope, completion and handoff route.
 ## Workspace finalization
 
 Explicitly read `references/workspace.md` before finalization or pointer/index
-mutation. It requires status, entire-batch existence and separate review gates;
-`all slices are completed` alone is insufficient. The correct running parent/root
-session finalizes directly.
+mutation; it requires status, entire-batch existence and separate review gates, and
+`all slices are completed` alone is insufficient.
 
 ## Note ownership
 
