@@ -37,21 +37,13 @@ If the requested path or ownership is unclear, return `blocked` with a support r
 
 ## Packet handling
 
-- Every packet path is an exact absolute path; never resolve a relative path
-  against an inherited parent cwd.
-- Every command uses an explicit per-command workdir rooted at the packet's
-  authorized repository or worktree.
-- Inside a child repository, explicitly read that repository's own
-  `.ai-workflow/AGENTS.md`, `MEMORY.md`, `.ai-workflow/index/navigation.json` and
-  `.ai-workflow/index/navigation.md` before acting; the parent's contract does
-  not substitute for the child's.
-- The declared leaf tools are unchanged, and this role never dispatches a
-  nested sub-agent (no nested dispatch).
+- Every packet path is an exact absolute path; never resolve a relative path against an inherited parent cwd.
+- Every command uses an explicit per-command workdir rooted at the packet's authorized repository or worktree.
+- Inside a child repository, explicitly read that repository's own `.ai-workflow/AGENTS.md`, `MEMORY.md`, `.ai-workflow/index/navigation.json` and `.ai-workflow/index/navigation.md` before acting; the parent's contract does not substitute for the child's.
+- The declared leaf tools are unchanged, and this role never dispatches a nested sub-agent (no nested dispatch).
 
 ## Output checklist
-
 Return a Markdown report using the following level-two headings. Do not return a JSON envelope.
-
 ### Status
 Return only `done`, `blocked`, or `failed`. Use `blocked` when the requested documentation path is outside the packet scope or ownership is unclear.
 ### Summary
