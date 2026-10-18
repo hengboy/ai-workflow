@@ -32,13 +32,10 @@ Each task's `read_scope` is fixed context plus exact locator paths and exact bou
 
 ## Work-boundary synchronization
 
-At skill session start, invoke exactly once for the actual project root:
-`ai-workflow sync-hook --host <current-host> --phase --project <actual-root>`.
+At skill session start, invoke exactly once for the actual project root: `ai-workflow sync-hook --host <current-host> --phase --project <actual-root>`.
+Follow `decision`, not the exit code (0 even on denial): `deny` or a `conflict`/`failed` `report.status` stops the phase; warnings proceed without a freshness claim; `skip` means no adoption.
 Later steps, phases and native host events reuse that root's stored result with no source request; a missing, corrupt or unreadable check allows with visible no-freshness context.
-
-The raw gate JSON has top-level `decision` (`allow`, `deny`, `skip`) and nested `report` fields `status`, `verified`, `proceed` (no report for `skip` or actor exemption). It exits 0 even on denial: `deny` or `report.status` of `conflict`/`failed` stops the phase; warnings proceed visibly without claiming freshness; `skip` means no adoption. Manual `ai-workflow sync [project]` returns a `SyncReport` with those report fields and no `decision`. The installed stdin form `ai-workflow sync-hook --host <host>` requires the native JSON payload; never run it by hand without that payload.
-
-After a safe patch changes the contract or owned workflow rules, re-read updated `.ai-workflow/AGENTS.md` before ordinary work. Frozen `spec.md`, `plan.md` and task files are never synchronization input; contradictory new authority stops the phase with a bounded support request, never a broader frozen scope.
+After a safe patch changes the contract or owned workflow rules, re-read `.ai-workflow/AGENTS.md` before ordinary work; frozen `spec.md`, `plan.md` and task files are never synchronization input, and contradictory new authority stops the phase with a bounded support request, never a broader frozen scope.
 
 ## Workspace planning
 
@@ -56,7 +53,7 @@ Planning `schedules each repository's note` and `MEMORY.md` work `in that reposi
 
 ## Clarification loop
 
-Ask the highest-priority clarifying question per turn: choose the unanswered inventory item whose ambiguity changes the most downstream work. Consider measurable goals, non-goals, actors and primary/alternate scenarios, functional requirements, AC/evidence, compatibility/performance/privacy/platform constraints, invalid inputs/failures/cancellation/recovery, validation layers and RED criteria.
+Ask the highest-priority clarifying question per turn: choose the unanswered inventory item whose ambiguity changes the most downstream work. Evaluate measurable goals, non-goals, actors and primary/alternate scenarios, functional requirements, AC/evidence, compatibility/performance/privacy/platform constraints, invalid inputs/failures/cancellation/recovery, validation layers and RED criteria.
 
 Apply a business-relevance gate before asking any question:
 
@@ -133,7 +130,7 @@ The planning primary owns writes; Spec Review is read-only. Planning artifacts a
 
 ## Agent Notes
 
-Planning schedules note work; the landing change owns its record and lifecycle transition. Read `.ai-workflow/notes/AGENTS.md` and `.ai-workflow/notes/README.md`, the single source for note format, lifecycle, supersession and archive governance. `MEMORY.md` records current standards (how), notes record why; keep them consistent in the same change without restating governance here.
+Route note format, lifecycle, supersession and archive governance through `.ai-workflow/notes/README.md`, reached via `.ai-workflow/notes/AGENTS.md`.
 
 Schedule note work when the change lands a lasting decision whose rationale code, tests and existing documentation cannot adequately explain; then the `plan.md` must contain an explicit step that adds or updates the relevant note, and the plan must align `MEMORY.md` with that note in the same change. Local, mechanical, UI, copy and formatting changes without such lasting rationale are exempt. Major unimplemented work is scheduled as `proposed`; a change that lands a decision moves its note to `implemented` and rewrites the body to delivered facts.
 

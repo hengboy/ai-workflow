@@ -6,10 +6,9 @@ finalization procedures. Apply it with `SKILL.md`'s shared gates and record life
 ## Activation and preflight
 
 Parent activation requires the main skill's frozen non-root participant matched
-to `.gitmodules`. Its ordinary, non-participating and root-only exemptions preserve
-worktree, ordering, review, record and completion semantics. Refuse claimed
-workspaces with absent, mismatched or escaped declarations; no fallback runs child
-tasks in the root.
+to `.gitmodules`; the ordinary, non-participating and root-only routes stay
+unchanged. Refuse claimed workspaces with absent, mismatched or escaped
+declarations; no fallback runs child tasks in the root.
 
 Before creating a worktree or implementation record, confirm the delivery gate with
 `ai-workflow workspace status --plan <directory>` against the original absolute
@@ -25,8 +24,7 @@ If splitting is needed, direct to the parent root for plan-to-tasks with the abs
 parent plan directory; parent Coding uses Approved preparation below. For existing
 split artifacts, request repair of the named divergence and a rerun of
 `ai-workflow workspace distribute --plan <directory>` against that same directory.
-Never repair frozen inputs in coding. Shared leaf clarification handling adds no
-workspace-only fields to ordinary packets.
+Never repair frozen inputs in coding.
 
 ## Approved preparation
 
@@ -109,10 +107,8 @@ JSON bodies or code blocks. Large outputs belong in
 ## Review and checkpoint record
 
 Delivery review covers that repository's tasks; the separate finalization review
-does not re-review delivered tasks. Apply the main simultaneous review/repair gate
-with one bounded aggregate repair and at most one targeted recheck of only the
-affected axes. Findings requiring changes in a delivered child need out-of-scope
-support or a new plan; never reopen that child.
+does not re-review delivered tasks. Findings requiring changes in a delivered child
+need out-of-scope support or a new plan; never reopen that child.
 
 The single `implementation.yaml` follows the main lifecycle, with no extra run
 record, ledger or manifest. Workspace fields are:
@@ -194,9 +190,9 @@ parentage and owned-cleanup evidence; otherwise stop. Never adopt a different-ru
 worktree; simultaneous primaries over one run are unsupported.
 
 For a workspace execution with checkpoint records (parent orchestration and
-slices), the primary may perform an active rebuild of its context only at a clean,
-fully checkpointed phase boundary or a verified repository delivery boundary. It
-re-derives state from the frozen files (`tasks/execution-order.yaml`, task files,
+slices), the primary must not perform an active rebuild of its context except at a
+clean, fully checkpointed phase boundary or a verified repository delivery boundary.
+It re-derives state from the frozen files (`tasks/execution-order.yaml`, task files,
 each repository's `implementation.yaml` and the `workspace status` projection),
 never from conversation history. Before continuing, verify that recorded checkpoint
 SHAs match Git objects through read-only checks, that `workspace status` shows no
