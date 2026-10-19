@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 # ai-workflow notes pairing --project <project-root> --write .ai-workflow/notes/implemented/process/2026-10-17-durable-artifacts.md
-2026-10-17-durable-artifacts.md: 53163a9fc72e629eb74a7b655187344d908ef46d
-2026-10-17-durable-artifacts.zh.md: a09141638a9b58f4d319f3546dc06460c4622c53
+2026-10-17-durable-artifacts.md: 072ff20fcdfab5f6a6b74529c178d19c034f552a
+2026-10-17-durable-artifacts.zh.md: 3b0da23fa9a6a9fd1c615e7d2c58aab2b27be23f

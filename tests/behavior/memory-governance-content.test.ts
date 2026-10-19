@@ -12,6 +12,10 @@ import { packagePath } from '../../src/utils/schema.js';
 
 const PLAN = '20261019-memory-governance';
 
+// The governance-consistency plan registered the delivered note triplets and the archived
+// migrated-record paths in the index; the navigation test below locks that registration.
+const GOVERNANCE_PLAN = '20261019-governance-consistency';
+
 const CONTRACT_PATHS = ['templates/project/AGENTS.md', '.ai-workflow/AGENTS.md'] as const;
 
 // The exact currency statements the frozen plan lands in the contract section.
@@ -311,6 +315,33 @@ describe('Root MEMORY is current-state only and records the latest standards (RE
   });
 });
 
+// The delivered note triplets and the two migrated records the governance-consistency plan
+// registered in the index. The archived directory is the migrated records' sealed home.
+const MEMORY_SINGLE_SOURCE_TRIPLET = [
+  '.ai-workflow/notes/implemented/process/2026-10-19-memory-single-source.md',
+  '.ai-workflow/notes/implemented/process/2026-10-19-memory-single-source.zh.md',
+  '.ai-workflow/notes/implemented/process/2026-10-19-memory-single-source.i18n.yaml',
+] as const;
+
+const ARCHIVE_RETENTION_TRIPLET = [
+  '.ai-workflow/notes/implemented/process/2026-10-19-archive-retention.md',
+  '.ai-workflow/notes/implemented/process/2026-10-19-archive-retention.zh.md',
+  '.ai-workflow/notes/implemented/process/2026-10-19-archive-retention.i18n.yaml',
+] as const;
+
+const MIGRATED_RECORDS = [
+  '2026-09-17-migrate-retired-adr-records-to-notes',
+  '2026-09-14-localize-adr-prose-at-install-time',
+] as const;
+
+/** Every string reachable from a parsed JSON value, in object traversal order. */
+function collectStrings(value: unknown): string[] {
+  if (typeof value === 'string') return [value];
+  if (Array.isArray(value)) return value.flatMap(collectStrings);
+  if (value !== null && typeof value === 'object') return Object.values(value).flatMap(collectStrings);
+  return [];
+}
+
 describe('Navigation registers the feature (REQ-007/AC-007)', () => {
   it('exposes a shared memory-governance feature whose entries and tests include the delivered surfaces', async () => {
     const navigation = JSON.parse(
@@ -344,14 +375,85 @@ describe('Navigation registers the feature (REQ-007/AC-007)', () => {
       `${PLAN} REQ-007/AC-007: the feature tests include tests/behavior/memory-governance-content.test.ts`,
     ).toContain('tests/behavior/memory-governance-content.test.ts');
   });
+
+  it('locks the delivered note triplets and the archived migrated-record references', async () => {
+    const navigation = JSON.parse(
+      await readFile(packagePath('.ai-workflow/index/navigation.json'), 'utf8'),
+    ) as {
+      features?: Array<{
+        id?: string;
+        entries?: string[];
+        related_files?: string[];
+        read_scope?: string[];
+        tests?: string[];
+      }>;
+    };
+
+    /** The union of a feature's registered path arrays; fails when the feature is absent. */
+    const featureArrays = (featureId: string): string[] => {
+      const target = navigation.features?.find((candidate) => candidate.id === featureId);
+      expect(
+        target,
+        `${GOVERNANCE_PLAN} REQ-007/AC-007: navigation.json has a ${featureId} feature`,
+      ).toBeDefined();
+      return [
+        ...(target?.entries ?? []),
+        ...(target?.related_files ?? []),
+        ...(target?.read_scope ?? []),
+        ...(target?.tests ?? []),
+      ];
+    };
+
+    for (const path of MEMORY_SINGLE_SOURCE_TRIPLET) {
+      expect(
+        featureArrays('memory-governance'),
+        `${GOVERNANCE_PLAN} REQ-007/AC-007: the memory-governance feature arrays include ${path}`,
+      ).toContain(path);
+    }
+
+    for (const path of ARCHIVE_RETENTION_TRIPLET) {
+      expect(
+        featureArrays('notes-governance'),
+        `${GOVERNANCE_PLAN} REQ-007/AC-007: the notes-governance feature arrays include ${path}`,
+      ).toContain(path);
+    }
+
+    const durableArtifacts = navigation.features?.find((candidate) => candidate.id === 'durable-artifacts');
+    expect(
+      durableArtifacts,
+      `${GOVERNANCE_PLAN} REQ-007/AC-007: navigation.json has a durable-artifacts feature`,
+    ).toBeDefined();
+
+    const migratedReferences = collectStrings(durableArtifacts).filter((value) =>
+      MIGRATED_RECORDS.some((record) => value.includes(record)),
+    );
+    expect(
+      migratedReferences.length,
+      `${GOVERNANCE_PLAN} REQ-007/AC-007: the durable-artifacts feature references the migrated records`,
+    ).toBeGreaterThan(0);
+    for (const reference of migratedReferences) {
+      expect(
+        reference.startsWith('.ai-workflow/notes/archived/process/'),
+        `${GOVERNANCE_PLAN} REQ-007/AC-007: the durable-artifacts reference ${reference} resolves under .ai-workflow/notes/archived/process/`,
+      ).toBe(true);
+    }
+
+    const implementedReferences = collectStrings(navigation).filter(
+      (value) =>
+        value.includes('.ai-workflow/notes/implemented/') &&
+        MIGRATED_RECORDS.some((record) => value.includes(record)),
+    );
+    expect(
+      implementedReferences,
+      `${GOVERNANCE_PLAN} REQ-007/AC-007: no implemented-path reference to the migrated records remains anywhere in the index`,
+    ).toEqual([]);
+  });
 });
 
 // 20261019-governance-consistency REQ-004/AC-004: root MEMORY.md single-sources the workflow
 // contract. It carries one workflow-authority pointer, only the enumerated product, repository
 // and meta standards, and no restatement of the workflow topics the contract now owns. These are
 // structural assertions over the shipped project memory; review establishes their sufficiency.
-
-const GOVERNANCE_PLAN = '20261019-governance-consistency';
 
 /**
  * Markdown blocks of `text`: blank lines and top-level list-item and heading starts split one
