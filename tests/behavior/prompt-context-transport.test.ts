@@ -368,3 +368,325 @@ describe('maintenance division, preserved boundaries and static evidence labels 
     );
   });
 });
+
+/**
+ * REQ-002 / AC-003 and REQ-005 / AC-009: the fixed eight-task reference fixture and the
+ * measurable scope-transport comparison.
+ *
+ * This is a deterministic static protocol fixture: it models one ordinary split and one
+ * workspace packaging of the same eight concrete tasks, each with fixed metadata, absolute
+ * source/worktree/plan/task references, version anchors, role, goal, assigned coverage,
+ * permitted commands and the current-phase schedule reference. It then compares a
+ * pre-change packet that repeated both the relative and resolved scope lists against the
+ * canonical frozen-task-scope reference packet for the same eight tasks.
+ *
+ * The measured volumes are shipped instruction-transport examples only: they are not live
+ * read counts, not proof that a live agent obeys the instructions, and not a programmatic
+ * runtime-cap or model-compliance claim.
+ */
+describe('fixed eight-task reference fixture and scope-transport volumes (REQ-005 / AC-003, AC-009)', () => {
+  const SOURCE_ROOT = '/Users/yuqiyu/AiHistorys/ai-workflow';
+  const WORKTREE = `${SOURCE_ROOT}/.worktrees/20261019-prompt-context-transport`;
+  const PLAN_DIR = `${SOURCE_ROOT}/.ai-workflow/plans/20261019-prompt-context-transport`;
+  const BASELINE_COMMIT = 'd4ac0142808c4975fbc160b8726f06d307b34ea4';
+  const FIXED_ANCHOR = 'daaa04532a5c68812f047959e2542cbb2049b076';
+  const SPEC_DIGEST = 'sha256:47d3440a52e77b0529cb338dc5cddfde7a771b174316c298bb242d9ee5d46dc6';
+  const PLAN_DIGEST = 'sha256:e0851633bb1f2abaa436c1e893838b84e11769e7f2986c15dd86d20322852904';
+
+  type WorkspaceRepository = 'engine' | 'interface';
+
+  interface FixedTask {
+    readonly id: string;
+    readonly phase: number;
+    readonly repository: WorkspaceRepository;
+    readonly role: string;
+    readonly goal: string;
+    readonly coverage: readonly string[];
+    readonly commands: readonly string[];
+    readonly readScopes: readonly string[];
+    readonly writeScopes: readonly string[];
+  }
+
+  // Exactly eight concrete tasks. Identifiers, phases, roles, goals, coverage, commands and
+  // scopes are fixed fixture data; nothing here reads the live project or a live session.
+  const FIXED_TASKS: readonly FixedTask[] = [
+    {
+      id: 'T01',
+      phase: 1,
+      repository: 'engine',
+      role: 'backend',
+      goal: 'Render the concise escaped navigation catalog',
+      coverage: ['REQ-003/AC-006'],
+      commands: ['pnpm exec vitest run tests/unit/navigation-builder.test.ts'],
+      readScopes: ['src/context/navigation.ts', 'tests/unit/navigation-builder.test.ts'],
+      writeScopes: ['src/context/navigation.ts'],
+    },
+    {
+      id: 'T02',
+      phase: 1,
+      repository: 'engine',
+      role: 'backend',
+      goal: 'Preserve authoritative JSON bytes across a render-only refresh',
+      coverage: ['REQ-004/AC-007'],
+      commands: ['pnpm exec vitest run tests/integration/navigation-refresh-cli.test.ts'],
+      readScopes: ['src/context/validate.ts', 'src/cli.ts'],
+      writeScopes: ['src/context/validate.ts'],
+    },
+    {
+      id: 'T03',
+      phase: 2,
+      repository: 'interface',
+      role: 'documentation-maintainer',
+      goal: 'Align all nine role templates on the whole-report targets',
+      coverage: ['REQ-001/AC-001'],
+      commands: ['pnpm exec vitest run tests/behavior/prompt-context-transport.test.ts'],
+      readScopes: ['templates/agents/backend.md', 'templates/agents/test.md'],
+      writeScopes: ['templates/agents/backend.md'],
+    },
+    {
+      id: 'T04',
+      phase: 2,
+      repository: 'interface',
+      role: 'documentation-maintainer',
+      goal: 'Ship current-phase primary-read and canonical task-scope guidance',
+      coverage: ['REQ-002/AC-003'],
+      commands: ['pnpm exec vitest run tests/behavior/coding-v2-content.test.ts'],
+      readScopes: ['templates/skills/coding/SKILL.md', 'templates/skills/coding/references/workspace.md'],
+      writeScopes: ['templates/skills/coding/SKILL.md'],
+    },
+    {
+      id: 'T05',
+      phase: 3,
+      repository: 'interface',
+      role: 'documentation-maintainer',
+      goal: 'Compact the core contract without dropping a distinct obligation',
+      coverage: ['REQ-003/AC-005'],
+      commands: ['pnpm exec vitest run tests/behavior/memory-governance-content.test.ts'],
+      readScopes: ['templates/project/AGENTS.md', '.ai-workflow/AGENTS.md'],
+      writeScopes: ['templates/project/AGENTS.md'],
+    },
+    {
+      id: 'T06',
+      phase: 3,
+      repository: 'engine',
+      role: 'test',
+      goal: 'Capture the source, catalog and packet-example transport volumes',
+      coverage: ['REQ-005/AC-009'],
+      commands: ['pnpm exec vitest run tests/behavior/prompt-context-transport.test.ts'],
+      readScopes: ['tests/behavior/prompt-context-transport.test.ts', 'src/workflow/read-scope.ts'],
+      writeScopes: ['tests/behavior/prompt-context-transport.test.ts'],
+    },
+    {
+      id: 'T07',
+      phase: 4,
+      repository: 'interface',
+      role: 'spec-review',
+      goal: 'Check requirement coverage, testability and scope of the delivery',
+      coverage: ['REQ-005/AC-009'],
+      commands: ['pnpm exec vitest run tests/behavior/prompt-context-transport.test.ts'],
+      readScopes: ['templates/project/AGENTS.md', 'tests/behavior/prompt-context-transport.test.ts'],
+      writeScopes: [],
+    },
+    {
+      id: 'T08',
+      phase: 4,
+      repository: 'engine',
+      role: 'standards-review',
+      goal: 'Check MEMORY and note consistency against the delivered standards',
+      coverage: ['REQ-005/AC-010'],
+      commands: ['pnpm exec vitest run tests/behavior/review-policy.test.ts'],
+      readScopes: ['MEMORY.md', '.ai-workflow/notes/implemented/process/2026-10-19-prompt-context-transport.md'],
+      writeScopes: [],
+    },
+  ];
+
+  // Expected boundaries are declared independently of the fixture builder so the check
+  // never derives its expectation from the value under test.
+  const EXPECTED_TASK_IDS: readonly string[] = ['T01', 'T02', 'T03', 'T04', 'T05', 'T06', 'T07', 'T08'];
+  const EXPECTED_PHASES: readonly (readonly string[])[] = [
+    ['T01', 'T02'],
+    ['T03', 'T04'],
+    ['T05', 'T06'],
+    ['T07', 'T08'],
+  ];
+
+  const REPOSITORY_WORKTREES: Record<WorkspaceRepository, string> = {
+    engine: `${SOURCE_ROOT}/repos/engine/.worktrees/20261019-prompt-context-transport`,
+    interface: `${SOURCE_ROOT}/repos/interface/.worktrees/20261019-prompt-context-transport`,
+  };
+
+  /** The absolute frozen-task reference for a fixture task. */
+  function taskPath(id: string): string {
+    return `${PLAN_DIR}/tasks/${id}.md`;
+  }
+
+  /** Shared packet header: absolute refs, version anchors and the current-phase schedule. */
+  function headerLines(repositoryLabel: string): string[] {
+    const schedule = EXPECTED_PHASES.map((phase) => `[${phase.join(' ')}]`).join('');
+    return [
+      `source root: ${SOURCE_ROOT}`,
+      `worktree: ${WORKTREE}`,
+      `plan: ${PLAN_DIR}`,
+      `repository: ${repositoryLabel}`,
+      `version anchors: source baseline commit=${BASELINE_COMMIT} frozen anchor=${FIXED_ANCHOR} spec digest=${SPEC_DIGEST} plan digest=${PLAN_DIGEST}`,
+      `current-phase schedule: ${PLAN_DIR}/tasks/execution-order.yaml phases=${schedule} current=phase 1`,
+    ];
+  }
+
+  /** The pre-change packet: repeats both the relative and the resolved scope list per task. */
+  function preChangePacket(tasks: readonly FixedTask[], repositoryLabel: string, workspace: boolean): string {
+    const lines = [
+      `PACKET ${workspace ? 'workspace' : 'ordinary-split'} (pre-change: repeated relative+resolved scopes)`,
+      ...headerLines(repositoryLabel),
+    ];
+    for (const task of tasks) {
+      const resolvedRead = task.readScopes.map((scope) => `${WORKTREE}/${scope}`).join(', ');
+      const resolvedWrite = task.writeScopes.map((scope) => `${WORKTREE}/${scope}`).join(', ');
+      const placement = workspace
+        ? ` repository=${task.repository} repository-worktree=${REPOSITORY_WORKTREES[task.repository]}`
+        : '';
+      lines.push(
+        `task ${task.id} phase=${task.phase} role=${task.role}${placement}`,
+        `goal: ${task.goal}`,
+        `coverage: ${task.coverage.join(', ')}`,
+        `read scopes (relative): ${task.readScopes.join(', ')}`,
+        `read scopes (resolved): ${resolvedRead}`,
+        `write scopes (relative): ${task.writeScopes.join(', ')}`,
+        `write scopes (resolved): ${resolvedWrite}`,
+        `commands: ${task.commands.join(', ')}`,
+        `task ref: ${taskPath(task.id)}`,
+      );
+    }
+    return lines.join('\n');
+  }
+
+  /** The canonical packet: references the frozen task instead of repeating either list. */
+  function canonicalPacket(tasks: readonly FixedTask[], repositoryLabel: string, workspace: boolean): string {
+    const lines = [
+      `PACKET ${workspace ? 'workspace' : 'ordinary-split'} (canonical frozen-task-scope reference)`,
+      ...headerLines(repositoryLabel),
+    ];
+    for (const task of tasks) {
+      const placement = workspace
+        ? ` repository=${task.repository} repository-worktree=${REPOSITORY_WORKTREES[task.repository]}`
+        : '';
+      lines.push(
+        `task ${task.id} phase=${task.phase} role=${task.role}${placement}`,
+        `goal: ${task.goal}`,
+        `coverage: ${task.coverage.join(', ')}`,
+        `canonical exact read/write scopes: see ${taskPath(task.id)} (frozen plan digest ${PLAN_DIGEST})`,
+        `commands: ${task.commands.join(', ')}`,
+        `task ref: ${taskPath(task.id)}`,
+      );
+    }
+    return lines.join('\n');
+  }
+
+  /** Deterministic measurement emitted into the test-run evidence with an explicit label. */
+  function measure(label: string, text: string): { codepoints: number; utf8Bytes: number } {
+    const codepoints = [...text].length;
+    const utf8Bytes = Buffer.byteLength(text, 'utf8');
+    console.log(`STATIC ${label}: codepoints=${codepoints} utf8bytes=${utf8Bytes}`);
+    return { codepoints, utf8Bytes };
+  }
+
+  it('fixes exactly eight concrete tasks with complete metadata, absolute refs and anchors', () => {
+    expect(FIXED_TASKS, 'the fixture carries exactly eight concrete tasks').toHaveLength(8);
+    expect(FIXED_TASKS.map((task) => task.id)).toEqual(EXPECTED_TASK_IDS);
+    expect(FIXED_TASKS.map((task) => task.phase)).toEqual([1, 1, 2, 2, 3, 3, 4, 4]);
+    for (const task of FIXED_TASKS) {
+      expect(task.role, `${task.id} names a role`).not.toBe('');
+      expect(task.goal, `${task.id} carries a goal`).not.toBe('');
+      expect(task.coverage.length, `${task.id} carries assigned coverage`).toBeGreaterThan(0);
+      expect(task.commands.length, `${task.id} carries permitted commands`).toBeGreaterThan(0);
+      expect(task.readScopes.length, `${task.id} carries read scopes`).toBeGreaterThan(0);
+      expect(taskPath(task.id).startsWith(`${PLAN_DIR}/tasks/`), `${task.id} has an absolute plan task reference`).toBe(true);
+      for (const scope of [...task.readScopes, ...task.writeScopes]) {
+        expect(scope.startsWith('/'), `${task.id} scope ${scope} stays a relative worktree path`).toBe(false);
+      }
+    }
+    const repositories = new Set(FIXED_TASKS.map((task) => task.repository));
+    console.log(`STATIC SOURCE eight-task fixture: tasks=${FIXED_TASKS.length} phases=${EXPECTED_PHASES.length} repositories=${repositories.size}`);
+  });
+
+  it('covers every task exactly once across the frozen current-phase schedule', () => {
+    const scheduled = EXPECTED_PHASES.flat();
+    expect(scheduled, 'every task appears exactly once').toEqual(EXPECTED_TASK_IDS);
+    expect(new Set(scheduled).size, 'no task is scheduled twice').toBe(8);
+    expect(EXPECTED_PHASES, 'the frozen schedule has four parallel phases').toHaveLength(4);
+    for (const phase of EXPECTED_PHASES) {
+      expect(phase).toHaveLength(2);
+    }
+    console.log(`STATIC SOURCE eight-task schedule reference: phases=${EXPECTED_PHASES.length} tasks=${scheduled.length} current=phase 1`);
+  });
+
+  it('compares pre-change scope transport with the canonical frozen-task-scope packet for the same eight tasks', () => {
+    const ordinaryPre = preChangePacket(FIXED_TASKS, 'ai-workflow', false);
+    const ordinaryCanonical = canonicalPacket(FIXED_TASKS, 'ai-workflow', false);
+    const workspacePre = preChangePacket(FIXED_TASKS, 'workspace-root', true);
+    const workspaceCanonical = canonicalPacket(FIXED_TASKS, 'workspace-root', true);
+
+    // Pre-change repeats both the relative and the resolved scope lists.
+    expect(ordinaryPre, 'the pre-change packet repeats relative scopes').toContain('read scopes (relative):');
+    expect(ordinaryPre, 'the pre-change packet repeats resolved scopes').toContain('read scopes (resolved):');
+    expect(ordinaryPre, 'the resolved read scope is the worktree-absolute path').toContain(`${WORKTREE}/src/context/navigation.ts`);
+    expect(workspacePre, 'the workspace pre-change packet also repeats resolved scopes').toContain(`${WORKTREE}/src/context/navigation.ts`);
+
+    // The canonical packet references the frozen task instead of repeating either list.
+    for (const packet of [ordinaryCanonical, workspaceCanonical]) {
+      expect(packet, 'the canonical packet references the frozen task scope').toContain('canonical exact read/write scopes: see');
+      expect(packet, 'the canonical packet does not repeat the relative scope list').not.toContain('scopes (relative):');
+      expect(packet, 'the canonical packet does not repeat the resolved scope list').not.toContain('scopes (resolved):');
+      expect(packet, 'the canonical packet carries no worktree-resolved scope path').not.toContain(`${WORKTREE}/src/context/navigation.ts`);
+      for (const id of EXPECTED_TASK_IDS) {
+        expect(packet, `the canonical packet keeps the ${id} reference`).toContain(`task ref: ${taskPath(id)}`);
+      }
+    }
+
+    // Required authority is preserved in every packaging.
+    for (const packet of [ordinaryPre, ordinaryCanonical, workspacePre, workspaceCanonical]) {
+      for (const anchor of [SOURCE_ROOT, WORKTREE, PLAN_DIR, BASELINE_COMMIT, FIXED_ANCHOR, SPEC_DIGEST, PLAN_DIGEST, 'current=phase 1']) {
+        expect(packet, `the packet preserves ${anchor}`).toContain(anchor);
+      }
+      for (const task of FIXED_TASKS) {
+        expect(packet, `the packet preserves the ${task.id} goal`).toContain(task.goal);
+        expect(packet, `the packet preserves the ${task.id} coverage`).toContain(task.coverage.join(', '));
+        expect(packet, `the packet preserves the ${task.id} commands`).toContain(task.commands.join(', '));
+      }
+    }
+
+    const ordinaryPreVolume = measure('PACKET-EXAMPLE pre-change repeated relative+resolved (ordinary split)', ordinaryPre);
+    const ordinaryCanonicalVolume = measure('PACKET-EXAMPLE canonical frozen-task-scope reference (ordinary split)', ordinaryCanonical);
+    const workspacePreVolume = measure('PACKET-EXAMPLE pre-change repeated relative+resolved (workspace)', workspacePre);
+    const workspaceCanonicalVolume = measure('PACKET-EXAMPLE canonical frozen-task-scope reference (workspace)', workspaceCanonical);
+
+    expect(ordinaryCanonicalVolume.codepoints, 'the canonical ordinary-split packet is smaller than the pre-change packet').toBeLessThan(ordinaryPreVolume.codepoints);
+    expect(ordinaryCanonicalVolume.utf8Bytes, 'the canonical ordinary-split packet is smaller in UTF-8 bytes').toBeLessThan(ordinaryPreVolume.utf8Bytes);
+    expect(workspaceCanonicalVolume.codepoints, 'the canonical workspace packet is smaller than the pre-change packet').toBeLessThan(workspacePreVolume.codepoints);
+    expect(workspaceCanonicalVolume.utf8Bytes, 'the canonical workspace packet is smaller in UTF-8 bytes').toBeLessThan(workspacePreVolume.utf8Bytes);
+  });
+
+  it('provides deterministic exact-size report-body boundary protocol examples', () => {
+    const REPORT_SHAPE = '### Status\ndone\n### Summary\nsummary\n### Evidence\n';
+    const sizedReportBody = (size: number): string => REPORT_SHAPE + 'x'.repeat(size - [...REPORT_SHAPE].length);
+
+    const ordinary = sizedReportBody(1200);
+    const ordinaryOver = sizedReportBody(1201);
+    const review = sizedReportBody(3000);
+    const reviewOver = sizedReportBody(3001);
+    const nonBmp = '😀'.repeat(1200);
+
+    expect([...ordinary], 'the ordinary example is exactly 1200 code points').toHaveLength(1200);
+    expect([...ordinaryOver], 'the ordinary example one code point above is 1201').toHaveLength(1201);
+    expect([...review], 'the review/failure/blocked example is exactly 3000 code points').toHaveLength(3000);
+    expect([...reviewOver], 'the review/failure/blocked example one code point above is 3001').toHaveLength(3001);
+    expect([...nonBmp], 'a non-BMP character counts as one code point').toHaveLength(1200);
+    expect(Buffer.byteLength(nonBmp, 'utf8'), 'the same non-BMP body is four UTF-8 bytes per code point').toBe(4800);
+
+    measure('PROTOCOL EXAMPLE ordinary report body at the limit', ordinary);
+    measure('PROTOCOL EXAMPLE ordinary report body one code point above', ordinaryOver);
+    measure('PROTOCOL EXAMPLE review/failure/blocked body at the limit', review);
+    measure('PROTOCOL EXAMPLE review/failure/blocked body one code point above', reviewOver);
+    measure('PROTOCOL EXAMPLE non-BMP body counted by code point', nonBmp);
+  });
+});

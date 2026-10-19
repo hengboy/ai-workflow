@@ -53,7 +53,7 @@ function escapeCatalogCell(value: string): string {
 }
 
 function catalogRow(feature: NavigationFeature): string {
-  const entry = feature.entries.length > 0 ? feature.entries[0] : '';
+  const entry = feature.entries[0] ?? '';
   const responsibility = Array.from(feature.responsibility).slice(0, RESPONSIBILITY_LIMIT).join('');
   return [
     escapeCatalogCell(feature.id),
