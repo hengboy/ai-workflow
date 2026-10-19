@@ -340,11 +340,12 @@ describe('automatic implementation commit', () => {
 // rule, so another accurate paragraph in the same document cannot hide the defect.
 describe('post-planning workspace chaining guidance is causally consistent', () => {
   it('invokes the automatic split immediately after the frozen pair validates, not after its own artifacts', async () => {
+    // REQ-004/AC-004: the split-before-implementation rule is owned by the contract and
+    // README, not by the project-owned MEMORY scaffolding.
     const documents = [
       { label: 'templates/project/AGENTS.md', text: await read('templates/project/AGENTS.md') },
       { label: '.ai-workflow/AGENTS.md', text: await read('.ai-workflow/AGENTS.md') },
       { label: 'README.md', text: await read('README.md') },
-      { label: 'MEMORY.md', text: await read('MEMORY.md') },
     ];
 
     for (const { label, text } of documents) {
@@ -401,5 +402,20 @@ describe('post-planning workspace chaining guidance is causally consistent', () 
         );
       }
     }
+  });
+});
+
+// Behavior boundary: REQ-004/AC-004 single-sources the workflow contract, so the routing and
+// split-before-implementation standards leave MEMORY.md and stay owned by the contract.
+describe('MEMORY no longer restates the routing contract (REQ-004 / AC-004)', () => {
+  it('drops the change-routing and split-before-implementation standards from MEMORY.md', async () => {
+    const memory = flatten(await read('MEMORY.md'));
+
+    expect(memory, 'MEMORY.md no longer owns the change-routing standard').not.toMatch(
+      /Requests are routed before work starts/i,
+    );
+    expect(memory, 'MEMORY.md no longer states the split-before-implementation rule').not.toMatch(
+      /split by plan-to-tasks before implementation/i,
+    );
   });
 });
