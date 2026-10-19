@@ -799,3 +799,53 @@ describe('the Git Operator owns the repository worktree and delivery lifecycle (
     expect(operator, 'the pointer update names the exact final tree').toMatch(/final[- ]tree/i);
   });
 });
+
+const FINALIZATION_RULE_SURFACES: Array<{ surface: string; parts: string[] }> = [
+  { surface: 'templates/project/AGENTS.md', parts: ['templates', 'project', 'AGENTS.md'] },
+  { surface: '.ai-workflow/AGENTS.md', parts: ['.ai-workflow', 'AGENTS.md'] },
+  { surface: 'README.md', parts: ['README.md'] },
+];
+
+/**
+ * The pre-correction wording coupled requirement and acceptance-criterion disjointness.
+ * The shipped rule instead keeps acceptance criteria disjoint while allowing requirement
+ * overlap, matching what `src/workflow/workspace.ts` rejects and accepts.
+ */
+const STALE_FINALIZATION_PHRASE = 'requirements and acceptance criteria are disjoint from every task AC';
+const STALE_FINALIZATION_PATTERN = /requirements`?\s+and\s+`?acceptance[ _]criteria`?\s+(?:are\s+)?disjoint from every task/i;
+
+describe('the finalization rule keeps criteria disjoint while requirements may overlap (REQ-001 / AC-001)', () => {
+  it('states that finalization acceptance criteria are disjoint from every task acceptance criterion', async () => {
+    for (const { surface, parts } of FINALIZATION_RULE_SURFACES) {
+      const text = await readShipped(parts);
+      expect(text, `${surface} is shipped`).not.toBeNull();
+      expect(
+        flatten(text ?? ''),
+        `${surface} states finalization acceptance criteria are disjoint from every task acceptance criterion`,
+      ).toMatch(/acceptance[ _]criteria[^.]{0,160}\bdisjoint\b from every task/i);
+    }
+  });
+
+  it('states that finalization requirements may overlap task requirements', async () => {
+    for (const { surface, parts } of FINALIZATION_RULE_SURFACES) {
+      const text = await readShipped(parts);
+      expect(text, `${surface} is shipped`).not.toBeNull();
+      expect(
+        flatten(text ?? ''),
+        `${surface} states finalization requirements may overlap task requirements`,
+      ).toMatch(/requirements[^.]{0,160}\b(?:may|can|might)\b[^.]{0,40}overlap[^.]{0,80}task requirements/i);
+    }
+  });
+
+  it('removes the stale phrase claiming requirements and acceptance criteria together are disjoint', async () => {
+    for (const { surface, parts } of FINALIZATION_RULE_SURFACES) {
+      const text = await readShipped(parts);
+      expect(text, `${surface} is shipped`).not.toBeNull();
+      const flat = flatten(text ?? '');
+      expect(flat, `${surface} drops the stale finalization sentence`).not.toContain(STALE_FINALIZATION_PHRASE);
+      expect(flat, `${surface} drops the stale sentence in any spacing or field-name form`).not.toMatch(
+        STALE_FINALIZATION_PATTERN,
+      );
+    }
+  });
+});
