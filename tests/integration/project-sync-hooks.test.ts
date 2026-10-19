@@ -720,62 +720,90 @@ describe('opencode plugin boundary', () => {
     await expectNoProjectMetadata(rootA);
   }, 90_000);
 
-  it('REQ-003/AC-006: routes an explicit workdir to another adopted root from its own primed cache without changing the SDK session directory', async () => {
-    const home = await temporary('ai-workflow-plugin-route-home-');
-    const contextDirectory = await temporary('ai-workflow-plugin-route-context-');
-    const fixtureLogDirectory = await temporary('ai-workflow-plugin-route-log-');
-    const sessionRoot = await adoptedProject();
-    const operationRootAgents = '# route B contract\n\nOld route B shared context.\n';
-    const operationRoot = await adoptedProject({ '.ai-workflow/AGENTS.md': operationRootAgents });
-    roots.push(home, contextDirectory, fixtureLogDirectory, sessionRoot, operationRoot);
+  const routeContractVariants = ['read-first', 'blocked-first'] as const;
 
-    const git = await gitFixture(baseSourceFiles);
-    const log = join(fixtureLogDirectory, 'heads.log');
-    await install(['opencode'], { home, opencodeVersion: 'v1' });
-    const sdk = pluginSdk({ S: { directory: sessionRoot } });
-    const plugin = await loadInstalledPlugin(home, sdk, contextDirectory);
-    const contextBefore = await snapshotTree(contextDirectory);
+  it.each(routeContractVariants)(
+    'REQ-003/AC-006: routes an explicit workdir to another adopted root and honors its contract read (%s)',
+    async (variant) => {
+      const home = await temporary('ai-workflow-plugin-route-home-');
+      const contextDirectory = await temporary('ai-workflow-plugin-route-context-');
+      const fixtureLogDirectory = await temporary('ai-workflow-plugin-route-log-');
+      const sessionRoot = await adoptedProject();
+      const operationRootAgents = '# route B contract\n\nOld route B shared context.\n';
+      const operationRoot = await adoptedProject({ '.ai-workflow/AGENTS.md': operationRootAgents });
+      roots.push(home, contextDirectory, fixtureLogDirectory, sessionRoot, operationRoot);
 
-    await withProcessEnvironment({
-      HOME: home,
-      TMPDIR: fixtureLogDirectory,
-      ...processShimEnv(git),
-      AI_WORKFLOW_FIXTURE_HEAD: A,
-      AI_WORKFLOW_FIXTURE_LOG: log,
-    }, async () => {
-      const operationContract = join(operationRoot, '.ai-workflow/AGENTS.md');
+      const git = await gitFixture(baseSourceFiles);
+      const log = join(fixtureLogDirectory, 'heads.log');
+      await install(['opencode'], { home, opencodeVersion: 'v1' });
+      const sdk = pluginSdk({ S: { directory: sessionRoot } });
+      const plugin = await loadInstalledPlugin(home, sdk, contextDirectory);
+      const contextBefore = await snapshotTree(contextDirectory);
 
-      await primeBuilt(sessionRoot, A);
-      const primedOperation = await primeBuilt(operationRoot, B);
-      expect(primedOperation.report?.status).toBe('synchronized');
-      expect(await observedHeads(log)).toEqual([A, B]);
-      process.env.AI_WORKFLOW_FIXTURE_HEAD = C;
+      await withProcessEnvironment({
+        HOME: home,
+        TMPDIR: fixtureLogDirectory,
+        ...processShimEnv(git),
+        AI_WORKFLOW_FIXTURE_HEAD: A,
+        AI_WORKFLOW_FIXTURE_LOG: log,
+      }, async () => {
+        const operationContract = join(operationRoot, '.ai-workflow/AGENTS.md');
+        const childBash = () => plugin['tool.execute.before']({ sessionID: 'S', tool: 'bash' }, { args: { command: 'ls', workdir: operationRoot } });
+        const readOperationContract = async (sessionID: string): Promise<void> => {
+          await plugin['tool.execute.before']({ sessionID, tool: 'read' }, { args: { filePath: operationContract } });
+          await plugin['tool.execute.after']({ sessionID, tool: 'read', args: { filePath: operationContract } });
+        };
 
-      // The SDK session root injects its own primed contract and is not re-synchronized.
-      const injected = { system: [] as string[] };
-      await plugin['experimental.chat.system.transform']({ sessionID: 'S' }, injected);
-      expect(injected.system.join('\n')).toContain('Fresh shared context.');
-      const sessionRootAfterLoad = await snapshotTree(sessionRoot);
+        await primeBuilt(sessionRoot, A);
+        const primedOperation = await primeBuilt(operationRoot, B);
+        expect(primedOperation.report?.status).toBe('synchronized');
+        expect(await observedHeads(log)).toEqual([A, B]);
+        process.env.AI_WORKFLOW_FIXTURE_HEAD = C;
 
-      // The ordinary Bash `workdir` reaches operationRoot's cached authority and refuses until
-      // that root's contract is read, exactly as the current behavior requires.
-      await expect(plugin['tool.execute.before']({ sessionID: 'S', tool: 'bash' }, { args: { command: 'ls', workdir: operationRoot } }))
-        .rejects.toThrow(/before ordinary project work continues/);
-      expect(await readFile(operationContract, 'utf8'), 'B must be primed before the operation').toContain('Fresh shared context.');
+        // The parent session root injects its own primed contract and stays allowed.
+        const injected = { system: [] as string[] };
+        await plugin['experimental.chat.system.transform']({ sessionID: 'S' }, injected);
+        expect(injected.system.join('\n'), 'the parent root injects its primed contract').toContain('Fresh shared context.');
+        const sessionRootAfterLoad = await snapshotTree(sessionRoot);
+        await plugin['tool.execute.before']({ sessionID: 'S', tool: 'bash' }, { args: { command: 'ls' } });
+        expect(await readFile(operationContract, 'utf8'), 'the child root must be primed before its operation').toContain('Fresh shared context.');
 
-      await plugin['tool.execute.before']({ sessionID: 'S', tool: 'read' }, { args: { filePath: operationContract } });
-      await plugin['tool.execute.after']({ sessionID: 'S', tool: 'read', args: { filePath: operationContract } });
-      await plugin['tool.execute.before']({ sessionID: 'S', tool: 'bash' }, { args: { command: 'ls', workdir: operationRoot } });
+        if (variant === 'read-first') {
+          // Reading the child contract BEFORE any attempted ordinary child operation must count.
+          await readOperationContract('S');
+        } else {
+          // An un-read child root refuses the ordinary operation until its contract is read.
+          await expect(childBash(), 'an un-read child root requires its contract first').rejects.toThrow(/before ordinary project work continues/);
+          await readOperationContract('S');
+        }
 
-      // No plugin event issued a source request, and the SDK session root stayed untouched.
-      expect(await observedHeads(log), 'the plugin must answer from both primed caches').toEqual([A, B]);
-      expect(changedPaths(sessionRootAfterLoad, await snapshotTree(sessionRoot)), 'the SDK session root must stay unchanged').toEqual([]);
-    });
+        // A later parent system transform must not discard the child contract read.
+        const reinjected = { system: [] as string[] };
+        await plugin['experimental.chat.system.transform']({ sessionID: 'S' }, reinjected);
+        expect(reinjected.system.join('\n')).toContain('Fresh shared context.');
 
-    expect(changedPaths(contextBefore, await snapshotTree(contextDirectory))).toEqual([]);
-    for (const root of [sessionRoot, operationRoot]) {
-      expect(await readFile(join(root, '.ai-workflow/plans/20260101-custom/spec.md'), 'utf8')).toBe(planSpecBytes);
-      await expectNoProjectMetadata(root);
-    }
-  }, 90_000);
+        // The child Bash workdir and a child file read now proceed.
+        await childBash();
+        await plugin['tool.execute.before']({ sessionID: 'S', tool: 'read' }, { args: { filePath: join(operationRoot, 'src', 'index.ts') } });
+
+        // A separate session on the parent root must not inherit the child contract read.
+        sdk.sessions.set('T', { directory: sessionRoot });
+        const separateInjected = { system: [] as string[] };
+        await plugin['experimental.chat.system.transform']({ sessionID: 'T' }, separateInjected);
+        await expect(plugin['tool.execute.before']({ sessionID: 'T', tool: 'bash' }, { args: { command: 'ls', workdir: operationRoot } }))
+          .rejects.toThrow(/before ordinary project work continues/);
+
+        // No plugin event issued a source request, and the SDK session root stayed untouched.
+        expect(await observedHeads(log), 'the plugin must answer from both primed caches').toEqual([A, B]);
+        expect(changedPaths(sessionRootAfterLoad, await snapshotTree(sessionRoot)), 'the SDK session root must stay unchanged').toEqual([]);
+      });
+
+      expect(changedPaths(contextBefore, await snapshotTree(contextDirectory))).toEqual([]);
+      for (const root of [sessionRoot, operationRoot]) {
+        expect(await readFile(join(root, '.ai-workflow/plans/20260101-custom/spec.md'), 'utf8')).toBe(planSpecBytes);
+        await expectNoProjectMetadata(root);
+      }
+    },
+    90_000,
+  );
 });

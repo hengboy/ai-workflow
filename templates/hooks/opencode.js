@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { readFile, stat } from 'node:fs/promises';
-import { dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 
 const executable = '__AI_WORKFLOW_NODE__';
 const cli = '__AI_WORKFLOW_CLI__';
@@ -81,9 +81,21 @@ export const AiWorkflowSyncPlugin = async ({ client }) => {
     return result;
   }
 
-  function readsAuthority(sessionID, tool, args, result) {
-    return tool === 'read' && typeof args.filePath === 'string'
-      && resolve(directories.get(sessionID), args.filePath) === join(result.project, '.ai-workflow/AGENTS.md');
+  function rememberAuthority(sessionID, project, authority) {
+    const roots = loadedAuthority.get(sessionID) ?? new Map();
+    roots.set(project, authority);
+    loadedAuthority.set(sessionID, roots);
+  }
+
+  function contractTarget(sessionID, args) {
+    if (typeof args.filePath !== 'string') return undefined;
+    const path = resolve(directories.get(sessionID), args.filePath);
+    if (basename(path) !== 'AGENTS.md' || basename(dirname(path)) !== '.ai-workflow') return undefined;
+    return { root: dirname(dirname(path)), path };
+  }
+
+  function readsAuthority(sessionID, tool, args, project) {
+    return tool === 'read' && contractTarget(sessionID, args)?.path === join(project, '.ai-workflow/AGENTS.md');
   }
 
   return {
@@ -114,24 +126,24 @@ export const AiWorkflowSyncPlugin = async ({ client }) => {
       if (!input.sessionID) return;
       const result = await synchronize(input.sessionID, 'PreToolUse');
       output.system.push(result.context);
-      if (result.authority !== undefined) loadedAuthority.set(input.sessionID, { project: result.project, authority: result.authority });
+      if (result.authority !== undefined) rememberAuthority(input.sessionID, result.project, result.authority);
     },
     'tool.execute.before': async (input, output) => {
       const result = await synchronize(input.sessionID, 'PreToolUse', input.tool, output.args);
       if (result.decision === 'deny') throw new Error(result.context);
-      const loaded = loadedAuthority.get(input.sessionID);
-      if (result.authority !== undefined && (loaded?.project !== result.project || loaded?.authority !== result.authority) && !readsAuthority(input.sessionID, input.tool, output.args, result)) {
+      const loaded = loadedAuthority.get(input.sessionID)?.get(result.project);
+      if (result.authority !== undefined && loaded !== result.authority && !readsAuthority(input.sessionID, input.tool, output.args, result.project)) {
         throw new Error(`${result.context}\nRead ${join(result.project, '.ai-workflow/AGENTS.md')} before ordinary project work continues.`);
       }
     },
     'tool.execute.after': async (input) => {
-      const result = results.get(input.sessionID);
-      if (result?.authority === undefined || input.tool !== 'read') return;
+      if (input.tool !== 'read') return;
       const session = await lookup(input.sessionID);
       directories.set(input.sessionID, session.directory);
-      if (readsAuthority(input.sessionID, input.tool, input.args, result)
-        && await readFile(join(result.project, '.ai-workflow/AGENTS.md'), 'utf8') === result.authority
-        && results.get(input.sessionID) === result) loadedAuthority.set(input.sessionID, { project: result.project, authority: result.authority });
+      const target = contractTarget(input.sessionID, input.args);
+      if (target === undefined) return;
+      const content = await readFile(target.path, 'utf8').catch(() => undefined);
+      if (content !== undefined) rememberAuthority(input.sessionID, target.root, content);
     },
   };
 };
