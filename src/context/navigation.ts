@@ -46,18 +46,25 @@ export interface NavigationIndex {
   features: NavigationFeature[];
 }
 
-function column(values: string[]): string { return values.join(', '); }
+const RESPONSIBILITY_LIMIT = 120;
+
+function escapeCatalogCell(value: string): string {
+  return value.replace(/\r?\n/g, ' ').replace(/\|/g, '\\|');
+}
+
+function catalogRow(feature: NavigationFeature): string {
+  const entry = feature.entries.length > 0 ? feature.entries[0] : '';
+  const responsibility = Array.from(feature.responsibility).slice(0, RESPONSIBILITY_LIMIT).join('');
+  return [
+    escapeCatalogCell(feature.id),
+    escapeCatalogCell(feature.owner_role),
+    escapeCatalogCell(entry),
+    escapeCatalogCell(responsibility),
+    escapeCatalogCell(`ai-workflow context locate --feature ${feature.id} --verify`)
+  ].join(' | ');
+}
 
 export function renderNavigation(index: NavigationIndex): string {
-  const rows = index.features.map((feature) => [
-    feature.name,
-    column(feature.entries),
-    column(feature.symbols.map((symbol) => `${symbol.file}#${symbol.name}`)),
-    column(feature.related_files),
-    column(feature.tests),
-    column(feature.read_scope),
-    feature.owner_role,
-    feature.responsibility
-  ].join(' | '));
-  return ['# Feature navigation', '', '| Feature | Entries | Public Symbols | Related Files | Tests | Read Scope | Owner | Responsibility |', '| --- | --- | --- | --- | --- | --- | --- | --- |', ...rows.map((row) => `| ${row} |`), ''].join('\n');
+  const rows = index.features.map((feature) => `| ${catalogRow(feature)} |`);
+  return ['# Feature navigation', '', '| Feature | Owner | Entry | Responsibility | Locate |', '| --- | --- | --- | --- | --- |', ...rows, ''].join('\n');
 }

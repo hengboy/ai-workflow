@@ -9,7 +9,7 @@ import {
   canonicalizeNavigation,
   renderNavigationJson
 } from '../../src/context/discovery/builder.js';
-import { renderNavigation, type NavigationIndex } from '../../src/context/navigation.js';
+import { renderNavigation, type NavigationFeature, type NavigationIndex } from '../../src/context/navigation.js';
 import { formatSchemaErrors, schemaValidator } from '../../src/utils/schema.js';
 import { temporary } from '../helpers.js';
 
@@ -391,5 +391,150 @@ describe('buildNavigation export-less projects (schema validity)', () => {
     for (const path of covered) {
       expect(coveredPaths.has(path), path).toBe(true);
     }
+  });
+});
+
+// AC-006 compares the compact catalog against the pre-implementation full-table
+// rendering of one controlled long-array fixture. The fixture shape below is
+// reproduced from the captured baseline; the baseline UTF-8 size is the scalar
+// carried forward from that capture.
+const CAPTURED_CONTROLLED_TABLE_UTF8_BYTES = 40_934;
+
+interface ControlledCounts { entries: number; symbols: number; related: number; tests: number }
+
+function controlledFeature(id: string, responsibility: string, counts: ControlledCounts): NavigationFeature {
+  return {
+    id,
+    name: id,
+    aliases: [],
+    module_root: 'src',
+    entries: Array.from({ length: counts.entries }, (_, index) => `src/mod${index}/file${index}.ts`),
+    symbols: Array.from({ length: counts.symbols }, (_, index) => ({
+      file: `src/mod${index % 10}/file${index}.ts`,
+      name: `symbol${index}`,
+      kind: 'function',
+      visibility: 'public' as const
+    })),
+    related_files: Array.from({ length: counts.related }, (_, index) => `docs/rel${index}.md`),
+    tests: Array.from({ length: counts.tests }, (_, index) => `tests/behavior/t${index}.test.ts`),
+    depends_on: [],
+    relations: [],
+    owner_role: 'shared',
+    responsibility,
+    read_scope: Array.from({ length: counts.entries }, (_, index) => `src/scope${index}.ts`),
+    shared_entry: false
+  };
+}
+
+function controlledIndex(): NavigationIndex {
+  return {
+    version: 1,
+    module_roots: [{ id: 'src', path: 'src', owner_role: 'shared', responsibility: 'module', language: 'typescript', entry_kinds: ['exported-symbol'] }],
+    features: [
+      controlledFeature('alpha', 'Handles alpha | beta with a newline\nand a pipe', { entries: 50, symbols: 120, related: 40, tests: 25 }),
+      controlledFeature('beta', 'Beta responsibility summary', { entries: 100, symbols: 240, related: 80, tests: 50 }),
+      controlledFeature('gamma', 'Gamma responsibility summary', { entries: 150, symbols: 360, related: 120, tests: 75 })
+    ]
+  };
+}
+
+function catalogFeature(id: string, responsibility: string, entries: string[] = ['src/alpha/one.ts']): NavigationFeature {
+  return {
+    id, name: id, aliases: [], module_root: 'src', entries,
+    symbols: [], related_files: [], tests: [], depends_on: [], relations: [],
+    owner_role: 'shared', responsibility, read_scope: entries, shared_entry: false
+  };
+}
+
+function catalogIndex(feature: NavigationFeature): NavigationIndex {
+  return {
+    version: 1,
+    module_roots: [{ id: 'src', path: 'src', owner_role: 'shared', responsibility: 'source', language: 'typescript', entry_kinds: ['exported-symbol'] }],
+    features: [feature]
+  };
+}
+
+function unescapedPipes(row: string): number {
+  let count = 0;
+  for (let index = 0; index < row.length; index += 1) if (row[index] === '|' && row[index - 1] !== '\\') count += 1;
+  return count;
+}
+
+describe('compact navigation catalog (AC-006)', () => {
+  it('keeps the controlled long-array catalog at most 40% of the captured legacy table bytes', () => {
+    const index = controlledIndex();
+    // Confirm the reconstruction matches the captured fixture shape before applying its baseline.
+    expect(index.features.map((feature) => feature.entries.length)).toEqual([50, 100, 150]);
+    expect(index.features.map((feature) => feature.symbols.length)).toEqual([120, 240, 360]);
+    expect(index.features.map((feature) => feature.related_files.length)).toEqual([40, 80, 120]);
+    expect(index.features.map((feature) => feature.tests.length)).toEqual([25, 50, 75]);
+    expect(index.features.map((feature) => feature.read_scope.length)).toEqual([50, 100, 150]);
+
+    const bytes = Buffer.byteLength(renderNavigation(index), 'utf8');
+
+    expect(bytes).toBeLessThanOrEqual(Math.floor(CAPTURED_CONTROLLED_TABLE_UTF8_BYTES * 0.4));
+  });
+
+  it('renders feature id, owner, one existing entry and the locate command without expanding arrays', () => {
+    const index: NavigationIndex = {
+      version: 1,
+      module_roots: [{ id: 'src', path: 'src', owner_role: 'shared', responsibility: 'source', language: 'typescript', entry_kinds: ['exported-symbol'] }],
+      features: [{
+        id: 'alpha', name: 'alpha feature', aliases: [], module_root: 'src',
+        entries: ['src/alpha/one.ts', 'src/alpha/two.ts'],
+        symbols: [{ file: 'src/alpha/one.ts', name: 'symbolOne', kind: 'function', visibility: 'public' }],
+        related_files: ['src/alpha/helper.ts'], tests: ['tests/unit/alpha.test.ts'], depends_on: [], relations: [],
+        owner_role: 'shared', responsibility: 'alpha summary',
+        read_scope: ['src/alpha/helper.ts', 'src/alpha/one.ts', 'src/alpha/two.ts', 'tests/unit/alpha.test.ts'], shared_entry: false
+      }]
+    };
+
+    const output = renderNavigation(index);
+
+    expect(output).toContain('alpha');
+    expect(output).toContain('shared');
+    const shownEntries = index.features[0]!.entries.filter((entry) => output.includes(entry));
+    expect(shownEntries).toHaveLength(1);
+    expect(output).toContain('locate');
+    expect(output).toMatch(/--feature\s+alpha/);
+    expect(output).not.toContain('symbolOne');
+    expect(output).not.toContain('src/alpha/helper.ts');
+    expect(output).not.toContain('tests/unit/alpha.test.ts');
+  });
+
+  it('escapes supported pipe and newline prose so every catalog row keeps its columns', () => {
+    const output = renderNavigation(catalogIndex(catalogFeature('alpha', 'Handles alpha | beta with a newline\nand a pipe')));
+
+    const rows = output.split('\n').filter((line) => line.startsWith('|'));
+    expect(rows.length).toBeGreaterThanOrEqual(3);
+    const columnCounts = rows.map(unescapedPipes);
+    expect(new Set(columnCounts).size).toBe(1);
+    expect(output).toContain('\\|');
+    expect(output).not.toContain('newline\nand a pipe');
+  });
+
+  it('truncates a responsibility summary to at most 120 code points', () => {
+    const output = renderNavigation(catalogIndex(catalogFeature('long', 'Ω'.repeat(200))));
+
+    expect(output).toContain('Ω');
+    expect(output.split('Ω').length - 1).toBeLessThanOrEqual(120);
+  });
+
+  it('counts the responsibility summary by code point so a 120 code point non-BMP tail is retained', () => {
+    const summary = `${'😀'.repeat(119)}X`;
+    expect(Array.from(summary)).toHaveLength(120);
+
+    const output = renderNavigation(catalogIndex(catalogFeature('wide', summary)));
+
+    expect(output).toContain(summary);
+  });
+
+  it('does not invent an entry for an empty index or an entry-less feature', () => {
+    const empty = renderNavigation({ version: 1, module_roots: [], features: [] });
+    expect(empty).not.toMatch(/\.ts/);
+
+    const entryless = renderNavigation(catalogIndex(catalogFeature('entryless', 'entryless summary', [])));
+    expect(entryless).toContain('entryless');
+    expect(entryless).not.toMatch(/\.ts/);
   });
 });

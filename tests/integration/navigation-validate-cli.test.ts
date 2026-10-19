@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { renderNavigation, type NavigationIndex } from '../../src/context/navigation.js';
 import { initializeProject } from '../../src/install/index.js';
@@ -185,5 +185,25 @@ describe('generated project validation (Step 5 fixtures)', () => {
     const { stdout } = await exec('pnpm', ['exec', 'tsx', 'src/cli.ts', 'context', 'validate', '--project', project, '--all']);
 
     expect(JSON.parse(stdout)).toEqual({ valid: true, errors: [] });
+  });
+});
+
+describe('render-only redraw validation (AC-007)', () => {
+  it('validates and locates a feature after a render-only refresh redraws navigation.md', async () => {
+    const project = await projectWithNavigation();
+    const jsonPath = join(project, '.ai-workflow/index/navigation.json');
+    const markdownPath = join(project, '.ai-workflow/index/navigation.md');
+    await writeFile(markdownPath, '# stale navigation\n');
+    const jsonBefore = await readFile(jsonPath, 'utf8');
+
+    const refresh = await exec('pnpm', ['exec', 'tsx', 'src/cli.ts', 'context', 'refresh', '--project', project, '--render-only', '--write']);
+    expect(refresh.stdout).toContain('navigation.md');
+    await expect(readFile(jsonPath, 'utf8')).resolves.toBe(jsonBefore);
+
+    const validated = await exec('pnpm', ['exec', 'tsx', 'src/cli.ts', 'context', 'validate', '--project', project, '--feature', 'workflow-parsing']);
+    expect(JSON.parse(validated.stdout)).toEqual({ valid: true, errors: [] });
+
+    const located = await exec('pnpm', ['exec', 'tsx', 'src/cli.ts', 'context', 'locate', '--project', project, '--feature', 'workflow-parsing', '--verify']);
+    expect(JSON.parse(located.stdout)).toHaveProperty('read_order');
   });
 });

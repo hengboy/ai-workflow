@@ -224,3 +224,105 @@ describe('context refresh CLI', () => {
     await expect(cliFrom(project, ['context', 'validate', '--project', project, '--all'])).resolves.toMatchObject({ stdout: expect.stringContaining('"valid": true') });
   });
 });
+
+// The fixture project is an OS-temp directory without a package manifest, so
+// `pnpm exec tsx` cannot resolve there. Invoke the worktree CLI through absolute
+// tsx/CLI entry points while keeping the fixture as the child cwd.
+const refreshCli = (project: string, arguments_: string[]): Promise<{ stdout: string }> =>
+  cliFrom(project, arguments_);
+
+describe('context refresh --render-only CLI', () => {
+  it('rewrites only navigation.md from the authoritative JSON and preserves the JSON bytes', async () => {
+    const project = await projectWithIndex();
+    const jsonPath = join(project, '.ai-workflow/index/navigation.json');
+    const markdownPath = join(project, '.ai-workflow/index/navigation.md');
+    const jsonBefore = await readFile(jsonPath, 'utf8');
+    await writeFile(markdownPath, '# stale navigation\n');
+
+    const { stdout } = await refreshCli(project, ['context', 'refresh', '--project', project, '--render-only', '--write']);
+
+    expect(stdout).toContain('navigation.md');
+    await expect(readFile(jsonPath, 'utf8')).resolves.toBe(jsonBefore);
+    await expect(readFile(markdownPath, 'utf8')).resolves.toBe(renderNavigation(navigation));
+  });
+
+  it('is idempotent across repeated render-only refreshes', async () => {
+    const project = await projectWithIndex();
+    const jsonPath = join(project, '.ai-workflow/index/navigation.json');
+    const markdownPath = join(project, '.ai-workflow/index/navigation.md');
+    const jsonBefore = await readFile(jsonPath, 'utf8');
+    await writeFile(markdownPath, '# stale navigation\n');
+
+    await refreshCli(project, ['context', 'refresh', '--project', project, '--render-only', '--write']);
+    const first = await readFile(markdownPath, 'utf8');
+    await refreshCli(project, ['context', 'refresh', '--project', project, '--render-only', '--write']);
+    const second = await readFile(markdownPath, 'utf8');
+
+    expect(second).toBe(first);
+    await expect(readFile(jsonPath, 'utf8')).resolves.toBe(jsonBefore);
+  });
+
+  it('refuses render-only without --write and leaves both index files untouched', async () => {
+    const project = await projectWithIndex();
+    const jsonPath = join(project, '.ai-workflow/index/navigation.json');
+    const markdownPath = join(project, '.ai-workflow/index/navigation.md');
+    await writeFile(markdownPath, '# stale navigation\n');
+    const before = await Promise.all([readFile(jsonPath, 'utf8'), readFile(markdownPath, 'utf8')]);
+
+    await expect(refreshCli(project, ['context', 'refresh', '--project', project, '--render-only'])).rejects.toThrow(/required option '--write' not specified/);
+
+    await expect(Promise.all([readFile(jsonPath, 'utf8'), readFile(markdownPath, 'utf8')])).resolves.toEqual(before);
+  });
+
+  it('refuses a refresh with neither --candidate nor --render-only and leaves both index files untouched', async () => {
+    const project = await projectWithIndex();
+    const jsonPath = join(project, '.ai-workflow/index/navigation.json');
+    const markdownPath = join(project, '.ai-workflow/index/navigation.md');
+    await writeFile(markdownPath, '# stale navigation\n');
+    const before = await Promise.all([readFile(jsonPath, 'utf8'), readFile(markdownPath, 'utf8')]);
+
+    await expect(refreshCli(project, ['context', 'refresh', '--project', project, '--write'])).rejects.toThrow(/requires --candidate or --render-only/);
+
+    await expect(Promise.all([readFile(jsonPath, 'utf8'), readFile(markdownPath, 'utf8')])).resolves.toEqual(before);
+  });
+
+  it('refuses a candidate combined with render-only and leaves both index files untouched', async () => {
+    const project = await projectWithIndex();
+    const candidatePath = await writeCandidate(project, candidate());
+    const jsonPath = join(project, '.ai-workflow/index/navigation.json');
+    const markdownPath = join(project, '.ai-workflow/index/navigation.md');
+    const before = await Promise.all([readFile(jsonPath, 'utf8'), readFile(markdownPath, 'utf8')]);
+
+    await expect(refreshCli(project, ['context', 'refresh', '--project', project, '--candidate', candidatePath, '--render-only', '--write'])).rejects.toThrow(/Use either --candidate or --render-only/);
+
+    await expect(Promise.all([readFile(jsonPath, 'utf8'), readFile(markdownPath, 'utf8')])).resolves.toEqual(before);
+  });
+
+  it('refuses render-only when the authoritative JSON is invalid and leaves both index files untouched', async () => {
+    const project = await projectWithIndex();
+    const jsonPath = join(project, '.ai-workflow/index/navigation.json');
+    const markdownPath = join(project, '.ai-workflow/index/navigation.md');
+    const invalidJson = '{ not valid json\n';
+    await writeFile(jsonPath, invalidJson);
+    const markdownBefore = await readFile(markdownPath, 'utf8');
+
+    await expect(refreshCli(project, ['context', 'refresh', '--project', project, '--render-only', '--write'])).rejects.toThrow(/navigation\.json is not valid JSON/);
+
+    await expect(readFile(jsonPath, 'utf8')).resolves.toBe(invalidJson);
+    await expect(readFile(markdownPath, 'utf8')).resolves.toBe(markdownBefore);
+  });
+
+  it('refuses render-only when the Markdown index path is not a regular file and leaves the JSON untouched', async () => {
+    const project = await projectWithIndex();
+    const jsonPath = join(project, '.ai-workflow/index/navigation.json');
+    const markdownPath = join(project, '.ai-workflow/index/navigation.md');
+    const jsonBefore = await readFile(jsonPath, 'utf8');
+    await rm(markdownPath);
+    await mkdir(markdownPath);
+
+    await expect(refreshCli(project, ['context', 'refresh', '--project', project, '--render-only', '--write'])).rejects.toThrow(/navigation\.md must be a regular file/);
+
+    await expect(readFile(jsonPath, 'utf8')).resolves.toBe(jsonBefore);
+    expect((await lstat(markdownPath)).isDirectory()).toBe(true);
+  });
+});

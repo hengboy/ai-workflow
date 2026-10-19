@@ -659,3 +659,25 @@ export async function refreshContext(project: string, candidatePath: string): Pr
   });
   return { updated: ['.ai-workflow/index/navigation.json', '.ai-workflow/index/navigation.md'] };
 }
+
+/**
+ * Regenerate `navigation.md` from the current authoritative `navigation.json`
+ * without a candidate or whole-index rediscovery, preserving the JSON bytes.
+ * The JSON and both formal index paths are validated before the Markdown-only
+ * atomic write, so an invalid JSON, invalid schema or invalid index path leaves
+ * both files untouched.
+ */
+export async function refreshNavigationMarkdown(project: string): Promise<{ updated: string[] }> {
+  const root = resolveProjectRoot(project);
+  const indexDirectory = join(root, '.ai-workflow/index');
+  const jsonPath = join(indexDirectory, 'navigation.json');
+  const markdownPath = join(indexDirectory, 'navigation.md');
+  await validateFormalIndexPath(jsonPath, 'navigation.json');
+  await validateFormalIndexPath(markdownPath, 'navigation.md');
+  let index: NavigationIndex;
+  try { index = JSON.parse(await readFile(jsonPath, 'utf8')) as NavigationIndex; } catch { throw new Error('navigation.json is not valid JSON'); }
+  const validator = await schemaValidator('navigation.schema.json');
+  if (!validator(index)) throw new Error(formatSchemaErrors(validator.errors));
+  await atomicWrite(markdownPath, renderNavigation(index));
+  return { updated: ['.ai-workflow/index/navigation.md'] };
+}
