@@ -160,6 +160,139 @@ describe('v2 coding guidance', () => {
   });
 });
 
+/**
+ * REQ-003 / AC-003: the shipped durable-artifacts rule carries one bounded
+ * exemption for test requirement-traceability metadata. Test names, assertion
+ * labels, test-local constants and traceability comments may carry requirement
+ * and acceptance identifiers and plan labels that link a test to what it
+ * verifies, while note bodies, commit messages, product code comments and
+ * shipped documentation keep the full prohibition. These read the delivered
+ * contract, its tracked mirror, the coding skill, the Standards Review checklist
+ * and `README.md` as public prompt artifacts; they assert the semantics and do
+ * not pin one exact sentence.
+ */
+describe('durable-artifact test requirement-traceability exemption (REQ-003, AC-003)', () => {
+  it('states the bounded exemption on the contract and its byte-equal mirror', async () => {
+    const contractBytes = await readFile(packagePath('templates/project/AGENTS.md'));
+    const mirrorBytes = await readFile(packagePath('.ai-workflow/AGENTS.md'));
+    expect(
+      mirrorBytes.equals(contractBytes),
+      'the tracked .ai-workflow/AGENTS.md mirror equals templates/project/AGENTS.md byte-for-byte',
+    ).toBe(true);
+
+    for (const path of ['templates/project/AGENTS.md', '.ai-workflow/AGENTS.md']) {
+      const text = await readFile(packagePath(path), 'utf8');
+      const section = normalizedSection(text, 'Shared context and maintenance');
+      expect(section, `${path} carries the shared-context maintenance section`).not.toBe('');
+      expectBoundedTestMetadataExemption(section, path);
+      // The existing durable-artifact prohibition wording stays asserted unmodified.
+      expect(section, `${path} still forbids transient plan-internal identifiers`).toMatch(
+        /transient plan-internal identifiers?/i,
+      );
+      expect(section, `${path} still names the identifier set`).toMatch(
+        /task IDs?[^.]{0,140}step numbers?[^.]{0,140}phase numbers?[^.]{0,220}(?:REQ|AC)[^.]{0,140}plan director/i,
+      );
+    }
+  });
+
+  it('states the bounded exemption in the coding skill comment rule', async () => {
+    const coding = await readFile(packagePath('templates', 'skills', 'coding', 'SKILL.md'), 'utf8');
+    const region = durableArtifactWindow(coding, ['Code comments', 'durable behavior or rationale']);
+    expect(region, 'the coding skill carries the durable comment rule').not.toBe('');
+    expectBoundedTestMetadataExemption(region, 'the coding skill comment rule');
+    // The existing prohibition wording stays asserted unmodified.
+    expect(coding, 'the coding skill still forbids transient plan-internal identifiers').toMatch(
+      /transient plan-internal identifiers?/i,
+    );
+  });
+
+  it('states the bounded exemption in the Standards Review durable-artifacts checklist', async () => {
+    const standards = await readFile(packagePath('templates/agents/standards-review.md'), 'utf8');
+    const checklist = normalizedSection(standards, 'Review checklist');
+    expect(checklist, 'the Standards Review checklist section exists').not.toBe('');
+    expectBoundedTestMetadataExemption(checklist, 'the Standards Review checklist');
+    // The existing prohibition wording stays asserted unmodified.
+    expect(checklist, 'the checklist still forbids transient plan-internal identifiers').toMatch(
+      /transient plan-internal identifiers?/i,
+    );
+  });
+
+  it('states the bounded exemption in README', async () => {
+    const readme = await readFile(packagePath('README.md'), 'utf8');
+    const normalized = readme.replace(/\s+/g, ' ');
+    // Grounded in the "Notes stay self-contained ..." durable-artifact sentence.
+    expect(normalized, 'README carries the self-contained durable-artifact sentence').toMatch(
+      /notes? stay self-contained|self-contained[^.]{0,200}(?:plan is gone|after (?:its|the) plan)/i,
+    );
+    const region = durableArtifactWindow(readme, ['Notes stay self-contained', 'self-contained after its plan']);
+    expect(region, 'README carries the self-contained durable-artifact sentence region').not.toBe('');
+    expectBoundedTestMetadataExemption(region, 'README.md');
+  });
+});
+
+/**
+ * One bounded exemption from the durable-artifact prohibition: test
+ * requirement-traceability metadata may carry requirement and acceptance
+ * identifiers and plan labels that link a test to what it verifies, while the
+ * full prohibition still covers note bodies, commit messages, product code
+ * comments and shipped documentation. Patterns require the semantics, not one
+ * exact sentence, so the shipped wording may vary.
+ */
+function expectBoundedTestMetadataExemption(region: string, label: string): void {
+  const normalized = region.replace(/\s+/g, ' ');
+  expect(normalized, `${label} carries a durable-artifact region to inspect`).not.toBe('');
+
+  // The exemption is stated for test requirement-traceability metadata: a
+  // permission/exemption word co-occurs with the test-metadata carriers, so an
+  // unrelated permission elsewhere in the file cannot satisfy it.
+  const permission = 'exempt\\w*|exception|carve-?out|may carry|can carry|allowed to carry|permitted to carry';
+  const carriers = 'test names?|test titles?|assertion labels?|test labels?|test-local constants?|traceability comments?|test comments?';
+  expect(
+    normalized,
+    `${label} states a bounded exemption for test requirement-traceability metadata`,
+  ).toMatch(new RegExp(`(?:${permission})[\\s\\S]{0,320}?(?:${carriers})|(?:${carriers})[\\s\\S]{0,320}?(?:${permission})`, 'i'));
+
+  // The exemption allows requirement/acceptance identifiers and plan labels.
+  expect(normalized, `${label} allows requirement, acceptance or plan identifiers in that metadata`).toMatch(
+    /(?:requirement|acceptance|\bREQ\b|\bAC\b)[^.]{0,100}(?:identifiers?|IDs?|labels?)|plan labels?/i,
+  );
+  // The exemption is bounded: those labels link a test to what it verifies.
+  expect(normalized, `${label} bounds the exemption to labels that link a test to what it verifies`).toMatch(
+    /link\w*[^.]{0,180}(?:tests?|verif)|(?:tests?|verif\w*)[^.]{0,180}link\w*|traceab\w*|what (?:a|the) tests? (?:verif\w*|cover)/i,
+  );
+
+  // The boundary keeps the full prohibition for the non-test durable artifacts.
+  const retainedArtifacts: ReadonlyArray<readonly [string, RegExp]> = [
+    ['note bodies', /note bodies?/i],
+    ['commit messages', /commit messages?/i],
+    ['code comments', /code comments?/i],
+    ['shipped documentation', /shipped (?:documentation|docs|prose)|shipped doc\b/i],
+  ];
+  for (const [artifact, pattern] of retainedArtifacts) {
+    expect(normalized, `${label} keeps the prohibition for ${artifact}`).toMatch(pattern);
+  }
+  expect(
+    normalized,
+    `${label} applies the prohibition to note bodies, commit messages, product code comments and shipped documentation`,
+  ).toMatch(
+    /(?:note bodies?|commit messages?|code comments?|shipped (?:documentation|docs|prose))[\s\S]{0,240}?(?:prohibition|prohibit\w*|forbid\w*|never carry|still carry|not permitted|remains?)\b/i,
+  );
+}
+
+/**
+ * A bounded text window around a surface's durable-artifact sentence, so the
+ * exemption semantics must appear with the rule it modifies rather than anywhere
+ * in the file.
+ */
+function durableArtifactWindow(text: string, anchors: readonly string[], span = 1500): string {
+  const normalized = text.replace(/\s+/g, ' ');
+  for (const anchor of anchors) {
+    const at = normalized.indexOf(anchor);
+    if (at !== -1) return normalized.slice(Math.max(0, at - 140), at + span);
+  }
+  return '';
+}
+
 /** Whitespace-normalized coding skill text so fragments match across source wrapping. */
 async function codingSkillFlattened(): Promise<string> {
   return (await readFile(packagePath('templates', 'skills', 'coding', 'SKILL.md'), 'utf8')).replace(/\s+/g, ' ');

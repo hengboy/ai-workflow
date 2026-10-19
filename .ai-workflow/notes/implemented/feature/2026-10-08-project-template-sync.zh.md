@@ -43,7 +43,7 @@ Status: implemented
 - 2026-09-14 的[用户级代理契约记录](../architecture/2026-09-14-user-level-agent-contract.md)被部分取代：其用户级标记块仍拥有加载入口，标记块所有权与历史理由得以保留，但已安装的 OpenCode 插件与 Claude/Codex 钩子条目现在也调用共享同步动作，因此其“仅全局入口”的执行方式不再描述完整的入口面。
 - Codex 信任、OpenCode 重启与任何重复的宿主作用域技能仍是显式用户步骤；被禁用、未受信任或未加载的条目，以及 fail open 的宿主崩溃或超时，都作为执行限制而非成功阻断来报告。
 - `.gitignore` 的精确调和与 notes 管理结构补齐复用了[旧式 .gitignore 迁移记录](../process/2026-09-29-migrate-legacy-gitignore-on-init.md) 确立的旧条目迁移；该记录的理由不变，仅其当前共享助手位置就地更正为 `src/sync/index.ts`，且只保留 `.ai-workflow/plans/` 与 `.worktrees/` 被忽略。
-- 上游 `hengboy/ai-workflow` 分支 `main` 尚未带无标记生成来源，因此实时尝试无法作出完整的管理新鲜性声明；观测到的真实运行报告 `unverified` 且 `created` 与 `updated` 均为空，完整声明须等待无标记模板发布到上游，而本计划未授权该发布。
+- 上游 `hengboy/ai-workflow` 分支 `main` 已发布五个无标记生成文件，实时同步对其报告 `synchronized`：完全一致的目标被跳过，不一致的目标作为完整文件替换。
 - `uninstallSynchronization` 通过 `Reflect.deleteProperty` 从调用方的 `sync_hooks` 记录中移除每个被卸载宿主的自有条目，`uninstall` 持久化缩减后的 manifest，因此被卸载宿主不会留下过时所有权，之后重装可为新的用户组干净地重新注册原生条目；公共 API 不变。
 - 上文门禁生命周期 Decision 条目与技能的按步骤及按阶段条目中的按边界节奏事实已被[技能启动时单次同步](2026-10-09-sync-once-at-skill-start.md)部分取代：自动同步现在按实际根在每次 planning、coding 或 plan-to-tasks 技能启动时运行一次，而本记录的检索与报告契约仍然有效。
 - 本记录的段落所有权决策已被[生成的本地项目指令](../simplification/2026-10-10-generated-local-instructions.md)部分取代：六个带标记模板、`src/sync/merge.ts` 的 `mergeOwnedSections`/`validateOwnedSections`/`OwnershipConflictError` 机制、标记授权边界与被同步的根 `MEMORY.md` 被五个作为完整文件替换的无标记文件与仅初始化生成的根 `MEMORY.md` 取代，而本记录的固定公共检索、报告形态、退出/状态含义以及对导航、归档与 note 数据的保留仍然有效。

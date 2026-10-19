@@ -5,17 +5,29 @@ import { packagePath } from '../../src/utils/schema.js';
 const normalize = (text: string): string => text.replace(/\s+/g, ' ');
 
 describe('mandatory project-local temporary worktree policy', () => {
-  it('records the mandatory project-local temporary worktree standard in MEMORY.md', async () => {
+  it('records the mandatory project-local temporary worktree standard in the project contract', async () => {
+    // REQ-004/AC-004: the worktree standard's owner moves from MEMORY.md to the contract.
+    const contract = normalize(await readFile(packagePath('.ai-workflow/AGENTS.md'), 'utf8'));
+
+    expect(contract).toContain('project-local temporary worktree');
+    expect(contract).toContain('.worktrees');
+    expect(contract).toContain('<project>/.worktrees/<name>');
+    expect(contract).toMatch(/before implementation/i);
+    expect(contract).not.toMatch(/consider\b[^.]*worktree|worktree[^.]*optional/i);
+    // REQ-004 / REQ-008: current standards point at notes governance, not the retired ADR command.
+    expect(contract).toMatch(/\.ai-workflow\/notes\//);
+    expect(contract).not.toMatch(/ai-workflow\s+adr\b/i);
+  });
+
+  it('no longer restates the worktree-materialization standard in MEMORY.md', async () => {
     const memory = normalize(await readFile(packagePath('MEMORY.md'), 'utf8'));
 
-    expect(memory).toContain('project-local temporary worktree');
-    expect(memory).toContain('.worktrees');
-    expect(memory).toContain('<project>/.worktrees/<name>');
-    expect(memory).toMatch(/before implementation/i);
-    expect(memory).not.toMatch(/consider\b[^.]*worktree|worktree[^.]*optional/i);
-    // REQ-004 / REQ-008: current standards point at notes governance, not the retired ADR command.
-    expect(memory).toMatch(/\.ai-workflow\/notes\//);
-    expect(memory).not.toMatch(/ai-workflow\s+adr\b/i);
+    expect(memory, 'REQ-004/AC-004: MEMORY no longer owns the worktree standard').not.toContain(
+      'project-local temporary worktree',
+    );
+    expect(memory, 'REQ-004/AC-004: MEMORY no longer carries the worktree path standard').not.toContain(
+      '<project>/.worktrees/<name>',
+    );
   });
 
   it('states the mandatory project-local temporary worktree policy in the project contract', async () => {
@@ -39,7 +51,8 @@ describe('mandatory project-local temporary worktree policy', () => {
     expect(coding).toMatch(/materialize the project's entire gitignored state/i);
     expect(coding).toContain('.worktrees/');
 
-    for (const path of ['MEMORY.md', 'templates/project/AGENTS.md']) {
+    // REQ-004/AC-004: the worktree materialization standard is owned by the contract, not MEMORY.
+    for (const path of ['.ai-workflow/AGENTS.md', 'templates/project/AGENTS.md']) {
       const text = normalize(await readFile(packagePath(path), 'utf8'));
       expect(text, `${path} shares ignored state`).toMatch(/gitignored state/i);
       expect(text, `${path} excludes the worktree container`).toContain('.worktrees/');

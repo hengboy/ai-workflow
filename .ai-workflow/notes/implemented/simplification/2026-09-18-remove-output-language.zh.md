@@ -16,7 +16,7 @@ Status: implemented
 - Agent Notes 与规划产物始终是完整的双语三件套，且没有任何配置选择它们的语言。
 - planning 技能在 `templates/skills/planning/SKILL.md` 中的编号工作流现在起草并写出全部六个冻结文件（`spec.md`/`spec.zh.md`/`spec.i18n.yaml` 与 `plan.md`/`plan.zh.md`/`plan.i18n.yaml`），并把 `ai-workflow plan validate --plan <目录>` 当作硬性完成闸门，因此 `spec.md` 或 `plan.md` 绝不会在没有其 `.zh.md` 与 `.i18n.yaml` 的情况下被冻结。
 - `standards-review` 角色与 README/MEMORY 已更新以删除偏好相关措辞。
-- 本记录部分取代[安装期本地化 ADR 散文](../process/2026-09-14-localize-adr-prose-at-install-time.md)、[双语 note 三件套](../process/2026-09-17-bilingual-note-triplets.md)与[双语规划产物](../process/2026-09-17-bilingual-planning-artifacts.md)中关于 `output_language` 的主张；那些记录保留其决定与理由，其当前语言事实指向本记录。
+- 本记录部分取代[安装期本地化 ADR 散文](../../archived/process/2026-09-14-localize-adr-prose-at-install-time.md)、[双语 note 三件套](../process/2026-09-17-bilingual-note-triplets.md)与[双语规划产物](../process/2026-09-17-bilingual-planning-artifacts.md)中关于 `output_language` 的主张；那些记录保留其决定与理由，其当前语言事实指向本记录。
 
 ## Alternatives considered
 

@@ -1,6 +1,7 @@
 # Agent Note: Localize ADR prose at install time
 
 Status: implemented
+Archived: 2026-10-19
 
 English | [中文](2026-09-14-localize-adr-prose-at-install-time.zh.md)
 

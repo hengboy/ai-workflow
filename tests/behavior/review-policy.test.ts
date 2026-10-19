@@ -17,12 +17,13 @@ const GIT_OPERATOR = 'templates/agents/git-operator.md';
 
 // Owners that publish the findings-closure policy in English. The generated contract is
 // the generic authority; the coding skill is the closure actor; the rest are the tracked
-// local mirror and the delivered memory, README and implemented-note alignment.
+// local mirror and the delivered README and implemented-note alignment. REQ-004/AC-004
+// moves the review-closure standard out of MEMORY.md and into the contract, so MEMORY.md
+// is no longer a closure owner.
 const CLOSURE_OWNERS: ReadonlyArray<readonly [string, string]> = [
   ['templates/project/AGENTS.md', 'the generated project contract'],
   ['templates/skills/coding/SKILL.md', 'the coding skill'],
   ['.ai-workflow/AGENTS.md', 'the tracked project contract mirror'],
-  ['MEMORY.md', 'project MEMORY'],
   ['README.md', 'README'],
   ['.ai-workflow/notes/implemented/process/2026-10-14-review-boundaries-and-repair.md', 'the implemented review-policy note'],
 ];
@@ -358,5 +359,18 @@ describe('integration source-HEAD gate (REQ-005 / AC-009)', () => {
       ]),
       'reviewed_commit is recorded only after repairs, rechecks and closure are accepted',
     ).toBe(true);
+  });
+});
+
+describe('MEMORY no longer restates the review-closure policy (REQ-004 / AC-004)', () => {
+  it('drops the findings-closure advisory and disposition clauses from MEMORY.md', async () => {
+    const memory = flatten(await read('MEMORY.md'));
+
+    expect(memory, 'MEMORY.md no longer owns the advisory-closure clause').not.toMatch(
+      /warnings?[^.]{0,90}?advisory/i,
+    );
+    expect(memory, 'MEMORY.md no longer owns the review-closure policy statement').not.toMatch(
+      /Review activation and closure follow the change class/i,
+    );
   });
 });

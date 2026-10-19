@@ -1,6 +1,7 @@
 # Agent Note: Migrate retired ADR records to notes
 
 Status: implemented
+Archived: 2026-10-19
 
 English | [中文](2026-09-17-migrate-retired-adr-records-to-notes.zh.md)
 
