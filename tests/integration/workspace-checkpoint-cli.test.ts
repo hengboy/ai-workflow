@@ -659,3 +659,63 @@ describe('workspace checkpoint repository delivery barrier', () => {
     expect((await checkpoint(planDirectory, 'downstream', { event: 'delivered', commit: SHA_DELIVERY })).code).toBe(0);
   }, TIMEOUT);
 });
+
+const ROOT_DEPENDENT_APP = { ...APP_REPO, dependsOn: ['workspace'] };
+const DOWNSTREAM_ON_APP = { ...DOWNSTREAM_REPO, dependsOn: ['app'] };
+
+/**
+ * A child-participating plan with zero root tasks where `app` depends on the reserved root and
+ * `downstream` depends on `app`, split as phases [[app],[downstream]].
+ */
+function zeroRootDependentChildSpec(): WorkspacePlanFixtureSpec {
+  return {
+    planId: PLAN_ID,
+    requirements: ['REQ-001', 'REQ-002'],
+    acceptanceCriteria: ['AC-001', 'AC-002'],
+    workspaceRepos: [WORKSPACE_REPO, ROOT_DEPENDENT_APP, DOWNSTREAM_ON_APP],
+    tasks: [
+      { id: 'task-001-app', repo: 'app', requirements: ['REQ-001'], acceptanceCriteria: ['AC-001'], writeScope: ['src/app.ts'] },
+      { id: 'task-002-downstream', repo: 'downstream', requirements: ['REQ-002'], acceptanceCriteria: ['AC-002'], writeScope: ['src/downstream.ts'] },
+    ],
+    phases: [['task-001-app'], ['task-002-downstream']],
+    manifest: {
+      planId: PLAN_ID,
+      role: 'workspace',
+      repositories: [
+        { ...WORKSPACE_REPO, requirements: [], acceptanceCriteria: [] },
+        { ...ROOT_DEPENDENT_APP, requirements: ['REQ-001'], acceptanceCriteria: ['AC-001'] },
+        { ...DOWNSTREAM_ON_APP, requirements: ['REQ-002'], acceptanceCriteria: ['AC-002'] },
+      ],
+    },
+  };
+}
+
+describe('workspace checkpoint implicit zero-task root delivery', () => {
+  it('treats the zero-task reserved root as delivered for a dependent child while a real undelivered dependency still gates', async () => {
+    const root = await temporary('ai-workflow-checkpoint-');
+    const planDirectory = await workspacePlanFixture(root, zeroRootDependentChildSpec());
+    await mkdir(join(root, 'packages/app'), { recursive: true });
+    await mkdir(join(root, 'packages/downstream'), { recursive: true });
+    const rootRecord = join(root, '.ai-workflow', 'plans', PLAN_ID, 'implementation.yaml');
+    const downstreamRecord = join(root, 'packages/downstream', '.ai-workflow', 'plans', PLAN_ID, 'implementation.yaml');
+
+    // The zero-task reserved root never records a delivery; its absence must not gate `app`.
+    const started = await checkpoint(planDirectory, 'app', startEvent(root, 'app'));
+    expect(started.code, outputOf(started)).toBe(0);
+    expect((await checkpoint(planDirectory, 'app', taskEvent('task-001-app', 'commit', SHA_TASK))).code).toBe(0);
+    expect(await readBytes(rootRecord), 'no artificial reserved-root record is created').toBe('<absent>');
+
+    // A real, undelivered dependency (`app`) still gates `downstream`.
+    const gated = await checkpoint(planDirectory, 'downstream', startEvent(root, 'downstream'));
+    expect(gated.code, outputOf(gated)).toBe(1);
+    const errors = refusalErrors(gated);
+    expect(errors, 'the refusal names the gated repository').toContain('downstream');
+    expect(errors, 'the refusal names the pending real dependency').toContain('app');
+    expect(await readBytes(downstreamRecord), 'the gated record stays absent').toBe('<absent>');
+
+    // Delivering `app` releases `downstream`.
+    expect((await checkpoint(planDirectory, 'app', { event: 'reviewed', commit: SHA_REVIEW })).code).toBe(0);
+    expect((await checkpoint(planDirectory, 'app', { event: 'delivered', commit: SHA_DELIVERY })).code).toBe(0);
+    expect((await checkpoint(planDirectory, 'downstream', startEvent(root, 'downstream'))).code).toBe(0);
+  }, TIMEOUT);
+});

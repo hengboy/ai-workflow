@@ -108,6 +108,10 @@ async function analyzeExecution(resolved: ResolvedWorkspacePlan): Promise<Execut
   }
 
   for (const [name, state] of states) {
+    // A reserved root with no root tasks is delivered implicitly, matching the workspace status
+    // model, so its absent delivery record never gates a dependent child and no artificial root
+    // record is created.
+    if (name === RESERVED_ROOT && !state.hasTasks) delivered.add(name);
     if (state.error !== undefined) {
       if (name !== RESERVED_ROOT || state.hasTasks) blockers.push(`Implementation record for repository "${name}" is invalid: ${state.error}`);
       continue;
