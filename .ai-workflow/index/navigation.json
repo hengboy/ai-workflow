@@ -4323,6 +4323,46 @@
         "tests/behavior/review-policy.test.ts"
       ],
       "shared_entry": true
+    },
+    {
+      "id": "memory-governance",
+      "name": "memory-governance",
+      "aliases": [],
+      "module_root": "root",
+      "entries": [
+        "templates/project/AGENTS.md",
+        "templates/agents/documentation-maintainer.md",
+        "templates/project/MEMORY.md",
+        ".ai-workflow/notes/implemented/process/2026-10-19-memory-governance.md"
+      ],
+      "symbols": [],
+      "related_files": [
+        ".ai-workflow/AGENTS.md",
+        "README.md",
+        "MEMORY.md",
+        ".ai-workflow/notes/implemented/process/2026-10-19-memory-governance.zh.md",
+        ".ai-workflow/notes/implemented/process/2026-10-19-memory-governance.i18n.yaml"
+      ],
+      "tests": [
+        "tests/behavior/memory-governance-content.test.ts"
+      ],
+      "depends_on": [],
+      "relations": [],
+      "owner_role": "shared",
+      "responsibility": "`MEMORY.md` records only the project's current standards and behavior: the change that supersedes a statement rewrites it to the current state or removes it in the same change, so the recorded standards stay current as changes land, and superseded history belongs to Git and Agent Notes rather than `MEMORY.md`; the rule ships through the project contract, the `documentation-maintainer` role, the init bootstrap `templates/project/MEMORY.md` and `README.md`.",
+      "read_scope": [
+        ".ai-workflow/AGENTS.md",
+        ".ai-workflow/notes/implemented/process/2026-10-19-memory-governance.i18n.yaml",
+        ".ai-workflow/notes/implemented/process/2026-10-19-memory-governance.md",
+        ".ai-workflow/notes/implemented/process/2026-10-19-memory-governance.zh.md",
+        "MEMORY.md",
+        "README.md",
+        "templates/agents/documentation-maintainer.md",
+        "templates/project/AGENTS.md",
+        "templates/project/MEMORY.md",
+        "tests/behavior/memory-governance-content.test.ts"
+      ],
+      "shared_entry": true
     }
   ]
 }

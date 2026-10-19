@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (.ai-workflow/notes/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+# ai-workflow notes pairing --project <project-root> --write .ai-workflow/notes/implemented/process/2026-10-19-memory-governance.md
+2026-10-19-memory-governance.md: b41c32719c83aa5f36aa0c965b92f1219d85bd6f
+2026-10-19-memory-governance.zh.md: db95a4436a7a4af7bd3fe0e9bed78b107e6c0704
