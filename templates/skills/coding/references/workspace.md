@@ -60,6 +60,8 @@ no sibling session, scheduler service or provider API executor, and no remote se
 This route never requires a manual child session.
 
 The original parent `tasks/execution-order.yaml` is the only global task schedule.
+The primary inspects the current-phase task bodies and must not eagerly read future
+tasks or child-manifest bodies.
 Apply the main scheduling rules: file order, concurrent independent tasks with
 Test first, the whole phase awaited and verified, then serial scoped task commits
 through Git Operator in listed order. Shared build contention permits serialization
@@ -87,9 +89,10 @@ worktrees/branches, preserving unrelated user state.
 ## Packet contract
 
 Every packet carries exact absolute parent plan/root, source repository, local
-slice plan, coding worktree, phase/task ID, assigned REQ/AC, task goal, exact scopes,
-relative and resolved read/write scope, permitted commands, output paths and upstream
-delivery evidence.
+slice plan, coding worktree, phase/task ID, assigned REQ/AC, task goal, permitted
+commands, output paths and upstream delivery evidence; the referenced frozen task supplies
+the canonical exact read/write scopes rather than repeating both the relative and resolved
+scope lists.
 Every command uses an explicit workdir and every packet path is an absolute path, never
 resolved against inherited parent cwd. Each leaf explicitly
 reads that repository's own `.ai-workflow/AGENTS.md`, `MEMORY.md`,
@@ -102,7 +105,9 @@ Return envelopes keep the delegated Markdown shape with `### Status`, `### Summa
 entry carries the absolute path of the produced artifact or an explicit report
 reference plus at most one sentence of conclusion, with no embedded diffs, logs,
 JSON bodies or code blocks. Large outputs belong in
-`<plan-directory>/reports/<taskId>.log`, a gitignored path that is never committed.
+`<plan-directory>/reports/<taskId>.log`, a gitignored path that is never committed. A fresh
+read-only digest the primary requests is read-only, grants no write permission, never reruns
+a completed side effect and never claims to remove already received content.
 
 ## Review and checkpoint record
 

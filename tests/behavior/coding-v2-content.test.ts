@@ -381,7 +381,21 @@ describe('parent workspace execution route', () => {
     ]) {
       expect(coding, `the parent packet contract must state "${fragment}"`).toContain(fragment);
     }
-    expect(coding).toMatch(/relative and resolved[^.]{0,24}read\/write scope/i);
+    // Retained obligation (REQ-002/AC-003): the referenced frozen task supplies the
+    // canonical exact read/write scopes, and the packet does not re-transport both the
+    // relative and resolved lists. The old relative+resolved duplication mandate is gone.
+    expect(coding, 'the packet references the frozen task for canonical read/write scopes').toMatch(
+      /(?:referenced )?frozen task[^.]{0,80}canonical[^.]{0,40}(?:read\/write )?scopes?/i,
+    );
+    expect(coding, 'the packet does not repeat both the relative and resolved scope lists').toMatch(
+      /(?:rather than|instead of|not|no)[^.]{0,60}(?:repeat|duplicat|re-?transport)[^.]{0,60}(?:relative and resolved|both (?:the )?(?:relative and resolved )?scope lists)/i,
+    );
+    // Retained obligation (REQ-002/AC-004): a no-plan direct or mechanical unit carries
+    // its complete explicit scope instead of demanding a missing frozen plan.
+    const noPlan = await codingSkillFlattened();
+    expect(noPlan, 'a no-plan unit carries its complete explicit scope').toMatch(
+      /(?:direct or mechanical|without a frozen plan|no frozen plan)[^.]{0,120}complete explicit scope|complete explicit scope/i,
+    );
   });
 
   it('separates per-repository delivery review from a distinct finalization review and checkpoints only after Git evidence', async () => {
@@ -653,7 +667,7 @@ describe('orchestrator context bounds: delegated evidence caps and path-based fr
     for (const field of [
       'REQ/AC',
       'task goal',
-      'exact scopes',
+      'canonical exact read/write scopes',
       'permitted commands',
       'upstream delivery evidence',
       'output paths',
@@ -928,33 +942,105 @@ describe('contract context-boundary rules', () => {
   });
 
   // The checkpoint-boundary active rebuild.
-  it('allows an active rebuild only at a clean checkpointed phase or verified delivery boundary, derived from records and never conversation history', async () => {
+  it('allows an active context rebuild only at a clean checkpointed phase or verified delivery boundary, derived from records and never conversation history', async () => {
+    // The core contract keeps the common obligation and points to the accessible
+    // primary-only workspace authority instead of duplicating the detailed rebuild
+    // protocol.
     for (const path of contractPaths) {
       const text = (await readFile(packagePath(path), 'utf8')).replace(/\s+/g, ' ');
       expect(text, `${path} allows an active context rebuild`).toMatch(
-        /active rebuild|actively rebuild (?:its |the )?context/i,
-      );
-      expect(text, `${path} names the checkpoint boundary`).toMatch(/\bcheckpoint/i);
-      expect(
-        text,
-        `${path} restricts an active rebuild to a clean, fully checkpointed phase boundary or a verified repository delivery boundary`,
-      ).toMatch(
-        /clean,? fully checkpointed[^.]{0,100}(?:phase |repository )?boundar|verified repository delivery boundar/i,
+        /active (?:context )?rebuild|actively rebuild (?:its |the )?context/i,
       );
       expect(
         text,
-        `${path} re-derives state from the frozen files and implementation records`,
-      ).toMatch(
-        /re-?deriv\w+[^.]{0,200}(?:frozen files|implementation records)|(?:frozen files|implementation records)[^.]{0,200}re-?deriv/i,
-      );
-      expect(text, `${path} never takes state from conversation history`).toMatch(
-        /(?:never|not|instead of|rather than)[^.]{0,180}conversation history|conversation history[^.]{0,180}(?:never|not)/i,
-      );
-      expect(text, `${path} requires read-only SHA and drift verification before continuing`).toMatch(
-        /read-only[\s\S]{0,240}?(?:SHA|drift)|(?:SHA|drift)[\s\S]{0,240}?read-only/i,
-      );
-      expect(text, `${path} verifies recorded checkpoint SHAs`).toMatch(/\bSHAs?\b/i);
-      expect(text, `${path} checks for no drift`).toMatch(/\bdrift\b/i);
+        `${path} references the accessible workspace authority for the primary-only rebuild detail`,
+      ).toMatch(/references\/workspace\.md/);
     }
+
+    // The preserved clean-boundary, SHA and drift gates live in that referenced authority.
+    const authority = (
+      await readFile(
+        packagePath('templates', 'skills', 'coding', 'references', 'workspace.md'),
+        'utf8',
+      )
+    ).replace(/\s+/g, ' ');
+    expect(authority, 'the workspace authority names the checkpoint boundary').toMatch(
+      /\bcheckpoint/i,
+    );
+    expect(
+      authority,
+      'the workspace authority restricts an active rebuild to a clean, fully checkpointed phase boundary or a verified repository delivery boundary',
+    ).toMatch(
+      /clean,? fully checkpointed[^.]{0,100}(?:phase |repository )?boundar|verified repository delivery boundar/i,
+    );
+    expect(
+      authority,
+      'the workspace authority re-derives state from the frozen files and implementation records',
+    ).toMatch(
+      /re-?deriv\w+[^.]{0,200}(?:frozen files|implementation records)|(?:frozen files|implementation records)[^.]{0,200}re-?deriv/i,
+    );
+    expect(authority, 'the workspace authority never takes state from conversation history').toMatch(
+      /(?:never|not|instead of|rather than)[^.]{0,180}conversation history|conversation history[^.]{0,180}(?:never|not)/i,
+    );
+    expect(
+      authority,
+      'the workspace authority requires read-only SHA and drift verification before continuing',
+    ).toMatch(
+      /read-only[\s\S]{0,240}?(?:SHA|drift)|(?:SHA|drift)[\s\S]{0,240}?read-only/i,
+    );
+    expect(authority, 'the workspace authority verifies recorded checkpoint SHAs').toMatch(
+      /\bSHAs?\b/i,
+    );
+    expect(authority, 'the workspace authority checks for no drift').toMatch(/\bdrift\b/i);
+  });
+});
+
+/**
+ * REQ-001 / REQ-002: the coding skill carries the portable delegated-report transport and
+ * the current-phase primary-read protocol. These read the delivered `SKILL.md` sections as
+ * public prompt artifacts; they are static delivered-content evidence, not host runtime
+ * enforcement or a live-compliance claim.
+ */
+describe('portable delegated-report transport in the coding skill (REQ-001, REQ-002)', () => {
+  it('bounds delegated result reports to whole-body 1200/3000 code-point targets with self-check', async () => {
+    const envelope = await codedEnvelopeText();
+    expect(envelope, 'the delegated envelope names the ordinary 1200 target').toMatch(/1[,.]?200/);
+    expect(envelope, 'the delegated envelope names the 3000 review/failure/blocked target').toMatch(/3[,.]?000/);
+    expect(envelope, 'the target covers the whole report body').toMatch(
+      /whole[\s-]?(?:report[\s-]?)?body|entire (?:report|body)|whole report/i,
+    );
+    expect(envelope, 'the author self-checks before returning').toMatch(/self[\s-]?check/i);
+    expect(envelope, 'the target includes Summary').toMatch(/\bSummary\b/);
+    expect(envelope, 'the target includes Evidence').toMatch(/\bEvidence\b/);
+  });
+
+  it('reads the current-phase task bodies without eager future-task reads', async () => {
+    const coding = await codingSkillFlattened();
+    expect(coding, 'the primary inspects current-phase task bodies').toMatch(
+      /current[- ]phase[^.]{0,140}(?:task bod|task file|task document|task)/i,
+    );
+    expect(coding, 'the primary does not eagerly read future tasks').toMatch(
+      /(?:not|never|rather than|instead of)[^.]{0,100}(?:eagerly read|read (?:all )?future|future tasks?|every task)/i,
+    );
+  });
+
+  it('treats a complete same-version native injection as loading and requires explicit reads otherwise', async () => {
+    const coding = await codingSkillFlattened();
+    expect(coding, 'complete same-version native injection counts as loading').toMatch(
+      /complete[^.]{0,90}(?:native )?injection[^.]{0,80}(?:counts? as (?:loading|read)|sufficient)|same version[^.]{0,80}injection/i,
+    );
+    expect(coding, 'uncertain or partial injection requires explicit reads').toMatch(
+      /(?:uncertain|partial|incomplete)[^.]{0,100}(?:explicit (?:read|reads)|read explicitly|explicit reads)/i,
+    );
+  });
+
+  it('references the frozen task for canonical scopes instead of repeating both lists', async () => {
+    const coding = await codingSkillFlattened();
+    expect(coding, 'the referenced frozen task supplies canonical scopes').toMatch(
+      /(?:frozen task|referenced (?:frozen )?task|task document)[^.]{0,140}(?:supplies?|provides?|carries?|is the source of)[^.]{0,80}canonical[^.]{0,40}(?:read\/write )?scope/i,
+    );
+    expect(coding, 'both relative and resolved lists are not repeated').toMatch(
+      /(?:instead of|rather than|not)[^.]{0,100}(?:repeat|re-?transport|duplicat)[^.]{0,80}(?:relative and resolved|both lists|both scope lists)/i,
+    );
   });
 });

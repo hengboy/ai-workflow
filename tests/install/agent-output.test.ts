@@ -64,4 +64,17 @@ describe('installed agent output contracts', () => {
       expect(body).not.toContain('changed_paths');
     }
   });
+
+  // REQ-001 / AC-001, AC-009: the installed role contract ships the portable whole-body
+  // report targets and self-check, so the delivered instruction is present on every host.
+  it('ships the whole-body 1200/3000 report targets and self-check in every installed role body', async () => {
+    for (const host of ['codex', 'claude', 'opencode'] as Host[]) {
+      for (const file of await renderHost(host)) {
+        const body = instructions(host, file.contents);
+        expect(body, `${host}/${file.relativePath} names the 1200 ordinary target`).toMatch(/1[,.]?200/);
+        expect(body, `${host}/${file.relativePath} names the 3000 review/failure/blocked target`).toMatch(/3[,.]?000/);
+        expect(body, `${host}/${file.relativePath} requires an author self-check`).toMatch(/self[\s-]?check/i);
+      }
+    }
+  });
 });

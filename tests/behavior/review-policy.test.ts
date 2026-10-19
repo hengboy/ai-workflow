@@ -80,11 +80,19 @@ describe('review boundary routing (REQ-001 / AC-001, AC-002)', () => {
 
     expect(
       anyMatch(contract, [
+        /\bPlanning\b[^.]{0,260}?\b(?:only|alone)\b[^.]{0,120}?\bSpec(?: Review)?\b/i,
         /\bPlanning\b[^.]{0,260}?\bSpec(?: Review)?\b[^.]{0,120}?\b(?:only|alone)\b/i,
-        /\bPlanning\b[^.]{0,260}?\bSpec Review\b[^.]{0,160}?\b(?:not|never|no)\b[^.]{0,100}?\bStandards Review\b/i,
       ]),
       'Planning dispatches Spec Review only',
     ).toBe(true);
+
+    // Retained obligation: Planning dispatches the Spec Review and never the Standards
+    // Review. The compacted contract conveys this through "only the Spec Review", so the
+    // clause is checked for the Spec axis and the absence of the Standards axis.
+    const planningClause =
+      /\bPlanning\b[^.]{0,200}?(?=,\s*(?:and\s+)?plan-to-tasks)/i.exec(contract)?.[0] ?? '';
+    expect(planningClause, 'the Planning review clause is present').not.toBe('');
+    expect(planningClause, 'Planning dispatches no Standards Review').not.toMatch(/Standards Review/i);
 
     expect(
       anyMatch(contract, [
@@ -371,6 +379,55 @@ describe('MEMORY no longer restates the review-closure policy (REQ-004 / AC-004)
     );
     expect(memory, 'MEMORY.md no longer owns the review-closure policy statement').not.toMatch(
       /Review activation and closure follow the change class/i,
+    );
+  });
+});
+
+/**
+ * REQ-001 / AC-001, AC-002: the review axes ship the portable whole-body report target and
+ * the complete-findings exception, while a fresh read-only digest grants no write permission
+ * and never replays a completed operation. These read the delivered review prompts as public
+ * artifacts; they are static delivered-content evidence, not model-compliance proof.
+ */
+describe('review report facts and complete-findings exception (REQ-001 / AC-001, AC-002)', () => {
+  it('targets the whole review report at 3000 code points and requires a self-check', async () => {
+    const policy = joined(flatten(await read(SPEC_REVIEW)), flatten(await read(STANDARDS_REVIEW)));
+    expect(policy, 'the review report names the 3000 target').toMatch(/3[,.]?000/);
+    expect(policy, 'the target covers the whole report body').toMatch(
+      /whole[\s-]?(?:report[\s-]?)?body|entire (?:report|body)|whole report/i,
+    );
+    expect(policy, 'the reviewer self-checks before returning').toMatch(/self[\s-]?check/i);
+    expect(policy, 'the review report does not exempt Summary from the target').not.toMatch(
+      /Summary[^.]{0,80}(?:exempt|excluded|not (?:counted|limited|included))/i,
+    );
+  });
+
+  it('retains complete findings and leaves acceptance unresolved without a recoverable reference', async () => {
+    const policy = joined(flatten(await read(CONTRACT)), flatten(await read(CODING)));
+    expect(policy, 'complete findings take precedence over the length target').toMatch(
+      /complete findings?[^.]{0,140}(?:precedence|before|outrank|over)[^.]{0,80}(?:length|brevity|target)|(?:length|brevity)[^.]{0,120}(?:not at the cost|yields? to|gives? way)[^.]{0,80}(?:findings|completeness)/i,
+    );
+    expect(policy, 'the unmet protocol or length exception is visibly reported').toMatch(
+      /(?:visible|expose|report|disclose)[^.]{0,120}(?:exception|unmet (?:protocol|length|condition))|exception[^.]{0,80}visible/i,
+    );
+    expect(policy, 'accessibility or a completed operation leaves acceptance unresolved').toMatch(
+      /(?:leave|keeps?|remains?)[^.]{0,80}acceptance[^.]{0,40}unresolved|acceptance[^.]{0,60}unresolved/i,
+    );
+  });
+
+  it('keeps a fresh read-only digest from granting write, replay or removal', async () => {
+    const policy = joined(flatten(await read(CONTRACT)), flatten(await read(CODING)));
+    expect(policy, 'a fresh read-only digest is read-only').toMatch(
+      /fresh[^.]{0,80}read-only[^.]{0,60}(?:digest|session)|read-only[^.]{0,60}(?:digest|session)/i,
+    );
+    expect(policy, 'the digest grants no write permission').toMatch(
+      /(?:digest|read-only)[^.]{0,140}(?:no |not |never )(?:write|edit|mutat|file-write)|(?:no |not |never )[^.]{0,80}(?:write|edit)[^.]{0,80}permission[^.]{0,80}read-only/i,
+    );
+    expect(policy, 'a completed operation is never automatically replayed').toMatch(
+      /(?:never|not|no )[^.]{0,80}(?:rerun|replay|redo)[^.]{0,80}(?:completed|side effect|operation)/i,
+    );
+    expect(policy, 'previously received content is not claimed as removed').toMatch(
+      /(?:not|never|no )[^.]{0,80}(?:remov|discard)[^.]{0,80}(?:already|previously) received|(?:already|previously) received[^.]{0,80}(?:not|never)[^.]{0,60}(?:remov|discard)/i,
     );
   });
 });

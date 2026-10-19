@@ -48,6 +48,7 @@ If no research target or objective is supplied, return `blocked` with a support 
 
 ## Output checklist
 Return a Markdown report using the following level-two headings. Do not return a JSON envelope. Never fabricate a source or conclusion.
+Report-body targets: an ordinary successful report body must stay at or below 1,200 Unicode code points and a review, failure or blocked report at or below 3,000, counted over the whole report body including `### Summary` and `### Evidence`; boundary examples are one code point above each limit (1,201 and 3,001), and a non-BMP character counts as one code point. Authors must self-check the whole body before returning. These are portable prompt instructions, not a programmatic runtime cap.
 ### Status
 Return only `done`, `blocked`, or `failed`. Use `blocked` when the supplied links cannot answer the stated objective.
 ### Summary

@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 # ai-workflow notes pairing --project <project-root> --write .ai-workflow/notes/implemented/process/2026-10-18-skill-prompt-deduplication.md
-2026-10-18-skill-prompt-deduplication.md: b4048ae1744d450d249d3a9c85204c395f7dff93
-2026-10-18-skill-prompt-deduplication.zh.md: 82a955b0d00dd236302ee854e51389ac08038bfd
+2026-10-18-skill-prompt-deduplication.md: fd80d97db8828919f9f97c33dd45878105896800
+2026-10-18-skill-prompt-deduplication.zh.md: acfbbacdb273dfa80f29c9d60d77227c383a89ab

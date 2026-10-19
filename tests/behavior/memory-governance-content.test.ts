@@ -23,7 +23,7 @@ const CURRENCY_STATEMENTS = [
   "records only the project's current standards and behavior",
   'the change that supersedes a statement rewrites it to the current state or removes it in the same change',
   'the recorded standards stay current as changes land',
-  'Superseded history belongs to Git and Agent Notes, never to `MEMORY.md`',
+  'superseded history belongs to Git and Agent Notes, never to `MEMORY.md`',
 ] as const;
 
 /** Whitespace-normalized text so fragments match across source wrapping. */
@@ -101,7 +101,7 @@ describe('MEMORY currency rule in the shipped contract (REQ-001/AC-001)', () => 
       expect(
         section,
         `${PLAN} REQ-001/AC-001: ${path} raw section states history belongs to Git and Agent Notes`,
-      ).toContain('Superseded history belongs to Git and Agent Notes');
+      ).toContain('superseded history belongs to Git and Agent Notes');
     }
   });
 
@@ -561,5 +561,41 @@ describe('MEMORY single-sources the workflow contract (REQ-004/AC-004)', () => {
         `${GOVERNANCE_PLAN} REQ-004/AC-004: MEMORY.md must not restate the ${topic} workflow topic`,
       ).not.toMatch(pattern);
     }
+  });
+});
+
+// 20261019-prompt-context-transport REQ-004/AC-008: MEMORY records current standards and
+// necessary references rather than delivery transcripts. These read the delivered role and
+// contract prompts as public artifacts; they are static delivered-content evidence.
+
+/** Whitespace-normalized text so a fragment matches across source wrapping. */
+function flat(text: string): string {
+  return text.replace(/\s+/g, ' ').trim();
+}
+
+describe('MEMORY records current standards rather than delivery transcripts (REQ-004/AC-008)', () => {
+  it('states that MEMORY carries current standards and references, not delivery transcripts', async () => {
+    const guidance = flat(
+      [
+        await readFile(packagePath('templates/agents/documentation-maintainer.md'), 'utf8'),
+        await readFile(packagePath('templates/project/AGENTS.md'), 'utf8'),
+      ].join('\n'),
+    );
+
+    expect(
+      guidance,
+      'the maintenance guidance prefers current standards and references over delivery transcripts',
+    ).toMatch(
+      /(?:current standards?|necessary references?)[^.]{0,140}(?:rather than|not|instead of)[^.]{0,60}(?:delivery )?transcripts?/i,
+    );
+  });
+
+  it('keeps MEMORY free of a plan-step or run-record transcript', async () => {
+    const memory = flat(await readFile(packagePath('MEMORY.md'), 'utf8'));
+
+    expect(memory, 'MEMORY.md carries no step or phase transcript').not.toMatch(
+      /\b(?:step|phase)\s+\d+/i,
+    );
+    expect(memory, 'MEMORY.md carries no run record').not.toMatch(/implementation\.yaml|task_checkpoints/i);
   });
 });

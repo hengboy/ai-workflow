@@ -98,4 +98,47 @@ describe('installed skills and agents', () => {
     expect(schema.additionalProperties, 'unknown configuration keys are rejected').toBe(false);
     expect(await readFile(join(home, manifestRelative), 'utf8')).not.toContain('config.yaml');
   });
+
+  // REQ-004 / REQ-005: the transport change keeps the nine native role frontmatter/tools and
+  // introduces no additional maintenance skill or command. These read installed output and the
+  // shipped skill set as public deliverables.
+  it('preserves the nine native role tool sets and ships no additional maintenance skill', async () => {
+    const home = await temporary('ai-workflow-role-tools-');
+    await install(hosts, { home });
+
+    const roleNames = [
+      'backend',
+      'documentation-maintainer',
+      'file-explorer',
+      'frontend',
+      'git-operator',
+      'researcher',
+      'spec-review',
+      'standards-review',
+      'test',
+    ];
+    for (const host of hosts) {
+      const rendered = await renderHost(host);
+      const names = rendered.map((file) => file.relativePath.replace(/\.(?:md|toml)$/, ''));
+      for (const role of roleNames) {
+        expect(names, `${host} ships ${role}`).toContain(role);
+      }
+    }
+
+    expect(await readFile(packagePath('templates', 'agents', 'documentation-maintainer.md'), 'utf8')).toMatch(
+      /^tools: \[read, edit\]$/m,
+    );
+    expect(await readFile(packagePath('templates', 'agents', 'spec-review.md'), 'utf8')).toMatch(/^tools: \[read\]$/m);
+
+    const skills = (await readdir(packagePath('templates', 'skills'))).sort();
+    expect(skills, 'no additional maintenance skill is shipped').toEqual([
+      'coding',
+      'git-message',
+      'plan-to-tasks',
+      'planning',
+      'setup-ai-workflow',
+      'switch-profile',
+      'sync-ai-workflow',
+    ]);
+  });
 });

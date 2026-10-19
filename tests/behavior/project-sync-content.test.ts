@@ -352,3 +352,34 @@ describe('project synchronization published documentation', () => {
     );
   });
 });
+
+/**
+ * REQ-005 / AC-009, AC-010: the transport change preserves the exact five managed
+ * synchronization targets and installs no runtime-enforcement or live-compliance claim.
+ * These read the shipped module and README as public deliverables.
+ */
+describe('preserved five-target allowlist and truthful transport labels (REQ-005 / AC-009, AC-010)', () => {
+  it('keeps exactly the five managed synchronization targets', async () => {
+    const artifacts = await readFile(packagePath('src', 'sync', 'artifacts.ts'), 'utf8');
+    for (const target of [
+      '.ai-workflow/AGENTS.md',
+      '.ai-workflow/notes/AGENTS.md',
+      '.ai-workflow/notes/README.md',
+      '.ai-workflow/notes/implemented/AGENTS.md',
+      '.ai-workflow/notes/archived/AGENTS.md',
+    ]) {
+      expect(artifacts, `the allowlist still maps ${target}`).toContain(target);
+    }
+    expect((artifacts.match(/target:\s*'\.ai-workflow\//g) ?? []).length, 'exactly five managed targets remain').toBe(5);
+  });
+
+  it('makes no runtime-enforcement or live-compliance claim for the report targets', async () => {
+    const readme = (await readFile(packagePath('README.md'), 'utf8')).replace(/\s+/g, ' ');
+    expect(readme, 'README never claims the host enforces the report target').not.toMatch(
+      /(?:runtime|programmatic|host)[^.]{0,60}(?:enforces?|guarantees?|applies?)[^.]{0,50}(?:1[,.]?200|3[,.]?000|report length)/i,
+    );
+    expect(readme, 'README makes no latency or total-window guarantee').not.toMatch(
+      /(?:guarantees?|ensures?)[^.]{0,60}(?:150k|total (?:context|window)|latency)/i,
+    );
+  });
+});

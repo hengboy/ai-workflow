@@ -61,6 +61,12 @@ session still ends at its handoff.
   and fix production code, but must not write the test itself.
 - Batch each role's work into one dispatch per step/task. A second dispatch to
   that role is allowed only as a review repair with new evidence or new inputs.
+- For a split or workspace plan the primary inspects the frozen schedule, verified
+  workspace status and the current-phase task bodies; it must not eagerly read future
+  tasks or child-manifest and note bodies, and one concrete support need may authorize a
+  single bounded child-body read within the existing scope.
+- The referenced frozen task supplies the canonical exact read/write scopes; the packet
+  must not repeat both the relative and resolved scope lists.
 - The orchestrator owns scheduling, dependency progression and automatic
   continuation; interrupt only for a real blocker, failed gate, missing
   authorization or required user decision. Specialists never dispatch children.
@@ -85,6 +91,16 @@ session still ends at its handoff.
   keeps `### Found Paths` — and add upper bounds: each `### Evidence` entry carries the
   absolute path of the produced artifact or an explicit report reference plus at most one
   sentence of conclusion, with no embedded diffs, logs, JSON bodies or code blocks.
+- Delegated reports target the whole report body: at most 1,200 Unicode code points for an
+  ordinary success and at most 3,000 for a review, failure or blocked result, including
+  `### Summary` and `### Evidence`, with boundary examples one code point above each limit
+  (1,201 and 3,001) and a non-BMP character counted as one code point. Authors must
+  self-check the whole body before returning; these are portable prompt instructions, not a
+  programmatic runtime cap. Complete findings take precedence over the length target:
+  without a complete recoverable reference, expose the length exception visibly, retain
+  every known status, verdict, SHA, exit-code and blocker fact, and leave acceptance
+  unresolved. A fresh read-only digest grants no write permission, never reruns a completed
+  side effect and never claims to remove already received content.
 - Large outputs such as test logs, `workspace status` JSON and build output are written
   to `<plan-directory>/reports/<taskId>.log`, where `<plan-directory>` is the writing
   repository's own plan directory, or each repository's slice plan directory in workspace
@@ -124,7 +140,7 @@ After a safe patch changes the contract or owned rules, re-read `.ai-workflow/AG
 
 ## Preconditions
 
-- Explicitly read `.ai-workflow/AGENTS.md`, `MEMORY.md`, `.ai-workflow/index/navigation.json` and `.ai-workflow/index/navigation.md`, or receive complete context injection, before acting. The contract binds every agent. Read frozen `spec.md` and `plan.md` for planned work; a direct or mechanical change uses the request's explicit scope and acceptance evidence as its boundary.
+- Explicitly read `.ai-workflow/AGENTS.md`, `MEMORY.md`, `.ai-workflow/index/navigation.json` and `.ai-workflow/index/navigation.md`, or receive complete context injection, before acting; a demonstrably complete same-version native injection counts as loading, while uncertain or partial injection requires explicit reads. The contract binds every agent. Read frozen `spec.md` and `plan.md` for planned work; a direct or mechanical change uses the request's explicit scope and acceptance evidence as its boundary.
 - A plan may be implemented whole or through split tasks. An assigned
   `tasks/<taskId>.md` permits only its exact read/write scopes and declared
   commands; an unsplit plan uses its explicit scope and acceptance criteria.
@@ -157,6 +173,10 @@ After a safe patch changes the contract or owned rules, re-read `.ai-workflow/AG
   `ai-workflow context locate --project <root> --feature <id> --verify` and reads the
   exact paths in its `read_order` output.
 - No full re-injection alternative mode is provided.
+- A direct or mechanical unit without a frozen plan carries its complete explicit scope,
+  with no missing-plan demand and no requirement for a `spec.md`, `plan.md` or task file.
+- Unreadable or contradictory frozen sources block before any edit, without broader
+  whole-repository discovery, and frozen inputs are never rewritten.
 
 ## Procedure
 
@@ -248,6 +268,7 @@ planning artifacts.
 - Create or update a note only for a lasting decision whose rationale code, tests and existing documentation cannot adequately explain; behavior changes, file counts and added tests are insufficient on their own, and local, mechanical, UI, copy and formatting changes without such lasting rationale are exempt. Reuse a still-accurate note that owns the same decision and keep its facts current in the same change; record a changed decision or lasting rationale as a new linked note.
 - When a decision lands, move its record to `implemented` and rewrite its body as delivered facts, not only its status. A changed decision or rationale requires a new note; assess related active-note supersession within scope.
 - Add relevant notes and governance to explicit bounded read/write scopes, never the entire notes history. After landing the note, run `ai-workflow notes validate --project <absolute-project-root>` and report the result.
+- The primary delegates the existing shell-based generation, pairing and validation commands to an existing shell-capable role with exact generated-artifact write authority; no additional maintenance command is introduced and no role tool set expands. The shipped-content and installation suites are static delivered evidence of the instruction contract, not a live compliance claim.
 
 ## Implementation Record
 

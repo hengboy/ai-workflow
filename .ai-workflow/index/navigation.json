@@ -1670,6 +1670,12 @@
           "name": "workspaceStatus",
           "kind": "function",
           "visibility": "public"
+        },
+        {
+          "file": "src/context/validate.ts",
+          "name": "refreshNavigationMarkdown",
+          "kind": "function",
+          "visibility": "public"
         }
       ],
       "related_files": [
@@ -3005,6 +3011,36 @@
           "kind": "imports",
           "from": "src/workspace/status.ts#workspaceStatus",
           "to": "src/workspace/execution.ts#projectWorkspaceExecution"
+        },
+        {
+          "kind": "imports",
+          "from": "src/context/validate.ts#refreshNavigationMarkdown",
+          "to": "src/context/navigation.ts#NavigationIndex"
+        },
+        {
+          "kind": "imports",
+          "from": "src/context/validate.ts#refreshNavigationMarkdown",
+          "to": "src/context/navigation.ts#renderNavigation"
+        },
+        {
+          "kind": "imports",
+          "from": "src/context/validate.ts#refreshNavigationMarkdown",
+          "to": "src/context/paths.ts#resolveProjectRoot"
+        },
+        {
+          "kind": "imports",
+          "from": "src/context/validate.ts#refreshNavigationMarkdown",
+          "to": "src/utils/fs.ts#atomicWrite"
+        },
+        {
+          "kind": "imports",
+          "from": "src/context/validate.ts#refreshNavigationMarkdown",
+          "to": "src/utils/schema.ts#formatSchemaErrors"
+        },
+        {
+          "kind": "imports",
+          "from": "src/context/validate.ts#refreshNavigationMarkdown",
+          "to": "src/utils/schema.ts#schemaValidator"
         }
       ],
       "owner_role": "shared",
@@ -4375,6 +4411,66 @@
         ".ai-workflow/notes/implemented/process/2026-10-19-memory-single-source.zh.md"
       ],
       "shared_entry": true
+    },
+    {
+      "id": "prompt-context-transport",
+      "name": "prompt-context-transport",
+      "aliases": [],
+      "module_root": "templates",
+      "entries": [
+        "templates/project/AGENTS.md",
+        "templates/skills/coding/SKILL.md",
+        "templates/skills/coding/references/workspace.md",
+        ".ai-workflow/notes/implemented/process/2026-10-19-prompt-context-transport.md"
+      ],
+      "symbols": [],
+      "related_files": [
+        ".ai-workflow/AGENTS.md",
+        "MEMORY.md",
+        "README.md",
+        ".ai-workflow/notes/implemented/process/2026-10-17-orchestrator-context-boundaries.md",
+        ".ai-workflow/notes/implemented/process/2026-10-18-skill-prompt-deduplication.md",
+        ".ai-workflow/notes/implemented/process/2026-10-19-prompt-context-transport.zh.md",
+        "templates/agents/backend.md",
+        "templates/agents/frontend.md",
+        "templates/agents/test.md",
+        "templates/agents/file-explorer.md",
+        "templates/agents/researcher.md",
+        "templates/agents/documentation-maintainer.md",
+        "templates/agents/spec-review.md",
+        "templates/agents/standards-review.md",
+        "templates/agents/git-operator.md"
+      ],
+      "tests": [
+        "tests/behavior/prompt-context-transport.test.ts"
+      ],
+      "depends_on": [],
+      "relations": [],
+      "owner_role": "shared",
+      "responsibility": "Portable prompt transport and deterministic document maintenance: the nine role templates, Coding skill and project contract target the whole report body at 1,200/3,000 code points with author self-check and visible length exceptions, the primary reads only current-phase task bodies and the referenced frozen task supplies canonical exact scopes, the source contract and mirror are compacted with every distinct obligation retained, and the navigation Markdown view becomes a concise catalog redrawn only from validated JSON.",
+      "shared_entry": true,
+      "read_scope": [
+        ".ai-workflow/AGENTS.md",
+        ".ai-workflow/notes/implemented/process/2026-10-17-orchestrator-context-boundaries.md",
+        ".ai-workflow/notes/implemented/process/2026-10-18-skill-prompt-deduplication.md",
+        ".ai-workflow/notes/implemented/process/2026-10-19-prompt-context-transport.md",
+        ".ai-workflow/notes/implemented/process/2026-10-19-prompt-context-transport.zh.md",
+        "MEMORY.md",
+        "README.md",
+        "templates/agents/backend.md",
+        "templates/agents/documentation-maintainer.md",
+        "templates/agents/file-explorer.md",
+        "templates/agents/frontend.md",
+        "templates/agents/git-operator.md",
+        "templates/agents/researcher.md",
+        "templates/agents/spec-review.md",
+        "templates/agents/standards-review.md",
+        "templates/agents/test.md",
+        "templates/project/AGENTS.md",
+        "templates/skills/coding/SKILL.md",
+        "templates/skills/coding/references/workspace.md",
+        "tests/behavior/prompt-context-transport.test.ts"
+      ]
     }
   ]
 }

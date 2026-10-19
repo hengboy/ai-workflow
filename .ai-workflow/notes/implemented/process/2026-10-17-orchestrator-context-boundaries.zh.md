@@ -31,3 +31,4 @@ Status: implemented
 - 交付内容回归、CLI 校验与文档检查是已交付文本证据：通过只证明指导存在，不证明宿主运行时强制执行或已测得性能提升。
 - [Fresh sub-agent sessions for completed roles](./2026-10-14-fresh-subagent-sessions.md) 保留其已完成会话边界决策；本记录不取代它，并在全新会话规则之上增加证据、传输与重建边界。
 - [Parent workspace coding orchestration](../feature/2026-10-09-workspace-coding-orchestration.md) 保留其激活、工作区、检查点与审阅决策；本记录保留并交叉链接它，以检查点边界主动重建部分地扩展其恢复措辞，而不取代其有界恢复规则。
+- [Portable prompt transport and deterministic document maintenance](./2026-10-19-prompt-context-transport.md) 部分取代本记录的报告与任务包指导：它统一整体报告目标、当前阶段读取边界与全新只读摘要边界，而本记录保留其证据边界、路径传输与主动重建决策。

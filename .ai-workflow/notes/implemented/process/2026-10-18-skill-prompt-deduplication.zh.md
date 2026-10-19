@@ -43,4 +43,5 @@ Status: implemented
 - 重复簇登记加等价规则可复用于后续措辞优化：新簇复用同一条仅移除重复的规则与同一逐字句子判据。
 - `MEMORY.md` 与导航索引保持不变，因为没有标准、路径、符号或所有权改变，本笔记记录其原因。
 - 强制语气政策使范围内文件中的每条规范性表述都明确，而 `may` 仅保留在真正的许可或可选字段语境中。
-- 不取代任何相关活动笔记：[Orchestrator context boundaries in delegated coding](./2026-10-17-orchestrator-context-boundaries.md) 保留其证据、传输与重建决策，本记录仅删除它们在已发布提示中的重复复述，未改变其中任何决策。
+- [Orchestrator context boundaries in delegated coding](./2026-10-17-orchestrator-context-boundaries.md) 保留其证据、传输与重建决策；本记录仅删除它们在已发布提示中的重复复述，未改变其中任何决策。
+- [Portable prompt transport and deterministic document maintenance](./2026-10-19-prompt-context-transport.md) 部分取代本记录有限的逐字重复做法，方法是在每个界面统一一份报告契约；本记录保留其重复簇登记、强制语气政策以及不删除任何被断言句子除非有等价替代的规则。

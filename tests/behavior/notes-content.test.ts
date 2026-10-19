@@ -424,3 +424,37 @@ describe('agent notes workflow content', () => {
     ).toEqual([]);
   });
 });
+
+// 20261019-prompt-context-transport REQ-004/REQ-005: the change lands one bilingual rationale
+// triplet and partially supersedes two related process tags in the same change. These read the
+// delivered note surfaces as public documentation artifacts.
+
+describe('delivered transport note triplet and partial-supersession links (REQ-004, REQ-005)', () => {
+  const TRANSPORT_SLUG = '2026-10-19-prompt-context-transport';
+  const PARTIALLY_SUPERSEDED = [
+    '2026-10-17-orchestrator-context-boundaries',
+    '2026-10-18-skill-prompt-deduplication',
+  ] as const;
+
+  it('ships the complete bilingual prompt-context-transport triplet', async () => {
+    for (const suffix of ['.md', '.zh.md', '.i18n.yaml'] as const) {
+      const body = await readFile(
+        packagePath('.ai-workflow/notes/implemented/process', `${TRANSPORT_SLUG}${suffix}`),
+        'utf8',
+      );
+      expect(body.trim(), `${TRANSPORT_SLUG}${suffix} is non-empty`).not.toBe('');
+    }
+  });
+
+  it('cross-links the two partially superseded process notes to the delivered triplet', async () => {
+    for (const slug of PARTIALLY_SUPERSEDED) {
+      const body = await readFile(
+        packagePath('.ai-workflow/notes/implemented/process', `${slug}.md`),
+        'utf8',
+      );
+      expect(body, `${slug} links the delivered transport note instead of restating it`).toContain(
+        TRANSPORT_SLUG,
+      );
+    }
+  });
+});
