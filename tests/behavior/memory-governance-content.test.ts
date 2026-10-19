@@ -58,8 +58,10 @@ function procedureStep(text: string, step: number): string {
   if (start === -1) return '';
   const collected: string[] = [];
   for (let index = start; index < lines.length; index += 1) {
-    if (index > start && /^\d+\. /.test(lines[index])) break;
-    collected.push(lines[index]);
+    const line = lines[index];
+    if (line === undefined) break;
+    if (index > start && /^\d+\. /.test(line)) break;
+    collected.push(line);
   }
   return flatten(collected.join('\n'));
 }
