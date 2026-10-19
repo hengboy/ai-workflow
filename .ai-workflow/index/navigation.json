@@ -4165,7 +4165,10 @@
         ".ai-workflow/notes/implemented/process/2026-10-16-note-rationale-and-retention.i18n.yaml",
         ".ai-workflow/notes/implemented/process/2026-09-16-project-contract-and-agent-notes.md",
         ".ai-workflow/notes/implemented/process/2026-09-16-project-contract-and-agent-notes.zh.md",
-        ".ai-workflow/notes/implemented/process/2026-09-16-project-contract-and-agent-notes.i18n.yaml"
+        ".ai-workflow/notes/implemented/process/2026-09-16-project-contract-and-agent-notes.i18n.yaml",
+        ".ai-workflow/notes/implemented/process/2026-10-19-archive-retention.i18n.yaml",
+        ".ai-workflow/notes/implemented/process/2026-10-19-archive-retention.md",
+        ".ai-workflow/notes/implemented/process/2026-10-19-archive-retention.zh.md"
       ],
       "tests": [
         "tests/behavior/notes-content.test.ts"
@@ -4190,7 +4193,10 @@
         "templates/skills/coding/SKILL.md",
         "templates/skills/plan-to-tasks/SKILL.md",
         "templates/skills/planning/SKILL.md",
-        "tests/behavior/notes-content.test.ts"
+        "tests/behavior/notes-content.test.ts",
+        ".ai-workflow/notes/implemented/process/2026-10-19-archive-retention.i18n.yaml",
+        ".ai-workflow/notes/implemented/process/2026-10-19-archive-retention.md",
+        ".ai-workflow/notes/implemented/process/2026-10-19-archive-retention.zh.md"
       ],
       "shared_entry": true
     },
@@ -4221,9 +4227,9 @@
         ".ai-workflow/notes/implemented/process/2026-09-17-bilingual-planning-artifacts.i18n.yaml",
         ".ai-workflow/notes/implemented/process/2026-09-17-bilingual-planning-artifacts.md",
         ".ai-workflow/notes/implemented/process/2026-09-17-bilingual-planning-artifacts.zh.md",
-        ".ai-workflow/notes/implemented/process/2026-09-17-migrate-retired-adr-records-to-notes.i18n.yaml",
-        ".ai-workflow/notes/implemented/process/2026-09-17-migrate-retired-adr-records-to-notes.md",
-        ".ai-workflow/notes/implemented/process/2026-09-17-migrate-retired-adr-records-to-notes.zh.md",
+        ".ai-workflow/notes/archived/process/2026-09-17-migrate-retired-adr-records-to-notes.i18n.yaml",
+        ".ai-workflow/notes/archived/process/2026-09-17-migrate-retired-adr-records-to-notes.md",
+        ".ai-workflow/notes/archived/process/2026-09-17-migrate-retired-adr-records-to-notes.zh.md",
         ".ai-workflow/notes/implemented/process/2026-10-14-review-boundaries-and-repair.i18n.yaml",
         ".ai-workflow/notes/implemented/process/2026-10-14-review-boundaries-and-repair.md",
         ".ai-workflow/notes/implemented/process/2026-10-14-review-boundaries-and-repair.zh.md",
@@ -4257,9 +4263,9 @@
         ".ai-workflow/notes/implemented/process/2026-09-17-bilingual-planning-artifacts.i18n.yaml",
         ".ai-workflow/notes/implemented/process/2026-09-17-bilingual-planning-artifacts.md",
         ".ai-workflow/notes/implemented/process/2026-09-17-bilingual-planning-artifacts.zh.md",
-        ".ai-workflow/notes/implemented/process/2026-09-17-migrate-retired-adr-records-to-notes.i18n.yaml",
-        ".ai-workflow/notes/implemented/process/2026-09-17-migrate-retired-adr-records-to-notes.md",
-        ".ai-workflow/notes/implemented/process/2026-09-17-migrate-retired-adr-records-to-notes.zh.md",
+        ".ai-workflow/notes/archived/process/2026-09-17-migrate-retired-adr-records-to-notes.i18n.yaml",
+        ".ai-workflow/notes/archived/process/2026-09-17-migrate-retired-adr-records-to-notes.md",
+        ".ai-workflow/notes/archived/process/2026-09-17-migrate-retired-adr-records-to-notes.zh.md",
         ".ai-workflow/notes/implemented/process/2026-10-14-review-boundaries-and-repair.i18n.yaml",
         ".ai-workflow/notes/implemented/process/2026-10-14-review-boundaries-and-repair.md",
         ".ai-workflow/notes/implemented/process/2026-10-14-review-boundaries-and-repair.zh.md",
@@ -4341,7 +4347,10 @@
         "README.md",
         "MEMORY.md",
         ".ai-workflow/notes/implemented/process/2026-10-19-memory-governance.zh.md",
-        ".ai-workflow/notes/implemented/process/2026-10-19-memory-governance.i18n.yaml"
+        ".ai-workflow/notes/implemented/process/2026-10-19-memory-governance.i18n.yaml",
+        ".ai-workflow/notes/implemented/process/2026-10-19-memory-single-source.i18n.yaml",
+        ".ai-workflow/notes/implemented/process/2026-10-19-memory-single-source.md",
+        ".ai-workflow/notes/implemented/process/2026-10-19-memory-single-source.zh.md"
       ],
       "tests": [
         "tests/behavior/memory-governance-content.test.ts"
@@ -4360,7 +4369,10 @@
         "templates/agents/documentation-maintainer.md",
         "templates/project/AGENTS.md",
         "templates/project/MEMORY.md",
-        "tests/behavior/memory-governance-content.test.ts"
+        "tests/behavior/memory-governance-content.test.ts",
+        ".ai-workflow/notes/implemented/process/2026-10-19-memory-single-source.i18n.yaml",
+        ".ai-workflow/notes/implemented/process/2026-10-19-memory-single-source.md",
+        ".ai-workflow/notes/implemented/process/2026-10-19-memory-single-source.zh.md"
       ],
       "shared_entry": true
     }

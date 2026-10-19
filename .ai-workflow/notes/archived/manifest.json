@@ -1,4 +1,11 @@
 {
   "version": 1,
-  "files": {}
+  "files": {
+    "archived/process/2026-09-14-localize-adr-prose-at-install-time.md": "sha256:121a43e51d434bd96da36247f588aaaaf355f83ef0d647aba5ea10ed129b3768",
+    "archived/process/2026-09-14-localize-adr-prose-at-install-time.zh.md": "sha256:d8d79d862ffe09e4c249a2a274c426c514c760e75b4fcd5d9fc06d7e76e8173a",
+    "archived/process/2026-09-14-localize-adr-prose-at-install-time.i18n.yaml": "sha256:d838d4d44b7d63618971c2b9b6d19b82f10068b3c7c43aae05290ca75600fc88",
+    "archived/process/2026-09-17-migrate-retired-adr-records-to-notes.md": "sha256:05e0791287c1950a9c81a2f48ad15b22224703dce67071bf0f87902b62801c6f",
+    "archived/process/2026-09-17-migrate-retired-adr-records-to-notes.zh.md": "sha256:0fb26024b628b12d94969626f2fbd249354149f18472d490390e461a08c1bde9",
+    "archived/process/2026-09-17-migrate-retired-adr-records-to-notes.i18n.yaml": "sha256:37a0bb2835c56532f8a9112d076c596602be7d304a0565b29d48541fdb878885"
+  }
 }

@@ -16,7 +16,7 @@ The optional `output_language` key in `~/.config/ai-workflow/config.yaml` once l
 - Agent Notes and planning artifacts remain always-complete bilingual triplets, and no configuration selects their languages.
 - The planning skill's numbered workflow in `templates/skills/planning/SKILL.md` now drafts and writes all six frozen files (`spec.md`/`spec.zh.md`/`spec.i18n.yaml` and `plan.md`/`plan.zh.md`/`plan.i18n.yaml`) and treats `ai-workflow plan validate --plan <directory>` as a hard completion gate, so `spec.md` or `plan.md` is never frozen without its `.zh.md` and `.i18n.yaml`.
 - The `standards-review` role and README/MEMORY were updated to drop the preference language.
-- This record partially supersedes the `output_language` claims in [localize ADR prose at install time](../process/2026-09-14-localize-adr-prose-at-install-time.md), [bilingual note triplets](../process/2026-09-17-bilingual-note-triplets.md) and [bilingual planning artifacts](../process/2026-09-17-bilingual-planning-artifacts.md); those records keep their decisions and rationale, and their current language facts point here.
+- This record partially supersedes the `output_language` claims in [localize ADR prose at install time](../../archived/process/2026-09-14-localize-adr-prose-at-install-time.md), [bilingual note triplets](../process/2026-09-17-bilingual-note-triplets.md) and [bilingual planning artifacts](../process/2026-09-17-bilingual-planning-artifacts.md); those records keep their decisions and rationale, and their current language facts point here.
 
 ## Alternatives considered
 

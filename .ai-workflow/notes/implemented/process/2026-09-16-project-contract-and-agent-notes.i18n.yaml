@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 # ai-workflow notes pairing --project <project-root> --write .ai-workflow/notes/implemented/process/2026-09-16-project-contract-and-agent-notes.md
-2026-09-16-project-contract-and-agent-notes.md: 75af638f111ff7bf03fbc58f04b8d3f89771e475
-2026-09-16-project-contract-and-agent-notes.zh.md: 33aa2063cdfdb6846799b697fd9ea18d34d1197f
+2026-09-16-project-contract-and-agent-notes.md: 947a76ce2d4cba296c29ce1ba49406f39fa759fa
+2026-09-16-project-contract-and-agent-notes.zh.md: 9bc1fea4888847b037446a44b5cfacd4580e4103
