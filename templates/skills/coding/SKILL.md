@@ -183,7 +183,11 @@ Never weaken assertions, suppress failures or add unrelated compatibility layers
 Code comments, including class- and type-level documentation comments, describe
 durable behavior or rationale and never carry transient plan-internal identifiers
 such as task IDs, step numbers, phase numbers, `REQ`/`AC` IDs or plan directory
-names. Unrelated existing comments are not rewritten.
+names. One bounded exemption applies: test names, assertion labels, test-local
+constants and traceability comments may carry requirement and acceptance
+identifiers and plan labels that link a test to what it verifies, while note
+bodies, commit messages, product code comments and shipped documentation keep the
+full prohibition. Unrelated existing comments are not rewritten.
 
 ## Verification and Commit
 
