@@ -96,7 +96,10 @@ scope lists.
 Every command uses an explicit workdir and every packet path is an absolute path, never
 resolved against inherited parent cwd. Each leaf explicitly
 reads that repository's own `.ai-workflow/AGENTS.md`, `MEMORY.md`,
-`.ai-workflow/index/navigation.json` and `.ai-workflow/index/navigation.md`.
+`.ai-workflow/index/navigation.json` and `.ai-workflow/index/navigation.md`, except
+Spec Review, which reads only the repository contract as procedural authority plus its
+frozen requirement references, immutable commit range, neutral routing metadata and raw
+evidence paths and never receives plan or task files, notes as process acceptance requirements or accepted results.
 A native permission denial is a blocker, never permission to bypass the host or
 create a different worktree.
 
@@ -112,8 +115,22 @@ a completed side effect and never claims to remove already received content.
 ## Review and checkpoint record
 
 Delivery review covers that repository's tasks; the separate finalization review
-does not re-review delivered tasks. Findings requiring changes in a delivered child
-need out-of-scope support or a new plan; never reopen that child.
+does not re-review delivered tasks. Serial task commits supply each split repository
+range, an unsplit repository commits its checked implementation before review, and a
+checked repair or finalization pointer change is committed before its own review.
+Those commits imply no review PASS and no integration authorization, and after an
+accepted review no further content-changing or empty commit before integration may
+drift the reviewed HEAD. Both axes receive the same immutable HEAD with separate permitted payloads, and
+Spec Review receives only requirement references and the raw commit range, never plan
+or task files, implementation narrative, test execution reports, logs or pass claims,
+earlier findings or verdicts. Its raw range arrives only through Git Operator's packet-authorized
+gitignored evidence file paths and verified full SHAs, because the reviewer has only
+`read` and cannot read Git objects. A recheck is one fresh affected-axis batch; Spec
+Review receives only affected requirement references plus the updated range and
+repair code scope, and finalization uses only its own repository-local base and scope.
+Initial implementation and repair commits exist before Spec dispatch, and the
+workspace pointer commit stays finalization-only. Findings requiring changes in a
+delivered child need out-of-scope support or a new plan; never reopen that child.
 
 The single `implementation.yaml` follows the main lifecycle, with no extra run
 record, ledger or manifest. Workspace fields are:

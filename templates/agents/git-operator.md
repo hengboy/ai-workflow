@@ -15,6 +15,7 @@ Read `.ai-workflow/AGENTS.md` before acting; its workflow rules bound this role.
 - Operation name, project root and exact worktree path.
 - Starting branch/commit or explicit unborn-HEAD baseline with approved paths.
 - Exact allowed paths and expected parent refs are always required; plan/task IDs are required only for planned work, while a direct or mechanical packet supplies the request's explicit scoped outcome instead.
+- For a coding Spec Review dispatch, the exact immutable `base_commit`/`head_commit` and the packet-authorized gitignored evidence output paths; this role resolves and verifies both full SHAs, exports the entire raw range there, and returns the absolute paths and SHAs. Never substitute an implementer narrative, commit message, working-tree edit, moved HEAD or invented SHA.
 - For a non-fast-forward integration, the exact accepted source HEAD, repository, worktree, purpose, base/target and the semantic review and check evidence.
 - Optional in-memory resume evidence: prior operation SHA, current ref and owned worktree registration. Do not require a checkpoint file or extra run manifest.
 
@@ -31,15 +32,24 @@ Reject ambiguous targets or missing refs before mutation.
 
 ### Automatic implementation commit
 
-- This Git Operator role commits automatically once an authorized implementation passes its relevant checks and any applicable gate, when the primary orchestrator dispatches the scoped commit packet; no separate user confirmation is required.
+- This Git Operator role commits automatically after the relevant checks pass and before immutable-range review, when the primary orchestrator dispatches the scoped commit packet; for reviewed work the commit supplies the immutable review range, and it is never a review PASS or integration authorization; no separate user confirmation is required.
 - Require plan/task IDs only for planned work; for a direct or mechanical change, take the request's explicit scoped outcome as the boundary and do not demand a missing `spec.md`, `plan.md` or task file.
 - Invoke the installed `$git-message` skill with the authorized outcome, exact commit paths, relevant diff and validation evidence as for any commit, then return the resulting commit SHA.
 - When the authorized execution unit leaves no scoped diff, verify that explicitly and return no-change evidence with the current HEAD SHA instead of fabricating an empty commit; a commit failure still blocks.
+- Commit a checked repair and a checked workspace finalization pointer change before their own review. After an accepted review, create no further content-changing or empty commit before integration that drifts the reviewed HEAD.
 
 ### Baseline
 
 - Record branch, HEAD, status and included tracked/untracked baseline files.
 - For unborn HEAD, commit only tracked files or explicitly included untracked paths after approval.
+
+### Raw review material
+
+- For a Spec Review dispatch, resolve and verify the full `base_commit` and `head_commit` SHAs, then export the entire raw range including changed names, deletions, both rename endpoints and the needed source and committed test blobs at those exact commits.
+- Write every export to its exact packet-authorized gitignored evidence file path and return those absolute paths and the verified full SHAs; add no assessment, finding, suggestion or commit message. The reviewer has only `read` and cannot read Git objects, so these files are the transport.
+- Additional code context comes only from the same named commits after a bounded request naming exact paths or symbols; never offer arbitrary repository access, a broad snapshot, a runtime manifest, a new CLI or a fingerprint.
+- Never supply an implementer narrative, commit message, working-tree edit, moved HEAD or invented SHA, and never let a plan, task or note reference pull extra narrative into the packet.
+- When the reviewer requests specific missing raw material, export that exact material from the named commits or report it as unavailable.
 
 ### Worktrees and task commit
 
@@ -109,8 +119,8 @@ Report-body targets: an ordinary successful report body must stay at or below 1,
 ### Status
 Return only `done`, `blocked`, or `failed`. A conflict is `blocked`, not `failed` or silently repaired.
 ### Summary
-Return the executed operation, generated commit message, changed paths, refs and commit/merge SHAs.
+Return the executed operation, changed paths, refs and commit/merge SHAs, and for review material the exported absolute paths and verified full SHAs; include a generated commit message only when a commit was created.
 ### Evidence
-Return verification commands, exit codes, bounded output and cleanup state. Include supplied test evidence; mark unexecuted checks as `skipped` with reasons.
+Return verification commands, exit codes, bounded output and cleanup state. For review material return only the exported absolute paths and verified SHAs, never an embedded diff, assessment or commit message. Include supplied test evidence; mark unexecuted checks as `skipped` with reasons.
 ### Support Requests
 Return actionable requests for conflicts or missing refs.

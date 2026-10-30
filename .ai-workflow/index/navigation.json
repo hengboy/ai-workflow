@@ -4026,16 +4026,21 @@
         ".ai-workflow/notes/implemented/process/2026-09-22-change-routing.md",
         ".ai-workflow/notes/implemented/process/2026-09-23-planning-coding-session-boundary.md",
         ".ai-workflow/notes/implemented/process/2026-10-14-automatic-implementation-commit.md",
-        ".ai-workflow/notes/implemented/feature/2026-10-09-workspace-coding-orchestration.md"
+        ".ai-workflow/notes/implemented/feature/2026-10-09-workspace-coding-orchestration.md",
+        "templates/contract/AGENTS.md"
       ],
       "tests": [
+        "tests/behavior/coding-v2-content.test.ts",
+        "tests/behavior/notes-content.test.ts",
         "tests/behavior/planning-content.test.ts",
-        "tests/behavior/review-policy.test.ts"
+        "tests/behavior/prompt-context-transport.test.ts",
+        "tests/behavior/review-policy.test.ts",
+        "tests/behavior/workspace-workflow-content.test.ts"
       ],
       "depends_on": [],
       "relations": [],
       "owner_role": "shared",
-      "responsibility": "Delivered class-boundary review and repair policy: the change class is the only routine review trigger with Direct and Mechanical changes dispatching neither axis, Planning dispatching the Spec Review only and plan-to-tasks neither, one simultaneous full Spec/Standards pair after implementation and required checks before integration, an automatic one aggregate in-scope repair with at most one affected-axis targeted recheck, separate execution Status and review Verdict, and the accepted clean source HEAD compared by Git Operator before a distinct non-fast-forward delivery merge",
+      "responsibility": "Delivered class-boundary review and repair policy: the change class is the only routine review trigger with Direct and Mechanical changes dispatching neither axis, Planning dispatching the Spec Review only and plan-to-tasks neither, one simultaneous full Spec/Standards pair after implementation and required checks before integration, an automatic one aggregate in-scope repair with at most one affected-axis targeted recheck, separate execution Status and review Verdict, and the accepted clean source HEAD compared by Git Operator before a distinct non-fast-forward delivery merge. Coding Spec Review is requirement-only and static at one immutable base/head range with plan/task files, implementer narratives, runtime test artifacts, earlier findings and conversation history excluded, separate permitted payloads per axis, and the primary keeping Test command, exit status and evidence as the runtime gate; Planning remains a document review of the plain draft spec and plan only.",
       "read_scope": [
         ".ai-workflow/AGENTS.md",
         ".ai-workflow/notes/implemented/feature/2026-10-09-workspace-coding-orchestration.md",
@@ -4049,13 +4054,18 @@
         "templates/agents/git-operator.md",
         "templates/agents/spec-review.md",
         "templates/agents/standards-review.md",
+        "templates/contract/AGENTS.md",
         "templates/project/AGENTS.md",
         "templates/skills/coding/SKILL.md",
         "templates/skills/coding/references/workspace.md",
         "templates/skills/plan-to-tasks/SKILL.md",
         "templates/skills/planning/SKILL.md",
+        "tests/behavior/coding-v2-content.test.ts",
+        "tests/behavior/notes-content.test.ts",
         "tests/behavior/planning-content.test.ts",
-        "tests/behavior/review-policy.test.ts"
+        "tests/behavior/prompt-context-transport.test.ts",
+        "tests/behavior/review-policy.test.ts",
+        "tests/behavior/workspace-workflow-content.test.ts"
       ],
       "shared_entry": true
     },

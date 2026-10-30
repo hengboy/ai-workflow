@@ -125,19 +125,31 @@ describe('agent notes workflow content', () => {
     expect(contractText, `templates/project/AGENTS.md points at ${NOTES_README}`).toContain(NOTES_README);
   });
 
-  it('requires every workflow skill and role to explicitly load all four fixed contexts', async () => {
+  it('requires every workflow skill and role except Spec Review to explicitly load all four fixed contexts', async () => {
     const FIXED_CONTEXT = [
       '.ai-workflow/AGENTS.md',
       'MEMORY.md',
       '.ai-workflow/index/navigation.json',
       '.ai-workflow/index/navigation.md',
     ];
-    for (const path of WORKFLOW_ARTIFACTS) {
+    for (const path of WORKFLOW_ARTIFACTS.filter((p) => p !== 'templates/agents/spec-review.md')) {
       const text = await read(path);
       for (const fixed of FIXED_CONTEXT) {
         expect(text, `${path} explicitly loads ${fixed}`).toContain(fixed);
       }
     }
+  });
+
+  it('explicitly excepts Spec Review from automatic fixed-context and accepted-results loading', async () => {
+    const specReview = await read('templates/agents/spec-review.md');
+    expect(specReview, 'Spec Review declares the fixed-context exception').toMatch(
+      /except(?:ed|ion)?[^.\n]{0,160}Spec Review|Spec Review[^.\n]{0,160}except/i,
+    );
+
+    const contract = await read('templates/project/AGENTS.md');
+    expect(contract, 'common guidance excepts Spec Review from automatic fixed-context loading').toMatch(
+      /Spec Review[^.\n]{0,240}(?:except|not (?:automatically )?loaded|not load)/i,
+    );
   });
 
   it('documents the bilingual note triplet in the governance source and its consumers', async () => {
@@ -329,10 +341,12 @@ describe('agent notes workflow content', () => {
 
   it('keeps the review axes distinct: spec/plan acceptance authority versus project standards', async () => {
     const specReview = await read('templates/agents/spec-review.md');
-    // REQ-007: Spec Review uses the frozen spec and plan as its acceptance authority and must
-    // not promote MEMORY (project rules) into that acceptance authority.
-    expect(specReview, 'Spec Review is bounded by the frozen documents').toMatch(
-      /sole authorit(?:y|ies)[^.\n]*supplied spec, plan and task documents/i,
+    // REQ-007: mode-specific acceptance authority; MEMORY (project rules) is not acceptance authority.
+    expect(specReview, 'planning mode reviews draft spec and plan only').toMatch(
+      /Planning review mode[^.\n]{0,120}draft spec and plan/i,
+    );
+    expect(specReview, 'coding mode reviews frozen requirements and an immutable range').toMatch(
+      /Coding review mode[^.\n]{0,160}frozen requirement documents[^.\n]{0,120}immutable commit range/i,
     );
     expect(specReview, 'Spec Review does not treat MEMORY as acceptance authority').toMatch(/apply MEMORY standards/i);
 

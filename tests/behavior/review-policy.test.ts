@@ -370,6 +370,99 @@ describe('integration source-HEAD gate (REQ-005 / AC-009)', () => {
   });
 });
 
+/**
+ * Spec Review objectivity: coding review gets only frozen requirements and an immutable
+ * commit range supplied by Git Operator; no plan/tasks, summaries, test reports or prior
+ * findings. Static checks over shipped prompt artifacts.
+ */
+describe('Spec Review objective inputs (shipped policy)', () => {
+  it('restricts coding Spec Review to frozen requirements and an immutable commit range', async () => {
+    const specReview = flatten(await read(SPEC_REVIEW));
+
+    expect(specReview, 'coding Spec Review uses frozen spec/requirement documents').toMatch(
+      /frozen (?:spec|requirement) (?:document|documents)/i,
+    );
+    expect(specReview, 'coding Spec Review uses an immutable base/head commit range').toMatch(
+      /base_commit[^.\n]{0,80}head_commit|immutable[^.\n]{0,120}commit (?:range|range)/i,
+    );
+    expect(specReview, 'raw diff and source are supplied by Git Operator').toMatch(
+      /Git Operator[^.\n]{0,160}(?:raw diff|diff)/i,
+    );
+    expect(await read(SPEC_REVIEW), 'Spec Review stays read-only').toMatch(/^tools: \[read\]$/m);
+
+    // Coding input contract explicitly forbids Spec Review from receiving these.
+    const coding = flatten(await read(CODING));
+    expect(coding, 'coding forbids Spec Review receiving plans or tasks').toMatch(
+      /never provide[^.\n]{0,320}(?:plan or task|task or plan)/i,
+    );
+    expect(coding, 'coding forbids implementation summaries or self-assessments').toMatch(
+      /never provide[^.\n]{0,320}(?:self-assessment|implementation (?:narrative|summary))/i,
+    );
+    expect(coding, 'coding forbids test reports, logs or pass claims').toMatch(
+      /never provide[^.\n]{0,320}(?:runtime test artifact|test (?:report|log)|pass claim)/i,
+    );
+    expect(coding, 'coding forbids prior or other reviewer findings, verdicts or conversation').toMatch(
+      /never provide[^.\n]{0,320}(?:earlier findings|verdicts|conversation history)/i,
+    );
+  });
+
+  it('requires independent requirement-to-code mapping and blocks missing raw inputs', async () => {
+    const specReview = flatten(await read(SPEC_REVIEW));
+
+    expect(specReview, 'reviewer independently maps requirements and ACs to code').toMatch(
+      /independently[^.\n]{0,160}(?:map|maps)[^.\n]{0,120}(?:requirement|AC)/i,
+    );
+    expect(specReview, 'reviewer blocks for missing or ambiguous raw inputs').toMatch(
+      /block[^.\n]{0,160}(?:missing|ambiguous)[^.\n]{0,120}(?:input|range|diff)/i,
+    );
+    expect(specReview, 'static verdict does not replace runtime validation').toMatch(
+      /static verdict[^.\n]{0,160}(?:not|does not|never)[^.\n]{0,120}(?:replace|substitute)[^.\n]{0,120}(?:runtime|Test)/i,
+    );
+  });
+
+  it('excepts Spec Review from common fixed-context loading', async () => {
+    const contract = flatten(await read(CONTRACT));
+    expect(contract, 'common guidance excepts Spec Review from fixed-context loading').toMatch(
+      /Spec Review[^.\n]{0,240}(?:except|not (?:automatically )?loaded)/i,
+    );
+  });
+
+  it('dispatches the same immutable HEAD to both axes with separate payloads', async () => {
+    const coding = flatten(await read(CODING));
+    expect(coding, 'ordinary delivery dispatches one immutable HEAD to both axes').toMatch(
+      /same[^.\n]{0,120}(?:immutable )?HEAD[^.\n]{0,160}(?:both|two) (?:ax(?:is|es)|reviews?)/i,
+    );
+    expect(coding, 'axes receive separate permitted payloads, not identical evidence').toMatch(
+      /separate[^.\n]{0,160}(?:payload|evidence)/i,
+    );
+  });
+
+  it('keeps planning as document review without fictional commits', async () => {
+    const planning = flatten(await read(PLANNING));
+    expect(planning, 'planning reviews draft spec and plan only').toMatch(
+      /document review|draft (?:spec|plan)/i,
+    );
+    expect(planning, 'planning does not use a fictional commit').toMatch(
+      /no fictional commit|without (?:a )?commit/i,
+    );
+    expect(planning, 'planning has an independent restricted recheck').toMatch(
+      /independent[^.\n]{0,120}recheck/i,
+    );
+  });
+
+  it('keeps planning drafts and coding recheck/workspace boundaries distinct', async () => {
+    const planning = flatten(await read(PLANNING));
+    expect(planning, 'planning drafts need no fictional frozen or commit input').toMatch(
+      /no fictional commit|without (?:a )?commit/i,
+    );
+    for (const path of [CONTRACT, CODING, WORKSPACE_REFERENCE]) {
+      const text = flatten(await read(path));
+      expect(text, `${path} keeps coding restricted inputs for recheck`).toMatch(/recheck/i);
+    }
+    const coding = flatten(await read(CODING));
+    expect(coding, 'axes do not receive identical evidence').not.toMatch(/identical evidence/i);
+  });
+});
 describe('MEMORY no longer restates the review-closure policy (REQ-004 / AC-004)', () => {
   it('drops the findings-closure advisory and disposition clauses from MEMORY.md', async () => {
     const memory = flatten(await read('MEMORY.md'));
