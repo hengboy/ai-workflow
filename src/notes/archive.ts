@@ -3,29 +3,26 @@ import { join } from 'node:path';
 import { resolveProjectRoot } from '../context/paths.js';
 import { atomicWrite, exists, readJson } from '../utils/fs.js';
 import { sha256 } from '../utils/hash.js';
+import { archiveManifestPath, compareArchiveBaseline, readArchiveBaseline, type ArchiveManifest } from './archive-baseline.js';
 import { enumerateNotes, type NoteAnchor } from './index.js';
 import { notesRoot } from './pairing.js';
 import { validateNotePair } from './validate.js';
-
-const manifestPath = `${notesRoot}/archived/manifest.json`;
-
-type ArchiveManifest = { version: 1; files: Record<string, string> };
 
 function artifactKey(path: string): string {
   return path.slice(notesRoot.length + 1);
 }
 
-export async function sealArchive(project: string): Promise<{ sealed: string[] }> {
+export async function sealArchive(project: string, base?: string): Promise<{ sealed: string[] }> {
   const root = resolveProjectRoot(project);
-  const manifestFile = join(root, manifestPath);
+  const manifestFile = join(root, archiveManifestPath);
   let manifest: ArchiveManifest;
   try {
     manifest = await readJson<ArchiveManifest>(manifestFile);
   } catch (error) {
-    throw new Error(`${manifestPath}: archive manifest must be readable JSON (${error instanceof Error ? error.message : String(error)})`);
+    throw new Error(`${archiveManifestPath}: archive manifest must be readable JSON (${error instanceof Error ? error.message : String(error)})`);
   }
   if (!manifest || manifest.version !== 1 || !manifest.files || typeof manifest.files !== 'object' || Array.isArray(manifest.files)) {
-    throw new Error(`${manifestPath}: archive manifest must be { version: 1, files: { <path>: sha256:<hex> } }`);
+    throw new Error(`${archiveManifestPath}: archive manifest must be { version: 1, files: { <path>: sha256:<hex> } }`);
   }
   const existing = manifest.files;
 
@@ -33,6 +30,12 @@ export async function sealArchive(project: string): Promise<{ sealed: string[] }
     const path = join(root, notesRoot, key);
     if (!(await exists(path))) throw new Error(`${path}: sealed archived artifact is missing`);
     if (sha256(await readFile(path)) !== digest) throw new Error(`${path}: sealed archived artifact bytes changed`);
+  }
+
+  if (base !== undefined) {
+    const baseline = await readArchiveBaseline(root, base);
+    const violations = compareArchiveBaseline(archiveManifestPath, baseline, existing);
+    if (violations.length) throw new Error(violations.join('\n'));
   }
 
   const pending: NoteAnchor[] = [];

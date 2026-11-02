@@ -315,9 +315,9 @@ planning artifacts.
 
 - Before landing a change, load `.ai-workflow/AGENTS.md`, `.ai-workflow/notes/AGENTS.md` and `.ai-workflow/notes/README.md`; the README is the single source for note format, lifecycle, supersession and archive governance.
 - Create or update a note only for a lasting decision whose rationale code, tests and existing documentation cannot adequately explain; behavior changes, file counts and added tests are insufficient on their own, and local, mechanical, UI, copy and formatting changes without such lasting rationale are exempt. Reuse a still-accurate note that owns the same decision and keep its facts current in the same change; record a changed decision or lasting rationale as a new linked note.
-- When a decision lands, move its record to `implemented` and rewrite its body as delivered facts, not only its status. A changed decision or rationale requires a new note; assess related active-note supersession within scope.
-- Add relevant notes and governance to explicit bounded read/write scopes, never the entire notes history. After landing the note, run `ai-workflow notes validate --project <absolute-project-root>` and report the result.
-- The primary delegates the existing shell-based generation, pairing and validation commands to an existing shell-capable role with exact generated-artifact write authority; no additional maintenance command is introduced and no role tool set expands. The shipped-content and installation suites are static delivered evidence of the instruction contract, not a live compliance claim.
+- When a decision lands, move its record to `implemented` and rewrite its body as delivered facts, not only its status. A changed decision or rationale requires a new note; assess related active-note supersession within scope and report the full, partial or no supersession disposition of every identified record, completing in the same change any eligible archive, rejection, deletion or consolidation and keeping an independently useful, unsuperseded record active. A feature-addition note is consolidated into a later removal note and deleted only after that removal is complete under the README, with residual compatibility or data keeping a partial supersession record.
+- Add relevant notes and governance to explicit bounded read/write scopes, never the entire notes history. Never defer a known match to a later broad cleanup or require a repository-wide audit. After landing the note, run `ai-workflow notes validate --project <absolute-project-root>`; the ordinary check is filesystem-only, and a delivered note or archive scope also runs `ai-workflow notes validate --project <absolute-project-root> --base <true pre-change commit>` before review and integration. A commit that contains the change never proves itself.
+- The primary delegates the existing shell-based generation, pairing and base-gated validation or archive-seal commands to an existing shell-capable role with exact generated-artifact write authority; no additional maintenance command is introduced and no role tool set expands. The shipped-content and installation suites are static delivered evidence of the instruction contract, not a live compliance claim.
 
 ## Implementation Record
 
@@ -396,7 +396,7 @@ repository ownership and plain plan-ID references; also apply Note Maintenance a
   `failed`, never as `done`.
 - Negative cases and failure output are reported truthfully.
 - Screenshots remain under `.ai-workflow/plans/<planId>/screenshot/`.
-- Any lasting decision that required a note updated its relevant record and `ai-workflow notes validate` passed; changes without such lasting rationale added no note.
+- Any lasting decision that required a note updated its relevant record, reported and disposed every identified related active record in the same change and passed the base-gated `ai-workflow notes validate` with its true pre-change commit; changes without such lasting rationale added no note.
 - Return `done` only when all scoped checks pass and the `git-operator`
   sub-agent (Git Operator) returned the scoped commit SHA or verified no-change
   evidence with the current HEAD SHA; otherwise return `blocked` or `failed`

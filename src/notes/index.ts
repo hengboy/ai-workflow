@@ -30,13 +30,20 @@ export async function listNotes(project: string, options: { archived?: boolean }
     const segments = note.path.split('/');
     const filename = segments[4] ?? '';
     const lines = (await readFile(join(root, note.path), 'utf8')).split(/\r?\n/);
+    const archived = note.lifecycle === 'archived';
+    const titleLine = archived
+      ? lines.find((line) => line.startsWith('# Agent Note: '))
+      : lines[0];
+    const statusLine = archived
+      ? lines.find((line) => line.startsWith('Status: '))
+      : lines[2];
     entries.push({
       path: note.path,
-      title: /^# Agent Note: (.*)$/.exec(lines[0] ?? '')?.[1] ?? '',
+      title: /^# Agent Note: (.*)$/.exec(titleLine ?? '')?.[1] ?? '',
       lifecycle: note.lifecycle,
       class: segments[3] as typeof noteClasses[number],
       date: /^(\d{4}-\d{2}-\d{2})-/.exec(filename)?.[1] ?? '',
-      status: /^Status: (.*)$/.exec(lines[2] ?? '')?.[1] ?? '',
+      status: /^Status: (.*)$/.exec(statusLine ?? '')?.[1] ?? '',
     });
   }
   entries.sort((a, b) => a.path.localeCompare(b.path));

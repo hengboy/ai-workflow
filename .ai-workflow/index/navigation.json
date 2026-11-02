@@ -95,6 +95,7 @@
         "src/install/index.ts",
         "src/install/opencode-version.ts",
         "src/install/render.ts",
+        "src/notes/archive-baseline.ts",
         "src/notes/archive.ts",
         "src/notes/index.ts",
         "src/notes/pair.ts",
@@ -792,6 +793,36 @@
         {
           "file": "src/install/render.ts",
           "name": "renderSkills",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/notes/archive-baseline.ts",
+          "name": "ArchiveManifest",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/notes/archive-baseline.ts",
+          "name": "BaselineArchive",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/notes/archive-baseline.ts",
+          "name": "archiveManifestPath",
+          "kind": "variable",
+          "visibility": "public"
+        },
+        {
+          "file": "src/notes/archive-baseline.ts",
+          "name": "compareArchiveBaseline",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/notes/archive-baseline.ts",
+          "name": "readArchiveBaseline",
           "kind": "function",
           "visibility": "public"
         },
@@ -2299,6 +2330,31 @@
         },
         {
           "kind": "imports",
+          "from": "src/notes/archive-baseline.ts#archiveManifestPath",
+          "to": "src/notes/pairing.ts#notesRoot"
+        },
+        {
+          "kind": "imports",
+          "from": "src/notes/archive.ts#sealArchive",
+          "to": "src/notes/archive-baseline.ts#ArchiveManifest"
+        },
+        {
+          "kind": "imports",
+          "from": "src/notes/archive.ts#sealArchive",
+          "to": "src/notes/archive-baseline.ts#archiveManifestPath"
+        },
+        {
+          "kind": "imports",
+          "from": "src/notes/archive.ts#sealArchive",
+          "to": "src/notes/archive-baseline.ts#compareArchiveBaseline"
+        },
+        {
+          "kind": "imports",
+          "from": "src/notes/archive.ts#sealArchive",
+          "to": "src/notes/archive-baseline.ts#readArchiveBaseline"
+        },
+        {
+          "kind": "imports",
           "from": "src/notes/archive.ts#sealArchive",
           "to": "src/context/paths.ts#resolveProjectRoot"
         },
@@ -2471,6 +2527,21 @@
           "kind": "imports",
           "from": "src/notes/validate.ts#validateNotePair",
           "to": "src/utils/fs.ts#exists"
+        },
+        {
+          "kind": "imports",
+          "from": "src/notes/validate.ts#validateNotes",
+          "to": "src/notes/archive-baseline.ts#archiveManifestPath"
+        },
+        {
+          "kind": "imports",
+          "from": "src/notes/validate.ts#validateNotes",
+          "to": "src/notes/archive-baseline.ts#compareArchiveBaseline"
+        },
+        {
+          "kind": "imports",
+          "from": "src/notes/validate.ts#validateNotes",
+          "to": "src/notes/archive-baseline.ts#readArchiveBaseline"
         },
         {
           "kind": "imports",
@@ -3074,6 +3145,7 @@
         "src/install/index.ts",
         "src/install/opencode-version.ts",
         "src/install/render.ts",
+        "src/notes/archive-baseline.ts",
         "src/notes/archive.ts",
         "src/notes/index.ts",
         "src/notes/pair.ts",
@@ -4206,6 +4278,9 @@
         "README.md",
         "MEMORY.md",
         ".ai-workflow/notes/README.md",
+        ".ai-workflow/notes/implemented/process/2026-11-02-notes-maintenance-and-archive-validation.i18n.yaml",
+        ".ai-workflow/notes/implemented/process/2026-11-02-notes-maintenance-and-archive-validation.md",
+        ".ai-workflow/notes/implemented/process/2026-11-02-notes-maintenance-and-archive-validation.zh.md",
         ".ai-workflow/notes/implemented/process/2026-10-16-note-rationale-and-retention.md",
         ".ai-workflow/notes/implemented/process/2026-10-16-note-rationale-and-retention.zh.md",
         ".ai-workflow/notes/implemented/process/2026-10-16-note-rationale-and-retention.i18n.yaml",
@@ -4214,17 +4289,24 @@
         ".ai-workflow/notes/implemented/process/2026-09-16-project-contract-and-agent-notes.i18n.yaml",
         ".ai-workflow/notes/implemented/process/2026-10-19-archive-retention.i18n.yaml",
         ".ai-workflow/notes/implemented/process/2026-10-19-archive-retention.md",
-        ".ai-workflow/notes/implemented/process/2026-10-19-archive-retention.zh.md"
+        ".ai-workflow/notes/implemented/process/2026-10-19-archive-retention.zh.md",
+        "package.json",
+        "src/notes/archive-baseline.ts"
       ],
       "tests": [
-        "tests/behavior/notes-content.test.ts"
+        "tests/behavior/notes-content.test.ts",
+        "tests/integration/notes-archive-baseline-cli.test.ts",
+        "tests/unit/notes-archive-maintenance.test.ts"
       ],
       "depends_on": [],
       "relations": [],
       "owner_role": "shared",
-      "responsibility": "Governs Agent Notes creation by lasting decision rationale that code, tests and existing documentation cannot explain, and defines the keep, archive and delete retention outcomes, with the notes README as the single authoritative source.",
+      "responsibility": "Governs Agent Notes creation by lasting decision rationale that code, tests and existing documentation cannot explain, defines the keep, archive and delete retention outcomes including the explicit no-supersession outcome, and enforces archive integrity against an immutable Git baseline, with the notes README as the single authoritative source.",
       "read_scope": [
         ".ai-workflow/notes/README.md",
+        ".ai-workflow/notes/implemented/process/2026-11-02-notes-maintenance-and-archive-validation.i18n.yaml",
+        ".ai-workflow/notes/implemented/process/2026-11-02-notes-maintenance-and-archive-validation.md",
+        ".ai-workflow/notes/implemented/process/2026-11-02-notes-maintenance-and-archive-validation.zh.md",
         ".ai-workflow/notes/implemented/process/2026-09-16-project-contract-and-agent-notes.i18n.yaml",
         ".ai-workflow/notes/implemented/process/2026-09-16-project-contract-and-agent-notes.md",
         ".ai-workflow/notes/implemented/process/2026-09-16-project-contract-and-agent-notes.zh.md",
@@ -4233,6 +4315,8 @@
         ".ai-workflow/notes/implemented/process/2026-10-16-note-rationale-and-retention.zh.md",
         "MEMORY.md",
         "README.md",
+        "package.json",
+        "src/notes/archive-baseline.ts",
         "templates/agents/documentation-maintainer.md",
         "templates/agents/standards-review.md",
         "templates/project/notes/README.md",
@@ -4240,6 +4324,8 @@
         "templates/skills/plan-to-tasks/SKILL.md",
         "templates/skills/planning/SKILL.md",
         "tests/behavior/notes-content.test.ts",
+        "tests/integration/notes-archive-baseline-cli.test.ts",
+        "tests/unit/notes-archive-maintenance.test.ts",
         ".ai-workflow/notes/implemented/process/2026-10-19-archive-retention.i18n.yaml",
         ".ai-workflow/notes/implemented/process/2026-10-19-archive-retention.md",
         ".ai-workflow/notes/implemented/process/2026-10-19-archive-retention.zh.md"

@@ -165,17 +165,24 @@ plan.command('pairing')
 
 const projectOption = 'project root directory path; use . or an absolute path';
 const notes = program.command('notes');
-notes.command('validate').option('--project <project>', projectOption, process.cwd()).action(async ({ project }: { project: string }) => {
-  const result = await validateNotes(project);
-  print(result);
-  if (!result.valid) process.exitCode = 1;
-});
+notes.command('validate')
+  .option('--project <project>', projectOption, process.cwd())
+  .option('--base <commit>', 'compare the archive manifest at this pre-change commit')
+  .action(async ({ project, base }: { project: string; base?: string }) => {
+    const result = await validateNotes(project, base);
+    print(result);
+    if (!result.valid) process.exitCode = 1;
+  });
 notes.command('list').option('--project <project>', projectOption, process.cwd()).option('--archived').action(async ({ project, archived }: { project: string; archived?: boolean }) => {
   print({ entries: await listNotes(project, { archived: Boolean(archived) }) });
 });
-notes.command('archive').option('--project <project>', projectOption, process.cwd()).requiredOption('--seal').action(async ({ project }: { project: string }) => {
-  print(await sealArchive(project));
-});
+notes.command('archive')
+  .option('--project <project>', projectOption, process.cwd())
+  .requiredOption('--seal')
+  .option('--base <commit>', 'reject any archive manifest entry changed since this pre-change commit')
+  .action(async ({ project, base }: { project: string; base?: string }) => {
+    print(await sealArchive(project, base));
+  });
 notes.command('pairing')
   .option('--project <project>', projectOption, process.cwd())
   .option('--list', 'report the pairing state of every note without failing')

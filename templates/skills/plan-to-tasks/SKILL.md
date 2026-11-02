@@ -33,7 +33,7 @@ Directly read the fixed context: `.ai-workflow/AGENTS.md`, `MEMORY.md`, `.ai-wor
 
 Resolve known affected features through `ai-workflow context locate --project <absolute-project-root> --feature <id> --verify`; the root argument is the normalized project directory path, never its directory name. Build each task's `read_scope` from fixed context plus the locator's exact `read_order` paths. Do not search; `read_scope` must not use `src/`, `tests/` or the project root. For `missing_index`, `miss`, `stale` or `invalid`, request File Explorer with authorized module roots and use only its returned exact paths.
 
-Route note format, lifecycle, supersession and archive governance through `.ai-workflow/notes/README.md`, reached via `.ai-workflow/notes/AGENTS.md`; do not copy those rules into task files. Add only the relevant notes and governance files to a task's bounded read/write scope, as exact paths, and never require a task to read the entire notes history.
+Route note format, lifecycle, supersession and archive governance through `.ai-workflow/notes/README.md`, reached via `.ai-workflow/notes/AGENTS.md`; do not copy those rules into task files. Add only the relevant notes and governance files to a task's bounded read/write scope, as exact paths, and never require a task to read the entire notes history. A task that adds a note or disposes a related active record carries the exact existing triplet and active inbound-link paths from the plan as write scope; never defer a known match to a later broad cleanup or require a repository-wide audit.
 
 ## Work-boundary synchronization
 
@@ -52,7 +52,7 @@ Before drafting, read [the task template](references/task.md) for the full field
 - Map every REQ and AC to task coverage or separately declared workspace finalization coverage; explain intentional shared coverage.
 - Declare dependencies only for data, contract, ordering or overlapping-write constraints.
 - Ask File Explorer for exact paths when an entry, call chain or dependency is unknown.
-- A task landing a lasting decision whose rationale code, tests and existing documentation cannot adequately explain includes its note update, lifecycle transition and the `ai-workflow notes validate` check; local, mechanical, UI, copy and formatting changes without such lasting rationale are exempt.
+- A task landing a lasting decision whose rationale code, tests and existing documentation cannot adequately explain includes its note update, lifecycle transition, the disposition of every identified related active record in the same change and the `ai-workflow notes validate` check; local, mechanical, UI, copy and formatting changes without such lasting rationale are exempt.
 
 ## Coverage and DAG checks
 

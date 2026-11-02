@@ -25,6 +25,7 @@ The notes README required a note for every non-mechanical change, and the five w
 ## Consequences
 
 - The README remains the single governance source and now carries both the creation criterion and the retention outcomes; the five consumers point to it instead of restating an unconditional trigger.
+- The 2026-11-02 [notes maintenance and archive baseline validation record](./2026-11-02-notes-maintenance-and-archive-validation.md) partially supersedes this record's retention disposition: it adds same-change supersession dispositions and explicit complete-removal evidence for feature-addition consolidation and keeps an independently useful related record active, and this record's creation criterion and keep, archive and delete outcomes remain current.
 - The 2026-09-16 [project contract and Agent Notes record](./2026-09-16-project-contract-and-agent-notes.md) is partially refined: its project-contract and notes-mechanism decision stands, while the creation obligation and retention boundaries now live in the README this record describes.
 - Existing decisions still require factual upkeep: a renamed path, symbol or default is corrected in place, and only a changed recorded decision or its lasting rationale creates a new note.
 - The delivery is structural only: the shipped-content checks and `ai-workflow notes validate` prove format, structure, pairing and links, but cannot prove that a recorded rationale is truthful or sufficient, which semantic review establishes separately.

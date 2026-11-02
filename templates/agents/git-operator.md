@@ -38,6 +38,12 @@ Reject ambiguous targets or missing refs before mutation.
 - When the authorized execution unit leaves no scoped diff, verify that explicitly and return no-change evidence with the current HEAD SHA instead of fabricating an empty commit; a commit failure still blocks.
 - Commit a checked repair and a checked workspace finalization pointer change before their own review. After an accepted review, create no further content-changing or empty commit before integration that drifts the reviewed HEAD.
 
+### Note and archive base gate
+
+- Before committing a scoped change to note triplets, archived artifacts or `archived/manifest.json`, run `ai-workflow notes validate --project <root> --base HEAD`; the pre-commit HEAD is the pre-change commit.
+- Before review or integration, run `ai-workflow notes validate --project <root> --base <true unit base>` for the delivered notes scope, and pass the same true pre-change base to `ai-workflow notes archive --project <root> --seal --base <commit>` when the unit seals archived artifacts.
+- Use only the packet's existing shell delegation and exact paths. Never substitute a commit that contains the change, and never expand the authorized scope silently.
+
 ### Baseline
 
 - Record branch, HEAD, status and included tracked/untracked baseline files.

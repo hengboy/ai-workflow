@@ -18,7 +18,7 @@ Status: implemented
 - `MEMORY.md` 记录当前标准（how），notes 记录原因（why），两者在同一变更内保持一致。
 - 每篇 note 最初使用一种正文语言并遵循既有 `output_language`；`# Agent Note:` 标题、段落标题、字段名、`Status` 取值、路径与日期保持英文，不生成翻译副本、sidecar 或集中式索引。2026-09-17 的[双语 note 配对记录](./2026-09-17-bilingual-note-triplets.md)取代了这条单语言规则：每篇 note 现在都带有英文、中文与一致性记录三个同级文件，结构性元素保持英文，并且仍不生成集中式索引。
 - 生命周期固定为 `proposed`、`implemented`、`rejected`、`archived`，类别固定为 `architecture`、`bug-fix`、`feature`、`process`、`simplification`、`testing`。状态必须与所在目录一致，implemented 记录改用 Decision 与 Consequences 描述已交付事实，不能只修改状态行。
-- 归档只允许在语义审阅后移动 implemented 记录、插入归档日期并修复 active 入站链接；封存后字节由 `.ai-workflow/notes/archived/manifest.json` 的摘要保护。`ai-workflow notes archive --project <root> --seal` 先校验所有既有条目再原子追加新条目，失败不写清单，也不重建清单来接受已修改的历史。
+- 归档只允许在语义审阅后移动 implemented 记录、插入归档日期并修复 active 入站链接；封存后字节由 `.ai-workflow/notes/archived/manifest.json` 的摘要保护。`ai-workflow notes archive --project <root> --seal [--base <commit>]` 先校验所有既有条目再原子追加新条目，失败不写清单，也不重建清单来接受已修改的历史；带 `--base` 时还会比较该变更前提交记录的每个归档路径与摘要。
 - 项目升级使用显式入口 `ai-workflow init <project> --upgrade`：要求既有 `.ai-workflow/`、`MEMORY.md` 与两份导航；通过现与 `ai-workflow sync` 共享的 `applyTemplateSnapshot` 核心把五个无标记生成文件作为完整文件替换，创建缺失的管理结构、类别目录与精确忽略条目，跳过完全一致的目标，并随 `synchronized`、`unverified`、`needs_attention`、`pending`、`conflict` 与 `failed` 状态报告 `created`、`updated` 与 `skipped`。由于随附模板没有解析出的上游提交，升级记录空本地来源并报告 `needs_attention` 与未验证本地来源警告，而不声称上游新鲜度；`ai-workflow sync`、其[项目模板同步记录](../feature/2026-10-08-project-template-sync.md)与[生成的本地项目指令](../simplification/2026-10-10-generated-local-instructions.md)部分取代本条目，而缺失前置条件冲突与写入前精确的退役 ADR 祈使守卫保持不变。
 - 用户历史数据保留：既有 `.ai-workflow/adr/` 文件、冻结计划、用户配置与已有 notes 正文都按原字节保留，不删除、不转换，也不进入 notes 的列表、校验与搜索。
 
@@ -36,7 +36,7 @@ Status: implemented
 - 本次升级在本项目创建了 29 个生命周期与类别目录以及 6 个管理文件，`created` 列出全部产物且 `skipped` 为空；既有 `.ai-workflow/adr/` 历史、冻结计划与导航的字节未被改写。
 - 旧记录机制的模块、命令、初始化分支、模板与现行指令被整体移除，发布物不再提供其列表功能；历史文件仅是本地数据，不再被读取。代价是历史资料不再被工具索引，需要人工查阅。
 - notes 的语义正确性仍依赖人工审阅：机械校验只覆盖路径、日期、标题、状态与必需段落顺序、active 相对链接以及归档清单一致性，不能证明内容真实或决定已经交付。
-- 归档是不可逆的字节冻结：封存后修改、移动、删除，或传入已被修改的历史文件，都会被 validate 与 `--seal` 拒绝；代价是历史 note 的出站链接可能过时且不再修复。
+- 归档是不可逆的字节冻结：封存后修改、移动、删除，或传入已被修改的历史文件，都会被 validate 与 `--seal` 拒绝；代价是历史 note 的出站链接可能过时且不再修复。2026-11-02 的[notes 维护与归档基准校验记录](./2026-11-02-notes-maintenance-and-archive-validation.md)以不可变 Git 基准与明确的 archived 格式例外部分细化该归档机制，而封存机制与字节冻结保持不变。
 - 落地时 notes 树为空：加入本记录前 `notes list` 返回空列表，因此当时没有需要保留、合并或交叉链接的既有记录。此后 2026-09-17 的一次性迁移把五篇既有 ADR 记录补齐为 implemented notes 并建立交叉链接，见[迁移退役 ADR 记录到 notes](../../archived/process/2026-09-17-migrate-retired-adr-records-to-notes.md)；本次升级自身没有转换、读取或删除历史文件。
 - 单一来源与用户历史的取舍是明确的：项目契约、notes 规范与导航 JSON 各自只有一个权威位置，而用户已有的本地历史文件保留原字节但不再是受支持的工作流输入。
 - 本记录确立的 note 创建与保留义务被 2026-10-16 的[note 理由与保留记录](./2026-10-16-note-rationale-and-retention.md)部分细化：现在只有代码、测试与现有文档无法充分解释的持久决定理由才需要 note，保留、归档与删除结果位于 `.ai-workflow/notes/README.md`，而本记录的项目契约与 notes 机制决定保持不变。

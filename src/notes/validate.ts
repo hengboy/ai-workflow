@@ -3,6 +3,7 @@ import { basename, join, posix } from 'node:path';
 import { resolveProjectRoot } from '../context/paths.js';
 import { exists, readJson } from '../utils/fs.js';
 import { sha256 } from '../utils/hash.js';
+import { archiveManifestPath, compareArchiveBaseline, readArchiveBaseline, type ArchiveManifest } from './archive-baseline.js';
 import { enumerateNotes, noteClasses, noteLifecycles, type NoteAnchor } from './index.js';
 import {
   blobHash,
@@ -13,9 +14,6 @@ import {
   structureDiff,
   noteStructureSignature,
 } from './pairing.js';
-
-const manifestPath = `${notesRoot}/archived/manifest.json`;
-type ArchiveManifest = { version: 1; files: Record<string, string> };
 
 const implementedSections = ['Problem', 'Decision', 'Alternatives considered', 'Consequences'];
 const requiredSections = {
@@ -31,6 +29,15 @@ function validDate(value: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || value.startsWith('0000-')) return false;
   const date = new Date(`${value}T00:00:00.000Z`);
   return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}
+
+function archivedDate(contents: string): string | undefined {
+  const lines = contents.split(/\r?\n/);
+  const status = lines.findIndex((line) => line.startsWith('Status:'));
+  if (status === -1 || lines[status] !== 'Status: implemented') return undefined;
+  const archived = /^Archived: (\d{4}-\d{2}-\d{2})$/.exec(lines[status + 1] ?? '');
+  const date = archived?.[1];
+  return date && validDate(date) ? date : undefined;
 }
 
 export function validateEnglishName(path: string): string[] {
@@ -49,10 +56,21 @@ export function validateFormat(
 ): string[] {
   const errors: string[] = [];
   const lines = contents.split(/\r?\n/);
+  if (lifecycle === 'archived') {
+    const status = lines.findIndex((line) => line.startsWith('Status:'));
+    if (status === -1 || lines[status] !== 'Status: implemented') {
+      errors.push('Status must be implemented for lifecycle archived');
+    }
+    const archived = /^Archived: (\d{4}-\d{2}-\d{2})$/.exec(lines[status + 1] ?? '');
+    if (status === -1 || !archived || !validDate(archived[1] ?? '')) {
+      errors.push('Archived must immediately follow Status with a real YYYY-MM-DD date');
+    }
+    return errors.map((error) => `${path}: ${error}`);
+  }
   if (!/^# Agent Note: \S.*$/.test(lines[0] ?? '') || lines[1] !== '') {
     errors.push('fixed title header must be # Agent Note: <title> followed by a blank line');
   }
-  const expectedStatus = lifecycle === 'archived' ? 'implemented' : lifecycle;
+  const expectedStatus = lifecycle;
   const validStatus = expectedStatus === 'rejected'
     ? /^Status: rejected — \S.*$/.test(lines[2] ?? '')
     : lines[2] === `Status: ${expectedStatus}`;
@@ -60,12 +78,7 @@ export function validateFormat(
     const expected = expectedStatus === 'rejected' ? 'rejected — <one-line reason>' : expectedStatus;
     errors.push(`Status must be ${expected} for lifecycle ${lifecycle}`);
   }
-  let cursor = 3;
-  if (lifecycle === 'archived') {
-    const archived = /^Archived: (\d{4}-\d{2}-\d{2})$/.exec(lines[3] ?? '');
-    if (!archived || !validDate(archived[1] ?? '')) errors.push('Archived must immediately follow Status with a real YYYY-MM-DD date');
-    cursor = 4;
-  }
+  const cursor = 3;
   if (lines[cursor] !== '') errors.push('the header block must be followed by a blank line');
   else if (lines[cursor + 1] !== switcher) errors.push(`language switcher must be exactly "${switcher}"`);
   else if (lines[cursor + 2] !== '') errors.push('the language switcher must be followed by a blank line');
@@ -93,7 +106,7 @@ export function validateFormat(
     const heading = /^ {0,3}(#{1,6})\s+(.+?)\s*$/.exec(line);
     const headingMarker = heading?.[1];
     const title = heading?.[2]?.replace(/\s+#+$/, '');
-    if ((lifecycle === 'implemented' || lifecycle === 'archived') && title && planningSections.includes(title)) {
+    if (lifecycle === 'implemented' && title && planningSections.includes(title)) {
       errors.push(`planning section ${title} is not allowed in ${lifecycle} notes`);
     }
     if (headingMarker && headingMarker.length <= 2) {
@@ -157,6 +170,23 @@ async function validateLinks(root: string, path: string, lifecycle: typeof noteL
   return errors;
 }
 
+function validateArchivedDates(note: NoteAnchor, english: string, chinese: string | undefined): string[] {
+  const errors: string[] = [];
+  const fileDate = basename(note.path).slice(0, 10);
+  const englishDate = archivedDate(english);
+  const chineseDate = chinese === undefined ? undefined : archivedDate(chinese);
+  if (englishDate && validDate(fileDate) && englishDate < fileDate) {
+    errors.push(`${note.path}: Archived date ${englishDate} must not be earlier than the file name date ${fileDate}`);
+  }
+  if (chineseDate && validDate(fileDate) && chineseDate < fileDate) {
+    errors.push(`${note.zhPath}: Archived date ${chineseDate} must not be earlier than the file name date ${fileDate}`);
+  }
+  if (englishDate && chineseDate && englishDate !== chineseDate) {
+    errors.push(`${note.path}: Archived date ${englishDate} must match the Chinese counterpart date ${chineseDate}`);
+  }
+  return errors;
+}
+
 export async function validateNotePair(root: string, note: NoteAnchor, errors: string[]): Promise<void> {
   const english = await readFile(join(root, note.path), 'utf8');
   const switcher = englishSwitcher(note.path);
@@ -164,20 +194,25 @@ export async function validateNotePair(root: string, note: NoteAnchor, errors: s
   errors.push(...validateFormat(note.path, note.lifecycle, english, switcher));
   errors.push(...await validateLinks(root, note.path, note.lifecycle, english));
 
+  let chinese: string | undefined;
   if (!(await exists(join(root, note.zhPath)))) {
     errors.push(`${note.zhPath}: missing Chinese counterpart (.zh.md) for the note`);
   } else {
-    const chinese = await readFile(join(root, note.zhPath), 'utf8');
+    chinese = await readFile(join(root, note.zhPath), 'utf8');
     errors.push(...validateFormat(note.zhPath, note.lifecycle, chinese, chineseSwitcher(note.path)));
     errors.push(...await validateLinks(root, note.zhPath, note.lifecycle, chinese));
-    const counterpart = basename(note.path);
-    for (const difference of structureDiff(
-      noteStructureSignature(english, basename(note.zhPath)),
-      noteStructureSignature(chinese, counterpart),
-    )) {
-      errors.push(`${note.path}: ${difference}`);
+    if (note.lifecycle !== 'archived') {
+      const counterpart = basename(note.path);
+      for (const difference of structureDiff(
+        noteStructureSignature(english, basename(note.zhPath)),
+        noteStructureSignature(chinese, counterpart),
+      )) {
+        errors.push(`${note.path}: ${difference}`);
+      }
     }
   }
+
+  if (note.lifecycle === 'archived') errors.push(...validateArchivedDates(note, english, chinese));
 
   if (!(await exists(join(root, note.metaPath)))) {
     errors.push(`${note.metaPath}: missing consistency record (.i18n.yaml) for the note`);
@@ -197,34 +232,37 @@ export async function validateNotePair(root: string, note: NoteAnchor, errors: s
   if (entries.get(englishKey) !== blobHash(english)) {
     errors.push(`${note.metaPath}: recorded hash for ${englishKey} does not match the current English bytes; re-record with ai-workflow notes pairing --write`);
   }
-  if (await exists(join(root, note.zhPath))) {
-    const chinese = await readFile(join(root, note.zhPath), 'utf8');
+  if (chinese !== undefined) {
     if (entries.get(zhKey) !== blobHash(chinese)) {
       errors.push(`${note.metaPath}: recorded hash for ${zhKey} does not match the current Chinese bytes; re-record with ai-workflow notes pairing --write`);
     }
   }
 }
 
-async function validateArchive(root: string, archived: Map<string, NoteAnchor>, errors: string[]): Promise<void> {
+async function validateArchive(
+  root: string,
+  archived: Map<string, NoteAnchor>,
+  errors: string[],
+): Promise<Record<string, string> | undefined> {
   let manifest: ArchiveManifest;
   try {
-    manifest = await readJson<ArchiveManifest>(join(root, manifestPath));
+    manifest = await readJson<ArchiveManifest>(join(root, archiveManifestPath));
   } catch (error) {
-    errors.push(`${manifestPath}: archive manifest must be readable JSON (${error instanceof Error ? error.message : String(error)})`);
-    return;
+    errors.push(`${archiveManifestPath}: archive manifest must be readable JSON (${error instanceof Error ? error.message : String(error)})`);
+    return undefined;
   }
   const files = manifest?.files;
   if (manifest?.version !== 1 || !files || typeof files !== 'object' || Array.isArray(files)) {
-    errors.push(`${manifestPath}: archive manifest must be { version: 1, files: { <path>: sha256:<hex> } }`);
-    return;
+    errors.push(`${archiveManifestPath}: archive manifest must be { version: 1, files: { <path>: sha256:<hex> } }`);
+    return undefined;
   }
   for (const [key, digest] of Object.entries(files)) {
     if (!(await exists(join(root, notesRoot, key)))) {
-      errors.push(`${manifestPath}: entry ${key} has no archived artifact`);
+      errors.push(`${archiveManifestPath}: entry ${key} has no archived artifact`);
       continue;
     }
     if (typeof digest !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(digest)) {
-      errors.push(`${manifestPath}: entry ${key} must map to sha256:<hex>`);
+      errors.push(`${archiveManifestPath}: entry ${key} must map to sha256:<hex>`);
       continue;
     }
     if (sha256(await readFile(join(root, notesRoot, key))) !== digest) {
@@ -234,12 +272,13 @@ async function validateArchive(root: string, archived: Map<string, NoteAnchor>, 
   for (const note of archived.values()) {
     for (const artifact of [note.path, note.zhPath, note.metaPath]) {
       const key = artifact.slice(notesRoot.length + 1);
-      if (!(key in files)) errors.push(`${artifact}: archived artifact is not registered in ${manifestPath}`);
+      if (!(key in files)) errors.push(`${artifact}: archived artifact is not registered in ${archiveManifestPath}`);
     }
   }
+  return files;
 }
 
-export async function validateNotes(project: string): Promise<{ valid: boolean; errors: string[] }> {
+export async function validateNotes(project: string, base?: string): Promise<{ valid: boolean; errors: string[] }> {
   const root = resolveProjectRoot(project);
   const requiredPaths = [
     '.ai-workflow/AGENTS.md',
@@ -273,6 +312,16 @@ export async function validateNotes(project: string): Promise<{ valid: boolean; 
     await validateNotePair(root, note, errors);
     if (note.lifecycle === 'archived') archived.set(note.path, note);
   }
-  await validateArchive(root, archived, errors);
+  const currentFiles = await validateArchive(root, archived, errors);
+  if (base !== undefined) {
+    try {
+      const baseline = await readArchiveBaseline(root, base);
+      if (currentFiles !== undefined) {
+        errors.push(...compareArchiveBaseline(archiveManifestPath, baseline, currentFiles));
+      }
+    } catch (error) {
+      errors.push(error instanceof Error ? error.message : String(error));
+    }
+  }
   return { valid: errors.length === 0, errors };
 }
