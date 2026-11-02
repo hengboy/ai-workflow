@@ -40,7 +40,7 @@ async function projectWithNavigation(value: unknown): Promise<string> {
   await writeFile(join(project, 'src/workflow/parse.ts'), 'export function readPlan(): void {}\n');
   await writeFile(join(project, 'tests/unit/navigation-contract.test.ts'), '');
   await writeFile(join(project, '.ai-workflow/index/navigation.json'), `${JSON.stringify(value)}\n`);
-  await writeFile(join(project, '.ai-workflow/index/navigation.md'), '# Feature navigation\n\n| Feature | Entries | Public Symbols | Related Files | Tests | Read Scope | Owner | Responsibility |\n| --- | --- | --- | --- | --- | --- | --- | --- |\n| workflow parsing | src/workflow/parse.ts | src/workflow/parse.ts#readPlan |  | tests/unit/navigation-contract.test.ts | src/workflow/parse.ts, tests/unit/navigation-contract.test.ts | frontend | frozen-plan validation |\n');
+  await writeFile(join(project, '.ai-workflow/index/navigation.md'), '# Feature navigation\n\n| Feature | Owner | Entry | Responsibility | Locate |\n| --- | --- | --- | --- | --- |\n| workflow-parsing | frontend | src/workflow/parse.ts | frozen-plan validation | ai-workflow context locate --feature workflow-parsing --verify |\n');
   return project;
 }
 
