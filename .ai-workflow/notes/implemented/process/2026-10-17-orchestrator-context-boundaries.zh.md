@@ -11,7 +11,7 @@ Status: implemented
 ## Decision
 
 - 受委派的子代理结果保留契约规定的 `## Output checklist` Markdown 形态，并增加上限：每条 `### Evidence` 条目携带产物绝对路径或明确的报告引用，外加至多一句结论，且禁止内嵌 diff、日志、JSON 正文或代码块。测试日志、`workspace status` JSON 和构建输出等大型输出写入 `<plan-directory>/reports/<taskId>.log`——写作仓库自身的计划目录，在工作区模式下为各仓库的切片计划目录——位于写作叶子经任务包授权的输出路径之内；该报告路径被 git 忽略且永不提交。当主编排者必须消化此类输出时，它派发一个全新的只读子代理会话（例如绑定到报告路径的 `file-explorer`，或在需要命令裁决时的 `test`），由其返回一条有界结论，原始内容绝不进入主编排者的上下文。主编排者自身的输出保持在决策层级，交接用的可复制提示、有界支持或恢复请求，以及最终报告除外。
-- 任务包仅以绝对路径加版本锚点传输冻结的固定上下文——项目契约、`MEMORY.md` 与两份导航文件——和冻结的计划文件：固定上下文用工作区基线提交或 blob 锚点，计划文件用冻结摘要；其内容绝不内联。主编排者在会话开始时一次性读取固定上下文，作为可复用的前缀，且不再按任务重新注入内容；每个叶子按任务包契约显式读取本仓库的固定上下文与冻结计划文件，对于计划引用的已索引功能，它运行 `ai-workflow context locate --project <root> --feature <id> --verify` 并读取其 `read_order` 输出中的确切路径。不提供全量重新注入模式。
+- 任务包仅以绝对路径加版本锚点传输冻结的固定上下文——项目契约、`MEMORY.md` 与角色获授权的导航条目或按需目录——和冻结的计划文件：固定上下文用工作区基线提交或 blob 锚点，计划文件用冻结摘要；其内容绝不内联。主编排者在会话开始时一次性读取固定上下文，作为可复用的前缀，且不再按任务重新注入内容；每个叶子按任务包契约显式读取本仓库的固定上下文与冻结计划文件，对于计划引用的已索引功能，它运行 `ai-workflow context locate --project <root> --feature <id> --verify` 并读取其 `read_order` 输出中的确切路径。不提供全量重新注入模式。
 - 对于带检查点记录的工作区执行——父级编排与切片——主编排者只可在干净的、完全检查点的阶段边界或已验证的仓库交付边界主动重建其上下文，从冻结的排程、任务文件、各仓库的实施记录与 `workspace status` 投影重新推导状态，绝不从对话历史推导。继续之前，它以只读方式确认已记录的检查点 SHA 与 Git 对象一致、`workspace status` 无漂移，且没有提交缺少检查点。禁止在脏的或部分的阶段、有提交而无检查点的缺口或未知进度处丢弃上下文；当上下文压力出现在阶段中途时，主编排者先把在途任务推进到最近的已验证边界并在那里重启，若无法到达干净边界则以有界支持报告 `blocked`。被恢复的会话遵循冻结排程，绝不重算 DAG 或跳过任务，而普通拆分或未拆分计划保留其既有的全新会话恢复。
 - 交付的规则作为提示词指导写入 `templates/skills/coding/SKILL.md`、`templates/skills/coding/references/workspace.md` 和 `templates/project/AGENTS.md` 及其受跟踪的 `.ai-workflow/AGENTS.md` 副本；`MEMORY.md` 记录同一标准，导航索引记录该功能及其生成的 Markdown。不引入协调者、阶段代理、运行时调度器或已测得性能声明。
 
@@ -32,3 +32,4 @@ Status: implemented
 - [Fresh sub-agent sessions for completed roles](./2026-10-14-fresh-subagent-sessions.md) 保留其已完成会话边界决策；本记录不取代它，并在全新会话规则之上增加证据、传输与重建边界。
 - [Parent workspace coding orchestration](../feature/2026-10-09-workspace-coding-orchestration.md) 保留其激活、工作区、检查点与审阅决策；本记录保留并交叉链接它，以检查点边界主动重建部分地扩展其恢复措辞，而不取代其有界恢复规则。
 - [Portable prompt transport and deterministic document maintenance](./2026-10-19-prompt-context-transport.md) 部分取代本记录的报告与任务包指导：它统一整体报告目标、当前阶段读取边界与全新只读摘要边界，而本记录保留其证据边界、路径传输与主动重建决策。
+- Partial supersession: [Workflow semantics, durable state progression and role-scoped context](./2026-11-02-workflow-semantics-context.md) 仅用角色限定获取取代本记录的两份导航文件传输事实；本记录保留其证据、传输与主动重建决策。

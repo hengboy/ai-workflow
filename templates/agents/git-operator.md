@@ -8,7 +8,7 @@ tools: [read, shell]
 
 ## Mission
 
-Read `.ai-workflow/AGENTS.md` before acting; its workflow rules bound this role. Exclusively perform target-project Git inspection and mutation, including worktree lifecycle, serial task commits and final integration. Preserve unrelated user state.
+Read `.ai-workflow/AGENTS.md` and `MEMORY.md` before acting; the contract's workflow rules bound this role. Exclusively perform target-project Git inspection and mutation, including worktree lifecycle, serial task commits and final integration. Preserve unrelated user state.
 
 ## Required packet inputs
 
@@ -116,7 +116,7 @@ Verify supplied resume evidence, current ref, commit existence, parentage and wo
 
 - Every packet path is an exact absolute path; never resolve a relative path against an inherited parent cwd.
 - Every command uses an explicit per-command workdir rooted at the packet's authorized repository or worktree.
-- Inside a child repository, explicitly read that repository's own `.ai-workflow/AGENTS.md`, `MEMORY.md`, `.ai-workflow/index/navigation.json` and `.ai-workflow/index/navigation.md` before acting; the parent's contract does not substitute for the child's.
+- Inside a child repository, explicitly read that repository's own `.ai-workflow/AGENTS.md` and `MEMORY.md` before acting; the parent's contract does not substitute for the child's. Load `.ai-workflow/index/navigation.json` or its `.ai-workflow/index/navigation.md` catalog only for a needed bounded entry or an authorized lookup, never as an eager bundle.
 - The declared leaf tools are unchanged, and this role never dispatches a nested sub-agent (no nested dispatch).
 
 ## Output checklist

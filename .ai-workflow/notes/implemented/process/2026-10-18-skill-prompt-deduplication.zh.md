@@ -27,7 +27,7 @@ Status: implemented
   - 九个代理解模板：`## Packet handling` 块各由 10 行内容压缩为 4 行内容（共删除 54 行），同时保留精确的绝对任务包路径、显式的逐命令 workdir、子仓库契约自读与 `no nested dispatch`；`## Output checklist` 块各失去两行冗余空行（共删除 18 行）。
   - git-operator 代理 `templates/agents/git-operator.md`：重复的定稿条目合并为单条权威指针提交表述（删除 5 行），保留整批 `git cat-file -e <sha>^{commit}` 存在性检查、绝不暂存部分批次规则以及精确的 `git update-index --cacheinfo 160000,<sha>,<path>` 指针写入命令。
   - 轻触文件（git-message、setup-ai-workflow、sync-ai-workflow 与 switch-profile 技能及其参考，以及规划与计划转任务的参考）：保持不变，因为在不动被断言句子的前提下不存在可移除的冗余。
-- **实测净缩减。** 23 个范围内的文件由 2142 行降至 2032 行（−110），超过至少 100 行的目标。逐文件终值：`templates/skills/coding/SKILL.md` 352→329、`templates/skills/coding/references/workspace.md` 256→252、`templates/skills/planning/SKILL.md` 153→150、`templates/skills/plan-to-tasks/SKILL.md` 142→139、`templates/agents/git-operator.md` 128→115、`templates/agents/test.md` 71→63、`templates/agents/spec-review.md` 70→62、`templates/agents/standards-review.md` 67→59、`templates/agents/researcher.md` 66→58、`templates/agents/frontend.md` 64→56、`templates/agents/backend.md` 63→55、`templates/agents/file-explorer.md` 63→55、`templates/agents/documentation-maintainer.md` 62→54；其余范围内的文件均未改变。
+- **历史实测净缩减。** 23 个范围内的文件在当时由 2142 行降至 2032 行（−110），超过当时的至少 100 行目标；这些计数属于历史测量，不是当前门槛，后续也没有任何行、字符、字节或缩减配额取代它们。逐文件终值：`templates/skills/coding/SKILL.md` 352→329、`templates/skills/coding/references/workspace.md` 256→252、`templates/skills/planning/SKILL.md` 153→150、`templates/skills/plan-to-tasks/SKILL.md` 142→139、`templates/agents/git-operator.md` 128→115、`templates/agents/test.md` 71→63、`templates/agents/spec-review.md` 70→62、`templates/agents/standards-review.md` 67→59、`templates/agents/researcher.md` 66→58、`templates/agents/frontend.md` 64→56、`templates/agents/backend.md` 63→55、`templates/agents/file-explorer.md` 63→55、`templates/agents/documentation-maintainer.md` 62→54；其余范围内的文件均未改变。
 - **无结构性变更。** 未引入跨文件引用链，也未引入主编排者内联或重读要求，且 frontmatter、标题与工具声明均未改变。
 
 ## Alternatives considered
@@ -35,13 +35,14 @@ Status: implemented
 - **整体重写提示模板。** 已否决：完全重写会改变规则措辞，破坏固定发布内容套件所依赖的逐字句子判据，从而在没有替代内容背书的情况下有丢失规范内容的风险。
 - **超出已登记簇的删除。** 已否决：未登记删除会在没有任何簇等价背书的情况下悄然弱化或丢弃规范内容。
 - **用跨文件指针替代复述。** 已否决：指针迫使主编排者阅读另一个文件，违反编排器上下文边界，以提示长度换取任务包模型并不提供的读取。
-- **保持文件原样。** 已否决：至少 100 行的净缩减目标与强制语气都无法达成。
+- **保持文件原样。** 已否决：当时的至少 100 行净缩减目标与强制语气都无法达成；该目标属于历史而非当前门槛。
 
 ## Consequences
 
-- 提示模板在保持工作流逻辑不变的前提下缩短 110 行，固定发布内容与安装测试套件在未编辑任何测试文件的情况下通过。
+- 提示模板当时在保持工作流逻辑不变的前提下测得缩短 110 行；该计数属于历史而非当前配额，固定发布内容与安装测试套件在未编辑任何测试文件的情况下通过。
 - 重复簇登记加等价规则可复用于后续措辞优化：新簇复用同一条仅移除重复的规则与同一逐字句子判据。
 - `MEMORY.md` 与导航索引保持不变，因为没有标准、路径、符号或所有权改变，本笔记记录其原因。
 - 强制语气政策使范围内文件中的每条规范性表述都明确，而 `may` 仅保留在真正的许可或可选字段语境中。
 - [Orchestrator context boundaries in delegated coding](./2026-10-17-orchestrator-context-boundaries.md) 保留其证据、传输与重建决策；本记录仅删除它们在已发布提示中的重复复述，未改变其中任何决策。
 - [Portable prompt transport and deterministic document maintenance](./2026-10-19-prompt-context-transport.md) 部分取代本记录有限的逐字重复做法，方法是在每个界面统一一份报告契约；本记录保留其重复簇登记、强制语气政策以及不删除任何被断言句子除非有等价替代的规则。
+- Partial supersession: [Workflow semantics, durable state progression and role-scoped context](./2026-11-02-workflow-semantics-context.md) 把本记录的行数与百分比测量标记为历史且非当前门槛；本记录保留其重复簇、等价与强制语气决策。

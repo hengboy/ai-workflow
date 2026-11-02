@@ -2,6 +2,7 @@
 
 | Feature | Owner | Entry | Responsibility | Locate |
 | --- | --- | --- | --- | --- |
+| workflow-semantics-context | shared | .ai-workflow/AGENTS.md | Delivered workflow semantics and role-scoped context authority: the project contract is the common source for delegated  | ai-workflow context locate --feature workflow-semantics-context --verify |
 | root | shared | eslint.config.js | Discovered typescript module at . | ai-workflow context locate --feature root --verify |
 | src | shared | src/context/discovery/adapters.ts | Discovered typescript module at src | ai-workflow context locate --feature src --verify |
 | templates | shared | templates/hooks/opencode.js | Discovered typescript module at templates | ai-workflow context locate --feature templates --verify |

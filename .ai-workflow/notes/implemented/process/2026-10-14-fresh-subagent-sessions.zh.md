@@ -12,7 +12,7 @@ Status: implemented
 
 - 返回执行状态 `done` 的子代理会话即告结束。后续向同名角色委派的任何任务、修复、验证或复验、文档和 Git 工作都必须开启新的原生子代理会话；绝不复用或恢复已完成会话，包括将其标识传入续接参数或任何其他续接机制。
 - 该规则是覆盖上述后续委派的同一边界；它不新增授权，也绝不把 `done` 结果当作审阅 PASS。复用角色名称并开启新会话仍然有效。
-- 新会话必须显式读取或完整接收当前必需的项目上下文、`MEMORY.md`、两份导航文件、项目契约、当前任务目标、准确的读写范围、允许的命令，以及相关已接受结果或可执行的审阅发现，而不是前一完整对话。
+- 新会话必须显式读取或完整接收当前必需的项目上下文、`MEMORY.md`、项目契约、按需的角色矩阵导航条目或目录、当前任务目标、准确的读写范围、允许的命令，以及相关已接受结果或可执行的审阅发现，而不是前一完整对话。
 - 理由是已完成任务上下文可能累积并降低有效性；新会话可限制这种累积，且不宣称已测得性能提升。
 - 该规则写入 `templates/project/AGENTS.md`（`## Orchestration`）、其受跟踪的 `.ai-workflow/AGENTS.md` 副本，以及 `coding` 技能的 `## Delegation and Scheduling`；`README.md` 和 `MEMORY.md` 记录同一标准，`navigation.json` 记录 `fresh-subagent-sessions` 功能及其生成的 Markdown。
 
@@ -29,3 +29,4 @@ Status: implemented
 - 范围明确的交付内容、安装传播和文档检查是静态验收边界；即使通过，也只证明提示词已交付，仍不证明宿主运行时强制执行、审阅接受或模型能力已实测提升。
 - [Review boundaries and repair](./2026-10-14-review-boundaries-and-repair.md) 保留其独立的审阅与修复决策，[Automatic implementation commit](./2026-10-14-automatic-implementation-commit.md) 保留其自动本地提交决策；本记录不取代其中任何一个，并保留既有的主会话恢复以及未完成或受阻处理。
 - 当宿主在后续同名角色委派后报告原生会话标识时，该标识是补充性宿主证据，不产生额外的工作流产物、夹具或对话记录。
+- Partial supersession: [Workflow semantics, durable state progression and role-scoped context](./2026-11-02-workflow-semantics-context.md) 仅用角色矩阵与有界导航条目取代本记录的两份导航文件上下文清单；本记录保留其已完成会话边界与新会话理由。

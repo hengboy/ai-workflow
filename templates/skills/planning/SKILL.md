@@ -24,11 +24,11 @@ If the project root or goal is missing, ask for that information before drafting
 
 ## Navigation-first context
 
-Before repository context work, directly read the fixed context: `.ai-workflow/AGENTS.md`, `MEMORY.md`, `.ai-workflow/index/navigation.json` and `.ai-workflow/index/navigation.md`. The contract governs the whole project and every participating agent; record absent `MEMORY.md` as a legal state.
+Before repository context work, directly read `.ai-workflow/AGENTS.md` and `MEMORY.md`; the contract governs the whole project and every participating agent, and an absent `MEMORY.md` is a legal state. Use the navigation catalog when locating an affected feature. Read `.ai-workflow/index/navigation.json` or its `.ai-workflow/index/navigation.md` catalog only for a needed bounded entry, an authorized index investigation, or a locator fallback; never eagerly read both navigation files.
 
-For a known feature run `ai-workflow context locate --project <absolute-project-root> --feature <id> --verify`, then read only its exact `read_order`. The root argument is the normalized project directory path, never its directory name. Do not search. For `missing_index`, `miss`, `stale` or `invalid`, request File Explorer with the original goal, status/reason and authorized module roots.
+For a known feature run `ai-workflow context locate --project <absolute-project-root> --feature <id> --verify`, then read only its exact `read_order`. The root argument is the normalized project directory path, never its directory name. Do not search. For `missing_index`, `miss`, `stale`, `invalid` or `ambiguous`, request File Explorer with the original goal, status/reason and authorized module roots; `stale`, `invalid` and `ambiguous` results need bounded resolution before reliance. A `hit` does not expand the plan's write scope.
 
-Each task's `read_scope` is fixed context plus exact locator paths and exact bounded paths for relevant notes/governance; it must not contain `src/`, `tests/` or the project root.
+Each task's `read_scope` is `.ai-workflow/AGENTS.md` and `MEMORY.md` plus exact locator paths and exact bounded paths for relevant notes/governance; include navigation JSON only when the task genuinely needs a bounded entry or an authorized index maintenance. It must not contain `src/`, `tests/` or the project root, and an old task scope that contains navigation JSON remains valid reading authorization.
 
 ## Work-boundary synchronization
 
@@ -43,11 +43,11 @@ When the project root declares submodules in its `.gitmodules` file, treat that 
 
 A workspace plan names the participating repositories and their dependency order. Confirm both as clarification questions, each in the numbered clarification prompt format: which declared repositories participate in this change, and which participating repository depends on which other participant. Fix the dependency order before drafting, because it sets the repository delivery order.
 
-Read each child's context through that child's own root: that repository's `own project contract` (`.ai-workflow/AGENTS.md`), its `MEMORY.md`, and `navigation through that repository's root`. Never substitute the workspace root's contract for a child's; each participating repository's own project contract governs that repository.
+Read each child's context through that child's own root: that repository's `own project contract` (`.ai-workflow/AGENTS.md`) and its `MEMORY.md`, plus navigation through that repository's root only for an authorized lookup or a needed bounded entry. Never substitute the workspace root's contract for a child's; each participating repository's own project contract governs that repository.
 
 Freeze `workspace_repos` and the `per-repository delivery boundary` using the mandatory plan template below. Its Workspace repositories and Workspace finalization sections define repository fields, root-prefix delivery, schedule constraints, cross-repository evidence and finalization authority; preserve those constraints in the plan.
 
-The workflow `stops before freezing` when a participating child `is not an initialized ai-workflow project` (missing `.ai-workflow/AGENTS.md`). Report the offending child and the repair `ai-workflow init <child> --upgrade`; never freeze a workspace plan whose participating child is uninitialized.
+The workflow `stops before freezing` when a participating child `is not an initialized ai-workflow project` (missing `.ai-workflow/AGENTS.md`). Report the offending child and, after the user explicitly authorizes setup, give its actual recovery: a child that never adopted ai-workflow uses ordinary `ai-workflow init <child>`, while an existing adoption whose `.ai-workflow/` directory, `MEMORY.md` and both navigation files exist uses `ai-workflow init <child> --upgrade`; missing prerequisites return an exact-path support request without overwriting local data. Never freeze a workspace plan whose participating child is uninitialized.
 
 Planning `schedules each repository's note` and `MEMORY.md` work `in that repository`, through its own notes and memory. Planning never distributes or writes a slice; the Completion checklist owns the split and session handoff and automatically invokes the `plan-to-tasks` preparation procedure for a child-participating workspace plan after the frozen pair passes `plan validate`.
 

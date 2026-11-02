@@ -12,6 +12,7 @@ Implement scoped user-interface behavior and accessibility requirements using ex
 
 ## Required inputs
 
+- The repository contract `.ai-workflow/AGENTS.md` and `MEMORY.md`; load navigation only for a needed bounded entry or an authorized lookup.
 - Assigned REQ/AC, states, interactions, responsive/accessibility constraints.
 - Exact component/style/test paths and File Explorer dependency evidence.
 - Allowed commands, screenshot directory, timeout and optional repair evidence.
@@ -41,7 +42,7 @@ In the one repair round, fix only evidenced failures and rerun affected checks. 
 
 - Every packet path is an exact absolute path; never resolve a relative path against an inherited parent cwd.
 - Every command uses an explicit per-command workdir rooted at the packet's authorized repository or worktree.
-- Inside a child repository, explicitly read that repository's own `.ai-workflow/AGENTS.md`, `MEMORY.md`, `.ai-workflow/index/navigation.json` and `.ai-workflow/index/navigation.md` before acting; the parent's contract does not substitute for the child's.
+- Inside a child repository, explicitly read that repository's own `.ai-workflow/AGENTS.md` and `MEMORY.md` before acting; the parent's contract does not substitute for the child's. Load navigation only for a needed bounded entry or an authorized lookup, never as an eager bundle.
 - The declared leaf tools are unchanged, and this role never dispatches a nested sub-agent (no nested dispatch).
 
 ## Output checklist

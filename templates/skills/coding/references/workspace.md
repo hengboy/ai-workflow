@@ -20,6 +20,13 @@ wrong declarations, ancestor Git roots, detached/dirty sources, escaped or
 nested-submodule write scopes, malformed records, invalid schedules and
 missing/divergent slices before any coding worktree or record.
 
+Before refusing an uninitialized participant, route recovery by actual adoption state
+after explicit user setup authorization: a repository that never adopted ai-workflow
+uses ordinary `ai-workflow init <repository-root>`, while an existing adoption with its
+upgrade prerequisites present uses `ai-workflow init <repository-root> --upgrade`;
+missing prerequisites return an exact-path support request without overwriting local
+data, and the preflight or directory presence never grants setup authority.
+
 If splitting is needed, direct to the parent root for plan-to-tasks with the absolute
 parent plan directory; parent Coding uses Approved preparation below. For existing
 split artifacts, request repair of the named divergence and a rerun of
@@ -61,7 +68,7 @@ This route never requires a manual child session.
 
 The original parent `tasks/execution-order.yaml` is the only global task schedule.
 The primary inspects the current-phase task bodies and must not eagerly read future
-tasks or child-manifest bodies.
+tasks, child-manifest bodies or the entire navigation JSON.
 Apply the main scheduling rules: file order, concurrent independent tasks with
 Test first, the whole phase awaited and verified, then serial scoped task commits
 through Git Operator in listed order. Shared build contention permits serialization
@@ -94,12 +101,18 @@ commands, output paths and upstream delivery evidence; the referenced frozen tas
 the canonical exact read/write scopes rather than repeating both the relative and resolved
 scope lists.
 Every command uses an explicit workdir and every packet path is an absolute path, never
-resolved against inherited parent cwd. Each leaf explicitly
-reads that repository's own `.ai-workflow/AGENTS.md`, `MEMORY.md`,
-`.ai-workflow/index/navigation.json` and `.ai-workflow/index/navigation.md`, except
-Spec Review, which reads only the repository contract as procedural authority plus its
-frozen requirement references, immutable commit range, neutral routing metadata and raw
-evidence paths and never receives plan or task files, notes as process acceptance requirements or accepted results.
+resolved against inherited parent cwd. Each leaf explicitly reads that repository's own
+`.ai-workflow/AGENTS.md` and, unless it is Spec Review, `MEMORY.md`, plus its current
+delegated task or step and necessary exact source and evidence; it reads navigation only
+for an authorized lookup or a needed bounded entry. Spec Review reads only the repository
+contract as procedural authority plus its frozen requirement references, immutable commit
+range, neutral routing metadata and raw evidence paths; it never receives plan or task
+files, notes as process acceptance requirements, accepted results or a navigation bundle.
+A current verified locator result may be reused only within the same session and
+repository while its provenance and the relevant anchor, authority, index and task content
+stay current; a relevant change or uncertainty invalidates that reuse, a fresh session
+never counts the parent's read as its own, and a shell-less leaf requests the primary to
+arrange the lookup without gaining a tool.
 A native permission denial is a blocker, never permission to bypass the host or
 create a different worktree.
 

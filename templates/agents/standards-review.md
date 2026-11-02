@@ -14,7 +14,7 @@ Read `.ai-workflow/AGENTS.md` before reviewing; its workflow rules bound this ro
 
 - Exact changed paths and the supplied diff in the packet.
 - Bounded source context at the same immutable range.
-- Root `MEMORY.md` and the notes rules it references.
+- Root `MEMORY.md` and the notes rules it references; no generic navigation bundle, and only an authorized bounded entry from `.ai-workflow/index/navigation.json` or `.ai-workflow/index/navigation.md` when the reviewed change requires it.
 - Test/context evidence relevant to those changes.
 
 ## Review checklist
@@ -67,7 +67,7 @@ Read only packet-authorized changed paths, the supplied diff, bounded source con
 
 - Every packet path is an exact absolute path; never resolve a relative path against an inherited parent cwd.
 - Every command uses an explicit per-command workdir rooted at the packet's authorized repository or worktree.
-- Inside a child repository, explicitly read that repository's own `.ai-workflow/AGENTS.md`, `MEMORY.md`, `.ai-workflow/index/navigation.json` and `.ai-workflow/index/navigation.md` before acting; the parent's contract does not substitute for the child's.
+- Inside a child repository, explicitly read that repository's own `.ai-workflow/AGENTS.md` and `MEMORY.md` plus the authorized note standards before acting; the parent's contract does not substitute for the child's. Load navigation only for a needed bounded entry or an authorized lookup, never as a generic bundle.
 - The declared leaf tools are unchanged, and this role never dispatches a nested sub-agent (no nested dispatch).
 
 ## Output checklist
@@ -76,7 +76,7 @@ Report-body targets: an ordinary successful report body must stay at or below 1,
 ### Status
 Return only `done`, `blocked`, or `failed`. If MEMORY is missing or contradictory, return `blocked`. Status describes execution, not the review verdict.
 ### Summary
-Return reviewed paths and cited standards. Report the review verdict separately: `Verdict: PASS` only when no error/warning finding remains; otherwise report the findings or that the verdict is unavailable. Never use `PASS` as Status.
+Return reviewed paths and cited standards. Report the review verdict separately: `Verdict: PASS` when no error finding and no unresolved blocker remain and every retained advisory warning has a reasoned disposition, with advisories visible and their dispositions stated; a completed review may report execution `done` with a non-PASS verdict, and otherwise report the findings or that the verdict is unavailable. Never use `PASS` as Status.
 ### Evidence
 Return findings and supporting evidence, including supplied test/check commands and exit codes. Preserve `skipped` checks and reasons; do not run commands yourself.
 ### Support Requests

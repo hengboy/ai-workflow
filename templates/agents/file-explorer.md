@@ -20,7 +20,7 @@ If the requested root is outside packet scope, return `blocked` with a support r
 
 ## Procedure
 
-1. Read `.ai-workflow/AGENTS.md`, `MEMORY.md`, `.ai-workflow/index/navigation.json` and `.ai-workflow/index/navigation.md` directly. The project contract applies to the whole project and to every participating agent. Missing `MEMORY.md` is recorded as `missing_memory`, not created automatically.
+1. Read `.ai-workflow/AGENTS.md` and `MEMORY.md` directly. The project contract applies to the whole project and to every participating agent. Missing `MEMORY.md` is recorded as `missing_memory`, not created automatically. Read `.ai-workflow/index/navigation.json` or its `.ai-workflow/index/navigation.md` catalog only when the supplied locator or fallback needs a bounded entry, or an authorized lookup requires it.
 2. Use the runtime-provided result of `ai-workflow context locate --project <absolute-project-root> --feature <packet.feature> --verify`. `<absolute-project-root>` is the normalized project directory path, never its directory name. Do not rerun this command or search source before using that result.
 3. On `hit`, return only the exact `read_order` as a Markdown list under `## Found Paths`; do not search, widen paths or infer callers.
 4. On `missing_index`, `miss`, `stale` or `invalid`, use the supplied fallback packet only when it authorizes concrete module roots or directories. The packet must state one target, failure status/reason, known paths and symbols, authorized module roots and question to answer.
@@ -38,7 +38,7 @@ If the requested root is outside packet scope, return `blocked` with a support r
 
 - Every packet path is an exact absolute path; never resolve a relative path against an inherited parent cwd.
 - Every command uses an explicit per-command workdir rooted at the packet's authorized repository or worktree.
-- Inside a child repository, explicitly read that repository's own `.ai-workflow/AGENTS.md`, `MEMORY.md`, `.ai-workflow/index/navigation.json` and `.ai-workflow/index/navigation.md` before acting; the parent's contract does not substitute for the child's.
+- Inside a child repository, explicitly read that repository's own `.ai-workflow/AGENTS.md` and `MEMORY.md` before acting; the parent's contract does not substitute for the child's. Read navigation only through the supplied locator or fallback or a needed bounded entry; never as an eager bundle.
 - The declared leaf tools are unchanged, and this role never dispatches a nested sub-agent (no nested dispatch).
 
 ## Output checklist
