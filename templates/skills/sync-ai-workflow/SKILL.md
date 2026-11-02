@@ -7,13 +7,13 @@ description: Synchronize an existing ai-workflow adoption's managed workflow ins
 
 ## Scope and cadence
 
-Refresh managed workflow instructions from upstream only on an explicit user request for a project already containing `.ai-workflow/`. First adoption, installer setup, host reinstallation and a repo-wide upgrade stay with the setup-ai-workflow skill.
+Refresh managed workflow instructions from upstream only on an explicit user request for a project already containing `.ai-workflow/`. First adoption, installer setup, host reinstallation and a repo-wide upgrade stay with the setup-ai-workflow skill; a project with no existing adoption cannot be synchronized into existence and needs explicit user-authorized ordinary initialization.
 
 Automatic synchronization runs once at each planning, coding or plan-to-tasks skill session start via `--phase --project <actual-root>`, stores the complete result for the actual root outside the project, and serves every later native host event from that stored per-root result with no source request. This manual skill performs a fresh, cache-independent synchronization and never replaces the stored gate decision. Do not start the automatic check here.
 
 ## Project context
 
-Before acting, explicitly read the project's `.ai-workflow/AGENTS.md`, `MEMORY.md`, `.ai-workflow/index/navigation.json` and `.ai-workflow/index/navigation.md`, or receive them through complete context injection. A Markdown link or an inherited parent read does not load them into this session. The project contract applies to the whole project and every participating agent.
+Before acting, explicitly read the project's `.ai-workflow/AGENTS.md` and `MEMORY.md`, or receive them through complete context injection; read `.ai-workflow/index/navigation.json` or its `.ai-workflow/index/navigation.md` catalog only for a needed bounded entry or an authorized lookup. A Markdown link or an inherited parent read does not load them into this session. The project contract applies to the whole project and every participating agent.
 
 ## CLI and source
 
@@ -38,7 +38,7 @@ The five generated workflow documents are replaced as complete files: differing 
 
 Root `MEMORY.md` is init-only and project-owned: synchronization never replaces, appends, normalizes or compares it against a template. Navigation, note bodies, the archive manifest and every other local or data artifact are preserved. Synchronization writes no product code, frozen plan or task file and performs no Git operation. Frozen planning artifacts are never synchronization input.
 
-A generated target with legacy `ai-workflow:section` comment markers is refused as a `conflict` before any write and requires manual replacement instead of a merge. A local shipped-template upgrade reports visible `needs_attention` with an unverified local-source warning until markerless upstream is available.
+A generated target with legacy `ai-workflow:section` comment markers is refused as a `conflict` before any write and requires manual replacement instead of a merge. A local shipped-template upgrade reports visible `needs_attention` with `proceed: true` and an unverified local-source warning, makes no upstream-freshness claim, and its exit 2 alone is not an execution failure.
 
 ## Report and decisions
 
@@ -53,7 +53,7 @@ Parse the manual CLI's `SyncReport`: `status`, `verified`, `proceed`, `check`, `
 | `conflict` | 1 | false | Stop; a structural, prerequisite or legacy-marker conflict wrote nothing. |
 | `failed` | 1 | false | Stop; publication failed or recovery did not restore the tree. |
 
-Only `synchronized` with `verified: true` means the artifacts are current; warnings proceed visibly without a freshness claim. A blocking `conflict` or `failed` stops ordinary work and reports affected paths. Never rely on the process exit code alone: warnings exit 2.
+Only `synchronized` with `verified: true` means the artifacts are current; warnings proceed visibly without a freshness claim. A blocking `conflict` or `failed` stops ordinary work and reports affected paths. Never rely on the process exit code alone: warnings exit 2, and exit 2 alone is not an execution failure when `proceed` is true.
 
 ## Native gate protocol
 

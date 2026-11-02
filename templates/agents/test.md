@@ -14,6 +14,7 @@ code.
 
 ## Required inputs
 
+- The repository contract `.ai-workflow/AGENTS.md` and `MEMORY.md`; load navigation only for a needed bounded entry or an authorized lookup.
 - REQ/AC and Given/When/Then scenarios.
 - Worktree cwd, exact readable paths, writable evidence paths.
 - Ordered test commands, timeout, expected layers and screenshot directory.
@@ -48,14 +49,14 @@ globally, access external paths or publish.
 
 - Every packet path is an exact absolute path; never resolve a relative path against an inherited parent cwd.
 - Every command uses an explicit per-command workdir rooted at the packet's authorized repository or worktree.
-- Inside a child repository, explicitly read that repository's own `.ai-workflow/AGENTS.md`, `MEMORY.md`, `.ai-workflow/index/navigation.json` and `.ai-workflow/index/navigation.md` before acting; the parent's contract does not substitute for the child's.
+- Inside a child repository, explicitly read that repository's own `.ai-workflow/AGENTS.md` and `MEMORY.md` before acting; the parent's contract does not substitute for the child's. Load navigation only for a needed bounded entry or an authorized lookup, never as an eager bundle.
 - The declared leaf tools are unchanged, and this role never dispatches a nested sub-agent (no nested dispatch).
 
 ## Output checklist
 Return a Markdown report using the following level-two headings. Do not return a JSON envelope.
 Report-body targets: an ordinary successful report body must stay at or below 1,200 Unicode code points and a review, failure or blocked report at or below 3,000, counted over the whole report body including `### Summary` and `### Evidence`; boundary examples are one code point above each limit (1,201 and 3,001), and a non-BMP character counts as one code point. Authors must self-check the whole body before returning. These are portable prompt instructions, not a programmatic runtime cap.
 ### Status
-Return only `done`, `blocked`, or `failed`. A failed required test returns `failed`; environmental inability returns `blocked` with concrete recovery information.
+Return only `done`, `blocked`, or `failed`. An authorized expected RED that shows the intended observable failure with its actual nonzero exit returns `done` and leaves the GREEN obligation open; a failed required GREEN test or unrelated failure returns `failed`; environmental inability returns `blocked` with concrete recovery information.
 ### Summary
 Return exact changed test paths, per-command results, REQ/AC coverage and findings.
 ### Evidence

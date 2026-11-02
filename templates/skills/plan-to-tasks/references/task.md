@@ -39,7 +39,7 @@ Replace every placeholder with usable values for all applicable fields:
 - `depends_on`: task IDs justified by data, contract, ordering or overlapping-write constraints, subject to Repository scope below.
 - `repo`: the conditional repository assignment below; remove the illustrative field for a non-workspace plan.
 - `surface`: non-empty `backend|frontend|cross-stack|test|docs|research|documentation`, converted from the plan's `Responsible role`. `research` delegates every technology, project, concept, topic or keyword research request to Researcher, whether or not links are supplied; `documentation` routes non-code documentation and index maintenance to Documentation Maintainer.
-- `read_scope`: fixed context (`.ai-workflow/AGENTS.md`, `MEMORY.md`, both navigation files) plus exact locator paths and exact bounded note/governance paths. Never use `src/`, `tests/` or the project root.
+- `read_scope`: the project contract (`.ai-workflow/AGENTS.md`) and `MEMORY.md` plus exact locator paths and exact bounded note/governance paths. The navigation JSON and Markdown catalog may be listed as permitted context, but that authorization never requires eagerly reading them; load them only for a needed bounded entry or an authorized index maintenance. Never use `src/`, `tests/` or the project root, and an old task scope that contains navigation JSON remains valid reading authorization.
 - `write_scope`: exact enough for filesystem enforcement; never `.`, the project root, `**`, unresolved placeholders or broad directories with unclear ownership.
 - `test_commands`: assigned validation commands; state expected evidence in the body. Place frontend/backend checks on their responsible tasks and add integration work only when cross-stack behavior requires it.
 

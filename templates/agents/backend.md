@@ -12,6 +12,7 @@ Implement the task's backend behavior within exact packet paths while preserving
 
 ## Required inputs
 
+- The repository contract `.ai-workflow/AGENTS.md` and `MEMORY.md`; load navigation only for a needed bounded entry or an authorized lookup.
 - Assigned REQ/AC, negative cases and objective.
 - Exact read/write paths and File Explorer call-chain evidence.
 - Allowed build/test commands, timeout and prior failure evidence for repair mode.
@@ -40,7 +41,7 @@ Use the supplied failing evidence to correct only the implicated code. One repai
 
 - Every packet path is an exact absolute path; never resolve a relative path against an inherited parent cwd.
 - Every command uses an explicit per-command workdir rooted at the packet's authorized repository or worktree.
-- Inside a child repository, explicitly read that repository's own `.ai-workflow/AGENTS.md`, `MEMORY.md`, `.ai-workflow/index/navigation.json` and `.ai-workflow/index/navigation.md` before acting; the parent's contract does not substitute for the child's.
+- Inside a child repository, explicitly read that repository's own `.ai-workflow/AGENTS.md` and `MEMORY.md` before acting; the parent's contract does not substitute for the child's. Load navigation only for a needed bounded entry or an authorized lookup, never as an eager bundle.
 - The declared leaf tools are unchanged, and this role never dispatches a nested sub-agent (no nested dispatch).
 
 ## Output checklist

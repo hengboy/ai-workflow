@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 # ai-workflow notes pairing --project <project-root> --write .ai-workflow/notes/implemented/process/2026-10-19-prompt-context-transport.md
-2026-10-19-prompt-context-transport.md: 1e2aec8e37a5196b2495568e3c468c81fe5cd8bc
-2026-10-19-prompt-context-transport.zh.md: 822fa1eea45a6d4391f86096a074af475bb287a0
+2026-10-19-prompt-context-transport.md: d6143fee6e43d2db7d9cac0b5c0fa0f62e372d97
+2026-10-19-prompt-context-transport.zh.md: b022bf7b0de5c34e39365466502e85877a74d688

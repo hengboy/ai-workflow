@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 # ai-workflow notes pairing --project <project-root> --write .ai-workflow/notes/implemented/process/2026-10-17-orchestrator-context-boundaries.md
-2026-10-17-orchestrator-context-boundaries.md: 8d053c06afd0ba62ebfd4e2600b1f83c0df70c14
-2026-10-17-orchestrator-context-boundaries.zh.md: 4136e284364e144e474213f16a8881b1f549658e
+2026-10-17-orchestrator-context-boundaries.md: 1a2efa839e258f043ac8c18493eb110571114370
+2026-10-17-orchestrator-context-boundaries.zh.md: 4baa249aaaf45dfd48b10a548886cb30ebb79a24
