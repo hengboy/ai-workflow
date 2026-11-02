@@ -244,6 +244,22 @@ There is no per-task, per-phase or per-commit review trigger, and no undefined
 larger or high-risk trigger beyond the change class. A direct or mechanical change
 runs the relevant checks without the dual-axis review.
 
+Standards Review judges the delivered code, not only MEMORY conformance: logic
+holes and missing boundary cases, security risks with a written risk explanation,
+and safely removable redundancy plus missing comments on hard-to-understand key
+logic. A logic or boundary finding names an exact path or symbol, a concrete
+triggering input, state or sequence, the observed behavior or gap, the expected
+behavior and a correction, and is merge-blocking when incorrect behavior, an
+unhandled boundary, state corruption or a resource leak is possible and otherwise
+an advisory warning. A security finding states its threat scenario, affected asset
+or path, impact and preconditions or exploitability and is merge-blocking only
+when the risk is plausibly exploitable, privilege-escalating or data-exposing; a
+speculative or unreachable concern is an advisory warning with its reasoning and a
+finding without a risk explanation is not a blocker. Redundancy and key-comment
+findings name the smallest behavior-preserving simplification or the durable
+behavior or rationale to document with no transient plan-internal identifiers, and
+stay advisory unless they cause a defect.
+
 Restrict Coding review inputs instead of assuming model objectivity: never provide a
 Spec Review session with plan or task files, an implementation or self-assessment
 narrative, a test execution report, log or pass claim, earlier findings or verdicts,
@@ -276,7 +292,7 @@ without asking which findings to fix and with no separate routine selection. Tes
 authors required test changes before the implementation role edits production code;
 authorized commands may collect missing evidence. An unfulfilled AC, a cited
 required-standard violation or missing required evidence is a blocker. Warnings are
-advisory and must carry a reasoned disposition; a warning never masks a blocker. Demonstrably unsupported or duplicate findings also require reasoned dispositions and must not be silently dropped.
+advisory and must carry a reasoned disposition; a warning never masks a blocker. Demonstrably unsupported or duplicate findings also require reasoned dispositions and must not be silently dropped. A Standards Review error finding from logic, boundary, security or a defect-causing redundancy is a blocker on the same terms, and a retained advisory finding needs a reasoned disposition and never masks a blocker.
 
 Each boundary permits at most one targeted recheck batch after the one aggregate
 repair: dispatch only the affected axes in a fresh session, and when both axes are
