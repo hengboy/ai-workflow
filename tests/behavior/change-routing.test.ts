@@ -80,10 +80,10 @@ describe('change routing guidance', () => {
       /Mechanical change[^.]*typo, copy, comment, formatting or test-only[^.]*narrowest relevant check/i,
     );
     expect(contract, 'Planning may not restate a settled request').toMatch(
-      /Never run Planning to restate a request with clear, bounded intent/i,
+      /Never run Planning to restate clear, bounded intent/i,
     );
     expect(contract, 'direct must not skip required checks').toMatch(
-      /never label a change direct to skip required checks or evidence/i,
+      /label direct to skip checks or evidence/i,
     );
   });
 
@@ -136,10 +136,19 @@ describe('change routing guidance', () => {
     // MEMORY scaffolding is no longer required to carry them.
     const contract = await read('templates/project/AGENTS.md');
     expect(flatten(contract), 'the generated contract records the routing standard').toMatch(
-      /Requests are classified before work starts[^.]*implemented directly without Planning or the dual-axis review/i,
+      /Classify every request before starting and state the class in one line/i,
+    );
+    expect(contract, 'the contract keeps the direct class bullet').toMatch(
+      /Direct change[^.]*small requirement/i,
+    );
+    expect(contract, 'the contract keeps the planned class bullet').toMatch(
+      /Planned change[^.]*new feature/i,
+    );
+    expect(contract, 'the contract keeps the mechanical class bullet').toMatch(
+      /Mechanical change[^.]*typo, copy/i,
     );
     expect(contract, 'the contract keeps the plan path for planned changes').toMatch(
-      /runs Planning and keeps that review gate/i,
+      /keep the dual-axis review gate/i,
     );
 
     const readme = await read('README.md');
@@ -221,7 +230,6 @@ describe('change routing guidance', () => {
 
   it('hands the child-participating workspace root session to the coding skill after the automatic chain completes', async () => {
     const documents = [
-      { label: 'templates/project/AGENTS.md', text: await read('templates/project/AGENTS.md') },
       { label: 'README.md', text: await read('README.md') },
     ];
 
@@ -251,6 +259,13 @@ describe('change routing guidance', () => {
       expect(flat, `${label} keeps the ordinary or root-only route`).toMatch(/ordinary or root-only/i);
       expect(flat, `${label} keeps the ordinary coding-skill handoff`).toMatch(/invok\w* (?:the )?coding skill/i);
     }
+
+    const contract = await read('templates/project/AGENTS.md');
+    const contractFlat = flatten(contract);
+    expect(
+      contractFlat,
+      'the contract states the compact route to a new session at the workspace root',
+    ).toMatch(/routes to a new session at (?:the )?workspace root/i);
   });
 });
 
@@ -340,11 +355,11 @@ describe('automatic implementation commit', () => {
 // rule, so another accurate paragraph in the same document cannot hide the defect.
 describe('post-planning workspace chaining guidance is causally consistent', () => {
   it('invokes the automatic split immediately after the frozen pair validates, not after its own artifacts', async () => {
-    // REQ-004/AC-004: the split-before-implementation rule is owned by the contract and
-    // README, not by the project-owned MEMORY scaffolding.
+    // REQ-004/AC-004: the split-before-implementation rule and its timing are owned by
+    // the planning skill and README `### Workspaces`, not by the project-owned MEMORY
+    // scaffolding.
     const documents = [
-      { label: 'templates/project/AGENTS.md', text: await read('templates/project/AGENTS.md') },
-      { label: '.ai-workflow/AGENTS.md', text: await read('.ai-workflow/AGENTS.md') },
+      { label: 'templates/skills/planning/SKILL.md', text: await read('templates/skills/planning/SKILL.md') },
       { label: 'README.md', text: await read('README.md') },
     ];
 
@@ -370,12 +385,18 @@ describe('post-planning workspace chaining guidance is causally consistent', () 
         );
       }
     }
+
+    const contract = await read('templates/project/AGENTS.md');
+    expect(flatten(contract), 'the contract states the split-before-implementation rule').toMatch(
+      /split by plan-to-tasks before implementation/i,
+    );
+    expect(flatten(contract), 'the contract states the root-only exemption counterpart').toMatch(
+      /may be implemented unsplit/i,
+    );
   });
 
   it('defaults the parent Coding session to the delivery gate and scopes preparation to the recovery case', async () => {
     const documents = [
-      { label: 'templates/project/AGENTS.md', text: await read('templates/project/AGENTS.md') },
-      { label: '.ai-workflow/AGENTS.md', text: await read('.ai-workflow/AGENTS.md') },
       { label: 'README.md', text: await read('README.md') },
     ];
 
@@ -402,6 +423,31 @@ describe('post-planning workspace chaining guidance is causally consistent', () 
         );
       }
     }
+
+    // Moved authority (row 5): coding skill and its workspace reference carry the
+    // delivery-gate default and the recovery-only preparation scope.
+    const codingSkill = flatten(await read('templates/skills/coding/SKILL.md'));
+    const workspaceRef = flatten(await read('templates/skills/coding/references/workspace.md'));
+
+    expect(workspaceRef, 'workspace reference states the primary parent session').toMatch(
+      /primary parent session/i,
+    );
+    expect(workspaceRef, 'workspace reference owns Approved preparation').toMatch(
+      /## Approved preparation/,
+    );
+    // delivery gate
+    expect(workspaceRef, 'workspace reference defaults to verifying the delivery gate').toMatch(
+      /verif\w*[^.;]{0,160}delivery gate/i,
+    );
+    // recovery only
+    expect(workspaceRef, 'workspace reference scopes preparation to the recovery case').toMatch(
+      /no task set or incomplete slices/i,
+    );
+
+    const contract = await read('templates/project/AGENTS.md');
+    expect(contract, 'the contract references the coding workspace authority').toMatch(
+      /references\/workspace\.md/,
+    );
   });
 });
 
