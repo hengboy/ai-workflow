@@ -191,6 +191,9 @@ describe('workflow semantics: no contract quota (AC-006)', () => {
   it('removes the historical 60%/35107 and any replacement fixed quota from the common contract', async () => {
     const contract = flatten(await read(CONTRACT));
     const mirror = flatten(await readFile(packagePath('.ai-workflow/AGENTS.md'), 'utf8'));
+    const sourceBytes = await readFile(packagePath('templates/project/AGENTS.md'));
+    const mirrorBytes = await readFile(packagePath('.ai-workflow/AGENTS.md'));
+    expect(mirrorBytes.equals(sourceBytes), 'raw source/mirror byte equality').toBe(true);
     // No historical or replacement fixed quota may remain as an acceptance gate.
     expect(contract).not.toMatch(/60%\s*(?:of|against)/i);
     expect(contract).not.toMatch(/35107/);
@@ -236,7 +239,7 @@ describe('workflow semantics: no contract quota (AC-006)', () => {
 describe('workflow semantics: role-scoped context acquisition (AC-007/AC-008)', () => {
   it('publishes the role loading matrix and rejects universal eager navigation self-read', async () => {
     const contract = flatten(await read(CONTRACT));
-    for (const role of ['Primary orchestration', 'File Explorer', 'Backend', 'Standards Review', 'Spec Review', 'Authorized index maintenance']) {
+    for (const role of ['Primary orchestration', 'File Explorer', 'Backend', 'Standards Review', 'Spec Review', 'Authorized index maintenance', 'Researcher']) {
       expect(contract, `role matrix names ${role}`).toContain(role);
     }
     expect(anyMatch(contract, [/Full applicable contract[^.]{0,120}?MEMORY/i]), 'primary loads full contract + MEMORY').toBe(true);
@@ -255,5 +258,54 @@ describe('workflow semantics: role-scoped context acquisition (AC-007/AC-008)', 
     expect(anyMatch(contract, [/shell[^.]{0,160}?(?:primary|requests? the primary|arrange lookup)/i]), 'shell-less role asks primary').toBe(true);
     expect(anyMatch(contract, [/old task scope[^.]{0,160}?(?:navigation|valid)/i]), 'old task scope navigation stays valid').toBe(true);
     expect(anyMatch(contract, [/permission[^.]{0,120}?(?:not|is not|!=)[^.]{0,120}?(?:mandatory read list|eager)/i, /mandatory read list/i]), 'permission is not mandatory read list').toBe(true);
+  });
+});
+
+describe('workflow semantics: navigation artifact consumers (W2)', () => {
+  it('registers workspace and task reference surfaces for the workflow-semantics-context feature', async () => {
+    const navigation = JSON.parse(await readFile(packagePath('.ai-workflow/index/navigation.json'), 'utf8')) as {
+      features?: Array<{ id?: string; related_files?: string[]; read_scope?: string[] }>;
+    };
+    const feature = navigation.features?.find((candidate) => candidate.id === 'workflow-semantics-context');
+    const paths = [...(feature?.related_files ?? []), ...(feature?.read_scope ?? [])];
+    for (const path of [
+      'templates/skills/coding/references/workspace.md',
+      'templates/skills/plan-to-tasks/references/task.md',
+    ]) {
+      expect(paths, `workflow-semantics-context navigation includes ${path}`).toContain(path);
+    }
+  });
+});
+
+describe('workflow semantics: Researcher role context (W3)', () => {
+  it('publishes a Researcher row retaining contract, MEMORY and research objective/inputs', async () => {
+    const contract = flatten(await read(CONTRACT));
+    expect(contract, 'role matrix names Researcher').toContain('Researcher');
+    expect(anyMatch(contract, [/Researcher[^.]{0,260}?(?:contract|MEMORY)[^.]{0,260}?(?:objective|inputs)/i, /Researcher[^.]{0,260}?(?:research objective|research inputs)/i]), 'Researcher retains research objective and inputs').toBe(true);
+  });
+});
+
+describe('workflow semantics: affected-surface anti-eager and required authority (AD-V1)', () => {
+  it('keeps planning, plan-to-tasks and sync skill guidance anti-eager and authority-preserving', async () => {
+    const surfaces = [
+      'templates/skills/planning/SKILL.md',
+      'templates/skills/plan-to-tasks/SKILL.md',
+      'templates/skills/sync-ai-workflow/SKILL.md',
+      'templates/contract/AGENTS.md',
+    ];
+    for (const path of surfaces) {
+      const text = flatten(await readFile(packagePath(path), 'utf8'));
+      expect(text, `${path} avoids eager navigation reads`).toMatch(/never eagerly read both navigation files|only for a needed bounded entry|not.*eager/i);
+      expect(text, `${path} preserves required authority`).toMatch(/MEMORY\.md|\.ai-workflow\/AGENTS\.md|full applicable contract/i);
+    }
+  });
+});
+
+describe('workflow semantics: checkpoint event vocabulary (state uncertainty)', () => {
+  it('records the five checkpoint event types in the authorized execution source', async () => {
+    const source = await readFile(packagePath('src/workspace/execution.ts'), 'utf8');
+    for (const label of ['start', 'task', 'reviewed', 'delivered', 'finalized']) {
+      expect(source, `execution source defines ${label} event`).toContain(`'${label}'`);
+    }
   });
 });

@@ -9,7 +9,7 @@ description: Initialize ai-workflow in a project, or upgrade an existing adoptio
 
 Use the locally installed `ai-workflow` CLI for user-authorized project initialization or upgrade. Do not invoke external orchestrators or provider APIs.
 
-Determine the actual adoption state before loading context. For an existing adoption, explicitly read the project's `.ai-workflow/AGENTS.md` and `MEMORY.md`, or receive them through complete context injection; read `.ai-workflow/index/navigation.json` or its `.ai-workflow/index/navigation.md` catalog only for a needed bounded entry or an authorized lookup. A Markdown link or an inherited parent read does not load them into this session. A project with no `.ai-workflow/` has never adopted ai-workflow: ordinary `init` creates those files, and no adoption uses ordinary `init` to require nonexistent workflow files first. The project contract applies to the whole project and to every participating agent once adopted.
+Determine the actual adoption state before loading context. For an existing adoption, explicitly read the project's `.ai-workflow/AGENTS.md` and `MEMORY.md`, or receive them through complete context injection; read `.ai-workflow/index/navigation.json` or its `.ai-workflow/index/navigation.md` catalog only for a needed bounded entry or an authorized lookup. A Markdown link or an inherited parent read does not load them into this session. A project with no `.ai-workflow/` has never adopted ai-workflow: ordinary `init` never requires nonexistent workflow files first, and it creates the contract, `MEMORY.md` and navigation. The project contract applies to the whole project and to every participating agent once adopted.
 
 Obtain the exact project path; ask for it if the user did not provide one.
 

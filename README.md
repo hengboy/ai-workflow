@@ -177,6 +177,7 @@ Every participating role explicitly loads its repository's full applicable proje
 | --- | --- |
 | Primary orchestration | Full applicable contract, `MEMORY.md`, complete frozen spec/plan once and current-phase task bodies; catalog or locator when locating affected features. |
 | File Explorer | Contract, `MEMORY.md`, supplied locator or fallback and catalog as needed; only authorized discovery roots. |
+| Researcher | Research objective and authorized inputs plus the full applicable contract and `MEMORY.md`; public sources and citations only. |
 | Backend, Frontend, Test, Git Operator, Documentation Maintainer | Contract, `MEMORY.md`, current delegated task or step and necessary exact source or evidence. |
 | Standards Review | Contract, `MEMORY.md`, authorized note standards and immutable review material; no generic navigation bundle. |
 | Spec Review | Procedural contract and only its mode-authorized requirement, draft or raw-evidence inputs; no MEMORY/navigation bundle. |
