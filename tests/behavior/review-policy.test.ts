@@ -423,7 +423,7 @@ describe('Spec Review objective inputs (shipped policy)', () => {
   it('excepts Spec Review from common fixed-context loading', async () => {
     const contract = flatten(await read(CONTRACT));
     expect(contract, 'common guidance excepts Spec Review from fixed-context loading').toMatch(
-      /Spec Review[^.\n]{0,240}(?:except|not (?:automatically )?loaded)/i,
+      /Spec Review[^.\n]{0,240}(?:skips|except|not (?:automatically )?loaded)/i,
     );
   });
 
