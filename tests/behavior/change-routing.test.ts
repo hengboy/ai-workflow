@@ -426,7 +426,6 @@ describe('post-planning workspace chaining guidance is causally consistent', () 
 
     // Moved authority (row 5): coding skill and its workspace reference carry the
     // delivery-gate default and the recovery-only preparation scope.
-    const codingSkill = flatten(await read('templates/skills/coding/SKILL.md'));
     const workspaceRef = flatten(await read('templates/skills/coding/references/workspace.md'));
 
     expect(workspaceRef, 'workspace reference states the primary parent session').toMatch(
