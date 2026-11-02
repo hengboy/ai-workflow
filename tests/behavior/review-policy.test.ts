@@ -524,3 +524,87 @@ describe('review report facts and complete-findings exception (REQ-001 / AC-001,
     );
   });
 });
+
+describe('code-review dimensions and severity (REQ-001..REQ-006 / AC-001..AC-006)', () => {
+  it('AC-001: standards review checklist names logic/boundary, security risk and redundancy/comment items', async () => {
+    const text = flatten(await read(STANDARDS_REVIEW));
+    expect(anyMatch(text, [/logic[^.]{0,120}boundary/i, /boundary[^.]{0,120}logic/i]), 'checklist has a logic and boundary item').toBe(true);
+    expect(text, 'checklist has a security risk item').toMatch(/security risk/i);
+    expect(text, 'security item requires a written risk explanation').toMatch(/risk explanation/i);
+    expect(text, 'checklist has a redundancy item').toMatch(/redundan/i);
+    expect(anyMatch(text, [/key[- ]?comment/i, /hard[- ]to[- ]understand[^.]{0,80}comment/i]), 'checklist has a key-comment item').toBe(true);
+  });
+
+  it('AC-002: logic and boundary findings carry a concrete scenario and severity split', async () => {
+    const text = flatten(await read(STANDARDS_REVIEW));
+    expect(anyMatch(text, [/exact (?:path|symbol|reference)/i, /path\/symbol/i]), 'finding names an exact path or symbol').toBe(true);
+    expect(anyMatch(text, [/concrete (?:input|state|sequence)/i, /triggering (?:input|state|sequence)/i]), 'finding names a concrete triggering input, state or sequence').toBe(true);
+    expect(anyMatch(text, [/observed (?:behavior|gap)/i, /observed gap/i]), 'finding states the observed behavior').toBe(true);
+    expect(anyMatch(text, [/expected (?:behavior|outcome)/i]), 'finding states the expected behavior').toBe(true);
+    expect(text, 'finding requires a correction').toMatch(/correction/i);
+    expect(anyMatch(text, [/incorrect behavior[^.]{0,160}(?:error|merge-blocking)/i, /unhandled boundary[^.]{0,160}(?:error|merge-blocking)/i, /state corruption[^.]{0,160}(?:error|merge-blocking)/i, /resource leak[^.]{0,160}(?:error|merge-blocking)/i, /(?:error|merge-blocking)[^.]{0,160}(?:incorrect behavior|unhandled boundary|state corruption|resource leak)/i]), 'a possible incorrect or unhandled behavior is an error').toBe(true);
+    expect(anyMatch(text, [/otherwise[^.]{0,120}(?:advisory|warning)/i, /advisory warning/i]), 'otherwise it is an advisory warning').toBe(true);
+  });
+
+  it('AC-003: security findings require a written risk explanation and severity split', async () => {
+    const text = flatten(await read(STANDARDS_REVIEW));
+    expect(text, 'security finding states a threat scenario').toMatch(/threat scenario/i);
+    expect(anyMatch(text, [/affected (?:asset|path)/i]), 'security finding states the affected asset or path').toBe(true);
+    expect(text, 'security finding states the impact').toMatch(/impact/i);
+    expect(anyMatch(text, [/preconditions/i, /exploitability/i]), 'security finding states preconditions or exploitability').toBe(true);
+    expect(anyMatch(text, [/(?:exploitable|privilege-escalating|data-exposing)[^.]{0,160}(?:error|merge-blocking)/i, /(?:error|merge-blocking)[^.]{0,160}(?:exploitable|data-exposing)/i]), 'a plausible exploitable or data-exposing risk is an error').toBe(true);
+    expect(anyMatch(text, [/(?:speculative|unreachable)[^.]{0,160}(?:advisory|warning)/i, /(?:advisory|warning)[^.]{0,160}(?:speculative|unreachable)/i]), 'a speculative or unreachable concern is an advisory warning with reasoning').toBe(true);
+    expect(anyMatch(text, [/without (?:a )?risk explanation/i, /incomplete/i, /not accepted as a blocker/i]), 'a finding without a risk explanation is incomplete and not a blocker').toBe(true);
+  });
+
+  it('AC-004: redundancy and key-comment findings propose a minimal action', async () => {
+    const text = flatten(await read(STANDARDS_REVIEW));
+    expect(anyMatch(text, [/duplicated/i, /dead/i, /unreachable/i, /needlessly indirect/i]), 'redundancy names duplicated, dead, unreachable or indirect code').toBe(true);
+    expect(anyMatch(text, [/introduced by the reviewed change/i, /introduced by the change/i]), 'redundancy is limited to code introduced by the reviewed change').toBe(true);
+    expect(anyMatch(text, [/smallest behavior-preserving simplification/i, /behavior-preserving simplification/i]), 'redundancy proposes the smallest behavior-preserving simplification').toBe(true);
+    expect(anyMatch(text, [/invariant/i, /state transition/i, /concurrency rule/i, /regular expression/i, /boundary branch/i, /bit operation/i]), 'key-comment names non-obvious key logic kinds').toBe(true);
+    expect(anyMatch(text, [/durable (?:behavior|explanation|rationale)/i]), 'key-comment names the durable behavior or rationale to document').toBe(true);
+    expect(anyMatch(text, [/advisory (?:warning)?[^.]{0,80}unless (?:it )?causes? a defect/i, /unless (?:it )?causes? a defect/i]), 'both are advisory unless they cause a defect').toBe(true);
+    expect(anyMatch(text, [/transient plan-internal identifiers/i, /no transient plan-internal/i]), 'comment guidance forbids transient plan-internal identifiers').toBe(true);
+  });
+
+  it('AC-005: review stays bounded and read-only', async () => {
+    const text = flatten(await read(STANDARDS_REVIEW));
+    expect(anyMatch(text, [/packet-authorized/i, /packet paths/i]), 'reads only packet-authorized paths').toBe(true);
+    expect(anyMatch(text, [/supplied diff/i, /supplied (?:range|context)/i]), 'reads the supplied diff and bounded context').toBe(true);
+    expect(anyMatch(text, [/bounded source context/i, /same immutable range/i, /immutable range/i]), 'bounded source context at the same immutable range').toBe(true);
+    expect(text, 'reads MEMORY').toMatch(/MEMORY/i);
+    expect(anyMatch(text, [/(?:never|do not) search/i]), 'never searches the repository').toBe(true);
+    expect(anyMatch(text, [/(?:never|do not) (?:run|execute) (?:Git|tests|commands)/i, /Do not search, edit, run commands or Git/i]), 'never runs Git or tests').toBe(true);
+    expect(anyMatch(text, [/(?:never|do not) edit/i]), 'never edits files').toBe(true);
+    expect(anyMatch(text, [/(?:never|do not) invent/i, /do not invent/i]), 'never invents requirements').toBe(true);
+    expect(anyMatch(text, [/uncited (?:style|taste)/i, /style taste/i]), 'never reports uncited style taste').toBe(true);
+    expect(await read(STANDARDS_REVIEW), 'frontmatter stays read-only').toMatch(/^tools: \[read\]$/m);
+  });
+
+  it('AC-006: shipped documents state the three dimensions and severity semantics', async () => {
+    const docs = [
+      'templates/project/AGENTS.md',
+      '.ai-workflow/AGENTS.md',
+      'templates/skills/coding/SKILL.md',
+      'README.md',
+      'MEMORY.md',
+    ];
+    for (const path of docs) {
+      const text = flatten(await read(path));
+      expect(anyMatch(text, [/logic[^.]{0,120}boundary/i, /boundary[^.]{0,120}logic/i]), `${path} states the logic and boundary dimension`).toBe(true);
+      expect(text, `${path} states the security risk dimension`).toMatch(/security risk/i);
+      expect(anyMatch(text, [/redundan/i]), `${path} states the redundancy dimension`).toBe(true);
+      expect(anyMatch(text, [/key[- ]?comment/i, /comment/i]), `${path} states the key-comment dimension`).toBe(true);
+      expect(anyMatch(text, [/error[^.]{0,160}(?:warning|advisory)/i, /(?:warning|advisory)[^.]{0,160}error/i, /merge-blocking/i]), `${path} states error-versus-advisory severity semantics`).toBe(true);
+    }
+
+    const contract = flatten(await read(CONTRACT));
+    const coding = flatten(await read(CODING));
+    expect(anyMatch(contract, [/\bDirect\b[^.]{0,320}?(?:neither|not\b|no\b|without|skip\w*)[^.]{0,160}?(?:ax(?:is|es)|reviews?|dual-axis)/i]), 'Direct changes dispatch neither review axis').toBe(true);
+    expect(anyMatch(contract, [/\bMechanical\b[^.]{0,320}?(?:neither|not\b|no\b|without|skip\w*)[^.]{0,160}?(?:ax(?:is|es)|reviews?|dual-axis)/i]), 'Mechanical changes dispatch neither review axis').toBe(true);
+    expect(anyMatch(contract, [/\bPlanning\b[^.]{0,260}?\b(?:only|alone)\b[^.]{0,120}?\bSpec(?: Review)?\b/i, /\bPlanning\b[^.]{0,260}?\bSpec(?: Review)?\b[^.]{0,120}?\b(?:only|alone)\b/i]), 'Planning dispatches Spec Review only').toBe(true);
+    expect(anyMatch(contract, [/\bplan-to-tasks\b[^.]{0,280}?(?:neither|not\b|no\b|without|skip\w*)[^.]{0,160}?(?:ax(?:is|es)|reviews?|dual-axis)/i]), 'plan-to-tasks dispatches neither review axis').toBe(true);
+    expect(anyMatch(joined(contract, coding), [/split or unsplit[^.]{0,320}?(?:one|single)[^.]{0,140}?simultaneous[^.]{0,160}?(?:Spec|Standards|pair|batch)/i, /split or unsplit[^.]{0,320}?simultaneous[^.]{0,160}?(?:Spec|Standards|pair|batch)/i]), 'ordinary planned work runs one simultaneous pair').toBe(true);
+  });
+});
