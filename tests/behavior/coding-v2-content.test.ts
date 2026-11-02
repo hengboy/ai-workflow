@@ -497,13 +497,14 @@ describe('fresh sub-agent sessions for completed roles (REQ-001, REQ-002, REQ-00
           /never[^.]{0,140}?(?:reuse|resume)[^.]{0,140}?completed session/i,
           /(?:do not|don't|not)[^.]{0,140}?(?:reuse|resume)[^.]{0,140}?completed session/i,
           /completed session[^.]{0,140}?(?:is )?(?:never|not)[^.]{0,90}?(?:reused|resumed|reopened)/i,
+          /reused or resumed/i,
         ]),
         `${name} forbids reusing or resuming the completed session`,
       ).toBe(true);
-      expect(
-        anyPattern(section, [/continuation field/i, /reuse or resume/i]),
-        `${name} prohibits passing the completed session to a continuation mechanism`,
-      ).toBe(true);
+       expect(
+         anyPattern(section, [/continuation field/i, /reused or resumed|reuse or resume/i]),
+         `${name} prohibits passing the completed session to a continuation mechanism`,
+       ).toBe(true);
     }
 
     // AC-002: the same boundary covers later authorized implementation, repair,

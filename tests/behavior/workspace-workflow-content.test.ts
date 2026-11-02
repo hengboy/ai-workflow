@@ -217,21 +217,34 @@ describe('decision records stay in their owning repository (REQ-010 / AC-020)', 
         '.gitmodules',
         'submodule boundar',
         '<root>/.ai-workflow/plans/<planId>',
-        'repository-level order',
         'ai-workflow workspace distribute --plan <directory>',
         'ai-workflow workspace status --plan <directory>',
-        'read-only Git',
-        'exception',
-        'worktree confinement',
-        'moving submodule checkouts after the pin is out of scope',
+        'references/workspace.md',
         'plain plan-ID text',
         'decision',
         'delivered facts',
-        'finalization',
         'pointer'
       ],
       'the Workspaces section'
     );
+
+    const reference = await readShipped(WORKSPACE_REFERENCE);
+    expect(reference, 'the mandatory workspace reference is shipped').not.toBeNull();
+    expectFragments(
+      flatten(reference ?? ''),
+      [
+        'read-only Git',
+        'worktree confinement',
+        'submodule checkout',
+        'out of scope',
+        'pin'
+      ],
+      'the workspace reference detailed procedure'
+    );
+
+    const readme = await readShipped(['README.md']);
+    expect(readme, 'README is shipped').not.toBeNull();
+    expect(flatten(readme ?? ''), 'README keeps repository-level delivery order').toContain('repository-level delivery order');
   });
 });
 
@@ -444,10 +457,12 @@ describe('the shipped contract states the workspace split rule (REQ-004 / AC-007
     expectFragments(
       flatten(workspaces),
       [
-        'at least one non-root participating repository',
-        'before implementation',
+        'A plan declaring a non-root participating repository',
+        'must be split by plan-to-tasks before implementation',
         'ai-workflow workspace distribute --plan <directory>',
-        'reserved workspace root entry',
+        'ai-workflow workspace status --plan <directory>',
+        'task set frozen only after',
+        'reserved `workspace` root entry',
         'implemented unsplit'
       ],
       'the shipped workspace split rule'
@@ -746,7 +761,8 @@ describe('both contracts state the workspace execution boundary (REQ-009)', () =
       expect(text, `${parts.join('/')} is shipped`).not.toBe('');
       expect(text, `${parts.join('/')} names .gitmodules`).toContain('.gitmodules');
       expect(text, `${parts.join('/')} requires a frozen plan`).toMatch(/frozen plan/i);
-      expect(text, `${parts.join('/')} requires a non-root participant`).toMatch(/at least one (?:participating )?non-root/i);
+      expect(text, `${parts.join('/')} requires a non-root participant`).toMatch(/non-root (?:participating|participant)/i);
+      expect(text, `${parts.join('/')} activates only a frozen plan with a non-root participant matched to .gitmodules`).toMatch(/only a frozen plan with a non-root participant matched to the current root's `?\.gitmodules`?/i);
     }
   });
 
@@ -754,7 +770,7 @@ describe('both contracts state the workspace execution boundary (REQ-009)', () =
     for (const parts of CONTRACTS) {
       const text = flatten((await readShipped(parts)) ?? '');
       expect(text, `${parts.join('/')} keeps orchestration in the parent`).toMatch(/native orchestration|primary parent|parent-only/i);
-      expect(text, `${parts.join('/')} owns one worktree per repository`).toMatch(/one run-owned worktree per (?:active )?repository|run-owned worktree per repository/i);
+      expect(text, `${parts.join('/')} owns one worktree per repository`).toMatch(/one run-owned worktree per (?:active )?repository|run-owned worktree per repository|each active repository owns one run-owned worktree/i);
       expect(text, `${parts.join('/')} names Git Operator`).toMatch(/Git Operator/i);
       expect(text, `${parts.join('/')} keeps Git Operator exclusive`).toMatch(/only role allowed to run Git|Git operations? (?:are allowed )?only through Git Operator|all Git/i);
     }
@@ -800,10 +816,15 @@ describe('the Git Operator owns the repository worktree and delivery lifecycle (
   });
 });
 
-const FINALIZATION_RULE_SURFACES: Array<{ surface: string; parts: string[] }> = [
+const FINALIZATION_FULL_SURFACES: Array<{ surface: string; parts: string[]; disjoint: RegExp; overlap: RegExp }> = [
+  { surface: 'README.md', parts: ['README.md'], disjoint: /acceptance[ _]criteria[^.]{0,160}\bdisjoint\b from every task/i, overlap: /requirements[^.]{0,160}\b(?:may|can|might)\b[^.]{0,40}overlap[^.]{0,80}task requirements/i },
+  { surface: 'templates/skills/planning/references/plan.md', parts: ['templates', 'skills', 'planning', 'references', 'plan.md'], disjoint: /Finalization acceptance criteria[^.]{0,120}disjoint[^.]{0,120}every task/i, overlap: /requirements[^.]{0,80}\b(?:may|can|might)\b[^.]{0,40}overlap/i },
+  { surface: 'templates/skills/plan-to-tasks/references/task.md', parts: ['templates', 'skills', 'plan-to-tasks', 'references', 'task.md'], disjoint: /Finalization ACs[^.]{0,80}\bdisjoint\b/i, overlap: /requirements[^.]{0,80}\b(?:may|can|might)\b[^.]{0,40}overlap/i },
+];
+
+const FINALIZATION_COMPACT_SURFACES: Array<{ surface: string; parts: string[] }> = [
   { surface: 'templates/project/AGENTS.md', parts: ['templates', 'project', 'AGENTS.md'] },
   { surface: '.ai-workflow/AGENTS.md', parts: ['.ai-workflow', 'AGENTS.md'] },
-  { surface: 'README.md', parts: ['README.md'] },
 ];
 
 /**
@@ -816,32 +837,35 @@ const STALE_FINALIZATION_PATTERN = /requirements`?\s+and\s+`?acceptance[ _]crite
 
 describe('the finalization rule keeps criteria disjoint while requirements may overlap (REQ-001 / AC-001)', () => {
   it('states that finalization acceptance criteria are disjoint from every task acceptance criterion', async () => {
-    for (const { surface, parts } of FINALIZATION_RULE_SURFACES) {
+    for (const { surface, parts, disjoint } of FINALIZATION_FULL_SURFACES) {
       const text = await readShipped(parts);
       expect(text, `${surface} is shipped`).not.toBeNull();
       expect(
         flatten(text ?? ''),
         `${surface} states finalization acceptance criteria are disjoint from every task acceptance criterion`,
-      ).toMatch(/acceptance[ _]criteria[^.]{0,160}\bdisjoint\b from every task/i);
+      ).toMatch(disjoint);
     }
   });
 
   it('states that finalization requirements may overlap task requirements', async () => {
-    for (const { surface, parts } of FINALIZATION_RULE_SURFACES) {
+    for (const { surface, parts, overlap } of FINALIZATION_FULL_SURFACES) {
       const text = await readShipped(parts);
       expect(text, `${surface} is shipped`).not.toBeNull();
       expect(
         flatten(text ?? ''),
         `${surface} states finalization requirements may overlap task requirements`,
-      ).toMatch(/requirements[^.]{0,160}\b(?:may|can|might)\b[^.]{0,40}overlap[^.]{0,80}task requirements/i);
+      ).toMatch(overlap);
     }
   });
 
   it('removes the stale phrase claiming requirements and acceptance criteria together are disjoint', async () => {
-    for (const { surface, parts } of FINALIZATION_RULE_SURFACES) {
+    for (const { surface, parts } of [...FINALIZATION_FULL_SURFACES, ...FINALIZATION_COMPACT_SURFACES]) {
       const text = await readShipped(parts);
       expect(text, `${surface} is shipped`).not.toBeNull();
       const flat = flatten(text ?? '');
+      if (FINALIZATION_COMPACT_SURFACES.some((s) => s.surface === surface)) {
+        expect(flat, `${surface} delegates finalization to references/workspace.md`).toContain('references/workspace.md');
+      }
       expect(flat, `${surface} drops the stale finalization sentence`).not.toContain(STALE_FINALIZATION_PHRASE);
       expect(flat, `${surface} drops the stale sentence in any spacing or field-name form`).not.toMatch(
         STALE_FINALIZATION_PATTERN,

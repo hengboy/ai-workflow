@@ -148,7 +148,7 @@ describe('agent notes workflow content', () => {
 
     const contract = await read('templates/project/AGENTS.md');
     expect(contract, 'common guidance excepts Spec Review from automatic fixed-context loading').toMatch(
-      /Spec Review[^.\n]{0,240}(?:except|not (?:automatically )?loaded|not load)/i,
+      /Spec Review[^.\n]{0,240}(?:skips|except|not (?:automatically )?loaded|not load)/i,
     );
   });
 
