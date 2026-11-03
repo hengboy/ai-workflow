@@ -29,4 +29,4 @@ Status: implemented
 - 小需求、功能调整或缺陷修复不再提示 Planning，而是直接实施并运行相关检查。
 - 每个请求都有明确的分类，代理若把小改动导向 Planning、或把该规划的改动标为 direct，都会与已发布文本相矛盾。
 - Direct 与 mechanical 改动仍会创建 worktree 并通过 Git Operator 提交，因此本次变更降低的是规划与评审开销，而不是执行开销。
-- [实施记录](./2026-09-22-plan-implementation-record.md)与[worktree 策略记录](./2026-09-14-project-local-worktree-policy.md)仍然有效；没有活动记录被取代，本记录只补上缺失的分类。
+- [实施记录](./2026-09-22-plan-implementation-record.md)与[worktree 策略记录](./2026-09-14-project-local-worktree-policy.md)仍然有效。本记录中的 Direct 定义由[特性优先的分流与工作树集成](./2026-11-03-routing-and-worktree-merge.md)部分取代：新功能或用户可见能力现在始终是 Planned，而 Direct 只保留对既有行为的有界调整与缺陷修复；上述分流理由、备选方案与后果仍然现行。

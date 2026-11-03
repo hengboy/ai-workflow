@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 # ai-workflow notes pairing --project <project-root> --write .ai-workflow/notes/implemented/process/2026-09-22-change-routing.md
-2026-09-22-change-routing.md: 82d89aca44ee3a4b9f9005788d0ed79c2c3ddfbf
-2026-09-22-change-routing.zh.md: e3a704ef25606f6e0d902b13a9d7e85ed56aaea1
+2026-09-22-change-routing.md: 4f417624a704bfeeca8f617efda71b2a8581610a
+2026-09-22-change-routing.zh.md: cebd794513590c80f1ee0bccd844ddd4b82da345
