@@ -99,3 +99,104 @@ describe('per-repository workspace worktree policy (REQ-002, REQ-004)', () => {
     expect(normalize(packet), 'every command carries an explicit workdir').toMatch(/every command uses an explicit workdir/i);
   });
 });
+
+// Behavior boundary: new worktree integration policy (REQ-002, REQ-003).
+describe('direct and mechanical execution unit keeps the worktree and merges back', () => {
+  it('states the mandatory worktree, in-worktree implement/validate/commit and merge-back', async () => {
+    for (const path of ['templates/project/AGENTS.md', 'templates/skills/coding/SKILL.md']) {
+      const text = normalize(await readFile(packagePath(path), 'utf8'));
+      expect(text, `${path} makes the worktree mandatory for Direct and Mechanical`).toMatch(
+        /(?:Direct|Mechanical)[^.]{0,260}mandatory[^.]{0,120}project-local temporary worktree|mandatory[^.]{0,120}project-local temporary worktree/i,
+      );
+      expect(text, `${path} requires implement, validate and commit inside the worktree`).toMatch(
+        /implement[^.]{0,80}validat[^.]{0,80}commit/i,
+      );
+      expect(text, `${path} merges back into the recorded target branch`).toMatch(
+        /merge[^.]{0,120}recorded target branch/i,
+      );
+      expect(text, `${path} skips only Planning artifacts and the dual-axis review`).toMatch(
+        /(?:only|skip)[^.]{0,120}(?:Planning artifacts|dual-axis review)/i,
+      );
+    }
+  });
+});
+
+describe('recorded integration target and merge-back', () => {
+  it('records the branch and starting commit and merges with non-fast-forward', async () => {
+    const operator = normalize(await readFile(packagePath('templates', 'agents', 'git-operator.md'), 'utf8'));
+    const contract = normalize(await readFile(packagePath('templates/project/AGENTS.md'), 'utf8'));
+    for (const text of [operator, contract]) {
+      expect(text, 'records the checked-out branch at worktree creation').toMatch(
+        /record[^.]{0,120}(?:checked-out branch|branch checked out)/i,
+      );
+      expect(text, 'records the starting commit at worktree creation').toMatch(
+        /record[^.]{0,120}(?:starting commit)/i,
+      );
+      expect(text, 'merges the worktree branch into the recorded target branch').toMatch(
+        /merge[^.]{0,120}worktree branch[^.]{0,120}recorded target branch/i,
+      );
+      expect(text, 'uses a non-fast-forward merge').toMatch(/non-fast-forward/i);
+    }
+    expect(operator, 'a target-branch advance is not source drift').toMatch(
+      /target(?:-branch)? (?:advance|advanced)[^.]{0,120}not source drift/i,
+    );
+    expect(operator, 'source HEAD, repository and worktree identity must still match').toMatch(
+      /source HEAD[^.]{0,120}(?:repository|worktree)[^.]{0,120}(?:must|still) match|identity[^.]{0,120}must (?:still )?match/i,
+    );
+    expect(operator, 'a detached starting checkout stops before implementation').toMatch(
+      /detached[^.]{0,120}(?:stop|stops|no target branch)[^.]{0,120}(?:before implementation|implementation)/i,
+    );
+  });
+});
+
+describe('both-side conflict resolution', () => {
+  it('preserves both sides, reruns affected checks, and blocks on failure', async () => {
+    const operator = normalize(await readFile(packagePath('templates', 'agents', 'git-operator.md'), 'utf8'));
+    expect(operator, 'every conflicted hunk preserves both sides').toMatch(
+      /(?:every |all )?conflict(?:ed)? hunk[^.]{0,120}preserv[^.]{0,80}both sides/i,
+    );
+    expect(operator, 'never chooses one side wholesale').toMatch(
+      /never[^.]{0,120}(?:ours|theirs)[^.]{0,80}(?:wholesale|choose)/i,
+    );
+    expect(operator, 'never rebases, forces, resets or amends').toMatch(
+      /never[^.]{0,160}(?:rebase|force|reset|amend)/i,
+    );
+    expect(operator, 'affected checks rerun').toMatch(/affected checks[^.]{0,80}rerun/i);
+    expect(operator, 'unresolvable or failed check aborts only the in-progress merge').toMatch(
+      /abort[^.]{0,80}(?:in-progress merge|merge in progress)/i,
+    );
+    expect(operator, 'retains the owned worktree and branch').toMatch(
+      /retain[^.]{0,80}(?:owned worktree|worktree and branch)/i,
+    );
+    expect(operator, 'reports blocked with conflicted paths, resolution evidence and failing check').toMatch(
+      /blocked[^.]{0,160}(?:conflicted paths|resolution evidence|failing check)/i,
+    );
+    expect(operator, 'delivery merge SHA recorded separately').toMatch(
+      /delivery merge SHA[^.]{0,80}(?:recorded separately|separate)/i,
+    );
+  });
+
+  it('no reviewed authority retains the old stop-on-conflict instruction', async () => {
+    const files = [
+      'templates/project/AGENTS.md',
+      '.ai-workflow/AGENTS.md',
+      'templates/skills/coding/SKILL.md',
+      'templates/skills/coding/references/workspace.md',
+      'templates/skills/planning/SKILL.md',
+      'templates/agents/git-operator.md',
+      'README.md',
+    ];
+    for (const path of files) {
+      const text = await readFile(packagePath(path), 'utf8');
+      expect(text, `${path} drops the old no-auto-resolve instruction`).not.toContain(
+        'On conflict or drift, stop with evidence; do not rebase or auto-resolve.',
+      );
+    }
+  });
+
+  it('keeps the tracked mirror byte-identical to the template', async () => {
+    const a = await readFile(packagePath('templates/project/AGENTS.md'));
+    const b = await readFile(packagePath('.ai-workflow/AGENTS.md'));
+    expect(b.equals(a)).toBe(true);
+  });
+});

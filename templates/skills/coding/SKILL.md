@@ -11,11 +11,11 @@ while a non-blocked delegated step remains.
 
 ## Change routing
 
-Classify the request before dispatching and state the class in one line.
+Classify the request before dispatching and state the class in one line. A new feature or user-visible capability is always a Planned change, even when its scope looks small or has one observable outcome.
 
-- Direct change — a small requirement, feature adjustment or defect fix with clear, bounded intent and one observable outcome: implement it without Planning, without `spec.md`, `plan.md` or task files, and without the dual-axis review. Run the relevant checks and add one focused regression test for a defect.
+- Direct change — a bounded adjustment to existing behavior or defect fix with clear intent and one observable outcome that adds no new user-visible capability: implement it without Planning, without `spec.md`, `plan.md` or task files, and without the dual-axis review. Run the relevant checks and add one focused regression test for a defect.
 - Mechanical change — a typo, copy, comment, formatting or test-only adjustment with no observable behavior change: implement it and run only the narrowest relevant check.
-- Planned change — a new feature, unclear or contested requirements, more than one materially different design, or a change to a public interface, persistent format, cross-module or cross-stack behavior, migration, compatibility or the project contract: implement the frozen plan and keep the dual-axis review gate.
+- Planned change — a new feature or user-visible capability, unclear or contested requirements, more than one materially different design, or a change to a public interface, persistent format, cross-module or cross-stack behavior, migration, compatibility or the project contract: implement the frozen plan and keep the dual-axis review gate.
 
 When a planned change has no frozen plan, run Planning first, freeze and validate
 `spec.md` and `plan.md`, then end the session. Follow the `planning` skill's
@@ -33,9 +33,23 @@ within the frozen plan.
 
 A direct or mechanical change
 still executes as one coding execution unit with its worktree and Git Operator
-commit; that same automatic commit gate covers planned, direct and mechanical
-changes alike, and only the planning artifacts and the dual-axis review are
-skipped. After its relevant checks pass, the primary automatically delegates the
+commit, and it keeps the mandatory project-local temporary worktree at
+`<project>/.worktrees/<name>`: implement, validate and commit inside it, then
+merge back into the recorded target branch, so only the planning artifacts and
+the dual-axis review are skipped. At worktree creation Git Operator records the
+branch checked out at that moment and its starting commit as the integration
+target; after checks pass it merges the worktree branch into that recorded target
+branch with a non-fast-forward merge. A target-branch advance is not source drift;
+the source HEAD, repository and worktree identity must still match accepted
+evidence, and a detached starting checkout stops before implementation with a
+bounded support request. On a merge conflict Git Operator reconciles every
+conflicted hunk by preserving both sides' changes, never chooses ours or theirs
+wholesale, never rebases, forces, resets or amends, and the affected checks rerun
+after resolution; if both sides cannot be preserved or any post-resolution check
+fails, it aborts only the in-progress merge, retains the owned worktree and
+branch, and reports blocked with the conflicted paths, resolution evidence and
+the failing check. That same automatic commit gate covers planned, direct and
+mechanical changes alike. After its relevant checks pass, the primary automatically delegates the
 scoped local commit to the `git-operator` sub-agent (Git Operator), with no separate
 commit confirmation; that commit supplies the review range and is not a review PASS
 or integration authorization. The mandate is implementation completion, so a
@@ -166,12 +180,17 @@ After a safe patch changes the contract or owned rules, re-read `.ai-workflow/AG
   Include missing manifests and claimed workspace/slice mismatches and their refusal
   routes. Both files are authority together; a link does not load the reference.
 - Before implementation, Git Operator must create one project-local temporary worktree
-  under `<project>/.worktrees/<name>` with `.worktrees/` in `.gitignore`, then
-  materialize the project's entire gitignored state into it except `.worktrees/`.
+  under `<project>/.worktrees/<name>` with `.worktrees/` in `.gitignore`, record the
+  branch checked out at that moment and its starting commit as the integration target,
+  then materialize the project's entire gitignored state into it except `.worktrees/`.
   `.ai-workflow/plans/` and dependencies stay visible and single-source at the project root;
   `MEMORY.md`, navigation and notes arrive through Git. Every coding execution unit
-  implements, validates and commits inside that single worktree; merge/remove only
-  its owned worktree and branch. Planning and TDD depth stay risk-proportional while
+  implements, validates and commits inside that single worktree, then merges back into
+  the recorded target branch with a non-fast-forward merge; merge/remove only
+  its owned worktree and branch. A target-branch advance is not source drift, while the
+  source HEAD, repository and worktree identity must still match accepted evidence; a
+  detached starting checkout stops before implementation with a bounded support request.
+  Planning and TDD depth stay risk-proportional while
   review boundaries follow the change class.
 - Create a Todo list before editing and keep it current, proportional to the
   change. Each step must state its scope, acceptance evidence and commit point.
@@ -341,12 +360,20 @@ HEAD SHA instead of an empty commit, and a failed or blocked commit is reported 
 `blocked` or `failed`, never `done`. After an accepted review, create no further
 content-changing or empty commit that drifts the reviewed HEAD.
 
-Before a non-fast-forward integration of the temporary branch, the primary supplies
+Before a non-fast-forward integration of the temporary branch into the recorded target
+branch, the primary supplies
 the exact accepted source HEAD, repository, worktree, purpose, base and target plus
 the semantic review and check evidence. Git Operator alone compares the actual clean
-source HEAD with that accepted HEAD and refuses drift before merge; the resulting
-delivery merge SHA is recorded separately and need not equal the source HEAD. After
-all steps and the applicable gate, Git Operator merges the temporary branch, reruns
+source HEAD with that accepted HEAD and refuses drift before merge; a target-branch
+advance is not source drift, while the source HEAD, repository and worktree identity
+must still match accepted evidence. On a merge conflict Git Operator reconciles every
+conflicted hunk by preserving both sides' changes, never chooses ours or theirs
+wholesale, never rebases, forces, resets or amends, and the affected checks rerun after
+resolution; if both sides cannot be preserved or any post-resolution check fails, it
+aborts only the in-progress merge, retains the owned worktree and branch, and reports
+blocked with the conflicted paths, resolution evidence and the failing check. The
+resulting delivery merge SHA is recorded separately and need not equal the source HEAD.
+After all steps and the applicable gate, Git Operator merges the temporary branch, reruns
 affected checks and removes only the owned worktree/branch. Never stage unrelated
 user changes, expand scope, search outside the packet, publish or edit frozen
 planning artifacts.

@@ -7,7 +7,7 @@ description: Freeze a reviewed spec.md and plan.md for a new or ambiguous featur
 
 ## When to use
 
-Planning is only for a planned change: a new feature, unclear or contested requirements, more than one materially different design, or a change to a public interface, persistent format, cross-module or cross-stack behavior, migration, compatibility or the project contract. A small requirement, feature adjustment or defect fix with clear, bounded intent is implemented directly and must not enter Planning; never use Planning to restate a request whose scope is already settled. Ask the user only when the request cannot be classified.
+Planning is only for a Planned change. A new feature or user-visible capability is always Planned, even when its scope looks small or has one observable outcome; unclear or contested requirements, more than one materially different design, and a change to a public interface, persistent format, cross-module or cross-stack behavior, migration, compatibility or the project contract also require it. A Direct change is a bounded adjustment to existing behavior or defect fix with clear intent and one observable outcome that adds no new user-visible capability; it is implemented directly without Planning or the dual-axis review, and must not enter Planning; it creates no `spec.md`, `plan.md` or task file. A Mechanical change is a typo, copy, comment, formatting or test-only adjustment with no observable behavior change; it is implemented directly and runs only the narrowest relevant check. Never use Planning to restate a request whose scope is already settled. Ask the user only when the request cannot be classified.
 
 ## Outcome
 
