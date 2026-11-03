@@ -873,3 +873,22 @@ describe('the finalization rule keeps criteria disjoint while requirements may o
     }
   });
 });
+
+// Behavior boundary: workspace delivery alignment (REQ-004/AC-007).
+describe('workspace delivery preserve-both conflict policy alignment', () => {
+  it('states preserve-both, affected-check rerun, blocked handling and reviewed source HEAD', async () => {
+    const reference = flatten((await readShipped(['templates', 'skills', 'coding', 'references', 'workspace.md'])) ?? '');
+    expect(reference, 'workspace reference preserves both sides on conflict').toMatch(
+      /preserv[^.]{0,80}both (?:sides|changes)/i,
+    );
+    expect(reference, 'workspace reference reruns affected checks').toMatch(
+      /affected checks[^.]{0,80}rerun/i,
+    );
+    expect(reference, 'workspace reference blocks on unresolvable or failed check').toMatch(
+      /blocked[^.]{0,120}(?:conflicted paths|resolution evidence|failing check)/i,
+    );
+    expect(reference, 'reviewed commit remains the reviewed source HEAD').toMatch(
+      /reviewed commit[^.]{0,120}reviewed source HEAD/i,
+    );
+  });
+});

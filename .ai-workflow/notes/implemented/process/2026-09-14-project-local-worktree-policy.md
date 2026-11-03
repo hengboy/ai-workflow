@@ -29,3 +29,4 @@ This decision is still current: the worktree requirement is now declared togethe
 - Every coding execution is isolated in a project-local worktree, so the per-step commits and the following merge and cleanup steps always have a worktree and branch to operate on.
 - `.worktrees/` must exist in the project `.gitignore`; a missing entry is a configuration defect to fix before implementation.
 - The proportionality of planning, TDD and review depth is unchanged; only the worktree itself became mandatory.
+- The mainline merge-back wording above is partially superseded by [feature-first routing and worktree integration](./2026-11-03-routing-and-worktree-merge.md): integration merges into the branch and starting commit recorded at worktree creation, and a conflict is resolved by preserving both sides' changes before the affected checks rerun. The mandatory-worktree decision, alternatives and consequences remain current.

@@ -90,8 +90,18 @@ directories stay empty; child edits stay in its own worktree. Materialize each
 repository's entire ignored state under the main policy, excluding `.worktrees/`.
 Verify every serial task commit's exact write scope, parentage and both rename
 endpoints. A genuinely unchanged task records exact verified HEAD evidence without
-an empty commit. Integrate delivery non-fast-forward and clean up only run-owned
-worktrees/branches, preserving unrelated user state.
+an empty commit. At worktree creation record the branch checked out at that moment and
+its starting commit as that repository's integration target, and deliver through a
+non-fast-forward merge of its owned worktree branch into that recorded target branch; a
+target-branch advance is not source drift, while the source HEAD, repository and
+worktree identity must still match accepted evidence. On a merge conflict reconcile
+every conflicted hunk by preserving both sides' changes and never choose ours or theirs
+wholesale, never rebase, force, reset or amend, and the affected checks rerun after
+resolution; if both sides cannot be preserved or any post-resolution check fails, abort
+only the in-progress merge, retain the owned worktree and branch, and report blocked
+with the conflicted paths, resolution evidence and the failing check. The delivery merge
+SHA is recorded separately, and the reviewed commit remains the reviewed source HEAD.
+Clean up only run-owned worktrees/branches, preserving unrelated user state.
 
 ## Packet contract
 

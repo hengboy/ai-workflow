@@ -13,7 +13,7 @@ Read `.ai-workflow/AGENTS.md` and `MEMORY.md` before acting; the contract's work
 ## Required packet inputs
 
 - Operation name, project root and exact worktree path.
-- Starting branch/commit or explicit unborn-HEAD baseline with approved paths.
+- Starting branch/commit or explicit unborn-HEAD baseline with approved paths. The branch checked out at worktree creation and its starting commit become the recorded integration target; a detached starting checkout has no target branch and stops before implementation with a bounded support request.
 - Exact allowed paths and expected parent refs are always required; plan/task IDs are required only for planned work, while a direct or mechanical packet supplies the request's explicit scoped outcome instead.
 - For a coding Spec Review dispatch, the exact immutable `base_commit`/`head_commit` and the packet-authorized gitignored evidence output paths; this role resolves and verifies both full SHAs, exports the entire raw range there, and returns the absolute paths and SHAs. Never substitute an implementer narrative, commit message, working-tree edit, moved HEAD or invented SHA.
 - For a non-fast-forward integration, the exact accepted source HEAD, repository, worktree, purpose, base/target and the semantic review and check evidence.
@@ -59,7 +59,7 @@ Reject ambiguous targets or missing refs before mutation.
 
 ### Worktrees and task commit
 
-- Before implementation, create exactly one mandatory project-local coding worktree at `<project>/.worktrees/<name>` and ensure `.gitignore` contains `.worktrees/`. All phases and tasks use that single worktree; never create isolated task worktrees.
+- Before implementation, create exactly one mandatory project-local coding worktree at `<project>/.worktrees/<name>`, ensure `.gitignore` contains `.worktrees/`, and record the branch checked out at that moment and its starting commit as the integration target. All phases and tasks use that single worktree; never create isolated task worktrees. A detached starting checkout has no target branch and stops before implementation with a bounded support request.
 - Immediately after creating a worktree, materialize the project's entire gitignored state into it so `.ai-workflow/plans/`, dependencies and build outputs stay visible: `MEMORY.md`, navigation and notes now travel with Git, so they need no materialization. At the project root enumerate ignored state with `git ls-files --others --ignored --exclude-standard --directory`. For each returned entry, excluding the `.worktrees/` container, symlink a file entry; for a directory entry create a real directory in the worktree and symlink each of its immediate children, because a trailing-slash ignore pattern matches a real directory but not a directory symlink. `.ai-workflow/plans/` is the only `.ai-workflow/` subtree that needs this handling; the rest of `.ai-workflow/` arrives with the worktree through Git. Ignored state stays single-source at the project root, so writes such as screenshots land there; removing the worktree drops only the links.
 - Verify before implementation that `git status --porcelain` reports nothing, that the intended ignored paths resolve inside the worktree, and that `git worktree remove` succeeds without `--force`.
 - After each phase is verified, commit each task serially, one commit at a time inside the same worktree. Stage only that task's explicit packet write paths.
@@ -69,11 +69,12 @@ Reject ambiguous targets or missing refs before mutation.
 
 ### Final integration
 
-- Recheck starting branch and baseline for drift.
+- Recheck the recorded starting commit and baseline for drift. A target-branch advance is not source drift, while the source HEAD, repository and worktree identity must still match accepted evidence.
 - Before any non-fast-forward merge, compare the actual clean source HEAD with the accepted source HEAD supplied in the packet and refuse any drift; a different or unaccepted HEAD with dirty or unaccepted content stops before merge.
-- Use a non-fast-forward merge from the single coding branch.
-- On conflict or drift, stop with evidence; do not rebase or auto-resolve.
-- Record the resulting delivery merge SHA separately; it need not equal the accepted source HEAD.
+- Merge the worktree branch into the recorded target branch with a non-fast-forward merge.
+- On a merge conflict, reconcile every conflicted hunk by preserving both sides' changes; never choose ours or theirs wholesale, and never rebase, force, reset or amend. After resolution the affected checks rerun.
+- If both sides cannot be preserved or any post-resolution check fails, abort only the in-progress merge, retain the owned worktree and branch, and report blocked with the conflicted paths, resolution evidence and the failing check.
+- Record the delivery merge SHA separately; it need not equal the accepted source HEAD.
 - After success, remove only run-owned branches/worktrees.
 
 ### Workspace repository lifecycle
@@ -90,8 +91,17 @@ Reject ambiguous targets or missing refs before mutation.
 - Commit each task scope serially in its repository worktree one commit at a time. Check the
   commit's exact parentage and both endpoints of every rename against the task's exact write
   scope; refuse completion when an endpoint or an unrelated path is out of scope.
-- Deliver a repository through a non-fast-forward integration of its owned worktree and branch,
-  verify the resulting delivery commit, then perform only owned cleanup.
+- Record the branch checked out at worktree creation and its starting commit as that
+  repository's integration target, and deliver through a non-fast-forward merge of its owned
+  worktree branch into that recorded target branch; a target-branch advance is not source
+  drift, while the source HEAD, repository and worktree identity must still match accepted
+  evidence. Apply the same preserve-both conflict policy: every conflicted hunk preserves both
+  sides' changes, never choose ours or theirs wholesale, never rebase, force, reset or amend,
+  and the affected checks rerun after resolution; if both sides cannot be preserved or any
+  post-resolution check fails, abort only the in-progress merge, retain the owned worktree and
+  branch, and report blocked with the conflicted paths, resolution evidence and the failing
+  check. Record the delivery merge SHA separately, and the reviewed commit remains the reviewed
+  source HEAD. Verify the resulting delivery commit, then perform only owned cleanup.
 
 ### Workspace pointer commit
 

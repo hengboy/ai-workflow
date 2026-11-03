@@ -68,13 +68,14 @@ describe('change routing guidance', () => {
 
     expect(contract, 'the contract owns the routing section').toMatch(/## Change routing/);
     expect(contract, 'a direct change is implemented without Planning').toMatch(
-      /Direct change[^.]*small requirement, feature adjustment or defect fix[^.]*without Planning/i,
+      /Direct change[^.]*bounded adjustment (?:to|of) existing behavior or defect fix[^.]*no new user-visible capability[^.]*without Planning/i,
     );
     expect(contract, 'a direct change skips the dual-axis review').toMatch(
       /Direct change[\s\S]{0,600}?without the dual-axis review/i,
     );
     expect(contract, 'unclear or contested requirements are planned').toMatch(
-      /Planned change[^.]*new feature, unclear or contested requirements/i,
+      /Planned change[^.]*new feature or user-visible capability, unclear or contested requirements/i,
+
     );
     expect(contract, 'mechanical edits run only the narrowest check').toMatch(
       /Mechanical change[^.]*typo, copy, comment, formatting or test-only[^.]*narrowest relevant check/i,
@@ -124,7 +125,7 @@ describe('change routing guidance', () => {
       /small fixes are implemented directly/i,
     );
     expect(flat, 'a direct fix must not enter Planning').toMatch(
-      /small requirement, feature adjustment or defect fix with clear, bounded intent is implemented directly and must not enter Planning/i,
+      /bounded adjustment (?:to|of) existing behavior or defect fix[^.]*no new user-visible capability[^.]*implemented directly[^.]*must not enter Planning/i,
     );
     expect(flat, 'Planning may not restate a settled request').toMatch(
       /never use Planning to restate a request whose scope is already settled/i,
@@ -139,7 +140,7 @@ describe('change routing guidance', () => {
       /Classify every request before starting and state the class in one line/i,
     );
     expect(contract, 'the contract keeps the direct class bullet').toMatch(
-      /Direct change[^.]*small requirement/i,
+      /Direct change[^.]*bounded adjustment (?:to|of) existing behavior[^.]*no new user-visible capability/i,
     );
     expect(contract, 'the contract keeps the planned class bullet').toMatch(
       /Planned change[^.]*new feature/i,
@@ -463,4 +464,28 @@ describe('MEMORY no longer restates the routing contract (REQ-004 / AC-004)', ()
       /split by plan-to-tasks before implementation/i,
     );
   });
+});
+
+// Behavior boundary: new feature-first classification (REQ-001). A new user-visible
+// capability is always Planned; Direct is bounded adjustment/defect fix with no new
+// capability; Mechanical is typo/copy/comment/formatting/test-only with no observable
+// behavior change. Reads shipped authorities.
+describe('feature-first classification (new routing policy)', () => {
+  for (const path of ['templates/project/AGENTS.md', 'templates/skills/coding/SKILL.md', 'templates/skills/planning/SKILL.md']) {
+    it(`states feature-first classification in ${path}`, async () => {
+      const text = flatten(await read(path));
+      expect(text, `${path} makes a new user-visible capability always Planned`).toMatch(
+        /new (?:feature|user-visible capability)[^.]{0,160}always[^.]{0,80}Planned|new (?:feature|user-visible capability)[^.]{0,160}Planned/i,
+      );
+      expect(text, `${path} limits Direct to bounded adjustment of existing behavior or defect fix`).toMatch(
+        /Direct[^.]{0,220}(?:bounded adjustment of existing behavior|defect fix)/i,
+      );
+      expect(text, `${path} states Direct adds no new user-visible capability`).toMatch(
+        /Direct[^.]{0,260}no new user-visible capability/i,
+      );
+      expect(text, `${path} keeps Mechanical typo/copy/comment/formatting/test-only with no observable behavior change`).toMatch(
+        /Mechanical[^.]{0,220}(?:typo|copy|comment|formatting|test-only)[^.]{0,220}no observable behavior change/i,
+      );
+    });
+  }
 });
