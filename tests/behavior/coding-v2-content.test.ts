@@ -58,6 +58,17 @@ describe('v2 coding guidance', () => {
     expect(coding).not.toMatch(/unsplit plan.{0,180}surface/i);
   });
 
+  it('requires Todo completion status to be updated promptly', async () => {
+    const coding = (await readFile(packagePath('templates', 'skills', 'coding', 'SKILL.md'), 'utf8')).replace(/\s+/g, ' ');
+
+    expect(coding, 'the coding skill requires a Todo list').toMatch(/Create a Todo list before editing/i);
+    expect(coding, 'completed items are marked immediately').toMatch(
+      /mark each item completed immediately[^.]{0,120}(?:verified|evidence)/i,
+    );
+    expect(coding, 'status updates are never batched').toMatch(/never batch status updates/i);
+    expect(coding, 'finished items are never left pending').toMatch(/leave finished items pending/i);
+  });
+
   it('requires a mandatory project-local temporary worktree before implementation', async () => {
     const coding = (await readFile(packagePath('templates', 'skills', 'coding', 'SKILL.md'), 'utf8')).replace(/\s+/g, ' ');
 

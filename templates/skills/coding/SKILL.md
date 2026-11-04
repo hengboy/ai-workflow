@@ -193,7 +193,9 @@ After a safe patch changes the contract or owned rules, re-read `.ai-workflow/AG
   Planning and TDD depth stay risk-proportional while
   review boundaries follow the change class.
 - Create a Todo list before editing and keep it current, proportional to the
-  change. Each step must state its scope, acceptance evidence and commit point.
+  change. Mark each item completed immediately when its work and acceptance
+  evidence are verified; never batch status updates or leave finished items
+  pending. Each step must state its scope, acceptance evidence and commit point.
 - Packets transport the frozen fixed context and frozen plan files as absolute paths
   plus version anchors only: the worktree baseline commit or blob anchor for fixed
   context and the frozen digest for plan files, plus repository, worktree and version
