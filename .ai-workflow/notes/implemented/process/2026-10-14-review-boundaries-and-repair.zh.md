@@ -10,13 +10,15 @@ Status: implemented
 
 ## Decision
 
+修复额度与复核输入由 [Review evidence and shared skills](2026-11-05-review-evidence-and-shared-skills.md) 部分替代。本记录保留下文的分流、状态分离、集成理由及历史验证。
+
 - 项目契约 `templates/project/AGENTS.md` 及其纳入版本控制的镜像 `.ai-workflow/AGENTS.md` 新增 `## Review policy` 一节，MEMORY、README 与本记录描述同一策略：变更类别是唯一常规评审批次触发条件。
 - Direct 与 Mechanical 变更不派发任何评审轴，Planning 只派发 Spec Review 而绝不派发 Standards Review，plan-to-tasks 两者都不派发；普通规划实施无论拆分与否，都在实施及其必需检查之后、集成之前运行一次并行的完整 Spec Review 与 Standards Review 批次。
 - 含子仓库参与的工作区为每一次仓库交付保留一次 per-repository delivery review，并为收尾保留一次独立的 finalization review，零任务根没有人为的 root-delivery review；不存在 per-task、per-phase 或 per-commit 触发器，也不存在超出变更类别的未定义 larger 或 high-risk 触发器。
-- 规划澄清业务意图，在内存中用两种语言起草，运行一次完整 Spec Review，自动修复范围内错误并至多做一次受影响发现的定向复核，然后才呈现完整的最终确认；批准之前不存在计划目录、`spec.md`、摘要或 task 文件，而该评审之后的实质性用户变更会开启新的规划边界与 plan ID，而不是复用陈旧证据。
-- 主代理聚合两个轴的发现，对已证实且在既定或冻结验收与既有写入范围内的缺陷自动委派一次聚合修复，不询问修复哪些发现；Test 先撰写必需的测试改动；每个边界至多允许一次聚合修复与一次定向复核批次，只派发受影响的轴，两轴都受影响时同时派发，并携带原始发现标签、修复 diff 与新鲜证据。
+- 规划澄清业务意图，在内存中用两种语言起草，运行一次完整 Spec Review，在有界修复额度内修复范围内缺口，并在最终确认前提供修复前后草稿进行定向复核；批准前不存在规划产物，实质性用户变更开启新的规划边界，不复用陈旧证据。
+- 主代理聚合两个轴的发现，每轮对已证实且在既定或冻结验收与既有写入范围内的缺陷自动委派一次聚合修复；Test 先撰写必需测试。每个边界最多两轮修复与复核，按修复实际影响选择评审轴，两轴受影响时并行执行。原始标签由主代理保留；Spec 接收受影响需求、前次已评审版本和原始修复对比，不接收此前发现，而 Standards 还接收事实发现证据。第二轮要求具体修正以及新证据或已证明的进展。
 - 未达成的 AC、被引用的必需标准违规或缺失的必需证据属于阻塞项，且不可用或失败的必需证据保持阻塞；warning 是建议性的，须带有具理由的处置，且绝不掩盖阻塞项。可证明为无依据或重复的发现同样须带有具理由的处置，且不得被静默丢弃。业务或验收变更、范围扩张、REQ/AC 变更或已交付子仓库编辑会停在有界的决策、新计划或支持请求上，而不是进行未授权编辑。
-- 执行 Status 与评审 Verdict 保持分离：`done` 表示执行完成，绝不替代 Verdict PASS；冻结或集成要求完整的已分配验收证据且没有未解决阻塞项，而未解决阻塞项或不可用的复核会以 `blocked` 或 `failed` 停止，不进入第二次修复或评审循环。
+- 执行 Status 与评审 Verdict 保持分离：`done` 表示执行完成，绝不替代 Verdict PASS；冻结或集成要求完整的已分配验收证据且没有未解决阻塞项。没有进展、必需证据不可用或修复额度耗尽仍有阻塞项时，以 `blocked` 或 `failed` 停止，不重新完整评审或隐藏缺陷。
 - 在非快进集成之前，主代理提供确切的已接受来源 HEAD、仓库、worktree、用途、基线与目标，以及评审与检查证据；只有 Git Operator 比较实际的干净来源 HEAD 与该已接受 HEAD，并在合并前拒绝漂移，而由此得到的交付合并 SHA 被独立记录，且不必等于来源 HEAD。
 - 工作区 `reviewed_commit` 只在修复、检查、复核与收尾均被接受之后写入一次，保持用途限定，绝不复用于另一用途或已变更的 HEAD；CLI 检查点成功只证明一次记录状态转换，不证明评审 PASS 或 Git 相等。
 - 该策略发布在 `templates/project/AGENTS.md`、`templates/skills/planning/SKILL.md`、`templates/skills/coding/SKILL.md`、`templates/skills/coding/references/workspace.md`、`templates/skills/plan-to-tasks/SKILL.md`、`templates/agents/spec-review.md`、`templates/agents/standards-review.md` 与 `templates/agents/git-operator.md`，并由 `tests/behavior/review-policy.test.ts` 以及 `tests/behavior/planning-content.test.ts` 中被替换的冲突断言守护。
@@ -25,7 +27,7 @@ Status: implemented
 
 - **保留未定义的 larger 或 high-risk 评审触发器。** 放弃：不确定的触发器意味着同一变更可能被评审、也可能不被评审，而变更类别已提供确定的边界。
 - **保留常规的"只修选定项与修复全部"选择。** 放弃：询问修复哪些发现会拖延一项验收与写入范围本已授权的范围内修复，且所请求的处置是自动的、无选择提示的。
-- **允许第二次完整评审或无界修复循环。** 放弃：一次聚合修复与一次受影响轴复核使每个边界保持有界，而未解决阻塞项必须停止而不是循环。
+- **允许第二次完整评审或无界修复循环。** 放弃：有界聚合修复和受影响轴复核保留有限边界，额度耗尽时未解决阻塞项必须停止。
 - **把成功检查点或 `done` 状态当作验收。** 放弃：一次记录状态转换不证明任何语义裁决，因此验收证据与干净的来源 HEAD 须分别提供。
 - **把交付合并 SHA 等同于已评审的来源 HEAD。** 放弃：非快进合并合理地产生不同的交付 SHA，因此二者作为独立证据记录。
 

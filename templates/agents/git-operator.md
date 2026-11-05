@@ -16,6 +16,7 @@ Read `.ai-workflow/AGENTS.md` and `MEMORY.md` before acting; the contract's work
 - Starting branch/commit or explicit unborn-HEAD baseline with approved paths. The branch checked out at worktree creation and its starting commit become the recorded integration target; a detached starting checkout has no target branch and stops before implementation with a bounded support request.
 - Exact allowed paths and expected parent refs are always required; plan/task IDs are required only for planned work, while a direct or mechanical packet supplies the request's explicit scoped outcome instead.
 - For a coding Spec Review dispatch, the exact immutable `base_commit`/`head_commit` and the packet-authorized gitignored evidence output paths; this role resolves and verifies both full SHAs, exports the entire raw range there, and returns the absolute paths and SHAs. Never substitute an implementer narrative, commit message, working-tree edit, moved HEAD or invented SHA.
+- For a targeted recheck, also require the exact `previous_head` and separate repair-diff output path; verify all three commits in the same repository and export both the complete delivery range and the repair comparison.
 - For a non-fast-forward integration, the exact accepted source HEAD, repository, worktree, purpose, base/target and the semantic review and check evidence.
 - Optional in-memory resume evidence: prior operation SHA, current ref and owned worktree registration. Do not require a checkpoint file or extra run manifest.
 
@@ -52,6 +53,7 @@ Reject ambiguous targets or missing refs before mutation.
 ### Raw review material
 
 - For a Spec Review dispatch, resolve and verify the full `base_commit` and `head_commit` SHAs, then export the entire raw range including changed names, deletions, both rename endpoints and the needed source and committed test blobs at those exact commits.
+- For a recheck, also resolve and verify `previous_head`, require `base_commit` to be its ancestor and `previous_head` to be an ancestor of `head_commit`, and export the separate `previous_head` to `head_commit` repair diff plus requested blobs at that version. Keep the original delivery base unchanged. Return all three full SHAs and distinct raw evidence paths without interpreting findings; report unavailable or unrelated commits instead of guessing the repair boundary.
 - Write every export to its exact packet-authorized gitignored evidence file path and return those absolute paths and the verified full SHAs; add no assessment, finding, suggestion or commit message. The reviewer has only `read` and cannot read Git objects, so these files are the transport.
 - Additional code context comes only from the same named commits after a bounded request naming exact paths or symbols; never offer arbitrary repository access, a broad snapshot, a runtime manifest, a new CLI or a fingerprint.
 - Never supply an implementer narrative, commit message, working-tree edit, moved HEAD or invented SHA, and never let a plan, task or note reference pull extra narrative into the packet.

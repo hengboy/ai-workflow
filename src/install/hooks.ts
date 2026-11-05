@@ -1,4 +1,4 @@
-import { readFile, rm } from 'node:fs/promises';
+import { readFile, realpath, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import { atomicWrite, exists, writeJson } from '../utils/fs.js';
@@ -86,7 +86,14 @@ export async function installSynchronization(
     const path = join(home, relativePath);
     const prior = records[host];
     const warnings = [...sharedWarnings];
-    for (const skill of shadowSkills[host]) if (await exists(join(home, skill))) warnings.push(`Existing host-scoped synchronization skill is preserved: ${skill}; resolve it if it shadows the shared safe skill.`);
+    for (const skill of shadowSkills[host]) {
+      const skillPath = join(home, skill);
+      if (!(await exists(skillPath))) continue;
+      const sharedPath = join(home, '.agents/skills/sync-ai-workflow/SKILL.md');
+      // A host directory link loads the shared skill itself, not a competing copy.
+      if (await exists(sharedPath) && await realpath(skillPath) === await realpath(sharedPath)) continue;
+      warnings.push(`Existing host-scoped synchronization skill is preserved: ${skill}; resolve it if it shadows the shared safe skill.`);
+    }
     let status: SynchronizationDeployment['status'] = host === 'claude' ? 'installed' : host === 'codex' ? 'trust_required' : 'restart_required';
     if (host === 'opencode') {
       warnings.push('Quit and restart OpenCode to load the installed plugin; installation does not prove it is active.');

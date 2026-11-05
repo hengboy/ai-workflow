@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { install, uninstall } from '../../src/install/index.js';
@@ -176,6 +176,25 @@ function moveOwnedGroupToFront(config: HookConfig, host: Host, event: string): v
 }
 
 describe('native synchronization deployment lifecycle', () => {
+  it('recognizes a Claude shared-directory link without reporting a shadow skill', async () => {
+    const home = await homeWithSpace();
+    await mkdir(join(home, '.agents/skills'), { recursive: true });
+    await mkdir(join(home, '.claude'), { recursive: true });
+    await symlink('../.agents/skills', join(home, '.claude/skills'));
+
+    for (let pass = 0; pass < 2; pass += 1) {
+      const report = await install(hosts, { home, opencodeVersion: 'v1' });
+      for (const entry of report.synchronization ?? []) {
+        expect(entry.warnings.some((warning) => /host-scoped.*skill/i.test(warning))).toBe(false);
+      }
+      expect(await realpath(join(home, '.claude/skills'))).toBe(await realpath(join(home, '.agents/skills')));
+      expect(await exists(join(home, '.agents/skills/coding/SKILL.md'))).toBe(true);
+      expect(await exists(join(home, '.codex/skills'))).toBe(false);
+      expect(await exists(join(home, '.config/opencode/skills'))).toBe(false);
+      expect(await exists(join(home, '.agents/skills/.backups'))).toBe(false);
+    }
+  });
+
   it('AC-012/AC-013 installs one shared native entry per host additively and uninstalls only owned entries', async () => {
     const home = await homeWithSpace();
     expect(home.includes(' ')).toBe(true);

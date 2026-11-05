@@ -4204,6 +4204,7 @@
         "templates/agents/standards-review.md",
         "templates/project/AGENTS.md",
         "templates/skills/coding/SKILL.md",
+        "templates/skills/coding/references/review.md",
         "templates/skills/coding/references/workspace.md",
         "templates/skills/plan-to-tasks/SKILL.md",
         "templates/skills/planning/SKILL.md"
@@ -4223,8 +4224,12 @@
         ".ai-workflow/notes/implemented/process/2026-11-02-workflow-semantics-context.md",
         ".ai-workflow/notes/implemented/process/2026-11-02-workflow-semantics-context.zh.md",
         ".ai-workflow/notes/implemented/process/2026-11-03-routing-and-worktree-merge.md",
+        ".ai-workflow/notes/implemented/process/2026-11-05-review-evidence-and-shared-skills.i18n.yaml",
+        ".ai-workflow/notes/implemented/process/2026-11-05-review-evidence-and-shared-skills.md",
+        ".ai-workflow/notes/implemented/process/2026-11-05-review-evidence-and-shared-skills.zh.md",
         "MEMORY.md",
         "README.md",
+        "src/install/hooks.ts",
         "templates/contract/AGENTS.md"
       ],
       "tests": [
@@ -4232,14 +4237,16 @@
         "tests/behavior/notes-content.test.ts",
         "tests/behavior/planning-content.test.ts",
         "tests/behavior/prompt-context-transport.test.ts",
+        "tests/behavior/review-dispatch.test.ts",
         "tests/behavior/review-policy.test.ts",
         "tests/behavior/workflow-semantics.test.ts",
-        "tests/behavior/workspace-workflow-content.test.ts"
+        "tests/behavior/workspace-workflow-content.test.ts",
+        "tests/install/sync-hooks.test.ts"
       ],
       "depends_on": [],
       "relations": [],
       "owner_role": "shared",
-      "responsibility": "Delivered class-boundary review and repair policy: the change class is the only routine review trigger with Direct and Mechanical changes dispatching neither axis, Planning dispatching the Spec Review only and plan-to-tasks neither, one simultaneous full Spec/Standards pair after implementation and required checks before integration, an automatic one aggregate in-scope repair with at most one affected-axis targeted recheck, separate execution Status and review Verdict, and the accepted clean source HEAD compared by Git Operator before a distinct non-fast-forward delivery merge into the target branch recorded at worktree creation, with conflicts resolved by preserving both sides before the affected checks rerun. Coding Spec Review is requirement-only and static at one immutable base/head range with plan/task files, implementer narratives, runtime test artifacts, earlier findings and conversation history excluded, separate permitted payloads per axis, and the primary keeping Test command, exit status and evidence as the runtime gate; Planning remains a document review of the plain draft spec and plan only. The Standards axis also reviews delivered code at the same immutable range for logic and boundary correctness, security risk with a written risk explanation, and redundancy plus key-comment quality, where a defect-capable finding is an error and any other finding is advisory, while review routing, triggers, axes and role count stay unchanged. The common state matrix additionally separates execution status, review judgment, test observation, persistence and navigation results and permits PASS with visible reasoned advisories while a completed review may report done with a non-PASS conclusion.",
+      "responsibility": "Review dispatch and bounded closure: separate initial and recheck packets for Spec and Standards, complete first-pass coverage, original delivery base plus previous reviewed head and repair head with distinct raw diffs, primary-owned finding closure and omission/regression classification, axes selected by repair impact, and at most two evidenced repair/recheck cycles with no-progress and exhausted-budget stops. Standards findings require supported reachability and cited expected behavior under the actual trust boundary. Static review, runtime checks, execution status and acceptance remain separate; integration verifies the accepted clean source head. Shared skills have one physical source and installation recognizes a host directory link without treating it as a shadow copy.",
       "read_scope": [
         ".ai-workflow/AGENTS.md",
         ".ai-workflow/notes/implemented/feature/2026-10-09-workspace-coding-orchestration.md",
@@ -4254,14 +4261,19 @@
         ".ai-workflow/notes/implemented/process/2026-11-02-workflow-semantics-context.md",
         ".ai-workflow/notes/implemented/process/2026-11-02-workflow-semantics-context.zh.md",
         ".ai-workflow/notes/implemented/process/2026-11-03-routing-and-worktree-merge.md",
+        ".ai-workflow/notes/implemented/process/2026-11-05-review-evidence-and-shared-skills.i18n.yaml",
+        ".ai-workflow/notes/implemented/process/2026-11-05-review-evidence-and-shared-skills.md",
+        ".ai-workflow/notes/implemented/process/2026-11-05-review-evidence-and-shared-skills.zh.md",
         "MEMORY.md",
         "README.md",
+        "src/install/hooks.ts",
         "templates/agents/git-operator.md",
         "templates/agents/spec-review.md",
         "templates/agents/standards-review.md",
         "templates/contract/AGENTS.md",
         "templates/project/AGENTS.md",
         "templates/skills/coding/SKILL.md",
+        "templates/skills/coding/references/review.md",
         "templates/skills/coding/references/workspace.md",
         "templates/skills/plan-to-tasks/SKILL.md",
         "templates/skills/planning/SKILL.md",
@@ -4269,9 +4281,11 @@
         "tests/behavior/notes-content.test.ts",
         "tests/behavior/planning-content.test.ts",
         "tests/behavior/prompt-context-transport.test.ts",
+        "tests/behavior/review-dispatch.test.ts",
         "tests/behavior/review-policy.test.ts",
         "tests/behavior/workflow-semantics.test.ts",
-        "tests/behavior/workspace-workflow-content.test.ts"
+        "tests/behavior/workspace-workflow-content.test.ts",
+        "tests/install/sync-hooks.test.ts"
       ],
       "shared_entry": true
     },

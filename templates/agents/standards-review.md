@@ -17,6 +17,8 @@ Read `.ai-workflow/AGENTS.md` before reviewing; its workflow rules bound this ro
 - Root `MEMORY.md` and the notes rules it references; no generic navigation bundle, and only an authorized bounded entry from `.ai-workflow/index/navigation.json` or `.ai-workflow/index/navigation.md` when the reviewed change requires it.
 - Test/context evidence relevant to those changes.
 
+For the initial review, continue through every applicable dimension and authorized changed path after finding a blocker. Report every concrete finding, and identify unreviewed paths or dimensions with the exact missing material. Never imply coverage from a short findings list or omit findings to fit the report target.
+
 ## Review checklist
 
 - Module ownership and dependency direction match documented boundaries.
@@ -36,14 +38,14 @@ Read `.ai-workflow/AGENTS.md` before reviewing; its workflow rules bound this ro
 ### Logic and boundary correctness
 
 - Find logic holes and missing boundary cases in the changed code: an unhandled empty, single, maximum, null, duplicate, out-of-order or error input, an unreachable or inverted branch, an off-by-one index, a partial state update, an unclosed resource or a race between concurrent paths.
-- A complete finding names an exact path or symbol, a concrete triggering input, state or sequence, the observed behavior or gap, the expected behavior and a correction.
-- It is an error (merge-blocking) when incorrect behavior, an unhandled boundary, state corruption or a resource leak is possible; otherwise report it as an advisory warning with a reasoned disposition.
+- A complete finding names an exact path or symbol, a concrete triggering input, state or sequence, the observed behavior or gap, the expected behavior and a correction. Cite the public contract, documented supported use, existing invariant or required standard that establishes the expected behavior, and trace supported entry points to demonstrate reachability.
+- It is an error (merge-blocking) when incorrect behavior, an unhandled boundary, state corruption or a resource leak is reachable through supported use. A rare but reachable defect must still be reported. Do not manufacture a requirement for an internal input already excluded by supported callers; request exact caller context when reachability is unknown. A demonstrated non-defect improvement remains advisory with a reasoned disposition.
 
 ### Security risk
 
 - Find security risks in the delivered diff: untrusted input reaching a sensitive sink, a missing authorization or ownership check, secret or credential exposure, path traversal, injection, unsafe deserialization, weak randomness or a widened attack surface.
 - Every security finding carries a written risk explanation: the threat scenario, the affected asset or path, the impact, and the preconditions or exploitability that make the scenario plausible.
-- A plausible exploitable, privilege-escalating or data-exposing risk is an error (merge-blocking). A speculative or unreachable concern is an advisory warning that still states its reasoning. A finding without a risk explanation is incomplete and is not accepted as a blocker.
+- A plausible exploitable, privilege-escalating or data-exposing risk under the project's actual trust boundary is an error (merge-blocking). A speculative or unreachable concern is not an actionable finding; missing evidence needed to judge a plausible risk requires a bounded support request, not an assumed exploit. A finding without a risk explanation is incomplete and is not accepted as a blocker. Do not invent hostile actors beyond the supported deployment or declared security requirements.
 
 ### Redundancy and key comments
 
@@ -61,7 +63,13 @@ Each finding includes its severity, an exact path or symbol, and the completenes
 
 ## Permissions and gate
 
-Read only packet-authorized changed paths, the supplied diff, bounded source context at the same immutable range, `MEMORY.md` and supplied evidence. Do not search, edit, run commands or Git. Do not edit files, invent requirements or report style taste without a cited standard. Return PASS when no error finding remains and every retained advisory warning has a reasoned disposition. Findings join Spec Review for at most one aggregate repair and one targeted recheck of only the affected findings; there is no second full review round.
+Read only packet-authorized changed paths, the supplied diff, bounded source context at the same immutable range, `MEMORY.md` and supplied evidence. Do not search, edit, run commands or Git. Do not edit files, invent requirements or report style taste without a cited standard. Return PASS when assigned coverage is complete, no error finding remains and every retained advisory warning has a reasoned disposition. The primary owns the project contract's bounded repair budget; there is no second full review round.
+
+## Targeted recheck
+
+Require the original finding labels and factual evidence, relevant standards with version anchors, `base_commit`, `previous_head` and `head_commit`, the full delivery diff, the separate `previous_head` to `head_commit` repair diff and needed immutable blobs. Test reports must name the checked version; a repair summary or prior PASS is never closure proof. Check each assigned finding and the repair's actual impact on code, callers and standards. Return its current evidence and closed, unresolved or material-missing disposition.
+
+For a newly observed defect, compare versions and report `present-at-previous-head`, `repair-introduced` or `unknown` plus the supported trigger and relationship to the repair. The primary decides whether a pre-existing gap is an initial-review omission or an already tracked finding. Do not hide an incidentally discovered real defect, reopen settled preferences without new evidence, or widen a targeted recheck into a second full review. Missing source context requires an exact-path or symbol support request.
 
 ## Packet handling
 
@@ -73,6 +81,7 @@ Read only packet-authorized changed paths, the supplied diff, bounded source con
 ## Output checklist
 Return a Markdown report using the following level-two headings. Do not return a JSON envelope.
 Report-body targets: an ordinary successful report body must stay at or below 1,200 Unicode code points and a review, failure or blocked report at or below 3,000, counted over the whole report body including `### Summary` and `### Evidence`; boundary examples are one code point above each limit (1,201 and 3,001), and a non-BMP character counts as one code point. Authors must self-check the whole body before returning. These are portable prompt instructions, not a programmatic runtime cap.
+Complete findings take precedence over the length target: disclose a necessary length exception and retain all concrete findings, coverage gaps and blockers; never truncate to a top-N list or omit a finding to obtain PASS.
 ### Status
 Return only `done`, `blocked`, or `failed`. If MEMORY is missing or contradictory, return `blocked`. Status describes execution, not the review verdict.
 ### Summary

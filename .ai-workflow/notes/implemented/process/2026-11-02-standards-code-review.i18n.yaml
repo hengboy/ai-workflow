@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 # ai-workflow notes pairing --project <project-root> --write .ai-workflow/notes/implemented/process/2026-11-02-standards-code-review.md
-2026-11-02-standards-code-review.md: 352631bd2baf44ecad7019f1e3a7997f0c42e8a9
-2026-11-02-standards-code-review.zh.md: 1dbd13bd4db3043996c25aa4d464d5aba45fd35e
+2026-11-02-standards-code-review.md: c8080f24b147d9a2d5b1a067fa28e6832a0d296c
+2026-11-02-standards-code-review.zh.md: b677bf7813f4228f2fc831edf90751640cdaf5f4

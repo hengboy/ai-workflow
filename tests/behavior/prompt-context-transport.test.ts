@@ -467,23 +467,23 @@ describe('fixed eight-task reference fixture and scope-transport volumes (REQ-00
       id: 'T07',
       phase: 4,
       repository: 'interface',
-      role: 'spec-review',
-      goal: 'Check requirement coverage, testability and scope of the delivery',
+      role: 'test',
+      goal: 'Verify requirement coverage and scope of the delivered prompt examples',
       coverage: ['REQ-005/AC-009'],
       commands: ['pnpm exec vitest run tests/behavior/prompt-context-transport.test.ts'],
       readScopes: ['templates/project/AGENTS.md', 'tests/behavior/prompt-context-transport.test.ts'],
-      writeScopes: [],
+      writeScopes: ['tests/behavior/prompt-context-transport.test.ts'],
     },
     {
       id: 'T08',
       phase: 4,
       repository: 'engine',
-      role: 'standards-review',
-      goal: 'Check MEMORY and note consistency against the delivered standards',
+      role: 'test',
+      goal: 'Verify MEMORY and note consistency policy in the delivered prompts',
       coverage: ['REQ-005/AC-010'],
       commands: ['pnpm exec vitest run tests/behavior/review-policy.test.ts'],
       readScopes: ['MEMORY.md', '.ai-workflow/notes/implemented/process/2026-10-19-prompt-context-transport.md'],
-      writeScopes: [],
+      writeScopes: ['tests/behavior/review-policy.test.ts'],
     },
   ];
 
@@ -583,6 +583,7 @@ describe('fixed eight-task reference fixture and scope-transport volumes (REQ-00
     expect(FIXED_TASKS.map((task) => task.phase)).toEqual([1, 1, 2, 2, 3, 3, 4, 4]);
     for (const task of FIXED_TASKS) {
       expect(task.role, `${task.id} names a role`).not.toBe('');
+      expect(['spec-review', 'standards-review'], 'reviewers use role-specific review packets, never generic task packets').not.toContain(task.role);
       expect(task.goal, `${task.id} carries a goal`).not.toBe('');
       expect(task.coverage.length, `${task.id} carries assigned coverage`).toBeGreaterThan(0);
       expect(task.commands.length, `${task.id} carries permitted commands`).toBeGreaterThan(0);

@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 # ai-workflow notes pairing --project <project-root> --write .ai-workflow/notes/implemented/process/2026-10-14-review-boundaries-and-repair.md
-2026-10-14-review-boundaries-and-repair.md: 167042ad15d27748da00fe0ad5060a102d8b43fd
-2026-10-14-review-boundaries-and-repair.zh.md: 430f021a1434d47cce5a7b7a58fbcb99a8a0605b
+2026-10-14-review-boundaries-and-repair.md: b38e77c21cb4602b235599df408ad97d546aade4
+2026-10-14-review-boundaries-and-repair.zh.md: ba81160f9747354d7cea4ef87ec8e3513d88359b

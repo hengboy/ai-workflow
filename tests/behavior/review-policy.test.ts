@@ -247,13 +247,11 @@ describe('automatic aggregate repair (REQ-003 / AC-004, AC-005)', () => {
   });
 });
 
-describe('one targeted recheck (REQ-004 / AC-006, AC-007)', () => {
+describe('bounded targeted rechecks (REQ-004 / AC-006, AC-007)', () => {
   it('rechecks only the implicated axes, simultaneously when both are affected', async () => {
     const coding = flatten(await read(CODING));
 
-    expect(coding, 'a boundary permits one targeted recheck batch').toMatch(
-      /one targeted recheck|targeted recheck batch|targeted recheck/i,
-    );
+    expect(coding, 'a boundary permits at most two repair/recheck cycles').toContain('at most two repair/recheck cycles');
     expect(
       anyMatch(coding, [
         /only[^.]{0,200}?(?:affected|implicated)[^.]{0,140}?ax(?:is|es)/i,
@@ -553,7 +551,7 @@ describe('code-review dimensions and severity (REQ-001..REQ-006 / AC-001..AC-006
     expect(text, 'security finding states the impact').toMatch(/impact/i);
     expect(anyMatch(text, [/preconditions/i, /exploitability/i]), 'security finding states preconditions or exploitability').toBe(true);
     expect(anyMatch(text, [/(?:exploitable|privilege-escalating|data-exposing)[^.]{0,160}(?:error|merge-blocking)/i, /(?:error|merge-blocking)[^.]{0,160}(?:exploitable|data-exposing)/i]), 'a plausible exploitable or data-exposing risk is an error').toBe(true);
-    expect(anyMatch(text, [/(?:speculative|unreachable)[^.]{0,160}(?:advisory|warning)/i, /(?:advisory|warning)[^.]{0,160}(?:speculative|unreachable)/i]), 'a speculative or unreachable concern is an advisory warning with reasoning').toBe(true);
+    expect(anyMatch(text, [/(?:speculative|unreachable)[^.]{0,160}not an actionable finding/i]), 'a speculative or unreachable concern is not promoted to an actionable finding').toBe(true);
     expect(anyMatch(text, [/without (?:a )?risk explanation/i, /incomplete/i, /not accepted as a blocker/i]), 'a finding without a risk explanation is incomplete and not a blocker').toBe(true);
   });
 

@@ -264,6 +264,8 @@ full prohibition. Unrelated existing comments are not rewritten.
 
 ## Verification and Commit
 
+Before any planned review dispatch, explicitly read `references/review.md` and use its separate initial and recheck packets for each axis. It defines the raw repair comparison, complete first-pass coverage and closure procedure; a generic task packet is never a review packet.
+
 Choose checks/commits by risk and repository practice. Run the narrowest relevant
 test after each slice, then all declared validation commands, including required
 typecheck, lint, build or integration checks. Report changed paths and every result.
@@ -294,13 +296,15 @@ holes and missing boundary cases, security risks with a written risk explanation
 and safely removable redundancy plus missing comments on hard-to-understand key
 logic. A logic or boundary finding names an exact path or symbol, a concrete
 triggering input, state or sequence, the observed behavior or gap, the expected
-behavior and a correction, and is merge-blocking when incorrect behavior, an
-unhandled boundary, state corruption or a resource leak is possible and otherwise
-an advisory warning. A security finding states its threat scenario, affected asset
-or path, impact and preconditions or exploitability and is merge-blocking only
-when the risk is plausibly exploitable, privilege-escalating or data-exposing; a
-speculative or unreachable concern is an advisory warning with its reasoning and a
-finding without a risk explanation is not a blocker. Redundancy and key-comment
+behavior with its public-contract, invariant or required-standard basis, and a
+correction. Incorrect behavior, an unhandled boundary, state corruption or a
+resource leak reachable through supported use is merge-blocking, including a rare
+case; an internal input excluded by supported callers creates no new requirement.
+A security finding states its threat scenario, affected asset or path, impact and
+preconditions or exploitability under the actual trust boundary and is merge-blocking
+only for a plausible exploitable, privilege-escalating or data-exposing risk.
+A speculative or unreachable concern is not an actionable finding; missing evidence
+needs a precise support request, and a finding without a risk explanation is not a blocker. Redundancy and key-comment
 findings name the smallest behavior-preserving simplification or the durable
 behavior or rationale to document with no transient plan-internal identifiers, and
 stay advisory unless they cause a defect.
@@ -339,17 +343,33 @@ authorized commands may collect missing evidence. An unfulfilled AC, a cited
 required-standard violation or missing required evidence is a blocker. Warnings are
 advisory and must carry a reasoned disposition; a warning never masks a blocker. Demonstrably unsupported or duplicate findings also require reasoned dispositions and must not be silently dropped. A Standards Review error finding from logic, boundary, security or a defect-causing redundancy is a blocker on the same terms, and a retained advisory finding needs a reasoned disposition and never masks a blocker. A review verdict `PASS` with advisories visible is permitted once every retained advisory has a reasoned disposition and no unresolved blocker remains; a completed review may report execution `done` with a non-PASS verdict.
 
-Each boundary permits at most one targeted recheck batch after the one aggregate
-repair: dispatch only the affected axes in a fresh session, and when both axes are
-affected, dispatch them simultaneously in one batch. The primary keeps the original
-findings and labels and maps closure itself. A Spec Review recheck receives only the
-affected requirement references plus the updated range and repair code scope, with
-no earlier findings or "fixed" explanation, and it includes repair-induced
-regressions within the affected scope; Standards Review may retain its existing
-evidence. The recheck never starts a second full repository review. Reviewers stay
-read-only and Test runs the commands. An unresolved blocker or an unavailable
-recheck stops as `blocked` or `failed` with bounded support; there is no second
-repair or review loop.
+Each boundary permits at most two repair/recheck cycles after its one full review.
+Each cycle combines one aggregate repair, fresh relevant checks and commits, and one
+targeted recheck batch. Dispatch only affected axes selected by actual repair impact
+on requirements, standards, code and callers, never solely by finding origin; when
+both axes are affected, dispatch them simultaneously in fresh sessions. The primary keeps
+the original findings and labels and maps closure itself. A Spec Review recheck
+receives affected requirement references, the original `base_commit`, `previous_head`
+(the immediately preceding reviewed version), updated `head_commit`, repair code
+scope, the complete base-to-head diff, the separate previous-to-head repair diff and
+needed immutable blobs. It receives no earlier findings or "fixed" explanation.
+Standards receives the corresponding raw comparison, original factual findings,
+applicable standards and fresh evidence. Both report whether a gap existed at the
+previous head, was introduced by the repair or has unknown provenance. The primary
+distinguishes unresolved findings, review omissions, repair regressions and unsupported
+or out-of-scope requests as defined in `references/review.md`.
+
+A second cycle is automatic only for evidenced in-scope blockers with a concrete
+correction and new defect evidence or demonstrable closure progress. No progress
+and no new evidence stops repetition. Missing raw material at an unchanged head is
+evidence completion, not another repair cycle; unavailable required evidence blocks.
+When the budget is exhausted with an unresolved blocker, stop as `blocked` or
+`failed` with its exact remaining trigger and evidence. Never conceal a real defect,
+reset the budget through a fresh session or start a second full repository review.
+Reviewers stay read-only and Test runs the commands. Acceptance at the final head
+requires closure of every original and new in-scope blocker, affected-axis acceptance
+and required checks; unaffected coverage carries forward only with an explicit
+repair-impact justification, never merely an earlier PASS.
 
 After the authorized implementation passes its relevant checks, the primary
 automatically delegates the scoped local commit to the `git-operator` sub-agent

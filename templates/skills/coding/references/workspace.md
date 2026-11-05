@@ -148,9 +148,14 @@ Spec Review receives only requirement references and the raw commit range, never
 or task files, implementation narrative, test execution reports, logs or pass claims,
 earlier findings or verdicts. Its raw range arrives only through Git Operator's packet-authorized
 gitignored evidence file paths and verified full SHAs, because the reviewer has only
-`read` and cannot read Git objects. A recheck is one fresh affected-axis batch; Spec
-Review receives only affected requirement references plus the updated range and
-repair code scope, and finalization uses only its own repository-local base and scope.
+`read` and cannot read Git objects. Each recheck is one fresh affected-axis batch within
+the project contract's two-cycle repair budget, with axes selected by actual repair
+impact. Spec Review receives affected requirement references, the original base,
+`previous_head`, updated head, the complete delivery diff and separate repair diff,
+repair code scope and needed immutable blobs. Standards receives the same raw version
+comparison plus its own allowed findings, standards and check evidence. Apply the
+main skill's `references/review.md` packets and closure rules; finalization uses only
+its own repository-local base and scope.
 Initial implementation and repair commits exist before Spec dispatch, and the
 workspace pointer commit stays finalization-only. Findings requiring changes in a
 delivered child need out-of-scope support or a new plan; never reopen that child.
