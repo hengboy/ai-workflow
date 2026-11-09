@@ -807,3 +807,123 @@ describe('opencode plugin boundary', () => {
     90_000,
   );
 });
+
+// --- OpenCode V2 plugin definition boundary (installed default.setup -> spawned dist CLI) ---
+
+interface OpenCodeV2SessionState { directory: string; parentID?: string }
+
+describe('opencode v2 plugin definition boundary', () => {
+  it('injects the primed contract, serves an unprimed root with a no-check, then requires the primed contract read', async () => {
+    const home = await temporary('ai-workflow-plugin-v2-home-');
+    const contextDirectory = await temporary('ai-workflow-plugin-v2-context-');
+    const fixtureLogDirectory = await temporary('ai-workflow-plugin-v2-log-');
+    const rootA = await adoptedProject();
+    const rootBAgents = '# root B contract\n\nOld root B shared context.\n';
+    const rootB = await adoptedProject({ '.ai-workflow/AGENTS.md': rootBAgents });
+    roots.push(home, contextDirectory, fixtureLogDirectory, rootA, rootB);
+    expect(contextDirectory).not.toBe(rootA);
+
+    const git = await gitFixture(baseSourceFiles);
+    const log = join(fixtureLogDirectory, 'heads.log');
+    await install(['opencode'], { home, opencodeVersion: 'v2' });
+
+    // V2 host context: sessions resolve through `session.get`, hooks register through
+    // `session.hook` / `tool.hook`, and `location.directory` is the plugin's own directory.
+    const sessions = new Map<string, OpenCodeV2SessionState>([['S', { directory: rootA }]]);
+    const registrations = new Map<string, Function>();
+    const ctx = {
+      app: { name: 'test', version: '2.2.6', channel: 'test' },
+      location: { directory: contextDirectory, project: { id: 'test', directory: contextDirectory, canonical: contextDirectory } },
+      options: {},
+      session: {
+        get: async ({ sessionID }: { sessionID: string }) => {
+          const state = sessions.get(sessionID);
+          return state ? { id: sessionID, directory: state.directory, ...(state.parentID ? { parentID: state.parentID } : {}) } : null;
+        },
+        hook: async (name: string, callback: Function) => { registrations.set(`session.${name}`, callback); return { dispose: async () => {} }; },
+      },
+      tool: {
+        hook: async (name: string, callback: Function) => { registrations.set(`tool.${name}`, callback); return { dispose: async () => {} }; },
+      },
+      event: { subscribe: async function* () {} },
+    };
+    const pluginModule = await import(pathToFileURL(join(home, opencodePluginRelative)).href) as {
+      default?: { id?: unknown; setup?: (context: unknown) => Promise<(() => void) | undefined> };
+    };
+    expect(pluginModule.default, 'the installed V2 plugin must export a default definition').toBeDefined();
+    expect(typeof pluginModule.default?.setup, 'the V2 definition must carry a setup function').toBe('function');
+    await pluginModule.default!.setup!(ctx);
+
+    const contextHook = registrations.get('session.context')!;
+    const beforeHook = registrations.get('tool.execute.before')!;
+    const afterHook = registrations.get('tool.execute.after')!;
+    expect(typeof contextHook, 'session.context hook').toBe('function');
+    expect(typeof beforeHook, 'tool.execute.before hook').toBe('function');
+    expect(typeof afterHook, 'tool.execute.after hook').toBe('function');
+
+    const contextBefore = await snapshotTree(contextDirectory);
+    const contractB = join(rootB, '.ai-workflow/AGENTS.md');
+
+    await withProcessEnvironment({
+      HOME: home,
+      TMPDIR: fixtureLogDirectory,
+      ...processShimEnv(git),
+      AI_WORKFLOW_FIXTURE_HEAD: A,
+      AI_WORKFLOW_FIXTURE_LOG: log,
+    }, async () => {
+      // Prime rootA at A: its injected session context carries the updated contract.
+      const primedA = await primeBuilt(rootA, A);
+      expect(primedA.report?.status).toBe('synchronized');
+      expect(await observedHeads(log)).toEqual([A]);
+
+      const primedContext = { sessionID: 'S', system: [] as Array<{ type: string; text: string }> };
+      await contextHook(primedContext);
+      expect(primedContext.system.map((entry) => entry.text).join('\n'), 'the primed contract must be injected before ordinary work').toContain('Fresh shared context.');
+      await beforeHook({ sessionID: 'S', tool: 'bash', input: { command: 'ls' } });
+      expect(await observedHeads(log), 'a primed plugin session must not query the source').toEqual([A]);
+
+      // The session moves to an unprimed root: the no-check context is injected, the ordinary
+      // tool proceeds, nothing is written and no source request is issued.
+      sessions.set('S', { directory: rootB });
+      const rootBBefore = await snapshotTree(rootB);
+      const noCheck = { sessionID: 'S', system: [] as Array<{ type: string; text: string }> };
+      await contextHook(noCheck);
+      expectNoCheck(noCheck.system.map((entry) => entry.text).join('\n'));
+      await beforeHook({ sessionID: 'S', tool: 'bash', input: { command: 'ls' } });
+      expect(await observedHeads(log), 'an unprimed root must not query the source').toEqual([A]);
+      expect(changedPaths(rootBBefore, await snapshotTree(rootB)), 'an unprimed root must stay unchanged').toEqual([]);
+
+      // Prime rootB at B; the ordinary tool now rejects until rootB's contract is read.
+      const primedB = await primeBuilt(rootB, B);
+      expect(primedB.report?.status).toBe('synchronized');
+      expect(await observedHeads(log)).toEqual([A, B]);
+      process.env.AI_WORKFLOW_FIXTURE_HEAD = C;
+
+      await expect(beforeHook({ sessionID: 'S', tool: 'bash', input: { command: 'ls' } }))
+        .rejects.toThrow(/before ordinary project work continues/);
+
+      await beforeHook({ sessionID: 'S', tool: 'read', input: { filePath: contractB } });
+      await afterHook({ sessionID: 'S', tool: 'read', input: { filePath: contractB }, status: 'completed', result: { content: '' } });
+      await beforeHook({ sessionID: 'S', tool: 'bash', input: { command: 'ls' } });
+
+      // A child session on the same actual root reuses the parent result with no new HEAD query.
+      sessions.set('P', { directory: rootB });
+      sessions.set('C', { directory: rootB, parentID: 'P' });
+      const parentOutput = { sessionID: 'P', system: [] as Array<{ type: string; text: string }> };
+      await contextHook(parentOutput);
+      const parentText = parentOutput.system.map((entry) => entry.text).join('\n');
+      expect(parentText).toContain('Fresh shared context.');
+      const headsBeforeChild = await observedHeads(log);
+      const childOutput = { sessionID: 'C', system: [] as Array<{ type: string; text: string }> };
+      await contextHook(childOutput);
+      expect(childOutput.system.map((entry) => entry.text).join('\n'), 'a same-root child reuses the parent result').toBe(parentText);
+      expect(await observedHeads(log), 'the reused result performs no new HEAD query').toEqual(headsBeforeChild);
+    });
+
+    expect(changedPaths(contextBefore, await snapshotTree(contextDirectory))).toEqual([]);
+    for (const root of [rootA, rootB]) {
+      expect(await readFile(join(root, '.ai-workflow/plans/20260101-custom/spec.md'), 'utf8')).toBe(planSpecBytes);
+      await expectNoProjectMetadata(root);
+    }
+  }, 90_000);
+});

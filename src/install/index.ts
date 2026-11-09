@@ -199,7 +199,7 @@ async function installUnsafe(hosts: Host[], options: { home?: string; version?: 
     manifest.hosts[host] = owned;
   }
   await installContracts(home, hosts, manifest, skipped);
-  const synchronization = await installSynchronization(home, hosts, manifest.sync_hooks ?? {}, preserveSyncSkill ? [`Existing shared synchronization skill is preserved: ${sharedSyncSkill}; resolve it explicitly before installing the shared safe skill.`] : []);
+  const synchronization = await installSynchronization(home, hosts, manifest.sync_hooks ?? {}, preserveSyncSkill ? [`Existing shared synchronization skill is preserved: ${sharedSyncSkill}; resolve it explicitly before installing the shared safe skill.`] : [], opencodeVersion);
   manifest.sync_hooks = synchronization.records;
   manifest.synchronization = synchronization.reports;
   skipped.push(...synchronization.skipped);
