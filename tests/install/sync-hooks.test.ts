@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mkdir, readdir, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { dirname, join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { install, uninstall } from '../../src/install/index.js';
 import { exists } from '../../src/utils/fs.js';
 import { packagePath } from '../../src/utils/schema.js';
@@ -481,5 +482,52 @@ describe('native synchronization deployment ownership lifecycle', () => {
       expect(await exists(join(home, opencodePluginRelative))).toBe(true);
       expect(await readFile(join(home, opencodeUserPluginRelative), 'utf8')).toBe(userPluginBytes);
     }
+  });
+});
+
+/**
+ * OpenCode v2.2.6 requires every plugin module to export a default definition carrying an
+ * `id` and a `setup` effect. Installing for `opencodeVersion: 'v2'` must therefore publish a
+ * V2 definition whose setup registers the session and tool hooks, while `v1` keeps the named
+ * `AiWorkflowSyncPlugin` factory that older OpenCode loads.
+ */
+describe('opencode v2 plugin definition installation', () => {
+  it('installs a V2 default plugin definition with setup registrations and preserves the V1 named export', async () => {
+    const v2Home = await homeWithSpace();
+    await install(['opencode'], { home: v2Home, opencodeVersion: 'v2' });
+
+    const v2 = await import(pathToFileURL(join(v2Home, opencodePluginRelative)).href) as {
+      default?: { id?: unknown; setup?: (context: unknown) => Promise<unknown> };
+    };
+    expect(v2.default, 'the installed V2 plugin must export a default definition').toBeDefined();
+    expect(v2.default?.id, 'the V2 definition must carry a non-empty string id').toEqual(expect.any(String));
+    expect((v2.default?.id as string).length).toBeGreaterThan(0);
+    expect(typeof v2.default?.setup, 'the V2 definition must carry a setup function').toBe('function');
+
+    // Record every hook the V2 setup effect registers on the host context.
+    const registrations = new Map<string, Function>();
+    const fakeContext = {
+      session: {
+        get: async () => null,
+        hook: async (name: string, callback: Function) => { registrations.set(`session.${name}`, callback); return { dispose: async () => {} }; },
+      },
+      tool: {
+        hook: async (name: string, callback: Function) => { registrations.set(`tool.${name}`, callback); return { dispose: async () => {} }; },
+      },
+      event: { subscribe: async function* () {} },
+    };
+    await v2.default!.setup!(fakeContext);
+
+    expect(
+      [...registrations.keys()].sort(),
+      'the V2 setup must register exactly the session and tool synchronization hooks',
+    ).toEqual(['session.context', 'session.prompt', 'tool.execute.after', 'tool.execute.before'].sort());
+    for (const [name, callback] of registrations) expect(typeof callback, `${name} callback`).toBe('function');
+
+    // A V1 install keeps the named factory export that older OpenCode loads.
+    const v1Home = await homeWithSpace();
+    await install(['opencode'], { home: v1Home, opencodeVersion: 'v1' });
+    const v1 = await import(pathToFileURL(join(v1Home, opencodePluginRelative)).href) as { AiWorkflowSyncPlugin?: unknown };
+    expect(typeof v1.AiWorkflowSyncPlugin, 'the V1 plugin keeps its named AiWorkflowSyncPlugin function').toBe('function');
   });
 });

@@ -4,6 +4,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { atomicWrite, exists, writeJson } from '../utils/fs.js';
 import { sha256 } from '../utils/hash.js';
 import { packagePath } from '../utils/schema.js';
+import type { OpencodeVersion } from './opencode-version.js';
 import type { Host } from '../workflow/types.js';
 
 export interface SynchronizationDeployment {
@@ -38,6 +39,12 @@ function withoutHostRecord(records: SynchronizationRecords, host: Host): Synchro
 }
 
 export function synchronizationPath(host: Host): string { return nativePaths[host]; }
+
+// The V2 server plugin definition replaces the V1 factory entry, so the installed file follows
+// the resolved OpenCode major version while the ownership path stays the same.
+function pluginTemplate(opencodeVersion: OpencodeVersion): string {
+  return opencodeVersion === 'v1' ? 'opencode.js' : 'opencode-v2.js';
+}
 
 function shellQuoted(path: string): string { return `"${path.replace(/["\\$`]/g, '\\$&')}"`; }
 function hookCommand(host: Host): string {
@@ -77,6 +84,7 @@ export async function installSynchronization(
   hosts: Host[],
   previous: SynchronizationRecords,
   sharedWarnings: string[],
+  opencodeVersion: OpencodeVersion,
 ): Promise<{ records: SynchronizationRecords; reports: SynchronizationDeployment[]; skipped: string[] }> {
   let records = { ...previous };
   const reports: SynchronizationDeployment[] = [];
@@ -103,7 +111,7 @@ export async function installSynchronization(
         warnings.push(`Unowned or modified plugin is preserved and was not refreshed: ${relativePath}`);
         skipped.push(relativePath);
       } else {
-        const template = await readFile(packagePath('templates', 'hooks', 'opencode.js'), 'utf8');
+        const template = await readFile(packagePath('templates', 'hooks', pluginTemplate(opencodeVersion)), 'utf8');
         const contents = template.replace("'__AI_WORKFLOW_NODE__'", () => JSON.stringify(process.execPath)).replace("'__AI_WORKFLOW_CLI__'", () => JSON.stringify(packagePath('dist', 'cli.js')));
         if (disk?.toString('utf8') !== contents) await atomicWrite(path, contents);
         records[host] = { kind: 'plugin', path: relativePath, digest: sha256(contents) };
