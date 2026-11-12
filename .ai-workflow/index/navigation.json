@@ -4084,6 +4084,7 @@
         }
       ],
       "related_files": [
+        ".ai-workflow/AGENTS.md",
         ".ai-workflow/notes/implemented/architecture/2026-09-30-submodule-workspace.md",
         ".ai-workflow/notes/implemented/bug-fix/2026-10-08-workspace-execution-consistency.md",
         ".ai-workflow/notes/implemented/bug-fix/2026-10-08-workspace-session-handoff.md",
@@ -4098,6 +4099,7 @@
         "src/workflow/types.ts",
         "src/workflow/workspace.ts",
         "src/workspace/git.ts",
+        "templates/project/AGENTS.md",
         "templates/project/MEMORY.md",
         "templates/skills/coding/SKILL.md",
         "templates/skills/coding/references/workspace.md"
@@ -4114,8 +4116,9 @@
       "depends_on": [],
       "relations": [],
       "owner_role": "shared",
-      "responsibility": "Delivered parent workspace coding orchestration: exact .gitmodules-matched child-plan activation, one primary session with an approved plan-to-tasks preparation that returns control, one run-owned worktree per active repository, the original parent phases with delivery barriers, the filesystem-only workspace checkpoint single-record protocol, per-repository delivery review versus a separate finalization review, recorded-target non-fast-forward delivery with preserve-both conflict resolution, bounded recovery and unchanged ordinary/root-only routes, with the three-host native smoke an outstanding reported gap",
+      "responsibility": "Delivered parent workspace coding orchestration: exact .gitmodules-matched child-plan activation, one primary session with an approved plan-to-tasks preparation that returns control, one run-owned worktree per active repository, the original parent phases with delivery barriers, the filesystem-only workspace checkpoint single-record protocol, per-repository delivery review versus a separate finalization review, recorded-target non-fast-forward delivery with preserve-both conflict resolution, bounded recovery and unchanged ordinary/root-only routes, with the three-host native smoke an outstanding reported gap; the root workspace session is a non-handoff primary-parent route that continues the parent dispatch after root-owned tasks, `next_repository` is advisory, and the primary parent session auto-dispatches child repositories without a next-session prompt",
       "read_scope": [
+        ".ai-workflow/AGENTS.md",
         ".ai-workflow/notes/implemented/architecture/2026-09-30-submodule-workspace.md",
         ".ai-workflow/notes/implemented/bug-fix/2026-10-08-workspace-execution-consistency.md",
         ".ai-workflow/notes/implemented/bug-fix/2026-10-08-workspace-session-handoff.md",
@@ -4132,6 +4135,7 @@
         "src/workspace/execution.ts",
         "src/workspace/git.ts",
         "src/workspace/record.ts",
+        "templates/project/AGENTS.md",
         "templates/project/MEMORY.md",
         "templates/skills/coding/SKILL.md",
         "templates/skills/coding/references/workspace.md",

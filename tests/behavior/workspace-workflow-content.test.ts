@@ -892,3 +892,85 @@ describe('workspace delivery preserve-both conflict policy alignment', () => {
     );
   });
 });
+
+describe('root workspace coding session is the primary parent auto-dispatch (advisory next_repository)', () => {
+  it('states phase dispatch uses the frozen schedule and workspace status execution projection as scheduling authority with advisory next_repository and no parent handoff', async () => {
+    const reference = await readShipped(WORKSPACE_REFERENCE);
+    expect(reference, 'the workspace reference is shipped').not.toBeNull();
+    const phase = section(reference ?? '', '## Phase dispatch and delivery barriers');
+    expect(phase, 'the Phase dispatch and delivery barriers section exists').not.toBe('');
+    const flat = flatten(phase);
+
+    expect(flat, 'the frozen schedule remains the scheduling authority').toMatch(
+      /frozen schedule[^.]{0,160}scheduling authority|scheduling authority[^.]{0,160}frozen schedule/i,
+    );
+    expect(flat, 'the workspace status execution projection is scheduling authority').toMatch(
+      /workspace status[^.]{0,120}execution[^.]{0,80}projection[^.]{0,160}scheduling authority|execution[^.]{0,40}projection[^.]{0,160}scheduling authority/i,
+    );
+    expect(flat, 'next_repository is advisory in phase dispatch').toMatch(/next_repository[^.]{0,80}advisory/i);
+    expect(flat, 'the primary parent never hands off a child repository session').toMatch(
+      /primary parent[^.]{0,160}never hands off[^.]{0,120}child repository session|primary parent[^.]{0,160}never hands off[^.]{0,120}child session/i,
+    );
+  });
+
+  it('keeps the workspace root session as a non-handoff parent-dispatch route with advisory next_repository and no child-session handoff', async () => {
+    const root = await workspaceDetail('## Workspace root sessions', '## Workspace root sessions');
+    expect(root, 'the Workspace root sessions section exists').not.toBe('');
+    const flat = flatten(root);
+
+    expect(flat, 'the workspace root session is not a handoff route').toMatch(/not a handoff route/i);
+    expect(flat, 'the root session continues the parent dispatch').toMatch(/continues? the parent dispatch/i);
+    expect(flat, 'next_repository is advisory in the root session').toMatch(/next_repository[^.]{0,80}advisory/i);
+    expect(flat, 'the root session never hands off a child session').toMatch(/never hands off a child session/i);
+    expect(flat, 'the root session never emits a next-session prompt').toMatch(/never emits?[^.]{0,60}next-session prompt/i);
+    expect(flat, 'the obsolete handoff phrase is removed').not.toContain('otherwise hand off the reported');
+  });
+
+  it('scopes next-repository handoff to an independent slice session and never to the primary parent session', async () => {
+    const slice = await workspaceDetail('## Slice sessions', '## Slice sessions');
+    expect(slice, 'the Slice sessions section exists').not.toBe('');
+    const flat = flatten(slice);
+
+    expect(flat, 'next-repository handoff is scoped to an independent slice session').toMatch(
+      /next-repository handoff[^.]{0,120}independent slice session|independent slice session[^.]{0,120}next-repository handoff/i,
+    );
+    expect(flat, 'next-repository handoff never applies to the primary parent session').toMatch(
+      /never[^.]{0,120}primary parent session|primary parent session[^.]{0,120}never/i,
+    );
+  });
+
+  it('states workspace root and parent execution in the coding skill as parent-dispatch routes with advisory next_repository', async () => {
+    const skill = await readShipped(CODING_SKILL);
+    expect(skill, 'the coding skill is shipped').not.toBeNull();
+
+    const root = section(skill ?? '', '## Workspace root sessions');
+    expect(root, 'the Workspace root sessions section exists in the coding skill').not.toBe('');
+    const rootFlat = flatten(root);
+    expect(rootFlat, 'the skill root section is not a handoff route').toMatch(/not a handoff route/i);
+    expect(rootFlat, 'the skill root section continues parent dispatch').toMatch(/continues? (?:the )?parent dispatch/i);
+    expect(rootFlat, 'next_repository is advisory in the skill root section').toMatch(/next_repository[^.]{0,80}advisory/i);
+
+    const parent = section(skill ?? '', '## Parent workspace execution');
+    expect(parent, 'the Parent workspace execution section exists in the coding skill').not.toBe('');
+    const parentFlat = flatten(parent);
+    expect(parentFlat, 'the parent route is the active route at the workspace root').toMatch(
+      /active route[^.]{0,120}workspace root|workspace root[^.]{0,120}active route/i,
+    );
+    expect(parentFlat, 'the primary never hands off a child session in the skill').toMatch(
+      /primary[^.]{0,120}never hands off[^.]{0,120}child session/i,
+    );
+  });
+
+  it('states next_repository is advisory and the primary never hands off a child session in both contracts and README', async () => {
+    for (const parts of [...CONTRACTS, ['README.md']]) {
+      const label = parts.join('/');
+      const text = await readShipped(parts);
+      expect(text, `${label} is shipped`).not.toBeNull();
+      const flat = flatten(text ?? '');
+      expect(flat, `${label} states next_repository is advisory`).toMatch(/next_repository[^.]{0,120}advisory/i);
+      expect(flat, `${label} states the primary never hands off a child session`).toMatch(
+        /primary[^.]{0,160}never hands off[^.]{0,120}child session/i,
+      );
+    }
+  });
+});
