@@ -66,6 +66,11 @@ dispatcher: no nested coordinator, no splitter sub-agent, no child host process,
 no sibling session, scheduler service or provider API executor, and no remote sessions.
 This route never requires a manual child session.
 
+The frozen schedule and the `workspace status` `execution` projection are the only
+scheduling authority; `tasks/execution-order.yaml` is that frozen schedule. The
+primary parent session never hands off a child repository session: `next_repository`
+is advisory and never authorizes a next-session prompt.
+
 The original parent `tasks/execution-order.yaml` is the only global task schedule.
 The primary inspects the current-phase task bodies and must not eagerly read future
 tasks, child-manifest bodies or the entire navigation JSON.
@@ -181,23 +186,33 @@ refusal leaves the prior record byte-unchanged.
 
 For parent `workspace.yaml` with `role: workspace` and a non-root participant,
 apply preflight's delivery gate before any worktree or record and require the
-current project root to equal the absolute `workspace_root`. Execute root delivery
-only when `next_repository` is `workspace` and
-`workspace_root_entry.tasks_delivered` is false; otherwise hand off the reported
-next repository or finalize when ready.
+current project root to equal the absolute `workspace_root`. This section covers
+the root-owned tasks of the one primary parent session; it is not a handoff route.
+Execute root delivery when the frozen schedule reaches a pending
+`task.repo: workspace` task and apply finalization only when status reports
+`ready_for_finalization` with `workspace_root_entry.tasks_delivered` true. In every
+other state, continue the parent dispatch in `## Phase dispatch and delivery
+barriers`; the primary parent session never hands off a child session, and
+`next_repository` is advisory and never emits a next-session prompt.
 
 Select only `task.repo: workspace` tasks. Filter parent phases in memory, preserving
 file order and removing empty phases; never edit `tasks/execution-order.yaml` or
 recompute the DAG. Execute only these root tasks in the root worktree with normal
 validation/review, never siblings; parent orchestration retains its global schedule.
 After passing, merge, perform owned cleanup and apply the main record table's root
-delivery row. Report the root SHA, rerun parent status and hand off `next_repository`.
+delivery row. Report the root SHA, rerun parent status and continue the parent
+schedule in `## Phase dispatch and delivery barriers`; `next_repository` is advisory
+and never a session handoff.
 
 When `tasks_delivered` is true, skip delivered root tasks and siblings.
 Finalization-only executes zero tasks, never reruns root reviews and uses the
 finalization gate below. For no root tasks, apply the main record table's implicit delivery.
 
 ## Slice sessions
+
+This section applies only to an independent slice session started in one
+participating repository, never to the primary parent session at the workspace
+root. The next-repository handoff belongs only to that independent slice session.
 
 Read the independent slice manifest `workspace.yaml` before any other slice step.
 Run parent status against the original absolute parent plan; require `valid: true`,

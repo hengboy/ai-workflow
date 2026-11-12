@@ -436,7 +436,11 @@ Workspace execution adds its fields and the checkpoint-only write protocol in `r
 
 For parent `workspace.yaml` with `role: workspace` and a non-root participant,
 explicitly read `references/workspace.md` before creating a worktree or implementation
-record; apply its root identity, delivery gate and root task/finalization-only routes.
+record. This section covers the root-owned tasks of the one primary parent session;
+it is not a handoff route. After root tasks, continue the parent dispatch for child
+repositories; the primary parent session never hands off a child session, and
+`next_repository` is advisory. Apply the reference's root identity, delivery gate and
+root task/finalization-only routes.
 
 ## Parent workspace execution
 
@@ -444,9 +448,11 @@ Activate only when the frozen plan declares at least one participating non-root
 repository matched to the current root's `.gitmodules`. Ordinary plans, root-only
 plans whose `workspace_repos` declares only the reserved workspace root entry,
 and projects with `.gitmodules` running a non-participating plan gain no workspace
-prerequisites; root-only plans may be implemented unsplit. Explicitly read
-`references/workspace.md` before approved preparation or any implementation state,
-then follow its parent execution and recovery procedure, including the
+prerequisites; root-only plans may be implemented unsplit. At the workspace root
+this is the active route for a child-participating frozen plan: the primary parent
+session never hands off a child session and remains the only dispatcher. Explicitly
+read `references/workspace.md` before approved preparation or any implementation
+state, then follow its parent execution and recovery procedure, including the
 checkpoint-boundary active rebuild in `references/workspace.md`.
 
 ## Slice sessions
