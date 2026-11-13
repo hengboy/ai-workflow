@@ -10,13 +10,12 @@ import { createNavigationCandidate, rebuildNavigation, refreshContext, refreshNa
 import { locateContext } from './context/locate.js';
 import { discoverFallback, type FallbackPacket } from './context/fallback.js';
 import { resolveCandidatePath, resolveProjectRoot } from './context/paths.js';
-import { readPlan, readTasks } from './workflow/parse.js';
 import { renderReviewPacket, type ReviewAxis, type ReviewMode, type ReviewPacketRequest, type ReviewPurpose } from './workflow/review-packet.js';
 import { planDispatch } from './workflow/dispatch.js';
 import { planReport } from './workflow/report.js';
-import { readExecutionOrder } from './workflow/order.js';
-import { readWorkspaceManifest, validateWorkspaceManifest, validateWorkspaceRepositoryOrder } from './workflow/workspace.js';
+import { validatePlanDirectory } from './workflow/validate.js';
 import { listPlanPairs, recordPlanPairs, verifyPlanPairs } from './workflow/pairing.js';
+import { runDoctor } from './ops/doctor.js';
 import { distributeWorkspace } from './workspace/distribute.js';
 import { workspaceStatus } from './workspace/status.js';
 import { auditWorkspace } from './workspace/audit.js';
@@ -115,32 +114,37 @@ program.command('sync-hook').requiredOption('--host <host>').option('--phase', '
   }
   process.exitCode = 0;
 });
+program.command('doctor')
+  .option('--project <root>', 'project root directory path; use . or an absolute path', process.cwd())
+  .option('--host <host>', 'limit host checks to one host')
+  .option('--plan <directory>', 'plan directory to validate')
+  .option('--home <path>', 'installation root; defaults to the current user home')
+  .option('--json', 'print the complete report structure')
+  .action(async (options: { project: string; host?: string; plan?: string; home?: string; json?: boolean }) => {
+    const report = await runDoctor({
+      project: options.project,
+      ...(options.host === undefined ? {} : { host: options.host as Host }),
+      ...(options.plan === undefined ? {} : { plan: options.plan }),
+      ...(options.home === undefined ? {} : { home: options.home }),
+    });
+    if (options.json) {
+      print(report);
+    } else {
+      const summary = [`project: ${report.project ?? 'none'}`, `valid: ${report.valid}`];
+      for (const item of report.checks) {
+        summary.push(`${item.status} ${item.id}: ${item.detail}`);
+        if (item.recovery !== undefined) summary.push(`  recovery: ${item.recovery}`);
+      }
+      print(summary.join('\n'));
+    }
+    process.exitCode = report.checks.some((item) => item.status === 'fail') ? 1 : report.checks.some((item) => item.status === 'warn') ? 2 : 0;
+  });
 const profile = program.command('profile');
 profile.command('activate').argument('<name>').option('--home <path>').option('--opencode-version <version>', 'opencode agent format: v1, v2 or auto (default auto)', 'auto').action(async (name: string, { home, opencodeVersion }: { home?: string; opencodeVersion: string }) => print(await activateProfile(name, { ...(home ? { home } : {}), opencodeVersion: opencodeVersionOption(opencodeVersion) })));
 
 const plan = program.command('plan');
 plan.command('validate').requiredOption('--plan <directory>').action(async ({ plan: directory }: { plan: string }) => {
-  const document = await readPlan(directory);
-  const tasks = await readTasks(directory);
-  const digests = { spec: document.specDigest, plan: document.planDigest, combined: document.digest };
-  const manifest = await readWorkspaceManifest(directory);
-  if (!tasks.length) { print({ valid: true, plan_id: document.planId, digests }); return; }
-  const schedule = await readExecutionOrder(directory, document.planId, tasks);
-  if (manifest) {
-    const errors = validateWorkspaceManifest(manifest, document, tasks, schedule);
-    if (errors.length) throw new Error(errors.join('\n'));
-  } else if (document.workspaceRepos) {
-    const errors = validateWorkspaceRepositoryOrder(document.workspaceRepos.map((repository) => ({ name: repository.name, dependsOn: repository.depends_on })), tasks, schedule);
-    if (errors.length) throw new Error(errors.join('\n'));
-  }
-  const output: { valid: boolean; plan_id: string; digests: typeof digests; execution_order: string[][]; repos?: { name: string; path: string; depends_on: string[] }[] } = {
-    valid: true,
-    plan_id: document.planId,
-    digests,
-    execution_order: schedule.phases.map((phase) => phase.parallel),
-  };
-  if (manifest?.role === 'workspace') output.repos = manifest.repositories.map((repository) => ({ name: repository.name, path: repository.path, depends_on: repository.dependsOn }));
-  print(output);
+  print(await validatePlanDirectory(directory));
 });
 plan.command('dispatch')
   .requiredOption('--plan <directory>')
