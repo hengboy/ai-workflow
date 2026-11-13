@@ -16,6 +16,7 @@ import { planReport } from './workflow/report.js';
 import { validatePlanDirectory } from './workflow/validate.js';
 import { listPlanPairs, recordPlanPairs, verifyPlanPairs } from './workflow/pairing.js';
 import { runDoctor } from './ops/doctor.js';
+import { runHostSmoke, type HostSmokeHost } from './host/smoke.js';
 import { distributeWorkspace } from './workspace/distribute.js';
 import { workspaceStatus } from './workspace/status.js';
 import { auditWorkspace } from './workspace/audit.js';
@@ -27,6 +28,7 @@ import { listPairs, recordPairs, verifyPairs } from './notes/pair.js';
 
 const hosts = ['codex', 'claude', 'opencode'] as const;
 function hostList(value: string): Host[] { if (value === 'all') return [...hosts]; if (!hosts.includes(value as Host)) throw new Error(`Invalid host: ${value}`); return [value as Host]; }
+function smokeHost(value: string): HostSmokeHost { if (value === 'all') return 'all'; if (!hosts.includes(value as Host)) throw new Error(`Invalid host: ${value}`); return value as Host; }
 async function jsonFile<T>(path: string): Promise<T> { return JSON.parse(await readFile(resolve(path), 'utf8')) as T; }
 function print(value: unknown): void { process.stdout.write(`${typeof value === 'string' ? value : JSON.stringify(value, null, 2)}\n`); }
 
@@ -138,6 +140,21 @@ program.command('doctor')
       print(summary.join('\n'));
     }
     process.exitCode = report.checks.some((item) => item.status === 'fail') ? 1 : report.checks.some((item) => item.status === 'warn') ? 2 : 0;
+  });
+const host = program.command('host');
+host.command('smoke')
+  .requiredOption('--host <host>', 'host to exercise: codex, claude, opencode or all')
+  .option('--home <path>', 'absent or empty installation HOME instead of a temporary one')
+  .option('--live', 'attempt one non-interactive read-only host dispatch')
+  .option('--keep', 'retain the temporary HOME and the external fixture')
+  .action(async ({ host: selected, home, live, keep }: { host: string; home?: string; live?: boolean; keep?: boolean }) => {
+    const report = await runHostSmoke({
+      host: smokeHost(selected),
+      ...(home === undefined ? {} : { home }),
+      ...(live ? { live: true } : {}),
+      ...(keep ? { keep: true } : {}),
+    });
+    print(report);
   });
 const profile = program.command('profile');
 profile.command('activate').argument('<name>').option('--home <path>').option('--opencode-version <version>', 'opencode agent format: v1, v2 or auto (default auto)', 'auto').action(async (name: string, { home, opencodeVersion }: { home?: string; opencodeVersion: string }) => print(await activateProfile(name, { ...(home ? { home } : {}), opencodeVersion: opencodeVersionOption(opencodeVersion) })));
