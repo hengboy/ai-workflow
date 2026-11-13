@@ -3894,6 +3894,7 @@
       ],
       "module_root": "root",
       "entries": [
+        "src/workspace/audit.ts",
         "src/workspace/execution.ts",
         "src/workspace/record.ts",
         "tests/unit/workspace-execution.test.ts",
@@ -4081,6 +4082,18 @@
           "name": "WorkspaceFinalization",
           "kind": "interface",
           "visibility": "public"
+        },
+        {
+          "file": "src/workspace/audit.ts",
+          "name": "auditWorkspace",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workspace/audit.ts",
+          "name": "WorkspaceAuditResult",
+          "kind": "interface",
+          "visibility": "public"
         }
       ],
       "related_files": [
@@ -4098,6 +4111,7 @@
         "src/cli.ts",
         "src/workflow/types.ts",
         "src/workflow/workspace.ts",
+        "src/workspace/audit.ts",
         "src/workspace/git.ts",
         "templates/project/AGENTS.md",
         "templates/project/MEMORY.md",
@@ -4132,6 +4146,7 @@
         "src/cli.ts",
         "src/workflow/types.ts",
         "src/workflow/workspace.ts",
+        "src/workspace/audit.ts",
         "src/workspace/execution.ts",
         "src/workspace/git.ts",
         "src/workspace/record.ts",
