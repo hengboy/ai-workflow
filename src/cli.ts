@@ -11,6 +11,7 @@ import { locateContext } from './context/locate.js';
 import { discoverFallback, type FallbackPacket } from './context/fallback.js';
 import { resolveCandidatePath, resolveProjectRoot } from './context/paths.js';
 import { readPlan, readTasks } from './workflow/parse.js';
+import { renderReviewPacket, type ReviewAxis, type ReviewMode, type ReviewPacketRequest, type ReviewPurpose } from './workflow/review-packet.js';
 import { readExecutionOrder } from './workflow/order.js';
 import { readWorkspaceManifest, validateWorkspaceManifest, validateWorkspaceRepositoryOrder } from './workflow/workspace.js';
 import { listPlanPairs, recordPlanPairs, verifyPlanPairs } from './workflow/pairing.js';
@@ -162,6 +163,81 @@ plan.command('pairing')
     const result = await verifyPlanPairs(target, documents);
     print(result);
     if (!result.valid) process.exitCode = 1;
+  });
+
+interface ReviewPacketOptions {
+  axis: string;
+  mode: string;
+  purpose: string;
+  repository: string;
+  contract: string;
+  base: string;
+  head: string;
+  previousHead?: string;
+  requirements?: string[];
+  requirementScope?: string[];
+  rawDiff?: string;
+  repairDiff?: string;
+  repairScope?: string[];
+  sourceBlobs?: string[];
+  committedTests?: string[];
+  changedPaths?: string[];
+  testReports?: string[];
+  memory?: string;
+  noteStandards?: string[];
+  originalFindings?: string[];
+  evidenceDir?: string;
+}
+
+const review = program.command('review');
+review.command('packet')
+  .requiredOption('--axis <axis>', 'review axis: spec or standards')
+  .requiredOption('--mode <mode>', 'review mode: initial or recheck')
+  .requiredOption('--purpose <purpose>', 'packet purpose: delivery or repository-local-finalization')
+  .requiredOption('--repository <path>', 'absolute repository path')
+  .requiredOption('--contract <path>', 'absolute project contract path')
+  .requiredOption('--base <sha>', 'full delivery-base SHA')
+  .requiredOption('--head <sha>', 'full checked-head SHA')
+  .option('--previous-head <sha>', 'full immediately preceding reviewed-head SHA')
+  .option('--requirements <path...>', 'absolute frozen requirement paths')
+  .option('--requirement-scope <id...>', 'assigned requirement and AC references')
+  .option('--raw-diff <path>', 'complete delivery diff path')
+  .option('--repair-diff <path>', 'previous-head-to-head repair diff path')
+  .option('--repair-scope <path...>', 'repaired paths, symbols and affected caller paths')
+  .option('--source-blobs <path...>', 'immutable source-context paths')
+  .option('--committed-tests <path...>', 'immutable test-source paths')
+  .option('--changed-paths <path...>', 'exact authorized changed paths')
+  .option('--test-reports <path...>', 'fresh test report paths')
+  .option('--memory <path>', 'absolute MEMORY path')
+  .option('--note-standards <path...>', 'applicable note-governance paths')
+  .option('--original-findings <text...>', 'original finding labels and evidence references')
+  .option('--evidence-dir <path>', 'base directory for relative evidence paths')
+  .action(async (options: ReviewPacketOptions) => {
+    const request: ReviewPacketRequest = {
+      axis: options.axis as ReviewAxis,
+      mode: options.mode as ReviewMode,
+      purpose: options.purpose as ReviewPurpose,
+      repository: options.repository,
+      contract: options.contract,
+      base: options.base,
+      head: options.head,
+      ...(options.previousHead === undefined ? {} : { previousHead: options.previousHead }),
+      ...(options.requirements === undefined ? {} : { requirements: options.requirements }),
+      ...(options.requirementScope === undefined ? {} : { requirementScope: options.requirementScope }),
+      ...(options.rawDiff === undefined ? {} : { rawDiff: options.rawDiff }),
+      ...(options.repairDiff === undefined ? {} : { repairDiff: options.repairDiff }),
+      ...(options.repairScope === undefined ? {} : { repairScope: options.repairScope }),
+      ...(options.sourceBlobs === undefined ? {} : { sourceBlobs: options.sourceBlobs }),
+      ...(options.committedTests === undefined ? {} : { committedTests: options.committedTests }),
+      ...(options.changedPaths === undefined ? {} : { changedPaths: options.changedPaths }),
+      ...(options.testReports === undefined ? {} : { testReports: options.testReports }),
+      ...(options.memory === undefined ? {} : { memory: options.memory }),
+      ...(options.noteStandards === undefined ? {} : { noteStandards: options.noteStandards }),
+      ...(options.originalFindings === undefined ? {} : { originalFindings: options.originalFindings }),
+      ...(options.evidenceDir === undefined ? {} : { evidenceDir: options.evidenceDir }),
+    };
+    const { packet } = await renderReviewPacket(request);
+    print(packet);
   });
 
 const projectOption = 'project root directory path; use . or an absolute path';
