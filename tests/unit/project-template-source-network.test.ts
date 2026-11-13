@@ -6,6 +6,7 @@ import { temporary } from '../helpers.js';
 
 const REPOSITORY = 'hengboy/ai-workflow';
 const BRANCH = 'main';
+const PUBLIC_URL = 'https://github.com/hengboy/ai-workflow.git';
 const COMMIT = '7c0d9a3f2b1e4d5c6a7b8c9d0e1f2a3b4c5d6e7f';
 const SYSTEM_PROXY_URL = 'http://127.0.0.1:7897';
 
@@ -123,6 +124,53 @@ async function pathExists(path: string): Promise<boolean> {
 
 async function readObserved(receivedPath: string): Promise<Record<string, string>> {
   return JSON.parse(await readFile(receivedPath, 'utf8')) as Record<string, string>;
+}
+
+/** Capture the rejection so the full message can be asserted without coupling to a matcher. */
+async function rejectionOf(operation: Promise<unknown>): Promise<Error> {
+  try {
+    await operation;
+  } catch (error) {
+    return error as Error;
+  }
+  throw new Error('expected the source acquisition to reject');
+}
+
+/**
+ * A real subprocess `git` shim whose clone sleeps before materializing the fixture, so it can
+ * outlive a short timeout bound. It never contacts the network, and `sleepMs: 0` behaves as a fast
+ * successful clone for the unchanged-behavior regression.
+ */
+function timeoutGitShim(sleepMs: number): string {
+  return `#!/usr/bin/env node
+const { mkdirSync, writeFileSync, readFileSync } = require('node:fs');
+const { dirname, join } = require('node:path');
+const args = process.argv.slice(2);
+const fixturePath = process.env.AI_WORKFLOW_GIT_FIXTURE;
+const fixture = fixturePath ? JSON.parse(readFileSync(fixturePath, 'utf8')) : { files: {} };
+if (args[0] === 'clone') {
+  const destination = args[args.length - 1];
+  const materialize = () => {
+    for (const [path, contents] of Object.entries(fixture.files || {})) {
+      const target = join(destination, path);
+      mkdirSync(dirname(target), { recursive: true });
+      writeFileSync(target, contents);
+    }
+  };
+  if (${sleepMs} > 0) {
+    setTimeout(() => { materialize(); process.exit(0); }, ${sleepMs});
+  } else {
+    materialize();
+    process.exit(0);
+  }
+} else if (args[0] === '-C' && args[2] === 'rev-parse' && args[3] === 'HEAD') {
+  process.stdout.write((process.env.AI_WORKFLOW_FIXTURE_HEAD || '') + '\\n');
+  process.exit(0);
+} else {
+  process.stderr.write('unexpected git invocation: ' + args.join(' ') + '\\n');
+  process.exit(2);
+}
+`;
 }
 
 describe('project template source acquisition honors the macOS system proxy', () => {
@@ -286,5 +334,63 @@ describe('project template source acquisition honors the macOS system proxy', ()
     expect(observed.https_proxy).toBe('');
     expect(observed.all_proxy).toBe('');
     expect(await pathExists(scutilLogPath), 'non-darwin must not consult scutil').toBe(false);
+  });
+});
+
+describe('project template source acquisition bounds the default clone', () => {
+  const MANAGED_ENV = ['PATH', 'AI_WORKFLOW_FIXTURE_HEAD', 'AI_WORKFLOW_GIT_FIXTURE'] as const;
+  const tempRoots: string[] = [];
+  let savedEnv: Map<string, string | undefined>;
+
+  /** Install a real `git` shim whose clone sleeps `sleepMs`; PATH is narrowed to it plus node. */
+  async function installFixture(config: { sleepMs: number }): Promise<void> {
+    const binDirectory = await temporary('ai-workflow-timeout-shim-');
+    const fixtureDirectory = await temporary('ai-workflow-timeout-fixture-');
+    tempRoots.push(binDirectory, fixtureDirectory);
+    await writeShim(binDirectory, 'git', timeoutGitShim(config.sleepMs));
+    const fixturePath = join(fixtureDirectory, 'fixture.json');
+    await writeFile(fixturePath, JSON.stringify({ files: expectedFiles(COMMIT) }));
+    process.env.PATH = `${binDirectory}${delimiter}${dirname(process.execPath)}`;
+    process.env.AI_WORKFLOW_FIXTURE_HEAD = COMMIT;
+    process.env.AI_WORKFLOW_GIT_FIXTURE = fixturePath;
+  }
+
+  beforeEach(() => {
+    savedEnv = new Map();
+    for (const key of MANAGED_ENV) savedEnv.set(key, process.env[key]);
+  });
+
+  afterEach(async () => {
+    for (const [key, value] of savedEnv) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    await Promise.all(tempRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
+  });
+
+  it('rejects promptly with a clear timeout when the default clone exceeds a short bound', async () => {
+    const timeoutMs = 200;
+    await installFixture({ sleepMs: 2_000 });
+    const started = Date.now();
+
+    const error = await rejectionOf(resolveTemplateSnapshot({ timeoutMs }));
+    const elapsed = Date.now() - started;
+
+    expect(elapsed, 'the short bound must end the wait well below the 60-second default').toBeLessThan(5_000);
+    expect(error.message).toMatch(/clone/i);
+    expect(error.message).toContain(PUBLIC_URL);
+    expect(error.message).toMatch(/\bmain\b/);
+    expect(error.message).toMatch(/timed?\s*out|timeout|killed|SIGTERM/i);
+    expect(error.message).toContain(String(timeoutMs));
+  });
+
+  it('keeps a fast successful clone unchanged when a generous timeout is supplied', async () => {
+    await installFixture({ sleepMs: 0 });
+
+    const snapshot = await resolveTemplateSnapshot({ timeoutMs: 30_000 });
+
+    expect(snapshot.source).toEqual({ repository: REPOSITORY, branch: BRANCH, commit: COMMIT });
+    expect(Object.keys(snapshot.files).sort()).toEqual([...GENERATED_SOURCES].sort());
+    for (const path of GENERATED_SOURCES) expect(snapshot.files[path]).toBe(expectedFiles(COMMIT)[path]);
   });
 });

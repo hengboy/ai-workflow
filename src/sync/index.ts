@@ -2,7 +2,7 @@ import { mkdir, readFile, rm, rmdir, stat } from 'node:fs/promises';
 import { dirname, join, relative, resolve } from 'node:path';
 import { atomicWrite } from '../utils/fs.js';
 import { noteClasses, noteLifecycles } from '../notes/index.js';
-import { resolveTemplateSnapshot, type GitRunner } from './source.js';
+import { resolveTemplateSnapshot, TemplateSourceTimeoutError, type GitRunner } from './source.js';
 import {
   archiveManifestTarget,
   emptyArchiveManifest,
@@ -130,6 +130,24 @@ export async function synchronizeProject(options: SynchronizeProjectOptions): Pr
       ...(options.runGit === undefined ? {} : { runGit: options.runGit }),
     });
   } catch (error) {
+    // A clone killed by its fixed bound is a blocking acquisition failure, not a transient
+    // source warning, so it must not publish or continue with unverified artifacts.
+    if (error instanceof TemplateSourceTimeoutError) {
+      const reason = error.message || 'Template source clone timed out and the process was killed';
+      return {
+        project: options.projectRoot,
+        source: { repository: 'hengboy/ai-workflow', branch: 'main', commit: null },
+        status: 'failed',
+        verified: false,
+        proceed: false,
+        check: options.check ?? false,
+        created: [],
+        updated: [],
+        skipped: [],
+        warnings: [{ reason }],
+        conflicts: [],
+      };
+    }
     const reason = (error instanceof Error ? error.message : String(error)) || 'Template source acquisition failed';
     const path = reason.match(/templates\/project\/[^\s?]+/)?.[0];
     return {

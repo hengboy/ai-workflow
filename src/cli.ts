@@ -16,6 +16,7 @@ import { readWorkspaceManifest, validateWorkspaceManifest, validateWorkspaceRepo
 import { listPlanPairs, recordPlanPairs, verifyPlanPairs } from './workflow/pairing.js';
 import { distributeWorkspace } from './workspace/distribute.js';
 import { workspaceStatus } from './workspace/status.js';
+import { auditWorkspace } from './workspace/audit.js';
 import { checkpointWorkspace } from './workspace/execution.js';
 import { listNotes } from './notes/index.js';
 import { validateNotes } from './notes/validate.js';
@@ -220,6 +221,11 @@ workspace.command('distribute').requiredOption('--plan <directory>').action(asyn
 });
 workspace.command('status').requiredOption('--plan <directory>').action(async ({ plan: directory }: { plan: string }) => {
   const result = await workspaceStatus(directory);
+  print(result);
+  if (!result.valid) process.exitCode = 1;
+});
+workspace.command('audit').requiredOption('--plan <directory>').action(async ({ plan: directory }: { plan: string }) => {
+  const result = await auditWorkspace(directory);
   print(result);
   if (!result.valid) process.exitCode = 1;
 });

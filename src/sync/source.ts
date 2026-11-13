@@ -17,6 +17,21 @@ const execFileAsync = promisify(execFile);
 /** Short bound so a stalled system-proxy helper never delays the clone indefinitely. */
 const systemProxyTimeoutMs = 2000;
 
+/** Fixed upper bound for one template clone; a stalled transport must not hang acquisition indefinitely. */
+const defaultCloneTimeoutMs = 60_000;
+
+/**
+ * A template clone that was killed or exceeded its bound. The message names the operation, the
+ * fixed source and branch, and the bound so a stalled acquisition is distinguishable from an
+ * ordinary clone failure.
+ */
+export class TemplateSourceTimeoutError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'TemplateSourceTimeoutError';
+  }
+}
+
 /** Proxy variables the git transport already honors; any of them makes the OS lookup unnecessary. */
 const explicitProxyVariables = ['https_proxy', 'HTTPS_PROXY', 'all_proxy', 'ALL_PROXY'] as const;
 
@@ -81,16 +96,38 @@ async function systemProxyEnvironment(env: NodeJS.ProcessEnv): Promise<Record<st
   return { [proxy.variable]: proxy.value };
 }
 
-const defaultGitRunner: GitRunner = async (arguments_) => {
-  const env: NodeJS.ProcessEnv = { ...process.env, GIT_TERMINAL_PROMPT: '0' };
-  if (arguments_[0] === 'clone') Object.assign(env, await systemProxyEnvironment(env));
-  const { stdout } = await execFileAsync('git', arguments_, { env });
-  return { stdout };
-};
+/** Apply the clone bound only to the clone call; other git invocations keep their ordinary behavior. */
+function defaultGitRunner(cloneTimeoutMs: number): GitRunner {
+  return async (arguments_) => {
+    const env: NodeJS.ProcessEnv = { ...process.env, GIT_TERMINAL_PROMPT: '0' };
+    const isClone = arguments_[0] === 'clone';
+    if (isClone) Object.assign(env, await systemProxyEnvironment(env));
+    const options: { env: NodeJS.ProcessEnv; timeout?: number } = { env };
+    if (isClone) options.timeout = cloneTimeoutMs;
+    const { stdout } = await execFileAsync('git', arguments_, options);
+    return { stdout };
+  };
+}
 
 function isMissing(error: unknown): boolean {
   const code = (error as NodeJS.ErrnoException).code;
   return code === 'ENOENT' || code === 'ENOTDIR';
+}
+
+/** Recognize a clone killed by a bound or rejected by one of the timeout-like transport shapes. */
+function isCloneTimeout(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const candidate = error as Error & { killed?: unknown; signal?: unknown; code?: unknown };
+  if (candidate.killed === true) return true;
+  if (candidate.code === 'ETIMEDOUT') return true;
+  if (typeof candidate.signal === 'string' && candidate.signal !== '') return true;
+  return /timed?\s*out|timeout|killed|SIGTERM|SIGKILL/i.test(candidate.message);
+}
+
+function cloneTimeoutError(bound: number): TemplateSourceTimeoutError {
+  return new TemplateSourceTimeoutError(
+    `Template clone timed out: git clone ${sourceUrl} --branch ${branch} did not finish within ${bound}ms; the process was killed`,
+  );
 }
 
 /**
@@ -99,14 +136,20 @@ function isMissing(error: unknown): boolean {
  * be markerless Markdown with a level-one title. Extras are ignored, and a missing or malformed
  * member rejects so no target can be written from an incomplete snapshot.
  */
-export async function resolveTemplateSnapshot(options: { runGit?: GitRunner } = {}): Promise<{
+export async function resolveTemplateSnapshot(options: { runGit?: GitRunner; timeoutMs?: number } = {}): Promise<{
   source: { repository: string; branch: string; commit: string };
   files: Record<string, string>;
 }> {
-  const git = options.runGit ?? defaultGitRunner;
+  const cloneBound = options.timeoutMs ?? defaultCloneTimeoutMs;
+  const git = options.runGit ?? defaultGitRunner(cloneBound);
   const directory = await mkdtemp(join(tmpdir(), 'ai-workflow-source-'));
   try {
-    await git(['clone', '--depth', '1', '--branch', branch, sourceUrl, directory]);
+    try {
+      await git(['clone', '--depth', '1', '--branch', branch, sourceUrl, directory]);
+    } catch (error) {
+      if (isCloneTimeout(error)) throw cloneTimeoutError(cloneBound);
+      throw error;
+    }
     const commit = (await git(['-C', directory, 'rev-parse', 'HEAD'])).stdout.trim();
     if (!/^[0-9a-f]{40}$/i.test(commit)) {
       throw new Error(`Template source branch has no immutable commit: ${branch}`);

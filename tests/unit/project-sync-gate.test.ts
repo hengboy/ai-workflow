@@ -4,6 +4,7 @@ import { access, chmod, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/
 import { dirname, join } from 'node:path';
 import { runProjectGate, type ProjectGateInput, type ProjectGateResult } from '../../src/sync/gate.js';
 import type { SyncStatus } from '../../src/sync/index.js';
+import { TemplateSourceTimeoutError } from '../../src/sync/source.js';
 import { changedPaths, fakeGit, snapshotTree, temporary, type TestGitRunner } from '../helpers.js';
 import { exists } from '../../src/utils/fs.js';
 
@@ -90,6 +91,18 @@ function fixedHeadGit(commit: string, files: Record<string, string>): TestGitRun
 /** A git runner whose clone fails before any commit is known (status/rate-limit/network). */
 function headFailureGit(): TestGitRunner {
   return async () => { throw new Error('source unavailable: clone failed'); };
+}
+
+/** A git runner whose clone is killed by the bounded acquisition before any commit is known. */
+function timeoutCloneGit(): TestGitRunner {
+  return async (arguments_) => {
+    if (arguments_[0] === 'clone') {
+      throw new TemplateSourceTimeoutError(
+        'Template clone timed out: git clone https://github.com/hengboy/ai-workflow.git --branch main did not finish within 60000ms; the process was killed',
+      );
+    }
+    throw new Error(`Unexpected git invocation after a timed-out clone: ${arguments_.join(' ')}`);
+  };
 }
 
 /** Adoption prerequisites and project-owned data the synchronizer never writes. */
@@ -789,5 +802,74 @@ describe('project sync gate project-owned memory (REQ-002 / AC-011)', () => {
     expect(result.report?.updated).not.toContain('MEMORY.md');
     expect(result.authority, 'project MEMORY is not a generated authority path').toBeUndefined();
     expect(await readFile(memoryPath), 'project MEMORY bytes are preserved').toEqual(memoryBefore);
+  });
+});
+
+describe('project sync gate clone timeout classification (AC-004/AC-005)', () => {
+  it('AC-004: denies with a failed report naming the clone, fixed source, branch and kill, and stores one complete entry', async () => {
+    const root = await temporary('ai-workflow-gate-timeout-');
+    const runtimeDirectory = await temporary('ai-workflow-gate-timeout-runtime-');
+    roots.push(root, runtimeDirectory);
+    await writeAdoptedTarget(root, COMMIT);
+
+    const result = await runProjectGate(
+      { host: 'opencode', event: 'PhaseEntry', sessionId: 'timeout-session', cwd: root },
+      { runGit: timeoutCloneGit(), runtimeDirectory },
+    );
+
+    expect(result.decision, 'a killed clone must not continue the phase').toBe('deny');
+    expect(result.report, 'the gate exposes the synchronization report').toBeDefined();
+    expect(result.report!.status).toBe('failed');
+    expect(result.report!.verified).toBe(false);
+    expect(result.report!.proceed).toBe(false);
+
+    // The denial stays actionable: it names the clone operation, the fixed source address,
+    // the branch, and the timeout or killed process.
+    expect(result.context).toMatch(/clone/i);
+    expect(result.context).toContain('https://github.com/hengboy/ai-workflow.git');
+    expect(result.context).toMatch(/branch\s+main/);
+    expect(result.context).toMatch(/timed?\s*out/i);
+    expect(result.context).toMatch(/killed|SIGTERM|SIGKILL/i);
+
+    const reasons = [...result.report!.warnings, ...result.report!.conflicts].map((entry) => entry.reason);
+    expect(reasons.length).toBeGreaterThan(0);
+    expect(reasons.some((reason) => result.context.includes(reason)), 'the failure reason must be visible in the context').toBe(true);
+
+    // The timeout decision is stored as exactly one complete, replayable cache entry.
+    const stored = await parseRuntimeFile(await singleRuntimeFile(runtimeDirectory)) as {
+      version?: unknown;
+      phase?: unknown;
+      result?: { decision?: unknown; report?: { status?: unknown } };
+    };
+    expect(stored.version, 'the stored entry must be versioned').toBe(1);
+    expect(stored.phase).toBe(true);
+    expect(stored.result?.decision).toBe('deny');
+    expect(stored.result?.report?.status).toBe('failed');
+  });
+
+  it('AC-005: keeps a generic non-timeout clone failure as the warning continuation', async () => {
+    const root = await temporary('ai-workflow-gate-generic-');
+    const runtimeDirectory = await temporary('ai-workflow-gate-generic-runtime-');
+    roots.push(root, runtimeDirectory);
+    await writeAdoptedTarget(root, COMMIT);
+
+    const result = await runProjectGate(
+      { host: 'codex', event: 'PhaseEntry', sessionId: 'generic-failure', cwd: root, toolName: 'Bash', toolInput: { command: 'ls' } },
+      { runGit: headFailureGit(), runtimeDirectory },
+    );
+
+    expect(result.decision, 'an ordinary source failure must still allow continuation').toBe('allow');
+    expect(result.report, 'the gate exposes the synchronization report').toBeDefined();
+    expect(result.report!.status).toBe('unverified');
+    expect(result.report!.verified).toBe(false);
+    expect(result.report!.proceed).toBe(true);
+
+    const reasons = result.report!.warnings.map((entry) => entry.reason);
+    expect(reasons).toContain('source unavailable: clone failed');
+    expect(reasons.some((reason) => result.context.includes(reason)), 'the warning reason must stay visible').toBe(true);
+
+    const stored = await parseRuntimeFile(await singleRuntimeFile(runtimeDirectory)) as { result?: { decision?: unknown; report?: { status?: unknown } } };
+    expect(stored.result?.decision).toBe('allow');
+    expect(stored.result?.report?.status).toBe('unverified');
   });
 });
