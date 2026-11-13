@@ -1819,6 +1819,12 @@
           "name": "refreshNavigationMarkdown",
           "kind": "function",
           "visibility": "public"
+        },
+        {
+          "file": "src/sync/source.ts",
+          "name": "TemplateSourceTimeoutError",
+          "kind": "class",
+          "visibility": "public"
         }
       ],
       "related_files": [
@@ -3224,6 +3230,16 @@
           "kind": "imports",
           "from": "src/context/validate.ts#refreshNavigationMarkdown",
           "to": "src/utils/schema.ts#schemaValidator"
+        },
+        {
+          "kind": "imports",
+          "from": "src/sync/index.ts#synchronizeProject",
+          "to": "src/sync/source.ts#TemplateSourceTimeoutError"
+        },
+        {
+          "kind": "imports",
+          "from": "src/install/hooks.ts#installSynchronization",
+          "to": "src/install/opencode-version.ts#OpencodeVersion"
         }
       ],
       "owner_role": "shared",
@@ -3293,7 +3309,8 @@
       "aliases": [],
       "module_root": "templates",
       "entries": [
-        "templates/hooks/opencode.js"
+        "templates/hooks/opencode.js",
+        "templates/hooks/opencode-v2.js"
       ],
       "symbols": [
         {
@@ -3310,7 +3327,8 @@
       "owner_role": "shared",
       "responsibility": "Discovered typescript module at templates",
       "read_scope": [
-        "templates/hooks/opencode.js"
+        "templates/hooks/opencode.js",
+        "templates/hooks/opencode-v2.js"
       ],
       "shared_entry": false
     },
@@ -4094,6 +4112,12 @@
           "name": "WorkspaceAuditResult",
           "kind": "interface",
           "visibility": "public"
+        },
+        {
+          "file": "src/workspace/audit.ts",
+          "name": "WorkspaceAuditRepository",
+          "kind": "interface",
+          "visibility": "public"
         }
       ],
       "related_files": [
@@ -4125,10 +4149,43 @@
         "tests/integration/plan-workspace-cli.test.ts",
         "tests/integration/workspace-distribute-cli.test.ts",
         "tests/integration/workspace-finalization-git.test.ts",
-        "tests/integration/workspace-status-cli.test.ts"
+        "tests/integration/workspace-status-cli.test.ts",
+        "tests/integration/workspace-audit-cli.test.ts",
+        "tests/unit/workspace-audit.test.ts"
       ],
       "depends_on": [],
-      "relations": [],
+      "relations": [
+        {
+          "kind": "imports",
+          "from": "src/workspace/audit.ts#auditWorkspace",
+          "to": "src/workflow/workspace.ts#validateWorkspaceManifest"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workspace/audit.ts#auditWorkspace",
+          "to": "src/workspace/distribute.ts#ResolvedWorkspacePlan"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workspace/audit.ts#auditWorkspace",
+          "to": "src/workspace/distribute.ts#resolveWorkspacePlan"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workspace/audit.ts#auditWorkspace",
+          "to": "src/workspace/record.ts#RESERVED_ROOT"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workspace/audit.ts#auditWorkspace",
+          "to": "src/workspace/record.ts#errorMessage"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workspace/audit.ts#auditWorkspace",
+          "to": "src/workspace/record.ts#implementationRecordPath"
+        }
+      ],
       "owner_role": "shared",
       "responsibility": "Delivered parent workspace coding orchestration: exact .gitmodules-matched child-plan activation, one primary session with an approved plan-to-tasks preparation that returns control, one run-owned worktree per active repository, the original parent phases with delivery barriers, the filesystem-only workspace checkpoint single-record protocol, per-repository delivery review versus a separate finalization review, recorded-target non-fast-forward delivery with preserve-both conflict resolution, bounded recovery and unchanged ordinary/root-only routes, with the three-host native smoke an outstanding reported gap; the root workspace session is a non-handoff primary-parent route that continues the parent dispatch after root-owned tasks, `next_repository` is advisory, and the primary parent session auto-dispatches child repositories without a next-session prompt",
       "read_scope": [
@@ -4164,7 +4221,9 @@
         "tests/integration/workspace-finalization-git.test.ts",
         "tests/integration/workspace-single-repo-compatibility.test.ts",
         "tests/integration/workspace-status-cli.test.ts",
-        "tests/unit/workspace-execution.test.ts"
+        "tests/unit/workspace-execution.test.ts",
+        "tests/integration/workspace-audit-cli.test.ts",
+        "tests/unit/workspace-audit.test.ts"
       ],
       "shared_entry": false
     },
