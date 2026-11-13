@@ -12,6 +12,7 @@ import { discoverFallback, type FallbackPacket } from './context/fallback.js';
 import { resolveCandidatePath, resolveProjectRoot } from './context/paths.js';
 import { readPlan, readTasks } from './workflow/parse.js';
 import { renderReviewPacket, type ReviewAxis, type ReviewMode, type ReviewPacketRequest, type ReviewPurpose } from './workflow/review-packet.js';
+import { planDispatch } from './workflow/dispatch.js';
 import { readExecutionOrder } from './workflow/order.js';
 import { readWorkspaceManifest, validateWorkspaceManifest, validateWorkspaceRepositoryOrder } from './workflow/workspace.js';
 import { listPlanPairs, recordPlanPairs, verifyPlanPairs } from './workflow/pairing.js';
@@ -140,6 +141,21 @@ plan.command('validate').requiredOption('--plan <directory>').action(async ({ pl
   if (manifest?.role === 'workspace') output.repos = manifest.repositories.map((repository) => ({ name: repository.name, path: repository.path, depends_on: repository.dependsOn }));
   print(output);
 });
+plan.command('dispatch')
+  .requiredOption('--plan <directory>')
+  .option('--phase <phase>', 'one-based phase number')
+  .option('--task <id>', 'exactly one task id from the selected phase')
+  .option('--verbose', 'include the text packet skeleton')
+  .action(async ({ plan: directory, phase, task, verbose }: { plan: string; phase?: string; task?: string; verbose?: boolean }) => {
+    const selectedPhase = phase === undefined ? undefined : Number(phase);
+    const result = await planDispatch({
+      planDirectory: directory,
+      ...(selectedPhase === undefined ? {} : { phase: selectedPhase }),
+      ...(task === undefined ? {} : { task }),
+      ...(verbose ? { verbose: true } : {}),
+    });
+    print(result);
+  });
 plan.command('pairing')
   .requiredOption('--plan <directory>')
   .option('--list', 'report the pairing state of every plan document without failing')
