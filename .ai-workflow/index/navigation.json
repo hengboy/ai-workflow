@@ -4877,6 +4877,524 @@
         "tests/behavior/worktree-policy.test.ts"
       ],
       "shared_entry": true
+    },
+    {
+      "id": "operator-tooling",
+      "name": "operator-tooling",
+      "aliases": [
+        "operator tooling",
+        "read-only operator commands",
+        "three-host smoke"
+      ],
+      "module_root": "root",
+      "entries": [
+        "src/host/smoke.ts",
+        "src/install/verify.ts",
+        "src/ops/doctor.ts",
+        "src/workflow/dispatch.ts",
+        "src/workflow/report.ts",
+        "src/workflow/review-packet.ts",
+        "src/workflow/validate.ts"
+      ],
+      "symbols": [
+        {
+          "file": "src/host/smoke.ts",
+          "name": "HostSmokeEntry",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/host/smoke.ts",
+          "name": "HostSmokeHost",
+          "kind": "type",
+          "visibility": "public"
+        },
+        {
+          "file": "src/host/smoke.ts",
+          "name": "HostSmokeLive",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/host/smoke.ts",
+          "name": "HostSmokeOptions",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/host/smoke.ts",
+          "name": "HostSmokeReport",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/host/smoke.ts",
+          "name": "HostSmokeStaticCheck",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/host/smoke.ts",
+          "name": "HostSmokeStatus",
+          "kind": "type",
+          "visibility": "public"
+        },
+        {
+          "file": "src/host/smoke.ts",
+          "name": "runHostSmoke",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/install/verify.ts",
+          "name": "InstallationCheck",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/install/verify.ts",
+          "name": "InstallationCheckStatus",
+          "kind": "type",
+          "visibility": "public"
+        },
+        {
+          "file": "src/install/verify.ts",
+          "name": "InstallationReport",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/install/verify.ts",
+          "name": "verifyInstallation",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/ops/doctor.ts",
+          "name": "DoctorOptions",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/ops/doctor.ts",
+          "name": "DoctorReport",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/ops/doctor.ts",
+          "name": "runDoctor",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/sync/gate.ts",
+          "name": "StoredProjectGateInput",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/sync/gate.ts",
+          "name": "readStoredProjectGate",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workflow/dispatch.ts",
+          "name": "DispatchRequest",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workflow/dispatch.ts",
+          "name": "DispatchResult",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workflow/dispatch.ts",
+          "name": "DispatchTask",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workflow/dispatch.ts",
+          "name": "planDispatch",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workflow/report.ts",
+          "name": "PlanReport",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workflow/report.ts",
+          "name": "planReport",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workflow/review-packet.ts",
+          "name": "ReviewAxis",
+          "kind": "type",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workflow/review-packet.ts",
+          "name": "ReviewMode",
+          "kind": "type",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workflow/review-packet.ts",
+          "name": "ReviewPacketRequest",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workflow/review-packet.ts",
+          "name": "ReviewPacketResult",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workflow/review-packet.ts",
+          "name": "ReviewPurpose",
+          "kind": "type",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workflow/review-packet.ts",
+          "name": "renderReviewPacket",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workflow/validate.ts",
+          "name": "PlanValidationResult",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workflow/validate.ts",
+          "name": "validatePlanDirectory",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workspace/git.ts",
+          "name": "commitCount",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "tests/helpers.ts",
+          "name": "FakeHostBehavior",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "tests/helpers.ts",
+          "name": "FakeHostBehaviors",
+          "kind": "type",
+          "visibility": "public"
+        },
+        {
+          "file": "tests/helpers.ts",
+          "name": "FakeHostCall",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "tests/helpers.ts",
+          "name": "FakeHostName",
+          "kind": "type",
+          "visibility": "public"
+        },
+        {
+          "file": "tests/helpers.ts",
+          "name": "FakeHosts",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "tests/helpers.ts",
+          "name": "fakeHosts",
+          "kind": "function",
+          "visibility": "public"
+        }
+      ],
+      "related_files": [
+        ".ai-workflow/AGENTS.md",
+        "MEMORY.md",
+        "README.md",
+        "src/cli.ts",
+        "src/sync/gate.ts",
+        "src/workspace/git.ts",
+        "templates/skills/coding/SKILL.md",
+        "templates/skills/coding/references/review.md",
+        "tests/helpers.ts"
+      ],
+      "tests": [
+        "tests/behavior/coding-v2-content.test.ts",
+        "tests/behavior/install-contract.test.ts",
+        "tests/behavior/memory-governance-content.test.ts",
+        "tests/behavior/operator-tooling-content.test.ts",
+        "tests/behavior/review-policy.test.ts",
+        "tests/integration/doctor-cli.test.ts",
+        "tests/integration/host-smoke-cli.test.ts",
+        "tests/integration/plan-dispatch-cli.test.ts",
+        "tests/integration/plan-report-cli.test.ts",
+        "tests/integration/review-packet-cli.test.ts",
+        "tests/unit/host-smoke.test.ts",
+        "tests/unit/install-verify.test.ts",
+        "tests/unit/ops-doctor.test.ts",
+        "tests/unit/workflow-dispatch.test.ts",
+        "tests/unit/workflow-report.test.ts",
+        "tests/unit/workflow-review-packet.test.ts"
+      ],
+      "depends_on": [],
+      "relations": [
+        {
+          "kind": "imports",
+          "from": "src/host/smoke.ts#HostSmokeEntry",
+          "to": "src/workflow/types.ts#Host"
+        },
+        {
+          "kind": "imports",
+          "from": "src/host/smoke.ts#HostSmokeHost",
+          "to": "src/workflow/types.ts#Host"
+        },
+        {
+          "kind": "imports",
+          "from": "src/host/smoke.ts#HostSmokeStaticCheck",
+          "to": "src/install/verify.ts#InstallationCheckStatus"
+        },
+        {
+          "kind": "imports",
+          "from": "src/host/smoke.ts#runHostSmoke",
+          "to": "src/install/index.ts#install"
+        },
+        {
+          "kind": "imports",
+          "from": "src/host/smoke.ts#runHostSmoke",
+          "to": "src/install/verify.ts#verifyInstallation"
+        },
+        {
+          "kind": "imports",
+          "from": "src/install/verify.ts#verifyInstallation",
+          "to": "src/workflow/types.ts#Host"
+        },
+        {
+          "kind": "imports",
+          "from": "src/ops/doctor.ts#DoctorOptions",
+          "to": "src/workflow/types.ts#Host"
+        },
+        {
+          "kind": "imports",
+          "from": "src/ops/doctor.ts#DoctorReport",
+          "to": "src/install/verify.ts#InstallationCheck"
+        },
+        {
+          "kind": "imports",
+          "from": "src/ops/doctor.ts#runDoctor",
+          "to": "src/context/validate.ts#validateContext"
+        },
+        {
+          "kind": "imports",
+          "from": "src/ops/doctor.ts#runDoctor",
+          "to": "src/install/verify.ts#InstallationCheck"
+        },
+        {
+          "kind": "imports",
+          "from": "src/ops/doctor.ts#runDoctor",
+          "to": "src/install/verify.ts#verifyInstallation"
+        },
+        {
+          "kind": "imports",
+          "from": "src/ops/doctor.ts#runDoctor",
+          "to": "src/notes/validate.ts#validateNotes"
+        },
+        {
+          "kind": "imports",
+          "from": "src/ops/doctor.ts#runDoctor",
+          "to": "src/sync/gate.ts#readStoredProjectGate"
+        },
+        {
+          "kind": "imports",
+          "from": "src/ops/doctor.ts#runDoctor",
+          "to": "src/utils/fs.ts#exists"
+        },
+        {
+          "kind": "imports",
+          "from": "src/ops/doctor.ts#runDoctor",
+          "to": "src/workflow/validate.ts#validatePlanDirectory"
+        },
+        {
+          "kind": "imports",
+          "from": "src/ops/doctor.ts#runDoctor",
+          "to": "src/workflow/workspace.ts#readWorkspaceManifest"
+        },
+        {
+          "kind": "imports",
+          "from": "src/ops/doctor.ts#runDoctor",
+          "to": "src/workspace/status.ts#workspaceStatus"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workflow/dispatch.ts#planDispatch",
+          "to": "src/workflow/order.ts#readExecutionOrder"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workflow/dispatch.ts#planDispatch",
+          "to": "src/workflow/parse.ts#readPlan"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workflow/dispatch.ts#planDispatch",
+          "to": "src/workflow/parse.ts#readTasks"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workflow/dispatch.ts#planDispatch",
+          "to": "src/workflow/workspace.ts#readWorkspaceManifest"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workflow/dispatch.ts#planDispatch",
+          "to": "src/workspace/status.ts#workspaceStatus"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workflow/report.ts#PlanReport",
+          "to": "src/workspace/execution.ts#ExecutionProjection"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workflow/report.ts#planReport",
+          "to": "src/utils/frontmatter.ts#parseMarkdown"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workflow/report.ts#planReport",
+          "to": "src/workflow/order.ts#readExecutionOrder"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workflow/report.ts#planReport",
+          "to": "src/workflow/parse.ts#readPlan"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workflow/report.ts#planReport",
+          "to": "src/workflow/parse.ts#readTasks"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workflow/report.ts#planReport",
+          "to": "src/workflow/workspace.ts#readWorkspaceManifest"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workflow/report.ts#planReport",
+          "to": "src/workspace/git.ts#commitCount"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workflow/report.ts#planReport",
+          "to": "src/workspace/record.ts#RESERVED_ROOT"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workflow/report.ts#planReport",
+          "to": "src/workspace/record.ts#WorkspaceExecutionRecord"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workflow/report.ts#planReport",
+          "to": "src/workspace/record.ts#implementationRecordPath"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workflow/report.ts#planReport",
+          "to": "src/workspace/record.ts#readWorkspaceRecord"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workflow/report.ts#planReport",
+          "to": "src/workspace/status.ts#workspaceStatus"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workflow/validate.ts#validatePlanDirectory",
+          "to": "src/workflow/order.ts#readExecutionOrder"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workflow/validate.ts#validatePlanDirectory",
+          "to": "src/workflow/parse.ts#readPlan"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workflow/validate.ts#validatePlanDirectory",
+          "to": "src/workflow/parse.ts#readTasks"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workflow/validate.ts#validatePlanDirectory",
+          "to": "src/workflow/workspace.ts#readWorkspaceManifest"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workflow/validate.ts#validatePlanDirectory",
+          "to": "src/workflow/workspace.ts#validateWorkspaceManifest"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workflow/validate.ts#validatePlanDirectory",
+          "to": "src/workflow/workspace.ts#validateWorkspaceRepositoryOrder"
+        }
+      ],
+      "owner_role": "shared",
+      "responsibility": "Read-only operator tooling: `ai-workflow doctor` aggregates adoption, synchronization, navigation, notes, plan or workspace and installation or host health, `ai-workflow review packet` and `ai-workflow plan dispatch` assemble supplied Spec or Standards and current-phase dispatch packets, `ai-workflow plan report` reports plan lifecycle and execution, and `ai-workflow host smoke` records an isolated three-host PASS, UNVERIFIED or BLOCKED matrix. All five are inspection and reporting aids, not workflow gates: they write no file, perform no Git mutation or schedule recomputation, decide no axis, verdict, finding, phase or scope, and change no role, review budget or mandatory context.",
+      "read_scope": [
+        ".ai-workflow/AGENTS.md",
+        "MEMORY.md",
+        "README.md",
+        "src/cli.ts",
+        "src/host/smoke.ts",
+        "src/install/verify.ts",
+        "src/ops/doctor.ts",
+        "src/sync/gate.ts",
+        "src/workflow/dispatch.ts",
+        "src/workflow/report.ts",
+        "src/workflow/review-packet.ts",
+        "src/workflow/validate.ts",
+        "src/workspace/git.ts",
+        "templates/skills/coding/SKILL.md",
+        "templates/skills/coding/references/review.md",
+        "tests/behavior/coding-v2-content.test.ts",
+        "tests/behavior/install-contract.test.ts",
+        "tests/behavior/memory-governance-content.test.ts",
+        "tests/behavior/operator-tooling-content.test.ts",
+        "tests/behavior/review-policy.test.ts",
+        "tests/helpers.ts",
+        "tests/integration/doctor-cli.test.ts",
+        "tests/integration/host-smoke-cli.test.ts",
+        "tests/integration/plan-dispatch-cli.test.ts",
+        "tests/integration/plan-report-cli.test.ts",
+        "tests/integration/review-packet-cli.test.ts",
+        "tests/unit/host-smoke.test.ts",
+        "tests/unit/install-verify.test.ts",
+        "tests/unit/ops-doctor.test.ts",
+        "tests/unit/workflow-dispatch.test.ts",
+        "tests/unit/workflow-report.test.ts",
+        "tests/unit/workflow-review-packet.test.ts"
+      ],
+      "shared_entry": false
     }
   ]
 }
