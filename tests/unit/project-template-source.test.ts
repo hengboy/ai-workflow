@@ -33,6 +33,30 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+type TimeoutLikeError = Error & { killed?: boolean; signal?: string };
+
+/** Capture the rejection so the full message can be asserted without coupling to a matcher. */
+async function rejectionOf(operation: Promise<unknown>): Promise<Error> {
+  try {
+    await operation;
+  } catch (error) {
+    return error as Error;
+  }
+  throw new Error('expected the source acquisition to reject');
+}
+
+/** The two timeout-like rejection shapes a clone can produce: a killed process or a timeout message. */
+const TIMEOUT_LIKE_ERRORS: Array<{ label: string; error: TimeoutLikeError }> = [
+  {
+    label: 'a killed clone process',
+    error: Object.assign(new Error('git clone: fatal: the remote end hung up unexpectedly'), { killed: true, signal: 'SIGTERM' }),
+  },
+  {
+    label: 'a clone timeout message',
+    error: new Error('git clone: error: command timed out after 60000ms'),
+  },
+];
+
 // The regression guard: while these suites run, any HTTP request is a failure. Source
 // acquisition must go through the injected git runner only.
 let fetchCalls = 0;
@@ -63,6 +87,18 @@ describe('project template source acquisition', () => {
     expect(fake.calls[0]).toEqual(['clone', '--depth', '1', '--branch', BRANCH, PUBLIC_URL, destination]);
     expect(fake.calls[1]).toEqual(['-C', destination, 'rev-parse', 'HEAD']);
     expect(fetchCalls).toBe(0);
+  });
+
+  it('keeps the immutable snapshot unchanged when a generous timeout override is supplied', async () => {
+    const commit = 'd'.repeat(40);
+    const expected = generatedFiles(commit);
+    const fake = fakeGit({ commit, files: expected });
+
+    const snapshot = await resolveTemplateSnapshot({ runGit: fake.runGit, timeoutMs: 30_000 });
+
+    expect(snapshot.source).toEqual({ repository: REPOSITORY, branch: BRANCH, commit });
+    expect(Object.keys(snapshot.files).sort()).toEqual([...GENERATED_SOURCES].sort());
+    for (const path of GENERATED_SOURCES) expect(snapshot.files[path]).toBe(expected[path]);
   });
 
   it('does not extend the allowlist for extra upstream files', async () => {
@@ -112,12 +148,31 @@ describe('project template source acquisition', () => {
     expect(await exists(destination), 'the temporary clone must be removed').toBe(false);
   });
 
-  it('rejects with a useful message when the clone itself fails', async () => {
+  it.each(TIMEOUT_LIKE_ERRORS)('rejects $label with one clear timeout error naming the clone, fixed source, branch and cause', async ({ error: thrown }) => {
+    const runGit: TestGitRunner = async () => {
+      throw thrown;
+    };
+
+    const error = await rejectionOf(resolveTemplateSnapshot({ runGit }));
+
+    expect(error).toBeInstanceOf(Error);
+    expect(error.message).toMatch(/clone/i);
+    expect(error.message).toContain(PUBLIC_URL);
+    expect(error.message).toMatch(/\bmain\b/);
+    expect(error.message).toMatch(/timed?\s*out|timeout|killed|SIGTERM/i);
+    expect(error.message).not.toBe(thrown.message);
+    expect(fetchCalls).toBe(0);
+  });
+
+  it('keeps a generic clone failure distinct from a timeout', async () => {
     const runGit: TestGitRunner = async () => {
       throw new Error('git clone: fatal: repository not found');
     };
 
-    await expect(resolveTemplateSnapshot({ runGit })).rejects.toThrow(/repository not found/);
+    const error = await rejectionOf(resolveTemplateSnapshot({ runGit }));
+
+    expect(error.message).toMatch(/repository not found/);
+    expect(error.message).not.toMatch(/timed?\s*out|timeout|killed|SIGTERM/i);
     expect(fetchCalls).toBe(0);
   });
 
