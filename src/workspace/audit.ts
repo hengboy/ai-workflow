@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { join } from 'node:path';
+import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { promisify } from 'node:util';
 import { exists } from '../utils/fs.js';
 import { validateWorkspaceManifest, type WorkspaceRepository } from '../workflow/workspace.js';
@@ -40,6 +40,21 @@ interface AuditedRecord {
   repositoryPath: string;
   repository: WorkspaceRepository | undefined;
   record: WorkspaceExecutionRecord | undefined;
+}
+
+/** True when `candidate` resolves strictly below `root`, never equal to it and never escaping it. */
+function isStrictlyInside(root: string, candidate: string): boolean {
+  const base = resolve(root);
+  const target = resolve(candidate);
+  const relativePath = relative(base, target);
+  return relativePath !== '' && relativePath !== '..' && !relativePath.startsWith(`..${sep}`) && !isAbsolute(relativePath);
+}
+
+/** True when `candidate` resolves at or below `root`, including the root itself. */
+function isWithinOrEqual(root: string, candidate: string): boolean {
+  const base = resolve(root);
+  const target = resolve(candidate);
+  return target === base || isStrictlyInside(base, target);
 }
 
 /**
@@ -85,9 +100,10 @@ async function checkRecordedCommits(entry: AuditedRecord, blockers: string[]): P
   const record = entry.record;
   if (record === undefined) return;
   const evidence: { sha: string; label: string }[] = [];
-  if (record.status === 'completed' && record.commit !== undefined) evidence.push({ sha: record.commit, label: 'delivery commit' });
+  if (record.commit !== undefined) evidence.push({ sha: record.commit, label: 'delivery commit' });
   if (record.root_tasks_commit !== undefined) evidence.push({ sha: record.root_tasks_commit, label: 'root tasks commit' });
   if (record.reviewed_commit !== undefined) evidence.push({ sha: record.reviewed_commit, label: 'reviewed commit' });
+  if (record.execution !== undefined) evidence.push({ sha: record.execution.base_commit, label: 'execution base commit' });
   for (const checkpoint of Object.values(record.task_checkpoints ?? {})) {
     evidence.push(
       checkpoint.kind === 'commit'
@@ -137,14 +153,31 @@ async function checkSliceConsistency(
   }
 }
 
-/** Check one execution anchor's worktree identity and report unrecorded commits on its branch. */
-async function checkExecutionAnchor(entry: AuditedRecord, blockers: string[], warnings: string[]): Promise<void> {
+/**
+ * Check one execution anchor's containment, worktree identity and branch history. Returns true when
+ * the branch probe ran successfully so the caller can report that check only for a completed probe.
+ */
+async function checkExecutionAnchor(
+  workspaceRoot: string,
+  entry: AuditedRecord,
+  blockers: string[],
+  warnings: string[],
+): Promise<boolean> {
   const record = entry.record;
   const anchor = record?.execution;
-  if (record === undefined || anchor === undefined) return;
+  if (record === undefined || anchor === undefined) return false;
+  const sourceRoot = resolve(anchor.source_root);
+  if (!isWithinOrEqual(workspaceRoot, sourceRoot)) {
+    blockers.push(`Execution anchor for repository "${entry.name}" names source_root ${anchor.source_root}, which is outside the workspace root ${workspaceRoot}`);
+    return false;
+  }
+  if (!isStrictlyInside(sourceRoot, anchor.worktree)) {
+    blockers.push(`Execution anchor worktree ${anchor.worktree} for repository "${entry.name}" must resolve strictly inside execution.source_root ${anchor.source_root}`);
+    return false;
+  }
   if (!(await exists(anchor.worktree))) {
     blockers.push(`Execution anchor for repository "${entry.name}" names worktree ${anchor.worktree}, which does not exist`);
-    return;
+    return false;
   }
   const [actual, expected] = await Promise.all([
     gitCommonDirectory(anchor.worktree),
@@ -152,16 +185,21 @@ async function checkExecutionAnchor(entry: AuditedRecord, blockers: string[], wa
   ]);
   if (actual === undefined || expected === undefined || actual !== expected) {
     blockers.push(`Execution anchor worktree ${anchor.worktree} for repository "${entry.name}" has Git common directory ${actual ?? 'unresolved'}, expected ${expected ?? 'unresolved'} at ${entry.repositoryPath}`);
-    return;
+    return false;
   }
   const head = await symbolicHead(anchor.worktree);
-  if (head !== `refs/heads/${anchor.branch}`) return;
+  if (head !== `refs/heads/${anchor.branch}`) return false;
   const evidence = new Set<string>(recordedCommits(record));
   evidence.add(anchor.base_commit);
   const unreferenced = await gitLines(anchor.worktree, ['rev-list', anchor.branch, '--not', ...evidence]);
-  for (const sha of unreferenced ?? []) {
+  if (unreferenced === undefined) {
+    blockers.push(`Audit could not verify branch "${anchor.branch}" in worktree ${anchor.worktree} for repository "${entry.name}" because git rev-list failed`);
+    return false;
+  }
+  for (const sha of unreferenced) {
     warnings.push(`Unreferenced commit ${sha} is reachable from branch "${anchor.branch}" in worktree ${anchor.worktree} but is not part of the recorded evidence`);
   }
+  return true;
 }
 
 /**
@@ -206,10 +244,16 @@ export async function auditWorkspace(planDirectory: string): Promise<WorkspaceAu
   for (const repository of manifest.repositories) {
     if (repository.name === RESERVED_ROOT) continue;
     result.repositories.push({ name: repository.name, path: repository.path });
+    const repositoryPath = resolve(join(root, repository.path));
+    if (isAbsolute(repository.path) || !isStrictlyInside(root, repositoryPath)) {
+      result.blockers.push(`Repository "${repository.name}" path "${repository.path}" resolves to ${repositoryPath}, which is not strictly inside the workspace root ${root}`);
+      audited.push({ name: repository.name, repositoryPath, repository, record: undefined });
+      continue;
+    }
     const recordPath = implementationRecordPath(root, repository.path, plan.planId);
     audited.push({
       name: repository.name,
-      repositoryPath: join(root, repository.path),
+      repositoryPath,
       repository,
       record: await readRecordForAudit(recordPath, plan.planId, repository.name, result.blockers),
     });
@@ -232,16 +276,17 @@ export async function auditWorkspace(planDirectory: string): Promise<WorkspaceAu
   }
   result.checks.push('Checked recorded execution anchors for an active worktree');
 
+  let branchProbeRan = false;
   for (const entry of audited) {
     await checkRecordedCommits(entry, result.blockers);
     checkTaskCoverage(entry, tasks, result.blockers);
     await checkSliceConsistency(resolved, entry, result.blockers);
-    await checkExecutionAnchor(entry, result.blockers, result.warnings);
+    if (await checkExecutionAnchor(root, entry, result.blockers, result.warnings)) branchProbeRan = true;
   }
   result.checks.push('Verified recorded commit SHAs against their owning repositories');
   result.checks.push('Checked task checkpoint coverage for completed implementation records');
   result.checks.push('Compared completed implementation records with their distributed slices');
-  result.checks.push('Checked recorded branches for commits outside the recorded evidence');
+  if (branchProbeRan) result.checks.push('Checked recorded branches for commits outside the recorded evidence');
 
   result.valid = result.blockers.length === 0;
   return result;

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { execFile } from 'node:child_process';
 import { appendFile, mkdir, rename, rm } from 'node:fs/promises';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { promisify } from 'node:util';
 import { auditWorkspace, type WorkspaceAuditResult } from '../../src/workspace/audit.js';
 import { distributeWorkspace } from '../../src/workspace/distribute.js';
@@ -134,6 +134,22 @@ async function addWorktree(repository: string): Promise<string> {
   return worktree;
 }
 
+async function addWorktreeInside(root: string, repository: string): Promise<string> {
+  const worktree = join(root, '.worktrees', 'worktree');
+  await mkdir(join(root, '.worktrees'), { recursive: true });
+  await exec('git', ['worktree', 'add', worktree, '-b', `ai-workflow/${PLAN_ID}`], { cwd: repository, maxBuffer: 10 * 1024 * 1024 });
+  return worktree;
+}
+
+async function releaseWorktree(repository: string, worktree: string): Promise<void> {
+  try {
+    await exec('git', ['worktree', 'remove', '--force', worktree], { cwd: repository, maxBuffer: 10 * 1024 * 1024 });
+  } catch {
+    await rm(worktree, { recursive: true, force: true });
+  }
+  await rm(dirname(worktree), { recursive: true, force: true });
+}
+
 describe('auditWorkspace', () => {
   it('reports a fresh workspace plan as valid, with checks and warnings, without writing', async () => {
     const { root } = await realWorkspaceFixture([
@@ -187,6 +203,45 @@ describe('auditWorkspace', () => {
     expect(changedPaths(before, await snapshotTree(root))).toEqual([]);
   }, TIMEOUT);
 
+  it('blocks a workspace plan whose repository path escapes the workspace root', async () => {
+    const parent = await temporary('ai-workflow-audit-escape-');
+    const root = join(parent, 'workspace');
+    const sibling = join(parent, 'sibling');
+    await mkdir(root, { recursive: true });
+    await mkdir(sibling, { recursive: true });
+    await gitInit(root);
+    await gitInit(sibling);
+    const escaping = { name: 'app', path: '../sibling', dependsOn: [] };
+    const directory = await workspacePlanFixture(root, {
+      planId: PLAN_ID,
+      requirements: ['REQ-001'],
+      acceptanceCriteria: ['AC-001'],
+      workspaceRepos: [WORKSPACE_REPO, escaping],
+      tasks: [{ id: 'task-001-app', repo: 'app', requirements: ['REQ-001'], acceptanceCriteria: ['AC-001'], writeScope: ['src/app.ts'] }],
+      phases: [['task-001-app']],
+      manifest: {
+        planId: PLAN_ID,
+        role: 'workspace',
+        repositories: [
+          { ...WORKSPACE_REPO, requirements: [], acceptanceCriteria: [] },
+          { ...escaping, requirements: ['REQ-001'], acceptanceCriteria: ['AC-001'] },
+        ],
+      },
+    });
+
+    try {
+      const before = await snapshotTree(root);
+      const output = view(await auditWorkspace(directory));
+
+      expect(output.valid).toBe(false);
+      const text = expectStrings(output.blockers, 'blockers').join('\n');
+      expect(text.includes('../sibling') || /outside[^.\n]*workspace root/i.test(text)).toBe(true);
+      expect(changedPaths(before, await snapshotTree(root))).toEqual([]);
+    } finally {
+      await rm(parent, { recursive: true, force: true });
+    }
+  }, TIMEOUT);
+
   it('blocks a recorded task checkpoint commit that does not exist, naming the repository and SHA', async () => {
     const { root, directory, app } = await buildWorkspace();
     await distributeSlices(directory);
@@ -210,11 +265,28 @@ describe('auditWorkspace', () => {
     expect(changedPaths(before, await snapshotTree(root))).toEqual([]);
   }, TIMEOUT);
 
+  it('blocks an in-progress record whose delivery commit does not exist', async () => {
+    const { root, directory, app } = await buildWorkspace();
+    try {
+      await writeRecord(app, { ...baseRecord(), commit: MISSING_SHA });
+
+      const before = await snapshotTree(root);
+      const output = view(await auditWorkspace(directory));
+
+      expect(output.valid).toBe(false);
+      const text = expectStrings(output.blockers, 'blockers').join('\n');
+      expect(text).toContain(MISSING_SHA);
+      expect(changedPaths(before, await snapshotTree(root))).toEqual([]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  }, TIMEOUT);
+
   it('accepts a no-change checkpoint whose recorded head exists', async () => {
     const { root, directory, app } = await buildWorkspace();
     await distributeSlices(directory);
     const head = await headOf(app);
-    const worktree = await addWorktree(app);
+    const worktree = await addWorktreeInside(root, app);
     await writeRecord(app, {
       ...baseRecord(),
       execution: anchorOf(root, worktree, head),
@@ -287,7 +359,7 @@ describe('auditWorkspace', () => {
   it('accepts an execution anchor naming a real worktree of the source repository', async () => {
     const { root, directory, app } = await buildWorkspace();
     const head = await headOf(app);
-    const worktree = await addWorktree(app);
+    const worktree = await addWorktreeInside(root, app);
     await writeRecord(app, { ...baseRecord(), execution: anchorOf(root, worktree, head) });
 
     const before = await snapshotTree(root);
@@ -299,11 +371,50 @@ describe('auditWorkspace', () => {
     expect(changedPaths(before, await snapshotTree(root))).toEqual([]);
   }, TIMEOUT);
 
+  it('blocks an execution anchor whose worktree lies outside execution.source_root', async () => {
+    const { root, directory, app } = await buildWorkspace();
+    const head = await headOf(app);
+    const worktree = await addWorktree(app);
+    try {
+      await writeRecord(app, { ...baseRecord(), execution: anchorOf(root, worktree, head) });
+
+      const before = await snapshotTree(root);
+      const output = view(await auditWorkspace(directory));
+
+      expect(output.valid).toBe(false);
+      const text = expectStrings(output.blockers, 'blockers').join('\n');
+      expect(text.includes(worktree) || /outside|contain|source_root/i.test(text)).toBe(true);
+      expect(changedPaths(before, await snapshotTree(root))).toEqual([]);
+    } finally {
+      await releaseWorktree(app, worktree);
+      await rm(root, { recursive: true, force: true });
+    }
+  }, TIMEOUT);
+
+  it('blocks an execution anchor whose recorded base commit does not exist', async () => {
+    const { root, directory, app } = await buildWorkspace();
+    const worktree = await addWorktreeInside(root, app);
+    try {
+      await writeRecord(app, { ...baseRecord(), execution: anchorOf(root, worktree, MISSING_SHA) });
+
+      const before = await snapshotTree(root);
+      const output = view(await auditWorkspace(directory));
+
+      expect(output.valid).toBe(false);
+      const text = expectStrings(output.blockers, 'blockers').join('\n');
+      expect(text.includes(MISSING_SHA) || /base[_ ]commit|execution/i.test(text)).toBe(true);
+      expect(changedPaths(before, await snapshotTree(root))).toEqual([]);
+    } finally {
+      await releaseWorktree(app, worktree);
+      await rm(root, { recursive: true, force: true });
+    }
+  }, TIMEOUT);
+
   it('warns about an unreferenced branch commit without blocking a valid record', async () => {
     const { root, directory, app } = await buildWorkspace();
     await distributeSlices(directory);
     const head = await headOf(app);
-    const worktree = await addWorktree(app);
+    const worktree = await addWorktreeInside(root, app);
     await writeRecord(app, {
       ...baseRecord(),
       status: 'completed',

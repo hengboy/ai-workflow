@@ -47,6 +47,7 @@ ai-workflow notes pairing --project . --write <note> | --write --all
 ai-workflow notes archive [--project .] --seal [--base <commit>]
 ai-workflow workspace distribute --plan <directory>
 ai-workflow workspace status --plan <directory>
+ai-workflow workspace audit --plan <directory>
 ai-workflow workspace checkpoint --plan <directory> --repo <name>
 ```
 
