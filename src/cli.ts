@@ -13,6 +13,7 @@ import { resolveCandidatePath, resolveProjectRoot } from './context/paths.js';
 import { readPlan, readTasks } from './workflow/parse.js';
 import { renderReviewPacket, type ReviewAxis, type ReviewMode, type ReviewPacketRequest, type ReviewPurpose } from './workflow/review-packet.js';
 import { planDispatch } from './workflow/dispatch.js';
+import { planReport } from './workflow/report.js';
 import { readExecutionOrder } from './workflow/order.js';
 import { readWorkspaceManifest, validateWorkspaceManifest, validateWorkspaceRepositoryOrder } from './workflow/workspace.js';
 import { listPlanPairs, recordPlanPairs, verifyPlanPairs } from './workflow/pairing.js';
@@ -156,6 +157,9 @@ plan.command('dispatch')
     });
     print(result);
   });
+plan.command('report').requiredOption('--plan <directory>').action(async ({ plan: directory }: { plan: string }) => {
+  print(await planReport(directory));
+});
 plan.command('pairing')
   .requiredOption('--plan <directory>')
   .option('--list', 'report the pairing state of every plan document without failing')
