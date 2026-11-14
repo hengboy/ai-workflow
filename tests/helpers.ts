@@ -476,3 +476,115 @@ export function withGitShim(env: NodeJS.ProcessEnv, binDirectory: string, fixtur
     AI_WORKFLOW_GIT_FIXTURE: fixturePath,
   };
 }
+
+// --- Fake native host executables for the smoke harness ------------------------------
+
+/** The mode a fake host executable emulates for one host. */
+export interface FakeHostBehavior {
+  /** Version reported for `--version`; defaults to 9.9.9. */
+  version?: string;
+  /** `ok` reads the fixture and prints it; `nomarker` exits 0 without the marker; `fail` exits nonzero; `mutate` edits the fixture; `timeout` never exits. */
+  mode?: 'ok' | 'nomarker' | 'fail' | 'mutate' | 'timeout';
+  /** Stderr text printed in `fail` mode. */
+  stderr?: string;
+  /** Exit code used in `fail` mode; defaults to 1. */
+  exitCode?: number;
+}
+
+export type FakeHostName = 'codex' | 'claude' | 'opencode';
+export type FakeHostBehaviors = Partial<Record<FakeHostName, FakeHostBehavior>>;
+
+/** One observed live invocation of a fake host executable. */
+export interface FakeHostCall {
+  name: string;
+  args: string[];
+  cwd: string;
+  HOME?: string;
+}
+
+/** A temporary bin directory holding fake `codex`, `claude` and `opencode` executables. */
+export interface FakeHosts {
+  bin: string;
+  log: string;
+  /** PATH with the fake bin first, keeping the real PATH for pnpm, node and git. */
+  path: string;
+  /** PATH with no host executables but node and git available, for missing-executable cases. */
+  minimalPath: string;
+  configure: (behaviors?: FakeHostBehaviors) => Promise<void>;
+  calls: () => Promise<FakeHostCall[]>;
+}
+
+const FAKE_HOST_SOURCE = `#!/usr/bin/env node
+const { appendFileSync, existsSync, readFileSync, readdirSync, statSync, writeFileSync } = require('node:fs');
+const { basename, join, resolve } = require('node:path');
+const name = basename(process.argv[1]);
+const configPath = join(__dirname, 'fake.json');
+const all = existsSync(configPath) ? JSON.parse(readFileSync(configPath, 'utf8')) : {};
+const config = all[name] || {};
+const args = process.argv.slice(2);
+if (args.includes('--version') || args.includes('-V') || (args.length === 1 && args[0] === 'version')) {
+  process.stdout.write((config.version || '9.9.9') + '\\n');
+  process.exit(0);
+}
+appendFileSync(join(__dirname, 'calls.log'), JSON.stringify({ name, args, cwd: process.cwd(), HOME: process.env.HOME }) + '\\n');
+const directories = args.filter((arg) => {
+  try { return statSync(resolve(arg)).isDirectory(); } catch { return false; }
+});
+const candidates = directories.map((dir) => resolve(dir));
+const project = candidates.find((dir) => existsSync(join(dir, '.ai-workflow')) || existsSync(join(dir, '.git'))) || candidates[0] || process.cwd();
+function readFixture(dir, depth, state) {
+  if (depth > 5 || state.files >= 200) return '';
+  let output = '';
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (entry.name === '.git' || entry.name === 'node_modules') continue;
+    const absolute = join(dir, entry.name);
+    if (entry.isDirectory()) output += readFixture(absolute, depth + 1, state);
+    else if (entry.isFile() && statSync(absolute).size < 200000 && state.files < 200) { state.files += 1; output += readFileSync(absolute, 'utf8') + '\\n'; }
+  }
+  return output;
+}
+if (config.mode === 'fail') {
+  process.stderr.write((config.stderr || 'authentication required') + '\\n');
+  process.exit(config.exitCode === undefined ? 1 : config.exitCode);
+}
+if (config.mode === 'timeout') {
+  setInterval(() => {}, 1000);
+} else if (config.mode === 'nomarker') {
+  process.stdout.write('completed without the fixture marker\\n');
+  process.exit(0);
+} else {
+  if (config.mode === 'mutate') writeFileSync(join(project, 'mutation.txt'), 'mutated\\n');
+  process.stdout.write(readFixture(project, 0, { files: 0 }));
+  process.exit(0);
+}
+`;
+
+/** Create fake host executables; call `configure` to change per-host behavior between runs. */
+export async function fakeHosts(behaviors: FakeHostBehaviors = {}): Promise<FakeHosts> {
+  const bin = await temporary('ai-workflow-fake-hosts-');
+  const empty = join(bin, 'empty');
+  await mkdir(empty, { recursive: true });
+  for (const name of ['codex', 'claude', 'opencode'] as const) {
+    const executable = join(bin, name);
+    await writeFile(executable, FAKE_HOST_SOURCE);
+    await chmod(executable, 0o755);
+  }
+  const log = join(bin, 'calls.log');
+  const configure = async (next: FakeHostBehaviors = behaviors): Promise<void> => {
+    await writeFile(join(bin, 'fake.json'), JSON.stringify(next));
+  };
+  await configure();
+  const original = process.env.PATH ?? '';
+  return {
+    bin,
+    log,
+    path: `${bin}${delimiter}${original}`,
+    minimalPath: `${empty}${delimiter}${dirname(process.execPath)}${delimiter}/usr/bin${delimiter}/bin`,
+    configure,
+    calls: async () => {
+      let contents = '';
+      try { contents = await readFile(log, 'utf8'); } catch { return []; }
+      return contents.trim().split('\n').filter((line) => line.length > 0).map((line) => JSON.parse(line) as FakeHostCall);
+    },
+  };
+}

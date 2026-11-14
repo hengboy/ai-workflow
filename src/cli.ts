@@ -10,10 +10,13 @@ import { createNavigationCandidate, rebuildNavigation, refreshContext, refreshNa
 import { locateContext } from './context/locate.js';
 import { discoverFallback, type FallbackPacket } from './context/fallback.js';
 import { resolveCandidatePath, resolveProjectRoot } from './context/paths.js';
-import { readPlan, readTasks } from './workflow/parse.js';
-import { readExecutionOrder } from './workflow/order.js';
-import { readWorkspaceManifest, validateWorkspaceManifest, validateWorkspaceRepositoryOrder } from './workflow/workspace.js';
+import { renderReviewPacket, type ReviewAxis, type ReviewMode, type ReviewPacketRequest, type ReviewPurpose } from './workflow/review-packet.js';
+import { planDispatch } from './workflow/dispatch.js';
+import { planReport } from './workflow/report.js';
+import { validatePlanDirectory } from './workflow/validate.js';
 import { listPlanPairs, recordPlanPairs, verifyPlanPairs } from './workflow/pairing.js';
+import { runDoctor } from './ops/doctor.js';
+import { runHostSmoke, type HostSmokeHost } from './host/smoke.js';
 import { distributeWorkspace } from './workspace/distribute.js';
 import { workspaceStatus } from './workspace/status.js';
 import { auditWorkspace } from './workspace/audit.js';
@@ -25,6 +28,7 @@ import { listPairs, recordPairs, verifyPairs } from './notes/pair.js';
 
 const hosts = ['codex', 'claude', 'opencode'] as const;
 function hostList(value: string): Host[] { if (value === 'all') return [...hosts]; if (!hosts.includes(value as Host)) throw new Error(`Invalid host: ${value}`); return [value as Host]; }
+function smokeHost(value: string): HostSmokeHost { if (value === 'all') return 'all'; if (!hosts.includes(value as Host)) throw new Error(`Invalid host: ${value}`); return value as Host; }
 async function jsonFile<T>(path: string): Promise<T> { return JSON.parse(await readFile(resolve(path), 'utf8')) as T; }
 function print(value: unknown): void { process.stdout.write(`${typeof value === 'string' ? value : JSON.stringify(value, null, 2)}\n`); }
 
@@ -112,32 +116,70 @@ program.command('sync-hook').requiredOption('--host <host>').option('--phase', '
   }
   process.exitCode = 0;
 });
+program.command('doctor')
+  .option('--project <root>', 'project root directory path; use . or an absolute path', process.cwd())
+  .option('--host <host>', 'limit host checks to one host')
+  .option('--plan <directory>', 'plan directory to validate')
+  .option('--home <path>', 'installation root; defaults to the current user home')
+  .option('--json', 'print the complete report structure')
+  .action(async (options: { project: string; host?: string; plan?: string; home?: string; json?: boolean }) => {
+    const report = await runDoctor({
+      project: options.project,
+      ...(options.host === undefined ? {} : { host: options.host as Host }),
+      ...(options.plan === undefined ? {} : { plan: options.plan }),
+      ...(options.home === undefined ? {} : { home: options.home }),
+    });
+    if (options.json) {
+      print(report);
+    } else {
+      const summary = [`project: ${report.project ?? 'none'}`, `valid: ${report.valid}`];
+      for (const item of report.checks) {
+        summary.push(`${item.status} ${item.id}: ${item.detail}`);
+        if (item.recovery !== undefined) summary.push(`  recovery: ${item.recovery}`);
+      }
+      print(summary.join('\n'));
+    }
+    process.exitCode = report.checks.some((item) => item.status === 'fail') ? 1 : report.checks.some((item) => item.status === 'warn') ? 2 : 0;
+  });
+const host = program.command('host');
+host.command('smoke')
+  .requiredOption('--host <host>', 'host to exercise: codex, claude, opencode or all')
+  .option('--home <path>', 'absent or empty installation HOME instead of a temporary one')
+  .option('--live', 'attempt one non-interactive read-only host dispatch')
+  .option('--keep', 'retain the temporary HOME and the external fixture')
+  .action(async ({ host: selected, home, live, keep }: { host: string; home?: string; live?: boolean; keep?: boolean }) => {
+    const report = await runHostSmoke({
+      host: smokeHost(selected),
+      ...(home === undefined ? {} : { home }),
+      ...(live ? { live: true } : {}),
+      ...(keep ? { keep: true } : {}),
+    });
+    print(report);
+  });
 const profile = program.command('profile');
 profile.command('activate').argument('<name>').option('--home <path>').option('--opencode-version <version>', 'opencode agent format: v1, v2 or auto (default auto)', 'auto').action(async (name: string, { home, opencodeVersion }: { home?: string; opencodeVersion: string }) => print(await activateProfile(name, { ...(home ? { home } : {}), opencodeVersion: opencodeVersionOption(opencodeVersion) })));
 
 const plan = program.command('plan');
 plan.command('validate').requiredOption('--plan <directory>').action(async ({ plan: directory }: { plan: string }) => {
-  const document = await readPlan(directory);
-  const tasks = await readTasks(directory);
-  const digests = { spec: document.specDigest, plan: document.planDigest, combined: document.digest };
-  const manifest = await readWorkspaceManifest(directory);
-  if (!tasks.length) { print({ valid: true, plan_id: document.planId, digests }); return; }
-  const schedule = await readExecutionOrder(directory, document.planId, tasks);
-  if (manifest) {
-    const errors = validateWorkspaceManifest(manifest, document, tasks, schedule);
-    if (errors.length) throw new Error(errors.join('\n'));
-  } else if (document.workspaceRepos) {
-    const errors = validateWorkspaceRepositoryOrder(document.workspaceRepos.map((repository) => ({ name: repository.name, dependsOn: repository.depends_on })), tasks, schedule);
-    if (errors.length) throw new Error(errors.join('\n'));
-  }
-  const output: { valid: boolean; plan_id: string; digests: typeof digests; execution_order: string[][]; repos?: { name: string; path: string; depends_on: string[] }[] } = {
-    valid: true,
-    plan_id: document.planId,
-    digests,
-    execution_order: schedule.phases.map((phase) => phase.parallel),
-  };
-  if (manifest?.role === 'workspace') output.repos = manifest.repositories.map((repository) => ({ name: repository.name, path: repository.path, depends_on: repository.dependsOn }));
-  print(output);
+  print(await validatePlanDirectory(directory));
+});
+plan.command('dispatch')
+  .requiredOption('--plan <directory>')
+  .option('--phase <phase>', 'one-based phase number')
+  .option('--task <id>', 'exactly one task id from the selected phase')
+  .option('--verbose', 'include the text packet skeleton')
+  .action(async ({ plan: directory, phase, task, verbose }: { plan: string; phase?: string; task?: string; verbose?: boolean }) => {
+    const selectedPhase = phase === undefined ? undefined : Number(phase);
+    const result = await planDispatch({
+      planDirectory: directory,
+      ...(selectedPhase === undefined ? {} : { phase: selectedPhase }),
+      ...(task === undefined ? {} : { task }),
+      ...(verbose ? { verbose: true } : {}),
+    });
+    print(result);
+  });
+plan.command('report').requiredOption('--plan <directory>').action(async ({ plan: directory }: { plan: string }) => {
+  print(await planReport(directory));
 });
 plan.command('pairing')
   .requiredOption('--plan <directory>')
@@ -162,6 +204,81 @@ plan.command('pairing')
     const result = await verifyPlanPairs(target, documents);
     print(result);
     if (!result.valid) process.exitCode = 1;
+  });
+
+interface ReviewPacketOptions {
+  axis: string;
+  mode: string;
+  purpose: string;
+  repository: string;
+  contract: string;
+  base: string;
+  head: string;
+  previousHead?: string;
+  requirements?: string[];
+  requirementScope?: string[];
+  rawDiff?: string;
+  repairDiff?: string;
+  repairScope?: string[];
+  sourceBlobs?: string[];
+  committedTests?: string[];
+  changedPaths?: string[];
+  testReports?: string[];
+  memory?: string;
+  noteStandards?: string[];
+  originalFindings?: string[];
+  evidenceDir?: string;
+}
+
+const review = program.command('review');
+review.command('packet')
+  .requiredOption('--axis <axis>', 'review axis: spec or standards')
+  .requiredOption('--mode <mode>', 'review mode: initial or recheck')
+  .requiredOption('--purpose <purpose>', 'packet purpose: delivery or repository-local-finalization')
+  .requiredOption('--repository <path>', 'absolute repository path')
+  .requiredOption('--contract <path>', 'absolute project contract path')
+  .requiredOption('--base <sha>', 'full delivery-base SHA')
+  .requiredOption('--head <sha>', 'full checked-head SHA')
+  .option('--previous-head <sha>', 'full immediately preceding reviewed-head SHA')
+  .option('--requirements <path...>', 'absolute frozen requirement paths')
+  .option('--requirement-scope <id...>', 'assigned requirement and AC references')
+  .option('--raw-diff <path>', 'complete delivery diff path')
+  .option('--repair-diff <path>', 'previous-head-to-head repair diff path')
+  .option('--repair-scope <path...>', 'repaired paths, symbols and affected caller paths')
+  .option('--source-blobs <path...>', 'immutable source-context paths')
+  .option('--committed-tests <path...>', 'immutable test-source paths')
+  .option('--changed-paths <path...>', 'exact authorized changed paths')
+  .option('--test-reports <path...>', 'fresh test report paths')
+  .option('--memory <path>', 'absolute MEMORY path')
+  .option('--note-standards <path...>', 'applicable note-governance paths')
+  .option('--original-findings <text...>', 'original finding labels and evidence references')
+  .option('--evidence-dir <path>', 'base directory for relative evidence paths')
+  .action(async (options: ReviewPacketOptions) => {
+    const request: ReviewPacketRequest = {
+      axis: options.axis as ReviewAxis,
+      mode: options.mode as ReviewMode,
+      purpose: options.purpose as ReviewPurpose,
+      repository: options.repository,
+      contract: options.contract,
+      base: options.base,
+      head: options.head,
+      ...(options.previousHead === undefined ? {} : { previousHead: options.previousHead }),
+      ...(options.requirements === undefined ? {} : { requirements: options.requirements }),
+      ...(options.requirementScope === undefined ? {} : { requirementScope: options.requirementScope }),
+      ...(options.rawDiff === undefined ? {} : { rawDiff: options.rawDiff }),
+      ...(options.repairDiff === undefined ? {} : { repairDiff: options.repairDiff }),
+      ...(options.repairScope === undefined ? {} : { repairScope: options.repairScope }),
+      ...(options.sourceBlobs === undefined ? {} : { sourceBlobs: options.sourceBlobs }),
+      ...(options.committedTests === undefined ? {} : { committedTests: options.committedTests }),
+      ...(options.changedPaths === undefined ? {} : { changedPaths: options.changedPaths }),
+      ...(options.testReports === undefined ? {} : { testReports: options.testReports }),
+      ...(options.memory === undefined ? {} : { memory: options.memory }),
+      ...(options.noteStandards === undefined ? {} : { noteStandards: options.noteStandards }),
+      ...(options.originalFindings === undefined ? {} : { originalFindings: options.originalFindings }),
+      ...(options.evidenceDir === undefined ? {} : { evidenceDir: options.evidenceDir }),
+    };
+    const { packet } = await renderReviewPacket(request);
+    print(packet);
   });
 
 const projectOption = 'project root directory path; use . or an absolute path';

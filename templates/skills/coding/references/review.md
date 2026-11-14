@@ -4,6 +4,7 @@ The primary must read this reference before a planned implementation's initial r
 
 ## Dispatch preparation
 
+- The optional `ai-workflow review packet` and `ai-workflow plan dispatch` generators assemble only supplied fields. They never change the gates, roles, repair budget or mandatory context, and the packet below still requires every named evidence path.
 - Obtain the complete execution-unit base and checked head plus raw export paths from Git Operator. A recheck additionally needs the immediately preceding reviewed `previous_head`, its blobs and the separate repair diff. The delivery base never advances to the last task or repair commit.
 - Supply exact absolute paths and version anchors. Export complete diffs including deletions and both rename endpoints; include the necessary unchanged caller context at the same commits. File names alone are not evidence of completeness.
 - The initial review covers every assigned AC or applicable standards dimension. A blocker does not terminate the rest of the review. Require explicit unreviewed coverage and missing material, all concrete findings and complete-findings precedence over the report target.

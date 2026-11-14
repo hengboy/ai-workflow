@@ -126,26 +126,51 @@ function reportResult(report: SyncReport, authority?: string): ProjectGateResult
   return { decision: report.proceed ? 'allow' : 'deny', project: report.project, report, context, ...(authority === undefined ? {} : { authority }) };
 }
 
+async function resolveAdoptedRoot(start: string): Promise<{ root: string; adopted: boolean }> {
+  let projectRoot = start;
+  while (true) {
+    try {
+      await stat(join(projectRoot, '.ai-workflow'));
+      return { root: projectRoot, adopted: true };
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code !== 'ENOENT' && code !== 'ENOTDIR') throw error;
+    }
+    const parent = dirname(projectRoot);
+    if (parent === projectRoot) return { root: start, adopted: false };
+    projectRoot = parent;
+  }
+}
+
+export interface StoredProjectGateInput {
+  host: ProjectGateInput['host'];
+  project: string;
+  runtimeDirectory?: string;
+}
+
+/**
+ * Read the stored phase result for an actual adopted root without running synchronization,
+ * writing a unit or requesting the network. An absent, unreadable or mismatched unit is
+ * reported as `undefined`.
+ */
+export async function readStoredProjectGate(input: StoredProjectGateInput): Promise<ProjectGateResult | undefined> {
+  const resolved = await resolveAdoptedRoot(resolve(input.project));
+  if (!resolved.adopted) return undefined;
+  const runtimeDirectory = resolve(input.runtimeDirectory ?? join(tmpdir(), 'ai-workflow', 'project-gate'));
+  const path = join(runtimeDirectory, input.host, `phase-${Buffer.from(resolved.root).toString('base64url')}.json`);
+  const unit = await readUnit(path);
+  return unit?.result.project === resolved.root ? unit.result : undefined;
+}
+
 export async function runProjectGate(input: ProjectGateInput, options: ProjectGateOptions = {}): Promise<ProjectGateResult> {
   const operationStart = operationDirectory(input);
   let projectRoot = operationStart;
   let report: SyncReport | undefined;
   let authority: string | undefined;
   try {
-    let adopted = false;
-    while (true) {
-      try { await stat(join(projectRoot, '.ai-workflow')); adopted = true; break; } catch (error) {
-        const code = (error as NodeJS.ErrnoException).code;
-        if (code !== 'ENOENT' && code !== 'ENOTDIR') throw error;
-      }
-      const parent = dirname(projectRoot);
-      if (parent === projectRoot) {
-        projectRoot = operationStart;
-        break;
-      }
-      projectRoot = parent;
-    }
-    if (!adopted) {
+    const resolved = await resolveAdoptedRoot(operationStart);
+    projectRoot = resolved.root;
+    if (!resolved.adopted) {
       return { decision: 'skip', project: projectRoot, context: `ai-workflow sync skipped: no adoption found for ${projectRoot}; no freshness claim is made.` };
     }
     const exemption = toolExemption(input, projectRoot);

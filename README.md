@@ -49,6 +49,11 @@ ai-workflow workspace distribute --plan <directory>
 ai-workflow workspace status --plan <directory>
 ai-workflow workspace audit --plan <directory>
 ai-workflow workspace checkpoint --plan <directory> --repo <name>
+ai-workflow doctor [--project <root>] [--host <host>] [--plan <dir>] [--home <path>] [--json]
+ai-workflow review packet --axis spec|standards --mode initial|recheck [options]
+ai-workflow plan dispatch --plan <directory> [--phase <phase>] [--task <id>] [--verbose]
+ai-workflow plan report --plan <directory>
+ai-workflow host smoke --host codex|claude|opencode|all [--home <path>] [--live] [--keep]
 ```
 
 `--project` is always a project root directory path. From that directory use `--project .` (project root directory path); from elsewhere pass an absolute path such as `--project /path/to/project`. Internal orchestration uses absolute project-root paths, and a relative `--candidate` is resolved from that project root.
@@ -253,6 +258,30 @@ A workspace plan's root record may additionally carry an optional `root_tasks_co
 
 The record has only the two status values `in-progress` and `completed`; an interrupted run stays at `in-progress` with only the start fields and, once root delivery has occurred, `root_tasks_commit`, and no failure reason. Only a frozen plan creates this record, and coding creates no other workflow manifest or run record. `ai-workflow plan validate --plan <directory>` and `ai-workflow plan pairing --plan <directory>` neither require nor read this file.
 
+## Read-only operator tooling
+
+The read-only operator commands `ai-workflow doctor`, `ai-workflow review packet`, `ai-workflow plan dispatch`, `ai-workflow plan report` and `ai-workflow host smoke` are inspection and reporting aids, not workflow gates. None authorizes a phase or replaces a review, test or acceptance decision, none claims synchronization freshness, and none changes a role, gate, repair budget or mandatory context. They are optional conveniences: the primary keeps its existing context, review inputs and evidence obligations, and the packet generators never decide an axis, finding, verdict, phase or scope.
+
+### Doctor
+
+`ai-workflow doctor [--project <root>] [--host <host>] [--plan <dir>] [--home <path>] [--json]` is the read-only aggregate health check for an adopted project. It reports adoption and contract state, the stored synchronization result, navigation, notes, optional plan or workspace state, installation integrity and host readiness. The default output is a compact human summary, and `--json` prints the complete report with a stable check identifier, `pass`, `warn` or `fail`, a detail and a recovery command where one exists. `--host` limits host checks to the named host, so an explicitly requested uninstalled host fails with its install command while unrequested uninstalled hosts are skipped; `--plan` adds plan and workspace checks; `--home` selects the installation root. It makes no network request, writes no file and performs no Git mutation. It exits 0 when every check passes, 2 when any check warns and 1 on a failure; missing host trust or authentication is always a warning, never `pass`.
+
+### Review packet
+
+`ai-workflow review packet` renders one Spec or Standards initial or recheck packet from the field layout in `templates/skills/coding/references/review.md`. `--axis spec|standards` and `--mode initial|recheck` select the packet, while `--purpose delivery|repository-local-finalization`, `--repository`, `--contract`, `--base`, `--head`, optional `--previous-head`, the requirement and repair options and the evidence path options supply the remaining fields. It assembles only supplied or Git-exported evidence and resolves relative evidence paths only with `--evidence-dir`; it validates full SHAs and required paths, and refuses a missing field, an option that belongs to the other axis or mode, an invalid enum value or a relative repository or contract path. It writes only to stdout and never decides an axis, finding or verdict.
+
+### Plan dispatch
+
+`ai-workflow plan dispatch --plan <dir> [--phase <n>] [--task <id>] [--verbose]` renders the current or selected phase's task packets with task ID, repository, surface, mapped role, REQ/AC, exact read and write scopes, test commands, output paths and absolute plan and task anchors. Without `--phase`, a workspace plan requires a valid `workspace.yaml` and `workspace status` and uses its non-null execution phase, while an ordinary plan uses phase 1. It writes no file, runs no Git operation and never recomputes the frozen schedule; future-phase tasks are omitted, and `--verbose` adds the text packet skeleton that the default structured summary omits.
+
+### Plan report
+
+`ai-workflow plan report --plan <dir>` reports plan creation, implementation start and completion times and durations, task and phase counts, critical-path length, the workspace execution projection and a review-round count when matching `reports/` files exist. It reports a commit count only for a recorded workspace base-to-final range; an ordinary plan or a partial availability reports `null` with a stated reason. Absent timestamps, counts and statuses are labeled `unknown` instead of fabricated. It writes no file and performs no Git mutation, and malformed records return an exact error.
+
+### Host smoke
+
+`ai-workflow host smoke --host codex|claude|opencode|all [--home <path>] [--live] [--keep]` builds a temporary HOME, a temporary Git repository and a frozen-plan fixture, installs only into that temporary HOME, records the host version and static installation checks, and optionally attempts one bounded non-interactive read-only dispatch with `--live`. It prints a per-host PASS, UNVERIFIED or BLOCKED matrix with reasons: PASS requires the host process to return successfully and report the fixture marker, while missing authentication, trust or executable or an unsupported invocation yields UNVERIFIED or BLOCKED, and a skipped live attempt is `not_attempted`, never PASS. It removes the temporary HOME and fixture on exit unless `--keep` retains and reports both paths. It refuses a real HOME and a working project, installs nothing into host configuration, and never modifies a real project or remote. A completed matrix exits 0 even with UNVERIFIED or BLOCKED entries; a real-HOME refusal, a non-empty `--home` or a fixture or setup failure exits 1. Smoke evidence is an observed optional result, not a workflow gate, an acceptance claim or a three-host guarantee.
+
 ## Troubleshooting and recovery
 
 Recovery follows the state domains in `.ai-workflow/AGENTS.md`: a recovery action or repaired record never substitutes for the required evidence, gate decision or review verdict. Each row names the existing command or explicit manual action, its owner and the shortcut that is never allowed.
@@ -302,4 +331,4 @@ Supported reasoning values are `low`, `medium`, `high`, `xhigh`, `max` and `ultr
 
 ## Optional real-host smoke
 
-After logging into each local CLI, initialize a disposable Git repository, create a frozen plan, install into a temporary HOME, generate/approve a workflow and invoke one no-write node with the corresponding host. Never run this smoke against a working project or real HOME. Automated tests use fake host CLIs and temporary repositories.
+After logging into each local CLI, initialize a disposable Git repository, create a frozen plan, install into a temporary HOME, generate/approve a workflow and invoke one no-write node with the corresponding host. Never run this smoke against a working project or real HOME. Automated tests use fake host CLIs and temporary repositories. `ai-workflow host smoke` runs this isolated sequence and reports the honest PASS, UNVERIFIED or BLOCKED matrix described above.

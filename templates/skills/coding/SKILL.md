@@ -266,6 +266,8 @@ full prohibition. Unrelated existing comments are not rewritten.
 
 Before any planned review dispatch, explicitly read `references/review.md` and use its separate initial and recheck packets for each axis. It defines the raw repair comparison, complete first-pass coverage and closure procedure; a generic task packet is never a review packet.
 
+The optional `ai-workflow plan dispatch` dispatch-packet generator and `ai-workflow review packet` review-packet generator assemble supplied fields as a convenience. They never change the gates, roles, repair budget or mandatory context, and the separate initial and recheck packets below remain the review inputs.
+
 Choose checks/commits by risk and repository practice. Run the narrowest relevant
 test after each slice, then all declared validation commands, including required
 typecheck, lint, build or integration checks. Report changed paths and every result.

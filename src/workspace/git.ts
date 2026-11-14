@@ -97,6 +97,17 @@ export async function gitCommonDirectory(repository: string): Promise<string | u
   return resolve(repository, common);
 }
 
+/**
+ * The number of commits in a recorded `base..final` delivery range via
+ * `git rev-list --count`; undefined when Git rejects the range or repository.
+ */
+export async function commitCount(repository: string, base: string, final: string): Promise<number | undefined> {
+  const output = await gitOutput(['-C', repository, 'rev-list', '--count', `${base}..${final}`]);
+  if (output === undefined) return undefined;
+  const count = Number.parseInt(output.trim(), 10);
+  return Number.isNaN(count) ? undefined : count;
+}
+
 /** True when `git cat-file -e <sha>^{commit}` succeeds; false for a missing commit or invalid repository. */
 export async function commitExists(repository: string, sha: string): Promise<boolean> {
   const output = await gitOutput(['-C', repository, 'cat-file', '-e', `${sha}^{commit}`]);
