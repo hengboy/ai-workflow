@@ -14,6 +14,7 @@ import { renderReviewPacket, type ReviewAxis, type ReviewMode, type ReviewPacket
 import { planDispatch } from './workflow/dispatch.js';
 import { planReport } from './workflow/report.js';
 import { validatePlanDirectory } from './workflow/validate.js';
+import { lintPlan } from './workflow/lint.js';
 import { listPlanPairs, recordPlanPairs, verifyPlanPairs } from './workflow/pairing.js';
 import { runDoctor } from './ops/doctor.js';
 import { runHostSmoke, type HostSmokeHost } from './host/smoke.js';
@@ -162,6 +163,9 @@ profile.command('activate').argument('<name>').option('--home <path>').option('-
 const plan = program.command('plan');
 plan.command('validate').requiredOption('--plan <directory>').action(async ({ plan: directory }: { plan: string }) => {
   print(await validatePlanDirectory(directory));
+});
+plan.command('lint').requiredOption('--plan <directory>').action(async ({ plan: directory }: { plan: string }) => {
+  print(await lintPlan(directory));
 });
 plan.command('dispatch')
   .requiredOption('--plan <directory>')
