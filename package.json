@@ -15,6 +15,8 @@
     "test:integration": "vitest run tests/install tests/integration/profile-cli.test.ts tests/integration/navigation-*.test.ts tests/integration/project-cli.test.ts",
     "types:generate": "json2ts -i schemas -o src/generated --bannerComment '/* Generated from authoritative JSON Schemas. Do not edit. */'",
     "check:notes": "tsx src/cli.ts notes validate --project . --base HEAD",
+    "test:affected": "tsx scripts/test-affected.ts",
+    "context:budget": "tsx scripts/context-budget.ts",
     "check": "pnpm check:notes && pnpm types:generate && pnpm typecheck && pnpm lint && pnpm test && pnpm build",
     "dev": "tsx src/cli.ts"
   },
