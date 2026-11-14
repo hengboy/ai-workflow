@@ -1,0 +1,2 @@
+- Every packet path is an exact absolute path; never resolve a relative path against an inherited parent cwd.
+- Every command uses an explicit per-command workdir rooted at the packet's authorized repository or worktree.

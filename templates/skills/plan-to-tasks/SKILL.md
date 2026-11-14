@@ -35,9 +35,14 @@ Resolve known affected features through `ai-workflow context locate --project <a
 
 Route note format, lifecycle, supersession and archive governance through `.ai-workflow/notes/README.md`, reached via `.ai-workflow/notes/AGENTS.md`; do not copy those rules into task files. Add only the relevant notes and governance files to a task's bounded read/write scope, as exact paths, and never require a task to read the entire notes history. A task that adds a note or disposes a related active record carries the exact existing triplet and active inbound-link paths from the plan as write scope; never defer a known match to a later broad cleanup or require a repository-wide audit.
 
+<!-- fragment:sync-phase-entry -->
 ## Work-boundary synchronization
+<!-- /fragment:sync-phase-entry -->
 
-At skill session start, invoke exactly once for the actual project root: `ai-workflow sync-hook --host <current-host> --phase --project <actual-root>`.
+At skill session start, invoke exactly once for the actual project root:
+<!-- fragment:sync-hook-invocation -->
+`ai-workflow sync-hook --host <current-host> --phase --project <actual-root>`.
+<!-- /fragment:sync-hook-invocation -->
 Follow `decision`, not the exit code (0 even on denial): `deny` or a `conflict`/`failed` `report.status` stops the split; warnings proceed without a freshness claim; `skip` means no adoption.
 Later steps, split phases and native host events reuse that root's stored result with no source request; a missing, corrupt or unreadable check allows with visible no-freshness context.
 After a safe patch changes the contract or owned workflow rules, read `.ai-workflow/AGENTS.md` again before ordinary work; frozen spec/plan/task bytes are immutable and never synchronization input, and contradictory authority stops the split with a bounded support request.
