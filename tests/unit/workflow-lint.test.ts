@@ -42,11 +42,11 @@ interface FixtureOptions {
   requirements?: string[];
   acceptanceCriteria?: string[];
   coverage?: string[][];
-  nonGoals?: string[];
+  nonGoals?: string[] | undefined;
   givenWhenThen?: boolean;
-  boundaries?: string[];
-  counterexamples?: string[];
-  verification?: string[][];
+  boundaries?: string[] | undefined;
+  counterexamples?: string[] | undefined;
+  verification?: string[][] | undefined;
   tasks?: TaskFixture[];
 }
 
