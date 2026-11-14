@@ -99,6 +99,14 @@ async function ordinaryValidateOutput(directory: string): Promise<string> {
       combined: frozenPlanDigest(specSource, planSource),
     },
     execution_order: [['task-001-example']],
+    metrics: {
+      task_count: 1,
+      phase_count: 1,
+      parallel_width: 1,
+      critical_path_length: 1,
+      estimated_commit_count: 2,
+      estimated_delegation_count: 5,
+    },
   }, null, 2)}\n`;
 }
 
@@ -170,7 +178,15 @@ describe('single-repository compatibility', () => {
 
     expect(result.code, outputOf(result)).toBe(0);
     const parsed = JSON.parse(result.stdout) as Record<string, unknown>;
-    expect(Object.keys(parsed).sort()).toEqual(['digests', 'execution_order', 'plan_id', 'repos', 'valid']);
+    expect(Object.keys(parsed).sort()).toEqual(['digests', 'execution_order', 'metrics', 'plan_id', 'repos', 'valid']);
+    expect(parsed.metrics).toEqual({
+      task_count: 1,
+      phase_count: 1,
+      parallel_width: 1,
+      critical_path_length: 1,
+      estimated_commit_count: 2,
+      estimated_delegation_count: 5,
+    });
     expect(JSON.stringify(parsed)).not.toContain('workspace_finalization');
   });
 

@@ -2,13 +2,14 @@ import { readdir, readFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { parseMarkdown } from '../utils/frontmatter.js';
 import { readPlan, readTasks } from './parse.js';
+import { computePlanMetrics } from './metrics.js';
 import { readExecutionOrder } from './order.js';
 import { readWorkspaceManifest } from './workspace.js';
 import { commitCount } from '../workspace/git.js';
 import { RESERVED_ROOT, implementationRecordPath, readWorkspaceRecord, type WorkspaceExecutionRecord } from '../workspace/record.js';
 import { workspaceStatus } from '../workspace/status.js';
 import type { ExecutionProjection } from '../workspace/execution.js';
-import type { TaskDocument, TaskSchedule } from './types.js';
+import type { TaskSchedule } from './types.js';
 
 const UNKNOWN = 'unknown' as const;
 
@@ -38,26 +39,6 @@ export interface PlanReport {
 /** The plan directory shape `<root>/.ai-workflow/plans/<planId>` resolves to its workspace root. */
 function workspaceRootOf(planDirectory: string): string {
   return dirname(dirname(dirname(planDirectory)));
-}
-
-/** Count the tasks on the longest `depends_on` chain; a single task is one and no tasks is zero. */
-function criticalPathLength(tasks: TaskDocument[]): number {
-  const byId = new Map(tasks.map((task) => [task.id, task]));
-  const memo = new Map<string, number>();
-  const visit = (id: string): number => {
-    const known = memo.get(id);
-    if (known !== undefined) return known;
-    const task = byId.get(id);
-    if (task === undefined) return 0;
-    let longestDependency = 0;
-    for (const dependency of task.dependsOn) longestDependency = Math.max(longestDependency, visit(dependency));
-    const length = longestDependency + 1;
-    memo.set(id, length);
-    return length;
-  };
-  let longest = 0;
-  for (const task of tasks) longest = Math.max(longest, visit(task.id));
-  return longest;
 }
 
 /** The earliest recorded start and, only for a completed plan, the latest recorded completion. */
@@ -108,6 +89,7 @@ export async function planReport(planDirectoryInput: string): Promise<PlanReport
   // A frozen plan may predate plan-to-tasks, so an absent schedule with no task documents is not an error.
   const schedule: TaskSchedule = tasks.length === 0 ? { planId: plan.planId, phases: [] } : await readExecutionOrder(planDirectory, plan.planId, tasks);
   const manifest = await readWorkspaceManifest(planDirectory);
+  const metrics = computePlanMetrics(tasks, schedule.phases);
 
   const planDocument = parseMarkdown(await readFile(join(planDirectory, 'plan.md'), 'utf8'));
   const declaredCreatedAt = planDocument.attributes.created_at;
@@ -194,9 +176,9 @@ export async function planReport(planDirectoryInput: string): Promise<PlanReport
     completed_at: completedAt,
     duration_seconds: status !== 'unknown' && timestamps.startedAt !== UNKNOWN && completedAt !== UNKNOWN ? wholeSeconds(timestamps.startedAt, completedAt) : UNKNOWN,
     status,
-    task_count: tasks.length,
-    phase_count: schedule.phases.length,
-    critical_path_length: criticalPathLength(tasks),
+    task_count: metrics.task_count,
+    phase_count: metrics.phase_count,
+    critical_path_length: metrics.critical_path_length,
     review_rounds: await reviewRounds(planDirectory),
     commit_count: commitTotal,
     commit_count_reason: commitReason,
