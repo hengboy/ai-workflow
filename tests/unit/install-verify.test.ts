@@ -74,6 +74,38 @@ describe('installation verification', () => {
     expect(changedPaths(before, await snapshotTree(home)), 'verification must not write').toEqual([]);
   });
 
+  it('fails a valid-JSON manifest with an invalid shape instead of throwing', async () => {
+    const home = await installedHome();
+    const relative = '.config/ai-workflow/install-manifest.json';
+    const path = join(home, relative);
+    await writeFile(path, '{}\n');
+
+    const report = await verifyInstallation(home);
+    const check = nonPassCheck(report, [relative, path]);
+
+    expect(report.valid).toBe(false);
+    expect(check, 'the invalid manifest shape must be reported').toBeDefined();
+    expect(check!.status).not.toBe('pass');
+    expectRecovery(check!);
+    expect(check!.recovery).toMatch(/install/i);
+  });
+
+  it('fails sync hook ownership without entries instead of throwing', async () => {
+    const home = await installedHome(['claude']);
+    const manifestRelative = '.config/ai-workflow/install-manifest.json';
+    const manifestPath = join(home, manifestRelative);
+    const manifest = JSON.parse(await readFile(manifestPath, 'utf8')) as { sync_hooks?: Record<string, unknown> };
+    manifest.sync_hooks = { ...(manifest.sync_hooks ?? {}), claude: { kind: 'configuration', path: '.claude/settings.json' } };
+    await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+
+    const report = await verifyInstallation(home, ['claude']);
+    const relative = '.claude/settings.json';
+    const check = nonPassCheck(report, [relative, join(home, relative)]);
+
+    expect(check, 'the invalid hook ownership must be reported against its settings path').toBeDefined();
+    expect(check!.status).not.toBe('pass');
+  });
+
   it('fails a modified managed file with its exact path and SHA', async () => {
     const home = await installedHome();
     const relative = '.agents/skills/git-message/SKILL.md';

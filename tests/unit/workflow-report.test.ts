@@ -4,8 +4,9 @@ import { access, mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { promisify } from 'node:util';
 import { stringify as stringifyYaml } from 'yaml';
+import { renderFrozenMarkdown } from '../../src/workflow/digest.js';
 import { planReport } from '../../src/workflow/report.js';
-import { commitFile, frozenPlan, gitInit, temporary, workspacePlanFixture, type WorkspacePlanFixtureSpec } from '../helpers.js';
+import { commitFile, frozenPlan, gitInit, renderWorkspaceManifestYaml, temporary, workspacePlanFixture, writePlanTriplet, type WorkspacePlanFixtureSpec } from '../helpers.js';
 
 const exec = promisify(execFile);
 
@@ -132,6 +133,59 @@ describe('planReport', () => {
     expect(report.commit_count_reason).toMatch(/record|anchor/i);
     expect(report.execution).toBeUndefined();
     await expect(access(implementationPath(root, '.', '20260831-example'))).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
+  it('reports a frozen plan without task documents instead of requiring an execution order', async () => {
+    const root = await temporary('ai-workflow-report-no-tasks-');
+    const directory = await frozenPlan(root, false);
+
+    const report = (await planReport(directory)) as PlanReport;
+
+    expect(report.plan_id).toBe('20260831-example');
+    expect(report.status).toBe('unknown');
+    expect(report.task_count).toBe(0);
+    expect(report.phase_count).toBe(0);
+    expect(report.critical_path_length).toBe(0);
+    expect(report.started_at).toBe('unknown');
+    expect(report.completed_at).toBe('unknown');
+    expect(report.commit_count).toBeNull();
+    expect(typeof report.commit_count_reason).toBe('string');
+    expect(report.commit_count_reason).toMatch(/record|anchor/i);
+    await expect(access(implementationPath(root, '.', '20260831-example'))).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
+  it('reports a root-only workspace plan without tasks as in-progress, not completed', async () => {
+    const root = await temporary('ai-workflow-report-root-only-workspace-');
+    const planId = '20260930-report-root-only';
+    const directory = join(root, '.ai-workflow/plans', planId);
+    await mkdir(join(directory, 'tasks'), { recursive: true });
+    const baseAttributes = {
+      plan_id: planId,
+      status: 'frozen',
+      created_at: '2026-09-30T00:00:00.000Z',
+      supersedes: null,
+      requirement_count: 0,
+      acceptance_criteria_count: 0,
+      digest: 'sha256:placeholder',
+    };
+    await writePlanTriplet(directory, 'spec.md', '# Specification\n', '# Specification\n', (body) => renderFrozenMarkdown(baseAttributes, body));
+    await writePlanTriplet(directory, 'plan.md', '# Implementation Plan\n', '# Implementation Plan\n', (body) => renderFrozenMarkdown({ ...baseAttributes, workspace_repos: [{ name: 'workspace', path: '.', depends_on: [] }] }, body));
+    await writeFile(join(directory, 'workspace.yaml'), renderWorkspaceManifestYaml({
+      planId,
+      role: 'workspace',
+      repositories: [{ name: 'workspace', path: '.', dependsOn: [], requirements: [], acceptanceCriteria: [] }],
+    }));
+    const startedAt = '2026-10-02T00:00:00.000Z';
+    await writeRecord(root, '.', planId, { plan_id: planId, status: 'in-progress', started_at: startedAt });
+
+    const report = (await planReport(directory)) as PlanReport;
+
+    expect(report.status).toBe('in-progress');
+    expect(report.started_at).toBe(startedAt);
+    expect(report.completed_at).toBe('unknown');
+    expect(report.task_count).toBe(0);
+    expect(report.phase_count).toBe(0);
+    expect(report.critical_path_length).toBe(0);
   });
 
   it('counts only review-round files directly under reports/', async () => {

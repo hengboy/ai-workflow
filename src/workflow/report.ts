@@ -8,7 +8,7 @@ import { commitCount } from '../workspace/git.js';
 import { RESERVED_ROOT, implementationRecordPath, readWorkspaceRecord, type WorkspaceExecutionRecord } from '../workspace/record.js';
 import { workspaceStatus } from '../workspace/status.js';
 import type { ExecutionProjection } from '../workspace/execution.js';
-import type { TaskDocument } from './types.js';
+import type { TaskDocument, TaskSchedule } from './types.js';
 
 const UNKNOWN = 'unknown' as const;
 
@@ -105,7 +105,8 @@ export async function planReport(planDirectoryInput: string): Promise<PlanReport
   const root = workspaceRootOf(planDirectory);
   const plan = await readPlan(planDirectory);
   const tasks = await readTasks(planDirectory);
-  const schedule = await readExecutionOrder(planDirectory, plan.planId, tasks);
+  // A frozen plan may predate plan-to-tasks, so an absent schedule with no task documents is not an error.
+  const schedule: TaskSchedule = tasks.length === 0 ? { planId: plan.planId, phases: [] } : await readExecutionOrder(planDirectory, plan.planId, tasks);
   const manifest = await readWorkspaceManifest(planDirectory);
 
   const planDocument = parseMarkdown(await readFile(join(planDirectory, 'plan.md'), 'utf8'));
@@ -132,7 +133,11 @@ export async function planReport(planDirectoryInput: string): Promise<PlanReport
 
   let status: PlanReport['status'] = 'unknown';
   if (presentRecords.length > 0) {
-    status = requiredRepositories.every((repository) => records.get(repository.name)?.status === 'completed') ? 'completed' : 'in-progress';
+    // A root-only plan has no required repository, so its status comes from the records that exist
+    // rather than from the vacuous truth of `[].every(...)`.
+    status = requiredRepositories.length === 0
+      ? (presentRecords.every((record) => record.status === 'completed') ? 'completed' : 'in-progress')
+      : (requiredRepositories.every((repository) => records.get(repository.name)?.status === 'completed') ? 'completed' : 'in-progress');
   }
 
   const timestamps = aggregateTimestamps(status === 'completed' ? requiredRepositories.flatMap((repository) => {
@@ -163,6 +168,9 @@ export async function planReport(planDirectoryInput: string): Promise<PlanReport
       break;
     }
     ranges.push({ repository: join(root, repository.path), base, final });
+  }
+  if (commitReason === null && requiredRepositories.length === 0) {
+    commitReason = 'No required repository has an implementation record or execution anchor to count commits';
   }
   if (commitReason === null) {
     let total = 0;

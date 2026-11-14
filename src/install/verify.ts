@@ -75,11 +75,60 @@ function locateContractBlock(contents: string): { blockText: string } | undefine
   return { blockText: contents.slice(begin, end + contractEnd.length) };
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function managedFilesShapeError(group: unknown): string | undefined {
+  if (!Array.isArray(group)) return 'as an array';
+  for (const file of group) {
+    if (!isRecord(file) || typeof file.path !== 'string' || typeof file.digest !== 'string' || (file.kind !== 'file' && file.kind !== 'directory')) {
+      return 'with path, digest and kind';
+    }
+  }
+  return undefined;
+}
+
+/** Validate exactly the manifest shapes verification reads, so an invalid shape fails as a check instead of throwing. */
+function manifestShapeError(parsed: unknown): string | undefined {
+  if (!isRecord(parsed)) return 'must contain a JSON object';
+  if (!isRecord(parsed.hosts)) return 'must contain a "hosts" object';
+  if (parsed.skills !== undefined) {
+    const error = managedFilesShapeError(parsed.skills);
+    if (error !== undefined) return `must record "skills" ${error}`;
+  }
+  for (const [host, group] of Object.entries(parsed.hosts)) {
+    const error = managedFilesShapeError(group);
+    if (error !== undefined) return `must record hosts.${host} ${error}`;
+  }
+  if (parsed.contracts !== undefined) {
+    if (!isRecord(parsed.contracts)) return 'must record "contracts" as an object';
+    for (const [host, contract] of Object.entries(parsed.contracts)) {
+      if (!isRecord(contract) || typeof contract.path !== 'string' || typeof contract.digest !== 'string') return `must record contract ${host} with path and digest`;
+    }
+  }
+  if (parsed.sync_hooks !== undefined) {
+    if (!isRecord(parsed.sync_hooks)) return 'must record "sync_hooks" as an object';
+    for (const [host, record] of Object.entries(parsed.sync_hooks)) {
+      if (!isRecord(record) || typeof record.path !== 'string' || record.path.length === 0) return `must record sync_hooks.${host} with a path`;
+      if (record.kind === 'plugin') {
+        if (typeof record.digest !== 'string' || record.digest.length === 0) return `must record sync_hooks.${host} (${record.path}) with a plugin digest`;
+      } else if (record.kind === 'configuration') {
+        if (!Array.isArray(record.entries)) return `must record sync_hooks.${host} (${record.path}) with an entries array`;
+      } else {
+        return `must record sync_hooks.${host} (${record.path}) with a supported kind`;
+      }
+    }
+  }
+  return undefined;
+}
+
 async function readManifest(home: string): Promise<{ manifest: InstallManifest } | { error: string }> {
   const path = join(home, manifestRelative);
   try {
     const parsed: unknown = JSON.parse(await readFile(path, 'utf8'));
-    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return { error: `${manifestRelative} (${path}) must contain a JSON object` };
+    const shapeError = manifestShapeError(parsed);
+    if (shapeError !== undefined) return { error: `${manifestRelative} (${path}) ${shapeError}` };
     return { manifest: parsed as InstallManifest };
   } catch (error) {
     return { error: `${manifestRelative} (${path}) is not readable: ${error instanceof Error ? error.message : String(error)}` };

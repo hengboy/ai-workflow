@@ -141,6 +141,25 @@ describe('ai-workflow plan report', () => {
     await expect(access(implementationPath(root, '.', '20260831-example'))).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
+  it('prints a frozen plan without task documents instead of failing on the missing execution order', async () => {
+    const root = await temporary('ai-workflow-report-cli-no-tasks-');
+    const directory = await frozenPlan(root, false);
+
+    const result = await runCli(['plan', 'report', '--plan', directory]);
+
+    expect(result.code, outputOf(result)).toBe(0);
+    const report = JSON.parse(result.stdout) as PlanReport;
+    expect(report.plan_id).toBe('20260831-example');
+    expect(report.status).toBe('unknown');
+    expect(report.task_count).toBe(0);
+    expect(report.phase_count).toBe(0);
+    expect(report.critical_path_length).toBe(0);
+    expect(report.started_at).toBe('unknown');
+    expect(report.completed_at).toBe('unknown');
+    expect(report.commit_count).toBeNull();
+    expect(typeof report.commit_count_reason).toBe('string');
+  });
+
   it('prints an in-progress workspace plan with the execution projection', async () => {
     const root = await temporary('ai-workflow-report-cli-in-progress-');
     const directory = await workspacePlanFixture(root, workspaceSpec());
