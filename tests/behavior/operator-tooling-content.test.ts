@@ -14,8 +14,13 @@ const CODING = 'templates/skills/coding/SKILL.md';
 const REVIEW_REFERENCE = 'templates/skills/coding/references/review.md';
 
 const MODULES = [
+  'src/ops/context-budget.ts',
   'src/ops/doctor.ts',
+  'src/ops/template-fragments.ts',
+  'src/ops/test-affected.ts',
   'src/install/verify.ts',
+  'src/workflow/lint.ts',
+  'src/workflow/metrics.ts',
   'src/workflow/validate.ts',
   'src/workflow/review-packet.ts',
   'src/workflow/dispatch.ts',
@@ -25,12 +30,18 @@ const MODULES = [
 
 const TEST_FILES = [
   'tests/unit/install-verify.test.ts',
+  'tests/unit/ops-context-budget.test.ts',
   'tests/unit/ops-doctor.test.ts',
+  'tests/unit/ops-template-fragments.test.ts',
+  'tests/unit/ops-test-affected.test.ts',
+  'tests/unit/workflow-lint.test.ts',
+  'tests/unit/workflow-metrics.test.ts',
   'tests/unit/workflow-review-packet.test.ts',
   'tests/unit/workflow-dispatch.test.ts',
   'tests/unit/workflow-report.test.ts',
   'tests/unit/host-smoke.test.ts',
   'tests/integration/doctor-cli.test.ts',
+  'tests/integration/plan-lint-cli.test.ts',
   'tests/integration/review-packet-cli.test.ts',
   'tests/integration/plan-dispatch-cli.test.ts',
   'tests/integration/plan-report-cli.test.ts',
@@ -47,6 +58,7 @@ const ALL_COMMANDS = [
   /ai-workflow plan dispatch\b/i,
   /ai-workflow plan report\b/i,
   /ai-workflow host smoke\b/i,
+  /ai-workflow plan lint\b/i,
 ];
 
 async function read(path: string): Promise<string> {
@@ -196,6 +208,133 @@ describe('README operator tooling (REQ-008 / AC-009)', () => {
   });
 });
 
+describe('README advisory tooling and CI content (REQ-007 / AC-011)', () => {
+  it('documents plan lint as a read-only advisory form check that never blocks', async () => {
+    const readme = await read(README);
+    expectNear(
+      readme,
+      /ai-workflow plan lint\b/i,
+      [
+        ['the read-only advisory form check', /read-only advisory/i],
+        ['stable warning codes', /stable code/i],
+        ['the exact document path', /exact document path/i],
+        ['the no-file-write boundary', /writes no file/i],
+        ['exit 0 with warnings for a readable plan', /exits 0[^.]{0,120}warnings?/i],
+        ['a nonzero result for an invalid plan', /nonzero[^.]{0,160}(?:not a valid frozen plan|identity error)/i],
+        ['the advisory never-block boundary', /never block planning[^.]{0,80}review/i],
+        ['no warning authorizes a gate', /no warning[^.]{0,120}gate decision/i],
+      ],
+      'README plan lint section',
+    );
+  });
+
+  it('documents the additive plan validate metrics as informational only', async () => {
+    const readme = await read(README);
+    expectNear(
+      readme,
+      /additive `metrics` object/i,
+      [
+        ['the plan validate command', /ai-workflow plan validate\b/i],
+        ['task_count', /task_count/i],
+        ['phase_count', /phase_count/i],
+        ['parallel_width', /parallel_width/i],
+        ['critical_path_length', /critical_path_length/i],
+        ['estimated_commit_count', /estimated_commit_count/i],
+        ['estimated_delegation_count', /estimated_delegation_count/i],
+        ['zero counts without tasks', /zero counts for a plan that has no task documents|zero[^.]{0,80}no task/i],
+        ['the informational limit', /informational/i],
+        ['no change to a verdict or exit code', /changes no verdict, exit code or obligation/i],
+        ['no budget or gate', /no estimate is a budget or a gate/i],
+      ],
+      'README plan validate metrics section',
+    );
+  });
+
+  it('documents test:affected as an advisory suggestion that never replaces a declared check', async () => {
+    const readme = await read(README);
+    expectNear(
+      readme,
+      /pnpm test:affected\b/i,
+      [
+        ['the advisory suggestion, not a test run', /advisory test suggestion, not a test run/i],
+        ['the union of indexed tests', /union of tests indexed/i],
+        ['one suggested Vitest command', /one suggested Vitest command/i],
+        ['the nonzero no-match result', /exits nonzero/i],
+        ['the declared-check fallback', /declared task or plan checks/i],
+        ['the never-replaces limit', /never replaces a declared task, plan or acceptance check/i],
+      ],
+      'README test:affected section',
+    );
+  });
+
+  it('documents context:budget as deterministic, threshold-free and non-writing', async () => {
+    const readme = await read(README);
+    expectNear(
+      readme,
+      /pnpm context:budget\b/i,
+      [
+        ['the fixed-context role groups', /fixed-context cost of each role group/i],
+        ['Unicode code-point counts', /Unicode code points/i],
+        ['the --json report', /--json/i],
+        ['the --baseline option', /--baseline/i],
+        ['per-group and per-file deltas', /per-group and per-file/i],
+        ['deterministic counts and deltas', /deterministic/i],
+        ['the missing or malformed baseline failure', /missing, unreadable or malformed baseline fails/i],
+        ['no threshold', /applies no threshold/i],
+        ['no file write', /writes no file/i],
+      ],
+      'README context:budget section',
+    );
+  });
+
+  it('documents check:templates, the fragment convention and the explicit --write mode', async () => {
+    const readme = await read(README);
+    expectNear(
+      readme,
+      /pnpm check:templates\b/i,
+      [
+        ['the fragment directory convention', /templates\/fragments\/<name>\.md/i],
+        ['the start marker', /<!-- fragment:<name> -->/i],
+        ['the end marker', /<!-- \/fragment:<name> -->/i],
+        ['drift detection', /drift between a fragment and a marked copy/i],
+        ['unknown fragment detection', /unknown fragment name/i],
+        ['unpaired marker detection', /unpaired marker/i],
+        ['duplicate occurrence detection', /duplicate occurrence/i],
+        ['unused fragment detection', /unused fragment file/i],
+        ['the --write mode', /check:templates --write/i],
+        ['re-inlining only marked regions', /re-inlines only the marked regions/i],
+        ['leaving unmarked text untouched', /leaves all unmarked text untouched/i],
+      ],
+      'README check:templates section',
+    );
+    expect(flatten(readme), 'pnpm check includes the fragment check').toMatch(
+      /includes `check:templates`/i,
+    );
+  });
+
+  it('documents the CI triggers, Node 22, lockfile install, note base, checks and generated diff', async () => {
+    const readme = await read(README);
+    expectNear(
+      readme,
+      /\.github\/workflows\/ci\.yml/i,
+      [
+        ['push and pull_request triggers', /`push` and `pull_request`/i],
+        ['Node 22', /Node 22/i],
+        ['the pnpm cache', /pnpm cache/i],
+        ['the frozen lockfile install', /--frozen-lockfile/i],
+        ['the event base sources', /github\.event\.pull_request\.base\.sha[^.]{0,120}github\.event\.before/i],
+        ['the note baseline command', /notes validate --project \. --base/i],
+        ['the visible skip', /visible skip/i],
+        ['pnpm check', /pnpm check/i],
+        ['pnpm types:generate', /pnpm types:generate/i],
+        ['the generated diff check', /git diff --exit-code -- src\/generated/i],
+        ['the not-a-gate limit', /not a workflow gate|authorizes no phase/i],
+      ],
+      'README CI section',
+    );
+  });
+});
+
 describe('MEMORY operator-tooling standard (REQ-008 / AC-009)', () => {
   it('records the read-only commands, the not-a-gate boundary and the no-Agent-Note rationale', async () => {
     const memory = await read(MEMORY);
@@ -223,6 +362,40 @@ describe('MEMORY operator-tooling standard (REQ-008 / AC-009)', () => {
     expect(
       closest,
       'one MEMORY standard must name all five read-only commands, the not-a-gate boundary, and the no-note rationale',
+    ).toEqual([]);
+  });
+});
+
+describe('MEMORY advisory tooling and script content (REQ-007 / AC-011)', () => {
+  it('records plan lint, metrics, the advisory scripts and the fragment convention with their limits', async () => {
+    const memory = await read(MEMORY);
+    const candidates = [windows(memory, /operator[- ]tooling/i, 400, 5000), windows(memory, /ai-workflow plan lint\b/i, 400, 5000)].flat();
+    expect(candidates.length, 'MEMORY records the advisory tooling standard').toBeGreaterThan(0);
+
+    const missingByWindow = candidates.map((candidate) =>
+      [
+        ['plan lint', /ai-workflow plan lint\b/i.test(candidate)],
+        ['the plan validate metrics object', /metrics/i.test(candidate) && /plan validate/i.test(candidate)],
+        ['test:affected', /pnpm test:affected\b/i.test(candidate)],
+        ['context:budget', /pnpm context:budget\b/i.test(candidate)],
+        ['the --json report', /--json/i.test(candidate)],
+        ['the --baseline option', /--baseline/i.test(candidate)],
+        ['check:templates', /pnpm check:templates\b/i.test(candidate)],
+        ['the fragment directory convention', /templates\/fragments\//i.test(candidate)],
+        ['the fragment markers', /<!-- fragment:<name> -->/i.test(candidate) && /<!-- \/fragment:<name> -->/i.test(candidate)],
+        ['the --write mode', /--write/i.test(candidate)],
+        ['the advisory and not-a-gate boundary', NOT_A_GATE.test(candidate)],
+        ['no threshold and no file write', /no threshold/i.test(candidate) && /writes no file/i.test(candidate)],
+      ]
+        .filter(([, present]) => !present)
+        .map(([description]) => description),
+    );
+    const closest = missingByWindow.reduce((left, right) =>
+      left.length <= right.length ? left : right,
+    );
+    expect(
+      closest,
+      'one MEMORY standard must name plan lint, metrics, the advisory scripts, the fragment convention and their limits',
     ).toEqual([]);
   });
 });

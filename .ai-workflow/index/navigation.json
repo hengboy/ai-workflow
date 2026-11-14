@@ -4890,8 +4890,13 @@
       "entries": [
         "src/host/smoke.ts",
         "src/install/verify.ts",
+        "src/ops/context-budget.ts",
         "src/ops/doctor.ts",
+        "src/ops/template-fragments.ts",
+        "src/ops/test-affected.ts",
         "src/workflow/dispatch.ts",
+        "src/workflow/lint.ts",
+        "src/workflow/metrics.ts",
         "src/workflow/report.ts",
         "src/workflow/review-packet.ts",
         "src/workflow/validate.ts"
@@ -4970,6 +4975,36 @@
           "visibility": "public"
         },
         {
+          "file": "src/ops/context-budget.ts",
+          "name": "ContextBudgetFile",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/ops/context-budget.ts",
+          "name": "ContextBudgetGroup",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/ops/context-budget.ts",
+          "name": "ContextBudgetOptions",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/ops/context-budget.ts",
+          "name": "ContextBudgetReport",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/ops/context-budget.ts",
+          "name": "computeContextBudget",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
           "file": "src/ops/doctor.ts",
           "name": "DoctorOptions",
           "kind": "interface",
@@ -4984,6 +5019,60 @@
         {
           "file": "src/ops/doctor.ts",
           "name": "runDoctor",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/ops/template-fragments.ts",
+          "name": "TemplateFragmentCheckResult",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/ops/template-fragments.ts",
+          "name": "TemplateFragmentProblem",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/ops/template-fragments.ts",
+          "name": "TemplateFragmentProblemKind",
+          "kind": "type",
+          "visibility": "public"
+        },
+        {
+          "file": "src/ops/template-fragments.ts",
+          "name": "checkTemplateFragments",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/ops/template-fragments.ts",
+          "name": "formatTemplateFragmentCheck",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/ops/template-fragments.ts",
+          "name": "writeTemplateFragments",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/ops/test-affected.ts",
+          "name": "AffectedTestsResult",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/ops/test-affected.ts",
+          "name": "formatAffectedTests",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/ops/test-affected.ts",
+          "name": "suggestAffectedTests",
           "kind": "function",
           "visibility": "public"
         },
@@ -5020,6 +5109,36 @@
         {
           "file": "src/workflow/dispatch.ts",
           "name": "planDispatch",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workflow/lint.ts",
+          "name": "PlanLintResult",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workflow/lint.ts",
+          "name": "PlanLintWarning",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workflow/lint.ts",
+          "name": "lintPlan",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workflow/metrics.ts",
+          "name": "PlanMetrics",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workflow/metrics.ts",
+          "name": "computePlanMetrics",
           "kind": "function",
           "visibility": "public"
         },
@@ -5130,6 +5249,9 @@
         ".ai-workflow/AGENTS.md",
         "MEMORY.md",
         "README.md",
+        "scripts/check-templates.ts",
+        "scripts/context-budget.ts",
+        "scripts/test-affected.ts",
         "src/cli.ts",
         "src/sync/gate.ts",
         "src/workspace/git.ts",
@@ -5138,20 +5260,28 @@
         "tests/helpers.ts"
       ],
       "tests": [
+        "tests/behavior/ci-workflow-content.test.ts",
         "tests/behavior/coding-v2-content.test.ts",
         "tests/behavior/install-contract.test.ts",
         "tests/behavior/memory-governance-content.test.ts",
         "tests/behavior/operator-tooling-content.test.ts",
         "tests/behavior/review-policy.test.ts",
+        "tests/behavior/template-fragments-content.test.ts",
         "tests/integration/doctor-cli.test.ts",
         "tests/integration/host-smoke-cli.test.ts",
         "tests/integration/plan-dispatch-cli.test.ts",
+        "tests/integration/plan-lint-cli.test.ts",
         "tests/integration/plan-report-cli.test.ts",
         "tests/integration/review-packet-cli.test.ts",
         "tests/unit/host-smoke.test.ts",
         "tests/unit/install-verify.test.ts",
+        "tests/unit/ops-context-budget.test.ts",
         "tests/unit/ops-doctor.test.ts",
+        "tests/unit/ops-template-fragments.test.ts",
+        "tests/unit/ops-test-affected.test.ts",
         "tests/unit/workflow-dispatch.test.ts",
+        "tests/unit/workflow-lint.test.ts",
+        "tests/unit/workflow-metrics.test.ts",
         "tests/unit/workflow-report.test.ts",
         "tests/unit/workflow-review-packet.test.ts"
       ],
@@ -5244,6 +5374,11 @@
         },
         {
           "kind": "imports",
+          "from": "src/ops/test-affected.ts#suggestAffectedTests",
+          "to": "src/context/navigation.ts#NavigationIndex"
+        },
+        {
+          "kind": "imports",
           "from": "src/workflow/dispatch.ts#planDispatch",
           "to": "src/workflow/order.ts#readExecutionOrder"
         },
@@ -5269,6 +5404,41 @@
         },
         {
           "kind": "imports",
+          "from": "src/workflow/lint.ts#lintPlan",
+          "to": "src/utils/frontmatter.ts#parseMarkdown"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workflow/lint.ts#lintPlan",
+          "to": "src/workflow/parse.ts#readPlan"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workflow/lint.ts#lintPlan",
+          "to": "src/workflow/parse.ts#readTasks"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workflow/lint.ts#lintPlan",
+          "to": "src/workflow/types.ts#PlanDocument"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workflow/lint.ts#lintPlan",
+          "to": "src/workflow/types.ts#TaskDocument"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workflow/metrics.ts#computePlanMetrics",
+          "to": "src/workflow/types.ts#TaskDocument"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workflow/metrics.ts#computePlanMetrics",
+          "to": "src/workflow/types.ts#TaskPhase"
+        },
+        {
+          "kind": "imports",
           "from": "src/workflow/report.ts#PlanReport",
           "to": "src/workspace/execution.ts#ExecutionProjection"
         },
@@ -5276,6 +5446,11 @@
           "kind": "imports",
           "from": "src/workflow/report.ts#planReport",
           "to": "src/utils/frontmatter.ts#parseMarkdown"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workflow/report.ts#planReport",
+          "to": "src/workflow/metrics.ts#computePlanMetrics"
         },
         {
           "kind": "imports",
@@ -5291,6 +5466,11 @@
           "kind": "imports",
           "from": "src/workflow/report.ts#planReport",
           "to": "src/workflow/parse.ts#readTasks"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workflow/report.ts#planReport",
+          "to": "src/workflow/types.ts#TaskSchedule"
         },
         {
           "kind": "imports",
@@ -5329,6 +5509,16 @@
         },
         {
           "kind": "imports",
+          "from": "src/workflow/validate.ts#PlanValidationResult",
+          "to": "src/workflow/metrics.ts#PlanMetrics"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workflow/validate.ts#validatePlanDirectory",
+          "to": "src/workflow/metrics.ts#computePlanMetrics"
+        },
+        {
+          "kind": "imports",
           "from": "src/workflow/validate.ts#validatePlanDirectory",
           "to": "src/workflow/order.ts#readExecutionOrder"
         },
@@ -5364,33 +5554,49 @@
         ".ai-workflow/AGENTS.md",
         "MEMORY.md",
         "README.md",
+        "scripts/check-templates.ts",
+        "scripts/context-budget.ts",
+        "scripts/test-affected.ts",
         "src/cli.ts",
         "src/host/smoke.ts",
         "src/install/verify.ts",
+        "src/ops/context-budget.ts",
         "src/ops/doctor.ts",
+        "src/ops/template-fragments.ts",
+        "src/ops/test-affected.ts",
         "src/sync/gate.ts",
         "src/workflow/dispatch.ts",
+        "src/workflow/lint.ts",
+        "src/workflow/metrics.ts",
         "src/workflow/report.ts",
         "src/workflow/review-packet.ts",
         "src/workflow/validate.ts",
         "src/workspace/git.ts",
         "templates/skills/coding/SKILL.md",
         "templates/skills/coding/references/review.md",
+        "tests/behavior/ci-workflow-content.test.ts",
         "tests/behavior/coding-v2-content.test.ts",
         "tests/behavior/install-contract.test.ts",
         "tests/behavior/memory-governance-content.test.ts",
         "tests/behavior/operator-tooling-content.test.ts",
         "tests/behavior/review-policy.test.ts",
+        "tests/behavior/template-fragments-content.test.ts",
         "tests/helpers.ts",
         "tests/integration/doctor-cli.test.ts",
         "tests/integration/host-smoke-cli.test.ts",
         "tests/integration/plan-dispatch-cli.test.ts",
+        "tests/integration/plan-lint-cli.test.ts",
         "tests/integration/plan-report-cli.test.ts",
         "tests/integration/review-packet-cli.test.ts",
         "tests/unit/host-smoke.test.ts",
         "tests/unit/install-verify.test.ts",
+        "tests/unit/ops-context-budget.test.ts",
         "tests/unit/ops-doctor.test.ts",
+        "tests/unit/ops-template-fragments.test.ts",
+        "tests/unit/ops-test-affected.test.ts",
         "tests/unit/workflow-dispatch.test.ts",
+        "tests/unit/workflow-lint.test.ts",
+        "tests/unit/workflow-metrics.test.ts",
         "tests/unit/workflow-report.test.ts",
         "tests/unit/workflow-review-packet.test.ts"
       ],
