@@ -42,14 +42,20 @@ If no research target or objective is supplied, return `blocked` with a support 
 
 ## Packet handling
 
+<!-- fragment:packet-path-rules -->
 - Every packet path is an exact absolute path; never resolve a relative path against an inherited parent cwd.
 - Every command uses an explicit per-command workdir rooted at the packet's authorized repository or worktree.
+<!-- /fragment:packet-path-rules -->
 - Inside a child repository, explicitly read that repository's own `.ai-workflow/AGENTS.md` and `MEMORY.md` before acting; the parent's contract does not substitute for the child's. Load navigation only for a needed bounded entry or an authorized lookup, never as an eager bundle.
 - The declared leaf tools are unchanged, and this role never dispatches a nested sub-agent (no nested dispatch).
 
+<!-- fragment:report-shape -->
 ## Output checklist
+<!-- /fragment:report-shape -->
 Return a Markdown report using the following level-two headings. Do not return a JSON envelope. Never fabricate a source or conclusion.
+<!-- fragment:report-body-targets -->
 Report-body targets: an ordinary successful report body must stay at or below 1,200 Unicode code points and a review, failure or blocked report at or below 3,000, counted over the whole report body including `### Summary` and `### Evidence`; boundary examples are one code point above each limit (1,201 and 3,001), and a non-BMP character counts as one code point. Authors must self-check the whole body before returning. These are portable prompt instructions, not a programmatic runtime cap.
+<!-- /fragment:report-body-targets -->
 ### Status
 Return only `done`, `blocked`, or `failed`. Use `blocked` when the supplied links cannot answer the stated objective.
 ### Summary

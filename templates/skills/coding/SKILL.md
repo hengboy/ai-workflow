@@ -154,9 +154,14 @@ use this mapping:
 - `test` → Test
 - `docs` → Documentation Maintainer
 
+<!-- fragment:sync-phase-entry -->
 ## Work-boundary synchronization
+<!-- /fragment:sync-phase-entry -->
 
-At this skill session's start, invoke the shared native entry exactly once for the actual project root: `ai-workflow sync-hook --host <current-host> --phase --project <actual-root>`.
+At this skill session's start, invoke the shared native entry exactly once for the actual project root:
+<!-- fragment:sync-hook-invocation -->
+`ai-workflow sync-hook --host <current-host> --phase --project <actual-root>`.
+<!-- /fragment:sync-hook-invocation -->
 Follow `decision`, not the exit code (0 even on denial): `deny` or a `conflict`/`failed` `report.status` stops the phase; warnings proceed without a freshness claim; `skip` means no adoption.
 Later steps, phases and native host events reuse the actual root's stored result; a missing, corrupt or unreadable check allows with visible no-freshness context and no source request.
 Preflight writes only managed instructions in the actual root or coding worktree, with no Git or product edit.

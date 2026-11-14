@@ -73,6 +73,7 @@ describe('plan validate for workspace plans', () => {
       plan_id: string;
       repos?: { name: string; path: string; depends_on: string[] }[];
       execution_order?: string[][];
+      metrics?: Record<string, number>;
     };
     expect(parsed.valid).toBe(true);
     expect(parsed.plan_id).toBe(WORKSPACE_ID);
@@ -82,6 +83,14 @@ describe('plan validate for workspace plans', () => {
       { name: 'lib', path: 'packages/lib', depends_on: ['app'] },
     ]);
     expect(parsed.execution_order).toEqual([['task-001-workspace'], ['task-002-app'], ['task-003-lib']]);
+    expect(parsed.metrics).toEqual({
+      task_count: 3,
+      phase_count: 3,
+      parallel_width: 1,
+      critical_path_length: 1,
+      estimated_commit_count: 4,
+      estimated_delegation_count: 9,
+    });
   });
 
   it('fails workspace coverage and names the uncovered requirement', async () => {
@@ -204,6 +213,14 @@ describe('plan validate for workspace plans', () => {
         combined: frozenPlanDigest(specSource, planSource),
       },
       execution_order: [['task-001-example']],
+      metrics: {
+        task_count: 1,
+        phase_count: 1,
+        parallel_width: 1,
+        critical_path_length: 1,
+        estimated_commit_count: 2,
+        estimated_delegation_count: 5,
+      },
     }, null, 2)}\n`;
 
     const result = await runCli(['plan', 'validate', '--plan', directory]);
@@ -589,7 +606,7 @@ describe('plan validate for the workspace_finalization declaration', () => {
 
     expect(result.code, outputOf(result)).toBe(0);
     const parsed = JSON.parse(result.stdout) as Record<string, unknown>;
-    expect(Object.keys(parsed).sort()).toEqual(['digests', 'execution_order', 'plan_id', 'repos', 'valid']);
+    expect(Object.keys(parsed).sort()).toEqual(['digests', 'execution_order', 'metrics', 'plan_id', 'repos', 'valid']);
     expect(JSON.stringify(parsed)).not.toContain('workspace_finalization');
   });
 });

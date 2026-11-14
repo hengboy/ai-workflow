@@ -183,11 +183,19 @@ describe('plan validate execution order', () => {
     const result = await runCli(['plan', 'validate', '--plan', directory]);
 
     expect(result.code, result.stderr).toBe(0);
-    const parsed = JSON.parse(result.stdout) as { valid: boolean; plan_id: string; execution_order: string[][] };
+    const parsed = JSON.parse(result.stdout) as { valid: boolean; plan_id: string; execution_order: string[][]; metrics: Record<string, number> };
     expect(parsed.valid).toBe(true);
     expect(parsed.plan_id).toBe(PLAN_ID);
     expect(parsed.execution_order).toEqual([['task-001-alpha'], ['task-002-beta']]);
-    expect(Object.keys(parsed).sort()).toEqual(['digests', 'execution_order', 'plan_id', 'valid']);
+    expect(parsed.metrics).toEqual({
+      task_count: 2,
+      phase_count: 2,
+      parallel_width: 1,
+      critical_path_length: 2,
+      estimated_commit_count: 3,
+      estimated_delegation_count: 7,
+    });
+    expect(Object.keys(parsed).sort()).toEqual(['digests', 'execution_order', 'metrics', 'plan_id', 'valid']);
   });
 
   it('fails when the schedule file is missing and names the artifact', async () => {
@@ -277,7 +285,15 @@ describe('plan validate execution order', () => {
 
     expect(result.code, result.stderr).toBe(0);
     const parsed = JSON.parse(result.stdout) as Record<string, unknown>;
-    expect(Object.keys(parsed).sort()).toEqual(['digests', 'plan_id', 'valid']);
+    expect(Object.keys(parsed).sort()).toEqual(['digests', 'metrics', 'plan_id', 'valid']);
     expect(parsed).not.toHaveProperty('execution_order');
+    expect(parsed.metrics).toEqual({
+      task_count: 0,
+      phase_count: 0,
+      parallel_width: 0,
+      critical_path_length: 0,
+      estimated_commit_count: 0,
+      estimated_delegation_count: 0,
+    });
   });
 });

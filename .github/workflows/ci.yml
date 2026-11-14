@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies from the lockfile
+        run: pnpm install --frozen-lockfile
+
+      - name: Compute event base commit
+        run: echo "BASE=${{ github.event.pull_request.base.sha || github.event.before }}" >> "$GITHUB_ENV"
+
+      - name: Validate note archive baseline
+        run: |
+          if [ -n "$BASE" ] && [ "$BASE" != "0000000000000000000000000000000000000000" ]; then
+            pnpm exec tsx src/cli.ts notes validate --project . --base "$BASE"
+          else
+            echo "Skipping note archive baseline validation: BASE is empty or all zeros."
+          fi
+
+      - name: Run repository checks
+        run: pnpm check
+
+      - name: Fail on generated type drift
+        run: |
+          pnpm types:generate
+          git diff --exit-code -- src/generated

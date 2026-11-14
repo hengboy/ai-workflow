@@ -1,4 +1,5 @@
 import { readPlan, readTasks } from './parse.js';
+import { computePlanMetrics, type PlanMetrics } from './metrics.js';
 import { readExecutionOrder } from './order.js';
 import { readWorkspaceManifest, validateWorkspaceManifest, validateWorkspaceRepositoryOrder } from './workspace.js';
 
@@ -7,6 +8,7 @@ export interface PlanValidationResult {
   plan_id: string;
   digests: { spec: string; plan: string; combined: string };
   execution_order?: string[][];
+  metrics: PlanMetrics;
   repos?: { name: string; path: string; depends_on: string[] }[];
 }
 
@@ -20,7 +22,7 @@ export async function validatePlanDirectory(directory: string): Promise<PlanVali
   const tasks = await readTasks(directory);
   const digests = { spec: document.specDigest, plan: document.planDigest, combined: document.digest };
   const manifest = await readWorkspaceManifest(directory);
-  if (!tasks.length) return { valid: true, plan_id: document.planId, digests };
+  if (!tasks.length) return { valid: true, plan_id: document.planId, digests, metrics: computePlanMetrics([], []) };
   const schedule = await readExecutionOrder(directory, document.planId, tasks);
   if (manifest) {
     const errors = validateWorkspaceManifest(manifest, document, tasks, schedule);
@@ -34,6 +36,7 @@ export async function validatePlanDirectory(directory: string): Promise<PlanVali
     plan_id: document.planId,
     digests,
     execution_order: schedule.phases.map((phase) => phase.parallel),
+    metrics: computePlanMetrics(tasks, schedule.phases),
   };
   if (manifest?.role === 'workspace') output.repos = manifest.repositories.map((repository) => ({ name: repository.name, path: repository.path, depends_on: repository.dependsOn }));
   return output;

@@ -30,9 +30,14 @@ For a known feature run `ai-workflow context locate --project <absolute-project-
 
 Each task's `read_scope` is `.ai-workflow/AGENTS.md` and `MEMORY.md` plus exact locator paths and exact bounded paths for relevant notes/governance; include navigation JSON only when the task genuinely needs a bounded entry or an authorized index maintenance. It must not contain `src/`, `tests/` or the project root, and an old task scope that contains navigation JSON remains valid reading authorization.
 
+<!-- fragment:sync-phase-entry -->
 ## Work-boundary synchronization
+<!-- /fragment:sync-phase-entry -->
 
-At skill session start, invoke exactly once for the actual project root: `ai-workflow sync-hook --host <current-host> --phase --project <actual-root>`.
+At skill session start, invoke exactly once for the actual project root:
+<!-- fragment:sync-hook-invocation -->
+`ai-workflow sync-hook --host <current-host> --phase --project <actual-root>`.
+<!-- /fragment:sync-hook-invocation -->
 Follow `decision`, not the exit code (0 even on denial): `deny` or a `conflict`/`failed` `report.status` stops the phase; warnings proceed without a freshness claim; `skip` means no adoption.
 Later steps, phases and native host events reuse that root's stored result with no source request; a missing, corrupt or unreadable check allows with visible no-freshness context.
 After a safe patch changes the contract or owned workflow rules, re-read `.ai-workflow/AGENTS.md` before ordinary work; frozen `spec.md`, `plan.md` and task files are never synchronization input, and contradictory new authority stops the phase with a bounded support request, never a broader frozen scope.
