@@ -12,6 +12,7 @@ interface WorkflowStep {
   uses?: string;
   run?: string;
   if?: unknown;
+  with?: Record<string, unknown>;
 }
 interface WorkflowJob {
   permissions?: unknown;
@@ -144,5 +145,20 @@ describe('GitHub Actions CI workflow content (REQ-005 / AC-008)', () => {
     expect(buildIndex, 'check script runs pnpm build').toBeGreaterThanOrEqual(0);
     expect(testIndex, 'check script runs pnpm test').toBeGreaterThanOrEqual(0);
     expect(buildIndex, 'pnpm build runs before pnpm test so dist/ is available to tests').toBeLessThan(testIndex);
+  });
+
+  it('checks out full history before note validation so the baseline commit is readable', async () => {
+    const { steps } = await loadWorkflow();
+    const checkoutIndex = steps.findIndex((step) => /^actions\/checkout@/.test(step.uses ?? ''));
+    const noteValidationIndex = steps.findIndex((step) => /notes validate --project \. --base/.test(step.run ?? ''));
+    expect(checkoutIndex, 'the workflow uses actions/checkout').toBeGreaterThanOrEqual(0);
+    expect(noteValidationIndex, 'the workflow runs note validation').toBeGreaterThanOrEqual(0);
+    expect(checkoutIndex, 'checkout runs before note validation').toBeLessThan(noteValidationIndex);
+    const checkout = steps[checkoutIndex];
+    const depth = checkout?.with?.['fetch-depth'];
+    expect(
+      depth === 0 || depth === '0',
+      'checkout must fetch full history (fetch-depth: 0) so notes validate --base can read the event base commit',
+    ).toBe(true);
   });
 });
