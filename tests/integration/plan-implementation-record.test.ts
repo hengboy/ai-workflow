@@ -147,8 +147,10 @@ describe('plan CLI compatibility with the implementation record', () => {
     const result = await runCli(['plan', 'validate', '--plan', directory]);
 
     expect(result.code, result.stderr).toBe(0);
-    const parsed = JSON.parse(result.stdout) as { valid: boolean; plan_id: string; digests: Record<string, string> };
-    expect(Object.keys(parsed).sort()).toEqual(['digests', 'plan_id', 'valid']);
+    const parsed = JSON.parse(result.stdout) as { valid: boolean; plan_id: string; digests: Record<string, string>; metrics: Record<string, number> };
+    expect(Object.keys(parsed).sort()).toEqual(['digests', 'metrics', 'plan_id', 'valid']);
+    expect(parsed.metrics).toBeTypeOf('object');
+    expect(parsed.metrics).not.toBeNull();
     expect(Object.keys(parsed.digests).sort()).toEqual(['combined', 'plan', 'spec']);
     expect(parsed.valid).toBe(true);
     expect(parsed.plan_id).toBe(PLAN_ID);
