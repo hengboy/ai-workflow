@@ -345,7 +345,13 @@ export async function realWorkspaceFixture(repos: RealWorkspaceRepoSpec[]): Prom
       exec('pnpm', ['exec', 'tsx', 'src/cli.ts', 'init', target], { maxBuffer: 10 * 1024 * 1024 }),
     ),
   );
-  for (const repo of initialized) await gitCommitAll(join(root, repo.path), 'initialize project');
+  for (const repo of initialized) {
+    const directory = join(root, repo.path);
+    await exec('git', ['config', 'user.email', 'test@example.com'], { cwd: directory });
+    await exec('git', ['config', 'user.name', 'Test'], { cwd: directory });
+    await exec('git', ['config', 'commit.gpgsign', 'false'], { cwd: directory });
+    await gitCommitAll(directory, 'initialize project');
+  }
 
   return { root, repos: repos.map((repo) => ({ name: repo.name, path: repo.path, absolute: join(root, repo.path) })) };
 }

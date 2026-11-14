@@ -135,4 +135,14 @@ describe('GitHub Actions CI workflow content (REQ-005 / AC-008)', () => {
       });
     }
   });
+
+  it('runs build before test in the check script so clean-checkout CLI artifacts exist', async () => {
+    const pkg = JSON.parse(await readFile(packagePath('package.json'), 'utf8')) as { scripts?: Record<string, string> };
+    const check = pkg.scripts?.check ?? '';
+    const buildIndex = check.indexOf('pnpm build');
+    const testIndex = check.indexOf('pnpm test');
+    expect(buildIndex, 'check script runs pnpm build').toBeGreaterThanOrEqual(0);
+    expect(testIndex, 'check script runs pnpm test').toBeGreaterThanOrEqual(0);
+    expect(buildIndex, 'pnpm build runs before pnpm test so dist/ is available to tests').toBeLessThan(testIndex);
+  });
 });
