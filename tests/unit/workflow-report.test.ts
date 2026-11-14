@@ -188,6 +188,40 @@ describe('planReport', () => {
     expect(report.critical_path_length).toBe(0);
   });
 
+  it('reports recorded timestamps for a completed root-only workspace plan without tasks', async () => {
+    const root = await temporary('ai-workflow-report-root-only-completed-');
+    const planId = '20260930-report-root-only-completed';
+    const directory = join(root, '.ai-workflow/plans', planId);
+    await mkdir(join(directory, 'tasks'), { recursive: true });
+    const baseAttributes = {
+      plan_id: planId,
+      status: 'frozen',
+      created_at: '2026-09-30T00:00:00.000Z',
+      supersedes: null,
+      requirement_count: 0,
+      acceptance_criteria_count: 0,
+      digest: 'sha256:placeholder',
+    };
+    await writePlanTriplet(directory, 'spec.md', '# Specification\n', '# Specification\n', (body) => renderFrozenMarkdown(baseAttributes, body));
+    await writePlanTriplet(directory, 'plan.md', '# Implementation Plan\n', '# Implementation Plan\n', (body) => renderFrozenMarkdown({ ...baseAttributes, workspace_repos: [{ name: 'workspace', path: '.', depends_on: [] }] }, body));
+    await writeFile(join(directory, 'workspace.yaml'), renderWorkspaceManifestYaml({
+      planId,
+      role: 'workspace',
+      repositories: [{ name: 'workspace', path: '.', dependsOn: [], requirements: [], acceptanceCriteria: [] }],
+    }));
+    const startedAt = '2026-10-02T00:00:00.000Z';
+    const completedAt = '2026-10-02T00:10:00.000Z';
+    await writeRecord(root, '.', planId, { plan_id: planId, status: 'completed', started_at: startedAt, completed_at: completedAt });
+
+    const report = (await planReport(directory)) as PlanReport;
+
+    expect(report.status).toBe('completed');
+    expect(report.started_at).toBe(startedAt);
+    expect(report.completed_at).toBe(completedAt);
+    expect(report.duration_seconds).toBe(600);
+    expect(report.task_count).toBe(0);
+  });
+
   it('counts only review-round files directly under reports/', async () => {
     const root = await temporary('ai-workflow-report-review-rounds-');
     const directory = await frozenPlan(root, true);

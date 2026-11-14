@@ -106,6 +106,25 @@ describe('installation verification', () => {
     expect(check!.status).not.toBe('pass');
   });
 
+  it('fails a null synchronization hook entry instead of throwing', async () => {
+    const home = await installedHome(['claude']);
+    const manifestRelative = '.config/ai-workflow/install-manifest.json';
+    const manifestPath = join(home, manifestRelative);
+    const manifest = JSON.parse(await readFile(manifestPath, 'utf8')) as { sync_hooks?: Record<string, unknown> };
+    manifest.sync_hooks = {
+      ...(manifest.sync_hooks ?? {}),
+      claude: { kind: 'configuration', path: '.claude/settings.json', entries: [null] },
+    };
+    await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+
+    const report = await verifyInstallation(home, ['claude']);
+    const relative = '.claude/settings.json';
+    const check = nonPassCheck(report, [relative, join(home, relative)]);
+
+    expect(check, 'the invalid hook entry must be reported against its settings path').toBeDefined();
+    expect(check!.status).not.toBe('pass');
+  });
+
   it('fails a modified managed file with its exact path and SHA', async () => {
     const home = await installedHome();
     const relative = '.agents/skills/git-message/SKILL.md';

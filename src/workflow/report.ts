@@ -140,7 +140,9 @@ export async function planReport(planDirectoryInput: string): Promise<PlanReport
       : (requiredRepositories.every((repository) => records.get(repository.name)?.status === 'completed') ? 'completed' : 'in-progress');
   }
 
-  const timestamps = aggregateTimestamps(status === 'completed' ? requiredRepositories.flatMap((repository) => {
+  // A root-only plan has no required repository, so a completed status takes its timestamps from
+  // the records that exist rather than from the empty required set.
+  const timestamps = aggregateTimestamps(status === 'completed' && requiredRepositories.length > 0 ? requiredRepositories.flatMap((repository) => {
     const record = records.get(repository.name);
     return record === undefined ? [] : [record];
   }) : presentRecords);

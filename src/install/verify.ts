@@ -115,6 +115,16 @@ function manifestShapeError(parsed: unknown): string | undefined {
         if (typeof record.digest !== 'string' || record.digest.length === 0) return `must record sync_hooks.${host} (${record.path}) with a plugin digest`;
       } else if (record.kind === 'configuration') {
         if (!Array.isArray(record.entries)) return `must record sync_hooks.${host} (${record.path}) with an entries array`;
+        for (const entry of record.entries) {
+          if (!isRecord(entry) || typeof entry.event !== 'string' || entry.event.length === 0 || typeof entry.index !== 'number' || !isRecord(entry.group) || !Array.isArray(entry.group.hooks)) {
+            return `must record sync_hooks.${host} (${record.path}) entries with event, index and group`;
+          }
+          for (const hook of entry.group.hooks) {
+            if (!isRecord(hook) || hook.type !== 'command' || typeof hook.command !== 'string') {
+              return `must record sync_hooks.${host} (${record.path}) hooks with type "command" and command`;
+            }
+          }
+        }
       } else {
         return `must record sync_hooks.${host} (${record.path}) with a supported kind`;
       }
