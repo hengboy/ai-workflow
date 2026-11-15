@@ -172,6 +172,36 @@ async function writeCompletedRecord(slicePlanDirectory: string, planId: string):
   await writeFile(join(slicePlanDirectory, 'implementation.yaml'), stringifyYaml({ plan_id: planId, status: 'completed', started_at: STARTED_AT, completed_at: COMPLETED_AT, commit: DELIVERY_SHA }));
 }
 
+const CHECKPOINT_SHA = 'b'.repeat(40);
+const BASE_SHA = 'c'.repeat(40);
+
+async function writeInProgressRecord(
+  slicePlanDirectory: string,
+  planId: string,
+  repository: string,
+  taskCheckpoints: Record<string, { kind: 'commit'; commit: string } | { kind: 'no-change'; head: string }>,
+): Promise<void> {
+  await mkdir(slicePlanDirectory, { recursive: true });
+  await writeFile(
+    join(slicePlanDirectory, 'implementation.yaml'),
+    stringifyYaml({
+      plan_id: planId,
+      status: 'in-progress',
+      started_at: STARTED_AT,
+      execution: {
+        purpose: 'tasks',
+        source_root: '/tmp/workspace-root',
+        repository,
+        worktree: `/tmp/workspace-root/.worktrees/${planId}`,
+        branch: `ai-workflow/${planId}`,
+        target_branch: 'main',
+        base_commit: BASE_SHA,
+      },
+      task_checkpoints: taskCheckpoints,
+    }),
+  );
+}
+
 function expectAnchor(actual: string, root: string, resolvedRoot: string, relative: string): void {
   expect(isAbsolute(actual)).toBe(true);
   expect([join(root, relative), join(resolvedRoot, relative)]).toContain(actual);
@@ -318,5 +348,32 @@ describe('plan dispatch CLI', () => {
     expectRefused(await runCli(['plan', 'dispatch', '--plan', directory]), /no pending phase|pending phase/i);
     const explicit = parseOutput(await runCli(['plan', 'dispatch', '--plan', directory, '--phase', '1']));
     expect(taskIds(explicit)).toEqual(['task-001-app']);
+  }, TIMEOUT);
+
+  it('refuses automatic dispatch while a dependency repository awaits delivery', async () => {
+    const planId = '20261113-dispatch-cli-awaiting-delivery';
+    const { root, directory } = await buildWorkspace(planId, validManifest(planId));
+    await writeInProgressRecord(join(root, 'packages/app/.ai-workflow/plans', planId), planId, 'app', {
+      'task-001-app': { kind: 'commit', commit: CHECKPOINT_SHA },
+    });
+
+    expectRefused(
+      await runCli(['plan', 'dispatch', '--plan', directory]),
+      /delivery|awaiting|blocked/i,
+    );
+    const refused = await runCli(['plan', 'dispatch', '--plan', directory]);
+    expect(refused.stderr).toContain('app');
+  }, TIMEOUT);
+
+  it('refuses automatic dispatch when the execution projection has blockers', async () => {
+    const planId = '20261113-dispatch-cli-execution-blockers';
+    const { root, directory } = await buildWorkspace(planId, validManifest(planId));
+    await writeInProgressRecord(join(root, 'packages/lib/.ai-workflow/plans', planId), planId, 'lib', {
+      'task-002-lib': { kind: 'commit', commit: CHECKPOINT_SHA },
+    });
+
+    const refused = await runCli(['plan', 'dispatch', '--plan', directory]);
+    expectRefused(refused, /blocker/i);
+    expect(refused.stderr).toMatch(/task-002-lib|lib/);
   }, TIMEOUT);
 });

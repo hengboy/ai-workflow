@@ -20,6 +20,14 @@ wrong declarations, ancestor Git roots, detached/dirty sources, escaped or
 nested-submodule write scopes, malformed records, invalid schedules and
 missing/divergent slices before any coding worktree or record.
 
+For a child-participating workspace, require the `execution` projection's
+`execution.blockers` to be empty and `ai-workflow workspace audit --plan <directory>`
+to report `valid true` with no blockers before creating a worktree or implementation
+record. `ai-workflow workspace audit --plan <directory>` re-verifies each active
+participating repository's submodule declaration, ai-workflow adoption, branch and
+clean source, recorded SHAs, slices and active anchors; any blocker stops with its
+exact evidence.
+
 Before refusing an uninitialized participant, route recovery by actual adoption state
 after explicit user setup authorization: a repository that never adopted ai-workflow
 uses ordinary `ai-workflow init <repository-root>`, while an existing adoption with its
@@ -70,6 +78,10 @@ The frozen schedule and the `workspace status` `execution` projection are the on
 scheduling authority; `tasks/execution-order.yaml` is that frozen schedule. The
 primary parent session never hands off a child repository session: `next_repository`
 is advisory and never authorizes a next-session prompt.
+
+Automatic dispatch must not offer a task whose repository dependency is undelivered,
+and `awaiting_delivery` must be resolved first by completing that repository's
+delivery review and repository delivery gate before a dependent task is offered.
 
 The original parent `tasks/execution-order.yaml` is the only global task schedule.
 The primary inspects the current-phase task bodies and must not eagerly read future
@@ -181,6 +193,11 @@ repository's single record. It accepts exactly one `start`, `task`, `reviewed`,
 wrong plan/repository, unauthorized task IDs, contradictory duplicates, invalid
 transitions or malformed full SHAs before writing. Identical repeats are idempotent;
 refusal leaves the prior record byte-unchanged.
+
+The checkpoint command remains filesystem-only, and Git Operator verification of
+every recorded SHA and commit parentage is a hard precondition for a task, reviewed,
+delivered or finalized event; `ai-workflow workspace audit --plan <directory>`
+re-verifies the recorded SHAs.
 
 ## Workspace root sessions
 

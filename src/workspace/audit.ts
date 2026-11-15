@@ -3,8 +3,9 @@ import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { promisify } from 'node:util';
 import { exists } from '../utils/fs.js';
 import { validateWorkspaceManifest, type WorkspaceRepository } from '../workflow/workspace.js';
+import { readSubmodules } from '../context/submodules.js';
 import { classifySlice, computeSliceFiles, resolveWorkspacePlan, type ResolvedWorkspacePlan } from './distribute.js';
-import { commitExists, gitCommonDirectory, symbolicHead } from './git.js';
+import { commitExists, gitCommonDirectory, repositoryPreconditionErrors, symbolicHead } from './git.js';
 import {
   RESERVED_ROOT,
   errorMessage,
@@ -179,6 +180,20 @@ async function checkExecutionAnchor(
     blockers.push(`Execution anchor worktree ${anchor.worktree} for repository "${entry.name}" must resolve strictly inside execution.source_root ${anchor.source_root}`);
     return false;
   }
+  // A delivered repository or a root tasks prefix owns a historical anchor whose worktree may
+  // already be cleaned up. Keep the lexical containment checks, but never block on the worktree
+  // Git identity, branch or unrecorded commits once delivery moved the anchor into history.
+  const historical = record.status === 'completed' || (anchor.purpose === 'tasks' && record.root_tasks_commit !== undefined);
+  if (historical) {
+    if (!(await exists(anchor.worktree))) return false;
+    const evidence = new Set<string>(recordedCommits(record));
+    evidence.add(anchor.base_commit);
+    const unreferenced = await gitLines(anchor.worktree, ['rev-list', anchor.branch, '--not', ...evidence]);
+    for (const sha of unreferenced ?? []) {
+      warnings.push(`Unreferenced commit ${sha} is reachable from branch "${anchor.branch}" in worktree ${anchor.worktree} but is not part of the recorded evidence`);
+    }
+    return false;
+  }
   if (!(await exists(anchor.worktree))) {
     blockers.push(`Execution anchor for repository "${entry.name}" names worktree ${anchor.worktree}, which does not exist`);
     return false;
@@ -291,6 +306,17 @@ export async function auditWorkspace(planDirectory: string): Promise<WorkspaceAu
     repository: undefined,
     record: await readRecordForAudit(rootRecordPath, plan.planId, RESERVED_ROOT, result.blockers),
   });
+
+  const declarations = await readSubmodules(root);
+  for (const repository of manifest.repositories) {
+    if (repository.name === RESERVED_ROOT) continue;
+    const entry = audited.find((candidate) => candidate.name === repository.name);
+    if (entry?.record?.status === 'completed') continue;
+    const repositoryPath = resolve(join(root, repository.path));
+    if (isAbsolute(repository.path) || !isStrictlyInside(root, repositoryPath)) continue;
+    result.blockers.push(...await repositoryPreconditionErrors(root, repository.name, repository.path, declarations, 'starting workspace implementation'));
+  }
+  result.checks.push('Checked active repository Git preconditions (submodule declaration, ai-workflow adoption, branch and clean source)');
 
   // A worktree is active only when a written execution anchor names it; an audit before the first
   // worktree therefore warns instead of blocking, and only records need to be consulted.

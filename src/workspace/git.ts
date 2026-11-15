@@ -49,7 +49,7 @@ export async function workingTreeStatus(repository: string): Promise<string | un
  * A repository is declared only when `.gitmodules` has a declaration whose path equals the
  * manifest path and whose section name equals the manifest name.
  */
-export async function repositoryPreconditionErrors(root: string, name: string, relativePath: string, declarations: SubmoduleDeclaration[]): Promise<string[]> {
+export async function repositoryPreconditionErrors(root: string, name: string, relativePath: string, declarations: SubmoduleDeclaration[], action = 'distributing'): Promise<string[]> {
   const errors: string[] = [];
   const declaration = declarations.find((entry) => entry.path === relativePath);
   if (declaration === undefined) {
@@ -71,7 +71,7 @@ export async function repositoryPreconditionErrors(root: string, name: string, r
     return errors;
   }
   if ((await symbolicHead(repository)) === undefined) {
-    errors.push(`Repository "${name}" is in detached HEAD; check out a branch before distributing`);
+    errors.push(`Repository "${name}" is in detached HEAD; check out a branch before ${action}`);
     return errors;
   }
   const status = await workingTreeStatus(repository);
@@ -80,7 +80,7 @@ export async function repositoryPreconditionErrors(root: string, name: string, r
     return errors;
   }
   if (status.trim().length > 0) {
-    errors.push(`Repository "${name}" has uncommitted changes; commit or stash them before distributing`);
+    errors.push(`Repository "${name}" has uncommitted changes; commit or stash them before ${action}`);
   }
   return errors;
 }

@@ -874,6 +874,42 @@ describe('the finalization rule keeps criteria disjoint while requirements may o
   });
 });
 
+describe('workspace preflight, dispatch and checkpoint barriers are explicit in shipped text', () => {
+  it('requires preflight execution.blockers to be empty and workspace audit valid with no blockers before any worktree or implementation record', async () => {
+    const text = await readShipped(WORKSPACE_REFERENCE);
+    expect(text, 'the workspace reference is shipped').not.toBeNull();
+    const flat = flatten(text ?? '');
+    expect(flat, 'preflight requires execution.blockers empty').toMatch(/execution\.blockers/i);
+    expect(flat, 'preflight requires workspace audit valid true and no blockers').toMatch(
+      /workspace audit[^.]{0,160}valid true[^.]{0,120}no blockers|valid true[^.]{0,120}no blockers[^.]{0,160}workspace audit/i,
+    );
+    expect(flat, 'preflight gate applies before any worktree or implementation record').toMatch(
+      /before (?:creating )?(?:a )?worktree or (?:an )?implementation record/i,
+    );
+  });
+
+  it('forbids automatic dispatch of tasks whose repository dependency is undelivered and requires awaiting_delivery to be resolved first', async () => {
+    const text = await readShipped(WORKSPACE_REFERENCE);
+    expect(text, 'the workspace reference is shipped').not.toBeNull();
+    const flat = flatten(text ?? '');
+    expect(flat, 'automatic dispatch must not offer tasks whose repository dependency is undelivered').toMatch(
+      /automatic dispatch[^.]{0,200}(?:must not|never)[^.]{0,200}(?:dependency[^.]{0,120}undelivered|undelivered[^.]{0,120}dependency)/i,
+    );
+    expect(flat, 'awaiting_delivery must be resolved first').toMatch(/awaiting_delivery[^.]{0,120}resolved first/i);
+  });
+
+  it('keeps checkpoint filesystem-only with Git Operator SHA/parentage verification as a hard precondition and workspace audit re-verifying recorded SHAs', async () => {
+    const text = await readShipped(WORKSPACE_REFERENCE);
+    expect(text, 'the workspace reference is shipped').not.toBeNull();
+    const flat = flatten(text ?? '');
+    expect(flat, 'checkpoint remains filesystem-only').toMatch(/filesystem-only[^.]{0,160}checkpoint|checkpoint[^.]{0,160}filesystem-only/i);
+    expect(flat, 'Git Operator SHA/parentage verification is a hard precondition').toMatch(
+      /Git Operator[^.]{0,160}SHA[^.]{0,120}parentage[^.]{0,120}(?:hard precondition|precondition)|SHA[^.]{0,120}parentage[^.]{0,120}verification[^.]{0,120}hard precondition/i,
+    );
+    expect(flat, 'workspace audit re-verifies recorded SHAs').toMatch(/workspace audit[^.]{0,160}re-?verif[^.]{0,120}recorded SHAs/i);
+  });
+});
+
 // Behavior boundary: workspace delivery alignment (REQ-004/AC-007).
 describe('workspace delivery preserve-both conflict policy alignment', () => {
   it('states preserve-both, affected-check rerun, blocked handling and reviewed source HEAD', async () => {

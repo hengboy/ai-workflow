@@ -460,7 +460,9 @@ this is the active route for a child-participating frozen plan: the primary pare
 session never hands off a child session and remains the only dispatcher. Explicitly
 read `references/workspace.md` before approved preparation or any implementation
 state, then follow its parent execution and recovery procedure, including the
-checkpoint-boundary active rebuild in `references/workspace.md`.
+checkpoint-boundary active rebuild in `references/workspace.md`. A child-participating
+preflight additionally requires `execution.blockers` empty and `workspace audit` valid
+true with no blockers before any worktree or implementation record.
 
 ## Slice sessions
 
