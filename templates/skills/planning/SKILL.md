@@ -104,7 +104,7 @@ The inventory includes every affected path in these categories, even when the st
 - documentation, navigation JSON and catalog, `MEMORY.md`, and every side of each note triplet whose supersession the plan assesses;
 - both endpoints of every rename and the exact path of every deletion.
 
-Resolve each existing path through `ai-workflow context locate --project <absolute-project-root> --feature <id> --verify` or File Explorer exact-path evidence; never guess a path. Mark each created path as new. Verify that every validation command's created, modified or regenerated files appear in the inventory and that no intentionally untouched file is listed. A required path discovered after freezing is a planning defect: the execution unit stops with a bounded support request and never edits outside the frozen scope. A step that fails this audit is not ready for the confirmation preview.
+Resolve each existing path through `ai-workflow context locate --project <absolute-project-root> --feature <id> --verify` or File Explorer exact-path evidence; never guess a path. Mark each created path as new. Verify that every validation command's created, modified or regenerated files appear in the inventory and that no intentionally untouched file is listed. A required path discovered after freezing is a planning defect. A supporting exact path may receive the coding skill's recorded in-run amendment; a material path needs a bounded user decision or planning repair, and execution never edits outside the frozen or amended scope. A step that fails this audit is not ready for the confirmation preview.
 
 ## Confirmation gate
 
