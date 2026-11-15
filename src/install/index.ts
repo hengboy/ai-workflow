@@ -164,7 +164,7 @@ async function installContracts(home: string, hosts: Host[], manifest: InstallMa
 }
 
 async function installUnsafe(hosts: Host[], options: { home?: string; version?: string; profile?: Profile; opencodeVersion?: OpencodeVersionOption }, snapshots: Map<string, Buffer | undefined>, newDirectories: Set<string>): Promise<InstallManifest> {
-  const home = resolve(options.home ?? homedir()); const version = options.version ?? '0.1.0'; const manifest = await readManifest(home);
+  const home = resolve(options.home ?? homedir()); const version = options.version ?? '0.2.0'; const manifest = await readManifest(home);
   // Resolve settings once before any render or write so an invalid active_profile aborts pre-write.
   const settings = await loadSettings(home);
   const explicit = options.profile;

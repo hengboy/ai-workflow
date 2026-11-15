@@ -4158,6 +4158,11 @@
         {
           "kind": "imports",
           "from": "src/workspace/audit.ts#auditWorkspace",
+          "to": "src/context/submodules.ts#readSubmodules"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workspace/audit.ts#auditWorkspace",
           "to": "src/workflow/workspace.ts#validateWorkspaceManifest"
         },
         {
@@ -4169,6 +4174,11 @@
           "kind": "imports",
           "from": "src/workspace/audit.ts#auditWorkspace",
           "to": "src/workspace/distribute.ts#resolveWorkspacePlan"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workspace/audit.ts#auditWorkspace",
+          "to": "src/workspace/git.ts#repositoryPreconditionErrors"
         },
         {
           "kind": "imports",
@@ -5396,6 +5406,16 @@
           "kind": "imports",
           "from": "src/workflow/dispatch.ts#planDispatch",
           "to": "src/workflow/workspace.ts#readWorkspaceManifest"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workflow/dispatch.ts#planDispatch",
+          "to": "src/workspace/execution.ts#ExecutionProjection"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workflow/dispatch.ts#planDispatch",
+          "to": "src/workspace/record.ts#RESERVED_ROOT"
         },
         {
           "kind": "imports",
