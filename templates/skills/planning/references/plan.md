@@ -36,14 +36,31 @@ Apply Planning's [Document contract](../SKILL.md#document-contract). The Chinese
 
 Keep the sequence cohesive and priority-ordered: merge tightly related behavior and its tests into one step, and do not create per-file or mechanical steps that only add execution overhead.
 
+Each step's write scope is the complete exact file inventory for that step, not a summary. Name every created, modified, deleted or renamed path; never use a directory, wildcard, glob, unresolved placeholder or vague "related files" entry. Include behavior test, fixture and snapshot paths, existing tests whose expectations change, export barrels and registries, schemas and migrations, tracked generated sources and outputs, documentation and navigation files, `MEMORY.md`, every side of an affected note triplet, both endpoints of a rename and the path of a deletion. When more than a few paths are involved, add a `#### Step N write paths` list and reference it from the Write scope field. Append `(new)` to a created path.
+
 ### Step 1: Short outcome name
 
 - Responsible role: `backend`, `frontend`, `test`, or another installed native role. Do not add a `surface` field to a plan step; surface routing belongs to generated task files.
 - Read scope: exact files or bounded directories needed for context.
-- Write scope: exact files the step may change.
+- Write scope: the complete exact file inventory for this step; list every created, modified, deleted or renamed path or reference the step's write-path list. Never use a directory, wildcard, glob, unresolved placeholder or vague "related files" entry.
 - Changes: describe the intended behavior and important constraints.
 - Validation: list commands and the evidence each command must produce.
 - Dependencies: name preceding steps or state `none`.
+
+## Write-scope audit
+
+Audit every step before freezing:
+
+- Every write path is exact and file-like, with no directory, wildcard, glob or unresolved placeholder.
+- Every behavior test, fixture and snapshot, including an existing test whose expectations change, is listed.
+- Every export barrel, module index, route or page registry and registration wiring that must admit the change is listed.
+- Every schema, migration and tracked generated source or output is listed, with its regeneration command.
+- Every documentation, navigation, `MEMORY.md` and affected note triplet side is listed.
+- Both endpoints of every rename and the path of every deletion are listed.
+- Every file a validation command creates, modifies or regenerates appears in the inventory.
+- No path discovered during execution is missing from the inventory.
+
+A step that fails any check is incomplete and is not frozen.
 
 ## Integration and compatibility
 
@@ -68,7 +85,7 @@ For the notification preference requirement in `spec.md`, a completed step could
 
 - Responsible role: `backend`
 - Read scope: `src/preferences/`, `tests/preferences/`
-- Write scope: `src/preferences/store.ts`, `tests/preferences/store.test.ts`
+- Write scope: `src/preferences/store.ts`, `src/preferences/index.ts`, `tests/preferences/store.test.ts` (new), `tests/preferences/fixtures/preferences.json` (new)
 - Changes: store the authenticated user's email preference through the existing preferences repository and preserve the current default for records without a value.
 - Validation: `pnpm vitest run tests/preferences/store.test.ts` proves AC-001 and the missing-value compatibility case.
 - Dependencies: none

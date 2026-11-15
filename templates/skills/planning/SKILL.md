@@ -91,6 +91,21 @@ Before requesting confirmation, assemble the complete goals, non-goals, REQ/AC i
 - Order steps by dependency and priority so upstream, higher-priority outcomes land first and the critical path stays short.
 - Never over-decompose: every step adds a delegation, a verification and a commit, so merge work that shares one outcome, one responsible role and one validation command into one step.
 
+## Write-scope completeness
+
+Before the confirmation preview, build one complete write inventory for every step from exact repository evidence. A step's write scope enumerates every exact repository path the step creates, modifies, deletes or renames; a directory, wildcard, glob, unresolved placeholder or vague "related files" entry is not a write scope and is never allowed.
+
+The inventory includes every affected path in these categories, even when the step does not mention the file explicitly:
+
+- production source and configuration;
+- export barrels, module indexes, route or page registries and dependency-injection or other registration wiring that must admit the change;
+- behavior tests, fixtures and snapshots, including existing tests whose expectations the behavior change invalidates;
+- schemas, migrations and tracked generated sources or outputs, plus the command that regenerates a tracked output;
+- documentation, navigation JSON and catalog, `MEMORY.md`, and every side of each note triplet whose supersession the plan assesses;
+- both endpoints of every rename and the exact path of every deletion.
+
+Resolve each existing path through `ai-workflow context locate --project <absolute-project-root> --feature <id> --verify` or File Explorer exact-path evidence; never guess a path. Mark each created path as new. Verify that every validation command's created, modified or regenerated files appear in the inventory and that no intentionally untouched file is listed. A required path discovered after freezing is a planning defect: the execution unit stops with a bounded support request and never edits outside the frozen scope. A step that fails this audit is not ready for the confirmation preview.
+
 ## Confirmation gate
 
 Show that complete inventory in one preview and ask for explicit approval. Until approval:
@@ -107,7 +122,7 @@ Material user changes invalidate the preview and require a new complete preview.
 The six-file deliverable lives at `.ai-workflow/plans/<YYYYMMDD-english-slug>/`:
 
 - `spec.md` + `spec.zh.md` + `spec.i18n.yaml`: goal, non-goals, scenarios, continuous REQ/AC, Given/When/Then evidence, RED criteria, boundary counterexamples and validation layers.
-- `plan.md` + `plan.zh.md` + `plan.i18n.yaml`: every REQ/AC mapping, implementation order, exact or bounded read/write paths, checks, compatibility, rollback and responsible native role.
+- `plan.md` + `plan.zh.md` + `plan.i18n.yaml`: every REQ/AC mapping, implementation order, exact read paths and complete exact file write inventories, checks, compatibility, rollback and responsible native role.
 
 Each document is a complete bilingual triplet. Only English carries YAML frontmatter (`plan_id`, `status: frozen`, `created_at`, nullable `supersedes`, `requirement_count`, `acceptance_criteria_count`, `digest`) and supplies machine REQ/AC IDs, counts and digests. The Chinese `.zh.md` has no frontmatter; it starts with the same English title followed by `[English](<doc>.md) | 中文`. English follows its title with `English | [中文](<doc>.zh.md)`. Mirror headings, structure, tables, lists and link targets; only prose differs. The `.i18n.yaml` is a consistency record, never a third prose side.
 
@@ -123,7 +138,7 @@ Draft, review and repair happen before final approval; freezing happens only aft
 1. Draft both documents in memory with all sides defined above. You must not write drafts, snapshots or other planning artifacts to a system temporary directory or any path outside the plan directory. The primary reads existing `MEMORY.md` directly while drafting and never dispatches a routine Standards Review.
 2. Run one full Spec Review before presenting the final confirmation preview, with exactly one dispatch. This is a document review of the plain draft spec and plan only: the in-memory drafts have no implementation range and require no commit, there is no fictional commit, and the reviewer must never demand a commit, file path or line that does not exist. The reviewer receives only the draft documents and their requirement references without drafting rationale, earlier verdicts or conversation history, and cites the draft document and REQ/AC rather than a commit, file or line.
 3. The primary automatically repairs every in-scope finding within the settled intent, without asking which findings to fix. Apply the project contract's budget of at most two repair/recheck cycles. Each independent targeted recheck receives only affected document and requirement references plus the previous and repaired in-memory drafts, no earlier findings or "fixed" explanation, and never starts a second full review. Compare the draft versions to distinguish an existing gap from a repair-induced gap; the primary maps closure to its original findings. A second cycle requires a concrete correction and new defect evidence or demonstrable closure progress; no progress, unavailable required material or an exhausted budget with unresolved blockers stops freezing. A material user change after review invalidates this reviewed draft: stop its freeze and establish a new planning boundary and Plan ID instead of reusing stale review evidence or reviewing the same boundary again.
-4. Only after the draft review and any in-scope repair or targeted recheck are accepted, show the complete final inventory in one preview and obtain explicit approval.
+4. Only after the draft review and any in-scope repair or targeted recheck are accepted, re-run the write-scope audit against the repaired drafts, show the complete final inventory in one preview and obtain explicit approval.
 
 After approval:
 
@@ -144,6 +159,7 @@ When the change adds a note or changes a recorded decision, `plan.md` must list 
 ## Completion checklist
 
 - The user approved the final full inventory, including any repaired review findings.
+- Every step names a complete exact write inventory: no directory, wildcard, glob, unresolved placeholder or vague "related files" entry; affected tests, fixtures, barrels and registries, schemas and migrations, tracked generated files, documentation, navigation, `MEMORY.md`, note triple sides and rename or delete endpoints are included.
 - Every plan that lands a lasting decision whose rationale code, tests and existing documentation cannot adequately explain schedules its note work and aligns `MEMORY.md`; a plan that adds a note or changes a recorded decision lists the exact existing triplets and active inbound-link paths whose supersession it assesses; local, mechanical, UI, copy and formatting changes without such lasting rationale are exempt.
 - The six-file contract and single-review workflow are complete: shared plan ID/counts, mirrored structure, matching English digests, recorded pairs and passing `ai-workflow plan validate --plan <directory>`.
 - Planning ends at the frozen plan and never starts implementation: report the absolute project or workspace root, the frozen plan directory and the `plan validate` result, then route by `workspace_repos`.

@@ -40,8 +40,12 @@ Replace every placeholder with usable values for all applicable fields:
 - `repo`: the conditional repository assignment below; remove the illustrative field for a non-workspace plan.
 - `surface`: non-empty `backend|frontend|cross-stack|test|docs|research|documentation`, converted from the plan's `Responsible role`. `research` delegates every technology, project, concept, topic or keyword research request to Researcher, whether or not links are supplied; `documentation` routes non-code documentation and index maintenance to Documentation Maintainer.
 - `read_scope`: the project contract (`.ai-workflow/AGENTS.md`) and `MEMORY.md` plus exact locator paths and exact bounded note/governance paths. The navigation JSON and Markdown catalog may be listed as permitted context, but that authorization never requires eagerly reading them; load them only for a needed bounded entry or an authorized index maintenance. Never use `src/`, `tests/` or the project root, and an old task scope that contains navigation JSON remains valid reading authorization.
-- `write_scope`: exact enough for filesystem enforcement; never `.`, the project root, `**`, unresolved placeholders or broad directories with unclear ownership.
+- `write_scope`: the exact frozen plan write inventory for this task. Include every created, modified, deleted or renamed path needed for the task outcome, including its behavior test and fixture paths; a path the frozen plan does not declare is not writable. Never `.`, the project root, a directory, wildcard, glob, unresolved placeholder or vague "related files" entry.
 - `test_commands`: assigned validation commands; state expected evidence in the body. Place frontend/backend checks on their responsible tasks and add integration work only when cross-stack behavior requires it.
+
+## Scope integrity
+
+`write_scope` is the exact subset of the frozen plan's write inventory for this task's covered outcomes, and together the tasks cover that inventory completely. A required path absent from the frozen plan, or an exact plan path widened to a directory, stops task writing with a bounded support request naming the path and affected plan step. Never add the path to the task, never widen the scope and never regenerate the plan.
 
 ## Objective
 
@@ -76,7 +80,7 @@ Root finalization criteria declared by `workspace_finalization` `never become` t
 ## Completion definition
 
 - All assigned REQ and AC identifiers are covered.
-- Changes remain within `write_scope`.
+- Changes remain within `write_scope`; a required path outside it stops before the edit with a support request naming the path and the plan gap.
 - Every `test_commands` entry passes and its evidence is recorded.
 
 ## Example

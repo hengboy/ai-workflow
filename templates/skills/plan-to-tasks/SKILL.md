@@ -59,9 +59,15 @@ Before drafting, read [the task template](references/task.md) for the full field
 - Ask File Explorer for exact paths when an entry, call chain or dependency is unknown.
 - A task landing a lasting decision whose rationale code, tests and existing documentation cannot adequately explain includes its note update, lifecycle transition, the disposition of every identified related active record in the same change and the `ai-workflow notes validate` check; local, mechanical, UI, copy and formatting changes without such lasting rationale are exempt.
 
+## Plan-derived write scopes
+
+Each task's `write_scope` comes only from the frozen plan's write inventory for the outcomes it covers. The union of task write scopes must equal the union of the covered plan steps' declared write paths: every plan write path is assigned to a task, and no task adds a path the plan does not declare. A plan path that is a directory, wildcard, glob or unresolved placeholder is a frozen-plan defect.
+
+When the task would need a path absent from the frozen plan, stop before writing tasks with a bounded support request naming the exact path and affected plan step; never add it silently, never widen an exact path to a directory and never regenerate the task set. A task may split a plan step, but its `write_scope` remains the exact subset of that step's inventory it needs, and the remaining tasks cover the rest.
+
 ## Coverage and DAG checks
 
-Before previewing, verify complete coverage with no unknown REQ/AC or duplicate task IDs, dependencies naming proposed tasks, an acyclic graph and no parallel overlapping or unknown write scopes. Each task must produce one coherent Git commit with tests proving its AC; screenshot-producing tests name the plan's `screenshot/` directory. Apply the mandatory execution-order reference to the complete graph. Plan-to-tasks dispatches neither review axis: it starts no Spec Review, no Standards Review and no per-task review trigger.
+Before previewing, verify complete coverage with no unknown REQ/AC or duplicate task IDs, dependencies naming proposed tasks, an acyclic graph and no parallel overlapping or unknown write scopes. Apply the plan-derived write-scope check above. Each task must produce one coherent Git commit with tests proving its AC; screenshot-producing tests name the plan's `screenshot/` directory. Apply the mandatory execution-order reference to the complete graph. Plan-to-tasks dispatches neither review axis: it starts no Spec Review, no Standards Review and no per-task review trigger.
 
 ## Approval preview
 
@@ -138,6 +144,7 @@ When distribution refuses, report the exact error and the repair instructions, s
 
 - The user approved the complete preview.
 - All files match the approved graph, with complete coverage and a valid DAG.
+- Every task write path comes from the frozen plan's declared write inventory; no task adds or widens a path, and every plan write path is assigned.
 - Frozen spec/plan bytes are unchanged.
 - `tasks/execution-order.yaml` is written for every split plan and `ai-workflow plan validate --plan <directory>` passes.
 - Task files remain gitignored and uncommitted; no workflow or run was started.

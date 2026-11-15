@@ -173,6 +173,12 @@ After a safe patch changes the contract or owned rules, re-read `.ai-workflow/AG
 - A plan may be implemented whole or through split tasks. An assigned
   `tasks/<taskId>.md` permits only its exact read/write scopes and declared
   commands; an unsplit plan uses its explicit scope and acceptance criteria.
+- Before the first edit of each execution unit, compare every intended created,
+  modified, deleted or renamed path with the frozen write scope. A required path
+  outside it stops before the edit with a bounded support request naming the exact
+  path, the behavior that needs it and the plan gap; never create or modify it,
+  never substitute a broader directory and never treat an omitted path as
+  authorization. A frozen plan is never repaired by expanding execution scope.
 - A missing/empty index is normal. Locate `missing_index` or feature `miss` does
   not block paths/symbols supplied by the plan or authorized bounded discovery;
   `stale`, `invalid` or `ambiguous` results need bounded resolution or index repair
@@ -492,6 +498,9 @@ repository ownership and plain plan-ID references; also apply Note Maintenance a
   and test evidence from a completed red -> green slice.
 - Every slice was verified, self-checked once, and committed before the next
   slice began; commits contain only that slice's scoped changes.
+- The delivered path set stayed within the frozen write scope and covered every
+  planned path; any required path discovered outside it was reported before any
+  out-of-scope edit.
 - The primary automatically delegated the scoped local commit to the
   `git-operator` sub-agent (Git Operator) after the relevant checks passed and
   before immutable-range review, and recorded the returned commit SHA or, for a

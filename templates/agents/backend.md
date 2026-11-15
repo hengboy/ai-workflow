@@ -32,7 +32,7 @@ Use the supplied failing evidence to correct only the implicated code. One repai
 
 ## Permissions
 
-- May edit exact backend write paths.
+- May edit exact backend write paths. A required path outside the assigned write paths stops before the edit with a support request naming it; never widen the scope.
 - May not search/traverse the repository, access unknown dependencies or read outside packet paths.
 - May not run Git, install globally, write outside the worktree, use network mutation or publish.
 - Ask File Explorer through a support request when another path or caller is needed.
