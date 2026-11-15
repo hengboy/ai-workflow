@@ -125,6 +125,24 @@ function workspaceSpec(planId: string, manifest?: WorkspaceManifestFixture): Wor
   };
 }
 
+function rootOnlySpec(planId: string): WorkspacePlanFixtureSpec {
+  return {
+    planId,
+    requirements: ['REQ-001'],
+    acceptanceCriteria: ['AC-001'],
+    workspaceRepos: [{ name: 'workspace', path: '.', dependsOn: [] }],
+    tasks: [
+      { id: 'task-001-root', repo: 'workspace', requirements: ['REQ-001'], acceptanceCriteria: ['AC-001'], surface: 'backend', writeScope: ['src/root.ts'] },
+    ],
+    phases: [['task-001-root']],
+    manifest: {
+      planId,
+      role: 'workspace',
+      repositories: [{ name: 'workspace', path: '.', dependsOn: [], requirements: ['REQ-001'], acceptanceCriteria: ['AC-001'] }],
+    },
+  };
+}
+
 function validManifest(planId: string): WorkspaceManifestFixture {
   return {
     planId,
@@ -267,6 +285,19 @@ describe('plan dispatch CLI', () => {
     const explicit = parseOutput(await runCli(['plan', 'dispatch', '--plan', directory, '--phase', '1']));
     expect(explicit.phase).toBe(1);
     expect(taskIds(explicit)).toEqual(['task-001-app']);
+  }, TIMEOUT);
+
+  it('prints the root task packet for a root-only workspace plan without --phase', async () => {
+    const planId = '20261113-dispatch-cli-root-only';
+    const root = await temporary('ai-workflow-plan-dispatch-root-only-');
+    const directory = await workspacePlanFixture(root, rootOnlySpec(planId));
+
+    const output = parseOutput(await runCli(['plan', 'dispatch', '--plan', directory]));
+
+    expect(output.plan_id).toBe(planId);
+    expect(output.phase).toBe(1);
+    expect(taskIds(output)).toEqual(['task-001-root']);
+    expect(output.tasks[0]?.repository).toBe('workspace');
   }, TIMEOUT);
 
   it('refuses a workspace plan with a missing manifest or an invalid status', async () => {

@@ -2,6 +2,7 @@ import { dirname, join, resolve } from 'node:path';
 import { readExecutionOrder } from './order.js';
 import { readPlan, readTasks } from './parse.js';
 import { readWorkspaceManifest } from './workspace.js';
+import { RESERVED_ROOT } from '../workspace/record.js';
 import { workspaceStatus } from '../workspace/status.js';
 
 export interface DispatchRequest {
@@ -96,10 +97,15 @@ export async function planDispatch(request: DispatchRequest): Promise<DispatchRe
     const manifest = await readWorkspaceManifest(planDirectory);
     if (manifest === undefined || manifest.role !== 'workspace') throw new Error(`Missing or invalid workspace manifest: ${join(planDirectory, 'workspace.yaml')}`);
     for (const repository of manifest.repositories) repositoryPaths.set(repository.name, repository.path);
+    const rootOnly = manifest.repositories.every((repository) => repository.name === RESERVED_ROOT);
     if (request.phase === undefined) {
-      const execution = status.execution;
-      if (execution === undefined || execution.phase === null || execution.completed) throw new Error(`Workspace plan has no pending phase: ${planDirectory}`);
-      selectedPhase = execution.phase;
+      if (rootOnly) {
+        selectedPhase = 1;
+      } else {
+        const execution = status.execution;
+        if (execution === undefined || execution.phase === null || execution.completed) throw new Error(`Workspace plan has no pending phase: ${planDirectory}`);
+        selectedPhase = execution.phase;
+      }
     } else {
       selectedPhase = request.phase;
     }

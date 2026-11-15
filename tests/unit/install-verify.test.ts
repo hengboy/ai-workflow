@@ -194,6 +194,27 @@ describe('installation verification', () => {
     expect(await readFile(path, 'utf8'), 'verification must not rewrite disabling configuration').toBe(bytes);
   });
 
+  it('fails an opencode host-scoped skills link pointing at a wrong directory, with a two-level relative recovery', async () => {
+    const home = await installedHome(['opencode']);
+    const other = await temporary('ai-workflow-install-verify-wrong-skills-');
+    homes.push(other);
+    await mkdir(join(other, 'sync-ai-workflow'), { recursive: true });
+    await writeFile(join(other, 'sync-ai-workflow', 'SKILL.md'), '# other skills\n');
+    const relative = '.config/opencode/skills';
+    const path = join(home, relative);
+    await rm(path, { force: true });
+    await symlink(other, path, 'dir');
+
+    const report = await verifyInstallation(home, ['opencode']);
+    const check = report.checks.find((item) => item.id === 'install.skills-link.opencode');
+
+    expect(report.valid).toBe(false);
+    expect(check, 'the wrong opencode host-scoped skills link must be reported').toBeDefined();
+    expect(check!.status).toBe('fail');
+    expect(check!.recovery, 'the recovery command must name the two-level relative target').toContain('../../.agents/skills');
+    expect(check!.recovery).not.toContain('ln -sfn ../.agents/skills');
+  });
+
   it('fails a shared-skill link whose identity does not resolve to the shared skills tree', async () => {
     const home = await installedHome(['claude']);
     const other = await temporary('ai-workflow-other-skills-');

@@ -45,7 +45,9 @@ export async function suggestAffectedTests(project: string, changedPaths: string
   if (!Array.isArray(index.features)) return noMatch(changedPaths, 'navigation index is missing or invalid');
 
   const targets = [...new Set(changedPaths.map((path) => repositoryPath(project, path)))].sort();
-  const owners = index.features.filter((feature) => feature.entries.some((entry) => targets.includes(entry)));
+  const owners = index.features.filter((feature) =>
+    feature.entries.some((entry) => targets.includes(entry))
+    || feature.tests.some((test) => targets.includes(test)));
   const features = [...new Set(owners.map((feature) => feature.id))].sort();
   const tests = [...new Set(owners.flatMap((feature) => feature.tests))].sort();
   if (features.length === 0 || tests.length === 0) return noMatch(targets);

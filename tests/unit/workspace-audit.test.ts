@@ -356,6 +356,44 @@ describe('auditWorkspace', () => {
     expect(changedPaths(before, await snapshotTree(root))).toEqual([]);
   }, TIMEOUT);
 
+  it('blocks an execution anchor whose worktree HEAD is detached from anchor.branch, naming the repository and the branch state', async () => {
+    const { root, directory, app } = await buildWorkspace();
+    const head = await headOf(app);
+    const worktree = await addWorktreeInside(root, app);
+    await exec('git', ['checkout', '--detach', head], { cwd: worktree, maxBuffer: 10 * 1024 * 1024 });
+    await writeRecord(app, { ...baseRecord(), execution: anchorOf(root, worktree, head) });
+
+    const before = await snapshotTree(root);
+    const output = view(await auditWorkspace(directory));
+
+    expect(output.valid).toBe(false);
+    const text = expectStrings(output.blockers, 'blockers').join('\n');
+    expect(text).toContain('app');
+    expect(text).toMatch(/branch|detach|HEAD/i);
+    expect(changedPaths(before, await snapshotTree(root))).toEqual([]);
+  }, TIMEOUT);
+
+  it('blocks a completed non-root record without a delivery commit, naming the repository and the missing commit', async () => {
+    const { root, directory, app } = await buildWorkspace();
+    await distributeSlices(directory);
+    const head = await headOf(app);
+    await writeRecord(app, {
+      ...baseRecord(),
+      status: 'completed',
+      completed_at: COMPLETED_AT,
+      task_checkpoints: { 'task-001-app': { kind: 'commit', commit: head } },
+    });
+
+    const before = await snapshotTree(root);
+    const output = view(await auditWorkspace(directory));
+
+    expect(output.valid).toBe(false);
+    const text = expectStrings(output.blockers, 'blockers').join('\n');
+    expect(text).toContain('app');
+    expect(text).toMatch(/delivery commit|missing/i);
+    expect(changedPaths(before, await snapshotTree(root))).toEqual([]);
+  }, TIMEOUT);
+
   it('accepts an execution anchor naming a real worktree of the source repository', async () => {
     const { root, directory, app } = await buildWorkspace();
     const head = await headOf(app);

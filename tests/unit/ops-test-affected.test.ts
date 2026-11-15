@@ -134,6 +134,17 @@ describe('suggestAffectedTests', () => {
     expect(output.match(/vitest run/g)).toHaveLength(1);
   });
 
+  it('treats an indexed feature test file as a match and returns the feature with its union of tests', async () => {
+    const root = await affectedFixture();
+    const result = await suggestAffectedTests(root, ['tests/unit/alpha.test.ts']);
+
+    expect(result.match).toBe(true);
+    expect(result.exitCode).toBe(0);
+    expect(result.features).toEqual(['alpha']);
+    expect(result.tests).toEqual(['tests/unit/alpha.test.ts', 'tests/unit/shared.test.ts']);
+    expect(result.command).toBe('pnpm exec vitest run tests/unit/alpha.test.ts tests/unit/shared.test.ts');
+  });
+
   it('treats an indexed feature without tests as a no-match with the declared-check fallback', async () => {
     const root = await affectedFixture();
     const result = await suggestAffectedTests(root, ['src/bare.ts']);

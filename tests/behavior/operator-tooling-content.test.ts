@@ -280,6 +280,7 @@ describe('README advisory tooling and CI content (REQ-007 / AC-011)', () => {
         ['per-group and per-file deltas', /per-group and per-file/i],
         ['deterministic counts and deltas', /deterministic/i],
         ['the missing or malformed baseline failure', /missing, unreadable or malformed baseline fails/i],
+        ['the redirect-safe form for saving a baseline JSON', /pnpm --silent context:budget --json/i],
         ['no threshold', /applies no threshold/i],
         ['no file write', /writes no file/i],
       ],
@@ -304,6 +305,7 @@ describe('README advisory tooling and CI content (REQ-007 / AC-011)', () => {
         ['the --write mode', /check:templates --write/i],
         ['re-inlining only marked regions', /re-inlines only the marked regions/i],
         ['leaving unmarked text untouched', /leaves all unmarked text untouched/i],
+        ['the zero-fragment boundary', /zero[^.]{0,200}(?:no fragment file|pre-migration|full rollback)/i],
       ],
       'README check:templates section',
     );
