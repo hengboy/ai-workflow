@@ -45,7 +45,7 @@ Replace every placeholder with usable values for all applicable fields:
 
 ## Scope integrity
 
-`write_scope` is the exact subset of the frozen plan's write inventory for this task's covered outcomes, and together the tasks cover that inventory completely. A required path absent from the frozen plan, or an exact plan path widened to a directory, stops task writing with a bounded support request naming the path and affected plan step. Never add the path to the task, never widen the scope and never regenerate the plan.
+`write_scope` is the exact subset of the frozen plan's write inventory for this task's covered outcomes, and together the tasks cover that inventory completely. No path absent from the frozen plan is added to the task, and an exact plan path is never widened to a directory. At execution, the coding skill may authorize a recorded in-run amendment for a supporting exact path; a material path stops before the edit with a bounded support request and requires a bounded user decision or planning repair. Never add the path to the task and never regenerate the plan.
 
 ## Objective
 
@@ -80,7 +80,7 @@ Root finalization criteria declared by `workspace_finalization` `never become` t
 ## Completion definition
 
 - All assigned REQ and AC identifiers are covered.
-- Changes remain within `write_scope`; a required path outside it stops before the edit with a support request naming the path and the plan gap.
+- Changes remain within `write_scope` or a recorded supporting-path amendment; a material path outside it stops before the edit with a support request naming the path and the plan gap.
 - Every `test_commands` entry passes and its evidence is recorded.
 
 ## Example

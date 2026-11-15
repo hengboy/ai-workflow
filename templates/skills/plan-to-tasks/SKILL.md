@@ -63,7 +63,7 @@ Before drafting, read [the task template](references/task.md) for the full field
 
 Each task's `write_scope` comes only from the frozen plan's write inventory for the outcomes it covers. The union of task write scopes must equal the union of the covered plan steps' declared write paths: every plan write path is assigned to a task, and no task adds a path the plan does not declare. A plan path that is a directory, wildcard, glob or unresolved placeholder is a frozen-plan defect.
 
-When the task would need a path absent from the frozen plan, stop before writing tasks with a bounded support request naming the exact path and affected plan step; never add it silently, never widen an exact path to a directory and never regenerate the task set. A task may split a plan step, but its `write_scope` remains the exact subset of that step's inventory it needs, and the remaining tasks cover the rest.
+Do not add a path absent from the frozen plan to a task. At execution, the coding skill may authorize a recorded in-run amendment for a supporting exact path; a material path stops before the edit with a bounded support request and requires a bounded user decision or planning repair. Never widen an exact path to a directory and never regenerate the task set. A task may split a plan step, but its `write_scope` remains the exact subset of that step's inventory it needs, and the remaining tasks cover the rest.
 
 ## Coverage and DAG checks
 

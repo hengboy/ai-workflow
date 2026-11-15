@@ -5627,6 +5627,7 @@
       "name": "plan-write-scope-completeness",
       "aliases": [
         "plan write inventory",
+        "scope amendment",
         "write scope completeness"
       ],
       "module_root": "root",
@@ -5654,7 +5655,7 @@
       "depends_on": [],
       "relations": [],
       "owner_role": "shared",
-      "responsibility": "Planning freezes a complete exact per-step write inventory, plan-to-tasks derives task scopes only from it, and coding stops before any out-of-scope edit.",
+      "responsibility": "Planning freezes a complete exact per-step write inventory, plan-to-tasks derives task scopes only from it, and coding classifies an out-of-scope path: a supporting exact path gets a recorded in-run amendment while a material path needs a bounded decision or planning repair.",
       "read_scope": [
         ".ai-workflow/notes/implemented/process/2026-11-16-plan-write-scope-completeness.i18n.yaml",
         ".ai-workflow/notes/implemented/process/2026-11-16-plan-write-scope-completeness.md",

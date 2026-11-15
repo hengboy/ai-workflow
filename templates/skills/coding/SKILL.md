@@ -174,11 +174,11 @@ After a safe patch changes the contract or owned rules, re-read `.ai-workflow/AG
   `tasks/<taskId>.md` permits only its exact read/write scopes and declared
   commands; an unsplit plan uses its explicit scope and acceptance criteria.
 - Before the first edit of each execution unit, compare every intended created,
-  modified, deleted or renamed path with the frozen write scope. A required path
-  outside it stops before the edit with a bounded support request naming the exact
-  path, the behavior that needs it and the plan gap; never create or modify it,
-  never substitute a broader directory and never treat an omitted path as
-  authorization. A frozen plan is never repaired by expanding execution scope.
+  modified, deleted or renamed path with the frozen write scope. A path outside
+  it is never written silently: classify it under `## Bounded scope amendment`,
+  where a supporting exact path may receive a recorded in-run authorization and a
+  material path needs a bounded user decision or planning repair. Never substitute
+  a broader directory and never treat an omission as authorization.
 - A missing/empty index is normal. Locate `missing_index` or feature `miss` does
   not block paths/symbols supplied by the plan or authorized bounded discovery;
   `stale`, `invalid` or `ambiguous` results need bounded resolution or index repair
@@ -241,6 +241,38 @@ After a safe patch changes the contract or owned rules, re-read `.ai-workflow/AG
   with no missing-plan demand and no requirement for a `spec.md`, `plan.md` or task file.
 - Unreadable or contradictory frozen sources block before any edit, without broader
   whole-repository discovery, and frozen inputs are never rewritten.
+
+## Bounded scope amendment
+
+When the first edit of an execution unit needs an exact path outside the frozen
+write scope, classify it before editing:
+
+- A supporting path is an exact path within the same repository and the feature
+  boundary of the frozen AC that is required only to deliver that AC's behavior
+  or evidence and adds no user-visible behavior, public interface, configuration
+  or dependency, schema or migration, cross-module or cross-stack contract, or
+  security/privacy boundary. Examples are a behavior test, fixture, snapshot,
+  export barrel, module index, route or registration entry, tracked generated
+  output, documentation, navigation, `MEMORY.md` or note triplet side. The primary
+  verifies the exact path and authorizes it in-run for the current execution unit,
+  records it in that unit's commit body and the final report, and ensures it
+  appears in the review range. This is an execution authorization, not a plan or
+  task edit, and it needs no separate user approval.
+- A material path is any other path, including new production source, public
+  interface, configuration or dependency, schema or migration, or cross-module or
+  cross-stack behavior. Stop before the edit and request one bounded user decision
+  naming the exact path, the frozen AC that needs it and the behavior it would add.
+  If the user approves and the requirements and public contract stay unchanged,
+  proceed as a recorded amendment. If the decision changes REQ/AC, public contract
+  or cross-repository behavior, stop and repair planning with a new plan ID instead
+  of amending execution.
+
+An amendment is always one exact path; a directory, wildcard, glob, placeholder or
+repository root is never an amendment. Never widen an existing path. A repeated
+need for supporting amendments, or any material amendment, means the plan was
+materially incomplete: finish only the already authorized unit, then require
+planning repair before later units. Never rewrite frozen inputs and never hide an
+amendment from the commit, final report or review.
 
 ## Procedure
 
@@ -498,9 +530,11 @@ repository ownership and plain plan-ID references; also apply Note Maintenance a
   and test evidence from a completed red -> green slice.
 - Every slice was verified, self-checked once, and committed before the next
   slice began; commits contain only that slice's scoped changes.
-- The delivered path set stayed within the frozen write scope and covered every
-  planned path; any required path discovered outside it was reported before any
-  out-of-scope edit.
+- The delivered path set stayed within the frozen write scope plus recorded
+  supporting-path amendments and covered every planned path; every supporting
+  amendment was exact, primary-authorized, recorded in the commit body and final
+  report and included in the review range, and every material path had a bounded
+  user decision or stopped for planning repair.
 - The primary automatically delegated the scoped local commit to the
   `git-operator` sub-agent (Git Operator) after the relevant checks passed and
   before immutable-range review, and recorded the returned commit SHA or, for a

@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 # ai-workflow notes pairing --project <project-root> --write .ai-workflow/notes/implemented/process/2026-11-16-plan-write-scope-completeness.md
-2026-11-16-plan-write-scope-completeness.md: 323302e979770ebfd2c140a0d9566237a017f544
-2026-11-16-plan-write-scope-completeness.zh.md: 8d45fb5aa32a57267c72a6bf71fd25238f16a2f8
+2026-11-16-plan-write-scope-completeness.md: 3db488e59a3b555a593304519c9cb46d0fe408fc
+2026-11-16-plan-write-scope-completeness.zh.md: d313032a92c82f36919f1a919ae73b596025feb2
