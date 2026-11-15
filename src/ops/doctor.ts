@@ -84,7 +84,9 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<DoctorRepo
     const contractRelative = '.ai-workflow/AGENTS.md';
     const contractPath = join(project, contractRelative);
     if (!(await exists(contractPath))) {
-      checks.push(check('project.contract', 'fail', `Project contract is missing: ${contractRelative} (${contractPath}).`, `ai-workflow init "${project}" --upgrade`));
+      const adopted = await exists(join(project, '.ai-workflow'));
+      const recovery = adopted ? `ai-workflow init "${project}" --upgrade` : `ai-workflow init "${project}"`;
+      checks.push(check('project.contract', 'fail', `Project contract is missing: ${contractRelative} (${contractPath}).`, recovery));
     } else {
       checks.push(check('project.contract', 'pass', `Project contract is present: ${contractRelative} (${contractPath}).`));
     }

@@ -38,6 +38,7 @@ export interface WorkspaceAuditResult {
 interface AuditedRecord {
   name: string;
   repositoryPath: string;
+  recordPath: string;
   repository: WorkspaceRepository | undefined;
   record: WorkspaceExecutionRecord | undefined;
 }
@@ -99,6 +100,9 @@ function recordedCommits(record: WorkspaceExecutionRecord): string[] {
 async function checkRecordedCommits(entry: AuditedRecord, blockers: string[]): Promise<void> {
   const record = entry.record;
   if (record === undefined) return;
+  if (record.status === 'completed' && record.commit === undefined) {
+    blockers.push(`Completed record for repository "${entry.name}" is missing a delivery commit in ${entry.recordPath}`);
+  }
   const evidence: { sha: string; label: string }[] = [];
   if (record.commit !== undefined) evidence.push({ sha: record.commit, label: 'delivery commit' });
   if (record.root_tasks_commit !== undefined) evidence.push({ sha: record.root_tasks_commit, label: 'root tasks commit' });
@@ -187,8 +191,20 @@ async function checkExecutionAnchor(
     blockers.push(`Execution anchor worktree ${anchor.worktree} for repository "${entry.name}" has Git common directory ${actual ?? 'unresolved'}, expected ${expected ?? 'unresolved'} at ${entry.repositoryPath}`);
     return false;
   }
+  const expectedRef = `refs/heads/${anchor.branch}`;
   const head = await symbolicHead(anchor.worktree);
-  if (head !== `refs/heads/${anchor.branch}`) return false;
+  if (head !== expectedRef) {
+    let state: string;
+    if (head === undefined) {
+      state = (await gitLines(anchor.worktree, ['rev-parse', '--verify', 'HEAD'])) === undefined
+        ? 'an unreadable HEAD'
+        : 'a detached HEAD';
+    } else {
+      state = `the other branch ${head}`;
+    }
+    blockers.push(`Execution anchor worktree ${anchor.worktree} for repository "${entry.name}" must be on branch "${anchor.branch}" (${expectedRef}) but has ${state}`);
+    return false;
+  }
   const evidence = new Set<string>(recordedCommits(record));
   evidence.add(anchor.base_commit);
   const unreferenced = await gitLines(anchor.worktree, ['rev-list', anchor.branch, '--not', ...evidence]);
@@ -247,13 +263,20 @@ export async function auditWorkspace(planDirectory: string): Promise<WorkspaceAu
     const repositoryPath = resolve(join(root, repository.path));
     if (isAbsolute(repository.path) || !isStrictlyInside(root, repositoryPath)) {
       result.blockers.push(`Repository "${repository.name}" path "${repository.path}" resolves to ${repositoryPath}, which is not strictly inside the workspace root ${root}`);
-      audited.push({ name: repository.name, repositoryPath, repository, record: undefined });
+      audited.push({
+        name: repository.name,
+        repositoryPath,
+        recordPath: implementationRecordPath(root, repository.path, plan.planId),
+        repository,
+        record: undefined,
+      });
       continue;
     }
     const recordPath = implementationRecordPath(root, repository.path, plan.planId);
     audited.push({
       name: repository.name,
       repositoryPath,
+      recordPath,
       repository,
       record: await readRecordForAudit(recordPath, plan.planId, repository.name, result.blockers),
     });
@@ -264,6 +287,7 @@ export async function auditWorkspace(planDirectory: string): Promise<WorkspaceAu
   audited.push({
     name: RESERVED_ROOT,
     repositoryPath: root,
+    recordPath: rootRecordPath,
     repository: undefined,
     record: await readRecordForAudit(rootRecordPath, plan.planId, RESERVED_ROOT, result.blockers),
   });

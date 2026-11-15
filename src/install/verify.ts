@@ -1,5 +1,5 @@
 import { lstat, readFile, realpath, stat } from 'node:fs/promises';
-import { isAbsolute, join, relative, resolve } from 'node:path';
+import { isAbsolute, dirname, join, relative, resolve } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import { sha256 } from '../utils/hash.js';
 import type { Host } from '../workflow/types.js';
@@ -284,6 +284,8 @@ async function verifySkillsLink(home: string, host: Host, checks: InstallationCh
   }
   if (!info.isSymbolicLink()) return;
   const expectedPath = join(home, sharedSkillsRelative);
+  const relativeTarget = relative(dirname(path), expectedPath).replaceAll('\\', '/');
+  const recovery = `ln -sfn "${relativeTarget}" "${path}"`;
   let expected: string;
   try {
     expected = await realpath(expectedPath);
@@ -294,12 +296,12 @@ async function verifySkillsLink(home: string, host: Host, checks: InstallationCh
   try {
     resolved = await realpath(path);
   } catch {
-    checks.push(check(`install.skills-link.${host}`, 'fail', `Host-scoped skills link ${linkRelative} (${path}) is broken; expected it to resolve to ${sharedSkillsRelative} (${expectedPath}).`, `ln -sfn ../.agents/skills "${path}"`));
+    checks.push(check(`install.skills-link.${host}`, 'fail', `Host-scoped skills link ${linkRelative} (${path}) is broken; expected it to resolve to ${sharedSkillsRelative} (${expectedPath}).`, recovery));
     return;
   }
   checks.push(resolved === expected
     ? check(`install.skills-link.${host}`, 'pass', `Host-scoped skills link ${linkRelative} resolves to ${sharedSkillsRelative} (${expected}).`)
-    : check(`install.skills-link.${host}`, 'fail', `Host-scoped skills link ${linkRelative} (${path}) resolves to ${resolved}; expected ${sharedSkillsRelative} (${expected}).`, `ln -sfn ../.agents/skills "${path}"`));
+    : check(`install.skills-link.${host}`, 'fail', `Host-scoped skills link ${linkRelative} (${path}) resolves to ${resolved}; expected ${sharedSkillsRelative} (${expected}).`, recovery));
 }
 
 /**

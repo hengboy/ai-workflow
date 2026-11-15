@@ -152,6 +152,22 @@ describe('read-only doctor aggregate', () => {
     expect(changedPaths(beforeRuntime, await snapshotTree(runtime)), 'gate runtime directory must be unchanged').toEqual([]);
   });
 
+  it('recovers a completely uninitialized project with ordinary init and no --upgrade', async () => {
+    const project = await temporary('ai-workflow-doctor-uninitialized-');
+    projects.push(project);
+    const home = await installedHome(['claude']);
+    const runtime = await runtimeDirectory();
+    await writeStoredCheck(runtime, project, 'claude');
+
+    const report = await runDoctor({ project, home, runtimeDirectory: runtime });
+    const check = report.checks.find((item) => item.id === 'project.contract');
+
+    expect(check?.status).toBe('fail');
+    expect(check?.recovery, 'an uninitialized project recovers with ordinary init').toBe(`ai-workflow init "${project}"`);
+    expect(check?.recovery).not.toContain('--upgrade');
+    expect(report.valid).toBe(false);
+  });
+
   it('fails a missing contract with its exact path and a recovery command', async () => {
     const { project, home, runtime } = await healthyFixture();
     const relative = '.ai-workflow/AGENTS.md';
