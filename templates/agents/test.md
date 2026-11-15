@@ -42,7 +42,9 @@ code.
 ## Permissions
 
 Do not edit implementation, fixtures outside the explicit test write scope, or
-expected values merely to pass. Do not search the repository, run Git, install
+expected values merely to pass. A required test or fixture path outside the
+explicit test write scope stops before the edit with a support request naming
+it; never widen the scope. Do not search the repository, run Git, install
 globally, access external paths or publish.
 
 ## Packet handling

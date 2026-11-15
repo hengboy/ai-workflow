@@ -5621,6 +5621,57 @@
         "tests/unit/workflow-review-packet.test.ts"
       ],
       "shared_entry": false
+    },
+    {
+      "id": "plan-write-scope-completeness",
+      "name": "plan-write-scope-completeness",
+      "aliases": [
+        "plan write inventory",
+        "write scope completeness"
+      ],
+      "module_root": "root",
+      "entries": [
+        "templates/skills/coding/SKILL.md",
+        "templates/skills/plan-to-tasks/SKILL.md",
+        "templates/skills/plan-to-tasks/references/task.md",
+        "templates/skills/planning/SKILL.md",
+        "templates/skills/planning/references/plan.md"
+      ],
+      "symbols": [],
+      "related_files": [
+        ".ai-workflow/notes/implemented/process/2026-11-16-plan-write-scope-completeness.i18n.yaml",
+        ".ai-workflow/notes/implemented/process/2026-11-16-plan-write-scope-completeness.md",
+        ".ai-workflow/notes/implemented/process/2026-11-16-plan-write-scope-completeness.zh.md",
+        "MEMORY.md",
+        "README.md",
+        "templates/agents/backend.md",
+        "templates/agents/frontend.md",
+        "templates/agents/test.md"
+      ],
+      "tests": [
+        "tests/behavior/plan-write-scope-content.test.ts"
+      ],
+      "depends_on": [],
+      "relations": [],
+      "owner_role": "shared",
+      "responsibility": "Planning freezes a complete exact per-step write inventory, plan-to-tasks derives task scopes only from it, and coding stops before any out-of-scope edit.",
+      "read_scope": [
+        ".ai-workflow/notes/implemented/process/2026-11-16-plan-write-scope-completeness.i18n.yaml",
+        ".ai-workflow/notes/implemented/process/2026-11-16-plan-write-scope-completeness.md",
+        ".ai-workflow/notes/implemented/process/2026-11-16-plan-write-scope-completeness.zh.md",
+        "MEMORY.md",
+        "README.md",
+        "templates/agents/backend.md",
+        "templates/agents/frontend.md",
+        "templates/agents/test.md",
+        "templates/skills/coding/SKILL.md",
+        "templates/skills/plan-to-tasks/SKILL.md",
+        "templates/skills/plan-to-tasks/references/task.md",
+        "templates/skills/planning/SKILL.md",
+        "templates/skills/planning/references/plan.md",
+        "tests/behavior/plan-write-scope-content.test.ts"
+      ],
+      "shared_entry": true
     }
   ]
 }

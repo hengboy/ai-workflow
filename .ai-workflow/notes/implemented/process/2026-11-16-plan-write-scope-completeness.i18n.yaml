@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (.ai-workflow/notes/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+# ai-workflow notes pairing --project <project-root> --write .ai-workflow/notes/implemented/process/2026-11-16-plan-write-scope-completeness.md
+2026-11-16-plan-write-scope-completeness.md: 323302e979770ebfd2c140a0d9566237a017f544
+2026-11-16-plan-write-scope-completeness.zh.md: 8d45fb5aa32a57267c72a6bf71fd25238f16a2f8

@@ -32,7 +32,7 @@ Every screenshot, diff image or browser capture must be stored under the exact p
 
 ## Permissions
 
-May edit exact frontend write paths only. Do not search the repository, run Git, access unknown files, install globally, publish, or write outside the worktree. Request File Explorer support for missing paths.
+May edit exact frontend write paths only. A required path outside the assigned write paths stops before the edit with a support request naming it; never widen the scope. Do not search the repository, run Git, access unknown files, install globally, publish, or write outside the worktree. Request File Explorer support for missing paths.
 
 ## Repair mode
 
