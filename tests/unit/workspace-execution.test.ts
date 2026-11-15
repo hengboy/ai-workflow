@@ -142,8 +142,25 @@ describe('projectWorkspaceExecution', () => {
     });
     const afterPhaseTwo = await projectWorkspaceExecution(fixture.resolved);
     expect(afterPhaseTwo.phase).toBe(3);
-    expect(afterPhaseTwo.pending_tasks.map((task) => task.task)).toEqual(['task-004-c1']);
+    expect(afterPhaseTwo.pending_tasks).toEqual([]);
     expect(afterPhaseTwo.awaiting_delivery).toEqual(['app', 'beta']);
+
+    await writeChildRecord(fixture, 'packages/app', 'app', {
+      status: 'completed',
+      completed_at: COMPLETED_AT,
+      commit: SHA_APP_DELIVERY,
+      task_checkpoints: { 'task-001-a1': checkpoint(SHA_A) },
+    });
+    await writeChildRecord(fixture, 'packages/beta', 'beta', {
+      status: 'completed',
+      completed_at: COMPLETED_AT,
+      commit: SHA_B2,
+      task_checkpoints: { 'task-002-b1': checkpoint(SHA_B1), 'task-003-b2': { kind: 'no-change', head: SHA_B2 } },
+    });
+    const afterDelivery = await projectWorkspaceExecution(fixture.resolved);
+    expect(afterDelivery.phase).toBe(3);
+    expect(afterDelivery.pending_tasks.map((task) => task.task)).toEqual(['task-004-c1']);
+    expect(afterDelivery.awaiting_delivery).toEqual([]);
   });
 
   it('clears the barrier when a child is delivered and keeps the next phase pending', async () => {
@@ -162,6 +179,42 @@ describe('projectWorkspaceExecution', () => {
     expect(projection.pending_tasks.map((task) => task.task)).toEqual(['task-003-b2']);
     expect(projection.awaiting_delivery).toEqual([]);
     expect(projection.completed).toBe(false);
+  });
+
+  it('keeps the phase pending until an undelivered dependency is delivered', async () => {
+    const fixture = await build();
+    await writeChildRecord(fixture, 'packages/app', 'app', { task_checkpoints: { 'task-001-a1': checkpoint(SHA_A) } });
+    await writeChildRecord(fixture, 'packages/beta', 'beta', { task_checkpoints: { 'task-002-b1': checkpoint(SHA_B1) } });
+    await writeChildRecord(fixture, 'packages/beta', 'beta', {
+      task_checkpoints: { 'task-002-b1': checkpoint(SHA_B1), 'task-003-b2': { kind: 'no-change', head: SHA_B2 } },
+    });
+
+    const afterPhaseTwo = await projectWorkspaceExecution(fixture.resolved);
+    expect(afterPhaseTwo.phase).toBe(3);
+    expect(afterPhaseTwo.pending_tasks).toEqual([]);
+    expect(afterPhaseTwo.awaiting_delivery).toEqual(['app', 'beta']);
+
+    await writeChildRecord(fixture, 'packages/app', 'app', {
+      status: 'completed',
+      completed_at: COMPLETED_AT,
+      commit: SHA_APP_DELIVERY,
+      task_checkpoints: { 'task-001-a1': checkpoint(SHA_A) },
+    });
+    const afterAppOnly = await projectWorkspaceExecution(fixture.resolved);
+    expect(afterAppOnly.phase).toBe(3);
+    expect(afterAppOnly.pending_tasks).toEqual([]);
+    expect(afterAppOnly.awaiting_delivery).toEqual(['beta']);
+
+    await writeChildRecord(fixture, 'packages/beta', 'beta', {
+      status: 'completed',
+      completed_at: COMPLETED_AT,
+      commit: SHA_B2,
+      task_checkpoints: { 'task-002-b1': checkpoint(SHA_B1), 'task-003-b2': { kind: 'no-change', head: SHA_B2 } },
+    });
+    const afterBoth = await projectWorkspaceExecution(fixture.resolved);
+    expect(afterBoth.phase).toBe(3);
+    expect(afterBoth.pending_tasks.map((task) => task.task)).toEqual(['task-004-c1']);
+    expect(afterBoth.awaiting_delivery).toEqual([]);
   });
 
   it('marks the workspace completed only when the reserved root record is completed', async () => {

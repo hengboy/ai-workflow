@@ -169,8 +169,16 @@ async function analyzeExecution(resolved: ResolvedWorkspacePlan): Promise<Execut
 export async function projectWorkspaceExecution(resolved: ResolvedWorkspacePlan): Promise<ExecutionProjection> {
   const analysis = await analyzeExecution(resolved);
   const { schedule, taskById, states, order, doneTasks } = analysis;
+  const dependsOnByRepository = new Map<string, string[]>();
+  for (const repository of resolved.manifest?.repositories ?? []) dependsOnByRepository.set(repository.name, repository.dependsOn);
   const firstPendingIndex = schedule.phases.findIndex((phase) => phase.parallel.some((id) => !doneTasks.has(id)));
   let phase: number | null = null;
+  const awaiting_delivery: string[] = [];
+  for (const name of order) {
+    const repoTasks = repositoryTasks(resolved.tasks, name);
+    if (repoTasks.length === 0 || analysis.delivered.has(name)) continue;
+    if (repoTasks.every((task) => doneTasks.has(task.id))) awaiting_delivery.push(name);
+  }
   const pending_tasks: ExecutionPendingTask[] = [];
   if (firstPendingIndex !== -1) {
     phase = firstPendingIndex + 1;
@@ -178,6 +186,8 @@ export async function projectWorkspaceExecution(resolved: ResolvedWorkspacePlan)
       if (doneTasks.has(id)) continue;
       const task = taskById.get(id);
       const repo = task?.repo ?? '';
+      const dependencies = dependsOnByRepository.get(repo) ?? [];
+      if (dependencies.some((dependency) => !analysis.delivered.has(dependency))) continue;
       const state = states.get(repo);
       pending_tasks.push({
         task: id,
@@ -186,12 +196,6 @@ export async function projectWorkspaceExecution(resolved: ResolvedWorkspacePlan)
         plan_path: state?.planPath ?? join(resolved.root, '.ai-workflow', 'plans', resolved.plan.planId),
       });
     }
-  }
-  const awaiting_delivery: string[] = [];
-  for (const name of order) {
-    const repoTasks = repositoryTasks(resolved.tasks, name);
-    if (repoTasks.length === 0 || analysis.delivered.has(name)) continue;
-    if (repoTasks.every((task) => doneTasks.has(task.id))) awaiting_delivery.push(name);
   }
   return { phase, pending_tasks, awaiting_delivery, blockers: analysis.blockers, completed: analysis.rootCompleted };
 }
@@ -451,7 +455,6 @@ export async function checkpointWorkspace(planDirectory: string, repository: str
       if (existing.reviewed_commit === undefined) return refuse([`delivery requires a reviewed commit for repository "${repository}"`]);
       if (repository === RESERVED_ROOT) {
         const record: WorkspaceExecutionRecord = { ...existing, root_tasks_commit: event.commit };
-        delete record.execution;
         delete record.reviewed_commit;
         await writeWorkspaceRecord(recordPath, record);
         return successful(record);
@@ -467,7 +470,6 @@ export async function checkpointWorkspace(planDirectory: string, repository: str
     if (existing.reviewed_commit === undefined) return refuse(['finalization requires a reviewed commit']);
     const completedAt = nowCst();
     const record: WorkspaceExecutionRecord = { ...existing, status: 'completed', completed_at: completedAt, commit: event.commit };
-    delete record.execution;
     delete record.reviewed_commit;
     await writeWorkspaceRecord(recordPath, record);
     return successful(record);

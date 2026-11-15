@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { execFile } from 'node:child_process';
-import { appendFile, mkdir, rename, rm } from 'node:fs/promises';
+import { appendFile, mkdir, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { promisify } from 'node:util';
 import { auditWorkspace, type WorkspaceAuditResult } from '../../src/workspace/audit.js';
@@ -516,6 +516,45 @@ describe('auditWorkspace', () => {
     const text = expectStrings(output.blockers, 'blockers').join('\n');
     expect(text).toContain('app');
     expect(text).toMatch(/divergen|slice|spec\.md/i);
+    expect(changedPaths(before, await snapshotTree(root))).toEqual([]);
+  }, TIMEOUT);
+
+  it('accepts a completed record whose worktree was cleaned up', async () => {
+    const { root, directory, app } = await buildWorkspace();
+    await distributeSlices(directory);
+    const head = await headOf(app);
+    const worktree = await addWorktreeInside(root, app);
+    await writeRecord(app, {
+      ...baseRecord(),
+      status: 'completed',
+      completed_at: COMPLETED_AT,
+      commit: head,
+      execution: anchorOf(root, worktree, head),
+      task_checkpoints: { 'task-001-app': { kind: 'commit', commit: head } },
+    });
+    await releaseWorktree(app, worktree);
+
+    const before = await snapshotTree(root);
+    const output = view(await auditWorkspace(directory));
+
+    expect(output.valid).toBe(true);
+    const blockers = expectStrings(output.blockers, 'blockers');
+    expect(blockers.some((blocker) => /missing worktree|worktree .* does not exist/i.test(blocker))).toBe(false);
+    expect(changedPaths(before, await snapshotTree(root))).toEqual([]);
+  }, TIMEOUT);
+
+  it('blocks an active participating repository with uncommitted source changes', async () => {
+    const { root, directory, app } = await buildWorkspace();
+    await distributeSlices(directory);
+    await writeFile(join(app, 'dirty-source.txt'), 'dirty\n');
+
+    const before = await snapshotTree(root);
+    const output = view(await auditWorkspace(directory));
+
+    expect(output.valid).toBe(false);
+    const text = expectStrings(output.blockers, 'blockers').join('\n');
+    expect(text).toContain('app');
+    expect(text).toMatch(/uncommitted|dirty|clean state/i);
     expect(changedPaths(before, await snapshotTree(root))).toEqual([]);
   }, TIMEOUT);
 });

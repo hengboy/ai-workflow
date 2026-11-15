@@ -4,6 +4,7 @@ import { readPlan, readTasks } from './parse.js';
 import { readWorkspaceManifest } from './workspace.js';
 import { RESERVED_ROOT } from '../workspace/record.js';
 import { workspaceStatus } from '../workspace/status.js';
+import type { ExecutionProjection } from '../workspace/execution.js';
 
 export interface DispatchRequest {
   planDirectory: string;
@@ -91,18 +92,22 @@ export async function planDispatch(request: DispatchRequest): Promise<DispatchRe
 
   const repositoryPaths = new Map<string, string>();
   let selectedPhase: number;
+  let execution: ExecutionProjection | undefined;
   if (isWorkspace) {
     const status = await workspaceStatus(planDirectory);
     if (!status.valid) throw new Error(`Invalid workspace status: ${(status.errors ?? ['unknown workspace status error']).join('; ')}`);
     const manifest = await readWorkspaceManifest(planDirectory);
     if (manifest === undefined || manifest.role !== 'workspace') throw new Error(`Missing or invalid workspace manifest: ${join(planDirectory, 'workspace.yaml')}`);
     for (const repository of manifest.repositories) repositoryPaths.set(repository.name, repository.path);
+    execution = status.execution;
+    if (execution !== undefined && execution.blockers.length > 0) {
+      throw new Error(`Workspace execution has blockers: ${execution.blockers.join('; ')}`);
+    }
     const rootOnly = manifest.repositories.every((repository) => repository.name === RESERVED_ROOT);
     if (request.phase === undefined) {
       if (rootOnly) {
         selectedPhase = 1;
       } else {
-        const execution = status.execution;
         if (execution === undefined || execution.phase === null || execution.completed) throw new Error(`Workspace plan has no pending phase: ${planDirectory}`);
         selectedPhase = execution.phase;
       }
@@ -117,13 +122,22 @@ export async function planDispatch(request: DispatchRequest): Promise<DispatchRe
     throw new Error(`Unknown phase ${selectedPhase}: ${planDirectory} declares ${schedule.phases.length} phase(s)`);
   }
   const phaseTaskIds = schedule.phases[selectedPhase - 1]?.parallel ?? [];
+  const automaticDeliveryBarrier = request.phase === undefined && execution !== undefined;
+  const pendingTaskIds = new Set((execution?.pending_tasks ?? []).map((task) => task.task));
+  const deliveryBarrierError = (): Error => new Error(
+    `Phase ${selectedPhase} is waiting for repository delivery; awaiting_delivery: ${(execution?.awaiting_delivery ?? []).join(', ') || 'none'}`,
+  );
+  const effectiveTaskIds = automaticDeliveryBarrier ? phaseTaskIds.filter((id) => pendingTaskIds.has(id)) : phaseTaskIds;
 
-  let selectedTaskIds = phaseTaskIds;
+  let selectedTaskIds = effectiveTaskIds;
   if (request.task !== undefined) {
     const task = tasks.find((candidate) => candidate.id === request.task);
     if (task === undefined) throw new Error(`Unknown task "${request.task}": ${planDirectory}`);
     if (!phaseTaskIds.includes(task.id)) throw new Error(`Task "${task.id}" is outside the selected phase ${selectedPhase}`);
+    if (automaticDeliveryBarrier && !pendingTaskIds.has(task.id)) throw deliveryBarrierError();
     selectedTaskIds = [task.id];
+  } else if (automaticDeliveryBarrier && phaseTaskIds.length > 0 && effectiveTaskIds.length === 0) {
+    throw deliveryBarrierError();
   }
 
   const taskById = new Map(tasks.map((task) => [task.id, task]));

@@ -187,6 +187,47 @@ describe('ai-workflow plan report', () => {
     expect(report.execution?.pending_tasks.map((task) => task.task)).toEqual(['task-001-app', 'task-002-lib']);
   });
 
+  it('counts a root-only workspace root task delivery range', async () => {
+    const root = await temporary('ai-workflow-report-cli-root-only-range-');
+    const planId = '20260930-report-root-only-range';
+    const directory = await workspacePlanFixture(root, {
+      planId,
+      requirements: ['REQ-001'],
+      acceptanceCriteria: ['AC-001'],
+      workspaceRepos: [{ name: 'workspace', path: '.', dependsOn: [] }],
+      tasks: [
+        { id: 'task-001-root', repo: 'workspace', requirements: ['REQ-001'], acceptanceCriteria: ['AC-001'], writeScope: ['src/root.ts'] },
+      ],
+      phases: [['task-001-root']],
+      manifest: {
+        planId,
+        role: 'workspace',
+        repositories: [{ name: 'workspace', path: '.', dependsOn: [], requirements: ['REQ-001'], acceptanceCriteria: ['AC-001'] }],
+      },
+    });
+    await gitInit(root);
+    const base = await headOf(root);
+    const final = await commitFile(root, 'src/root.ts', 'export const root = true;\n', 'root delivery');
+    const startedAt = '2026-10-01T00:00:00.000Z';
+    const completedAt = '2026-10-01T00:05:00.000Z';
+    await writeRecord(root, '.', planId, {
+      plan_id: planId,
+      status: 'completed',
+      started_at: startedAt,
+      completed_at: completedAt,
+      root_tasks_commit: final,
+      execution: { ...executionAnchor('workspace', base), repository: 'workspace' },
+    });
+
+    const result = await runCli(['plan', 'report', '--plan', directory]);
+
+    expect(result.code, outputOf(result)).toBe(0);
+    const report = JSON.parse(result.stdout) as PlanReport;
+    expect(report.status).toBe('completed');
+    expect(report.commit_count).toBe(1);
+    expect(report.commit_count_reason).toBeNull();
+  });
+
   it('prints the real commit count for a completed workspace plan', async () => {
     const root = await temporary('ai-workflow-report-cli-completed-');
     const directory = await workspacePlanFixture(root, workspaceSpec());

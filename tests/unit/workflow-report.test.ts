@@ -239,6 +239,42 @@ describe('planReport', () => {
     expect(report.status).toBe('unknown');
   });
 
+  it('counts a reports/review evidence directory as one review round when no review-round files exist', async () => {
+    const root = await temporary('ai-workflow-report-review-evidence-dir-');
+    const directory = await frozenPlan(root, true);
+    const review = join(directory, 'reports', 'review');
+    await mkdir(review, { recursive: true });
+    await writeFile(join(review, 'base.diff'), 'diff --git a/a b/a\n');
+
+    const report = (await planReport(directory)) as PlanReport;
+
+    expect(report.review_rounds).toBe(1);
+  });
+
+  it('keeps review-round file counting authoritative over a review directory', async () => {
+    const root = await temporary('ai-workflow-report-review-rounds-authoritative-');
+    const directory = await frozenPlan(root, true);
+    const reports = join(directory, 'reports');
+    await mkdir(join(reports, 'review'), { recursive: true });
+    await writeFile(join(reports, 'review-round-1.md'), '# Round 1\n');
+    await writeFile(join(reports, 'review-round-2.md'), '# Round 2\n');
+    await writeFile(join(reports, 'review', 'base.diff'), 'diff --git a/a b/a\n');
+
+    const report = (await planReport(directory)) as PlanReport;
+
+    expect(report.review_rounds).toBe(2);
+  });
+
+  it('treats an empty reports/review directory as unknown review rounds', async () => {
+    const root = await temporary('ai-workflow-report-review-dir-empty-');
+    const directory = await frozenPlan(root, true);
+    await mkdir(join(directory, 'reports', 'review'), { recursive: true });
+
+    const report = (await planReport(directory)) as PlanReport;
+
+    expect(report.review_rounds).toBe('unknown');
+  });
+
   it('reports an in-progress workspace plan with its execution projection', async () => {
     const root = await temporary('ai-workflow-report-in-progress-');
     const directory = await workspacePlanFixture(root, workspaceSpec());

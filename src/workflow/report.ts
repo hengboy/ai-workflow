@@ -66,7 +66,16 @@ async function reviewRounds(planDirectory: string): Promise<number | typeof UNKN
     throw error;
   }
   const rounds = entries.filter((entry) => entry.isFile() && entry.name.startsWith('review-round')).length;
-  return rounds > 0 ? rounds : UNKNOWN;
+  if (rounds > 0) return rounds;
+  let reviewEntries;
+  try {
+    reviewEntries = await readdir(join(planDirectory, 'reports', 'review'));
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT' || code === 'ENOTDIR') return UNKNOWN;
+    throw error;
+  }
+  return reviewEntries.length > 0 ? 1 : UNKNOWN;
 }
 
 function wholeSeconds(startedAt: string, completedAt: string): number | typeof UNKNOWN {

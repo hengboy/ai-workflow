@@ -361,6 +361,8 @@ describe('workspace checkpoint root lifecycle', () => {
     expect(record.status).toBe('in-progress');
     expect(record.root_tasks_commit).toBe(SHA_ROOT_DELIVERY);
     expect(record.task_checkpoints).toMatchObject({ 'task-001-root': { kind: 'commit', commit: SHA_ROOT_TASK } });
+    expect(record.execution).toMatchObject({ purpose: 'tasks', base_commit: SHA_BASE });
+    expect(record.reviewed_commit).toBeUndefined();
     const startedAt = record.started_at;
 
     const finalizationStart = await checkpoint(planDirectory, 'workspace', startEvent(root, 'workspace', { purpose: 'finalization' }));
@@ -370,6 +372,7 @@ describe('workspace checkpoint root lifecycle', () => {
     expect(record.root_tasks_commit).toBe(SHA_ROOT_DELIVERY);
     expect(record.task_checkpoints).toMatchObject({ 'task-001-root': { kind: 'commit', commit: SHA_ROOT_TASK } });
     expect(record.started_at).toBe(startedAt);
+    expect(record.execution).toMatchObject({ purpose: 'finalization', base_commit: SHA_BASE });
     expect(record.reviewed_commit).toBeUndefined();
 
     const finalizationReviewed = await checkpoint(planDirectory, 'workspace', { event: 'reviewed', commit: SHA_FINAL_REVIEW });
@@ -382,6 +385,7 @@ describe('workspace checkpoint root lifecycle', () => {
     expect(record.completed_at).toMatch(/\+08:00$/);
     expect(record.commit).toBe(SHA_FINAL);
     expect(record.root_tasks_commit).toBe(SHA_ROOT_DELIVERY);
+    expect(record.execution).toMatchObject({ purpose: 'finalization', base_commit: SHA_BASE });
   }, TIMEOUT);
 
   it('finalizes a workspace with zero root tasks after the child is delivered', async () => {
