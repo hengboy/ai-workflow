@@ -24,9 +24,9 @@ If the project root or goal is missing, ask for that information before drafting
 
 ## Navigation-first context
 
-Before repository context work, directly read `.ai-workflow/AGENTS.md` and `MEMORY.md`; the contract governs the whole project and every participating agent, and an absent `MEMORY.md` is a legal state. Use the navigation catalog when locating an affected feature. Read `.ai-workflow/index/navigation.json` or its `.ai-workflow/index/navigation.md` catalog only for a needed bounded entry, an authorized index investigation, or a locator fallback; never eagerly read both navigation files.
+Before repository context work, directly read `.ai-workflow/AGENTS.md` and `MEMORY.md`; an absent `MEMORY.md` is a legal state. Use the navigation catalog when locating an affected feature. Read `.ai-workflow/index/navigation.json` or its `.ai-workflow/index/navigation.md` catalog only for a needed bounded entry, an authorized index investigation, or a locator fallback.
 
-For a known feature run `ai-workflow context locate --project <absolute-project-root> --feature <id> --verify`, then read only its exact `read_order`. The root argument is the normalized project directory path, never its directory name. Do not search. For `missing_index`, `miss`, `stale`, `invalid` or `ambiguous`, request File Explorer with the original goal, status/reason and authorized module roots; `stale`, `invalid` and `ambiguous` results need bounded resolution before reliance. A `hit` does not expand the plan's write scope.
+For a known feature run `ai-workflow context locate --project <absolute-project-root> --feature <id> --verify`, then read only its exact `read_order`. The root argument is the normalized project directory path, never its directory name. Do not search. For `missing_index`, `miss`, `stale`, `invalid` or `ambiguous`, request File Explorer with the original goal, status/reason and authorized module roots.
 
 Each task's `read_scope` is `.ai-workflow/AGENTS.md` and `MEMORY.md` plus exact locator paths and exact bounded paths for relevant notes/governance; include navigation JSON only when the task genuinely needs a bounded entry or an authorized index maintenance. It must not contain `src/`, `tests/` or the project root, and an old task scope that contains navigation JSON remains valid reading authorization.
 
@@ -34,7 +34,7 @@ Each task's `read_scope` is `.ai-workflow/AGENTS.md` and `MEMORY.md` plus exact 
 
 At skill session start, invoke exactly once for the actual project root:
 `ai-workflow sync-hook --host <current-host> --phase --project <actual-root>`.
-Follow `decision`, not the exit code (0 even on denial): `deny` or a `conflict`/`failed` `report.status` stops the phase; warnings proceed without a freshness claim; `skip` means no adoption.
+Follow `decision`, not the exit code: `deny` or a `conflict`/`failed` `report.status` stops the phase, and `skip` means no adoption.
 Later steps, phases and native host events reuse that root's stored result with no source request; a missing, corrupt or unreadable check allows with visible no-freshness context.
 After a safe patch changes the contract or owned workflow rules, re-read `.ai-workflow/AGENTS.md` before ordinary work; frozen `spec.md`, `plan.md` and task files are never synchronization input, and contradictory new authority stops the phase with a bounded support request, never a broader frozen scope.
 
@@ -120,10 +120,7 @@ The six-file deliverable lives at `.ai-workflow/plans/<YYYYMMDD-english-slug>/`:
 - `spec.md` + `spec.zh.md` + `spec.i18n.yaml`: goal, non-goals, scenarios, continuous REQ/AC, Given/When/Then evidence, RED criteria, boundary counterexamples and validation layers.
 - `plan.md` + `plan.zh.md` + `plan.i18n.yaml`: every REQ/AC mapping, implementation order, exact read paths and complete exact file write inventories, checks, compatibility, rollback and responsible native role.
 
-Each document is a complete bilingual triplet. Only English carries YAML frontmatter (`plan_id`, `status: frozen`, `created_at`, nullable `supersedes`, `requirement_count`, `acceptance_criteria_count`, `digest`) and supplies machine REQ/AC IDs, counts and digests. The Chinese `.zh.md` has no frontmatter; it starts with the same English title followed by `[English](<doc>.md) | 中文`. English follows its title with `English | [中文](<doc>.zh.md)`. Mirror headings, structure, tables, lists and link targets; only prose differs. The `.i18n.yaml` is a consistency record, never a third prose side.
-
-Plan steps use `Responsible role`; `plan.md` itself does not require a
-`surface` attribute. Surface routing is added only to generated task files.
+Each document is a complete bilingual triplet. Only English carries YAML frontmatter (`plan_id`, `status: frozen`, `created_at`, nullable `supersedes`, `requirement_count`, `acceptance_criteria_count`, `digest`) and supplies machine REQ/AC IDs, counts and digests. The Chinese `.zh.md` has no frontmatter and mirrors the English headings, structure, tables, lists and link targets with only prose differing; the `.i18n.yaml` is a consistency record, never a third prose side.
 
 Before drafting, read [the specification template](references/spec.md), [the implementation plan template](references/plan.md) and [the frozen-plan digest protocol](references/digest.md). Preserve their contracts; replace illustrative content with approved requirements and repository-specific evidence. A changed frozen requirement creates a new plan ID; never edit a frozen plan in place.
 
@@ -148,15 +145,15 @@ The planning primary owns writes; Spec Review is read-only. Planning artifacts a
 
 Route note format, lifecycle, supersession and archive governance through `.ai-workflow/notes/README.md`, reached via `.ai-workflow/notes/AGENTS.md`.
 
-Schedule note work when the change lands a lasting decision whose rationale code, tests and existing documentation cannot adequately explain; then the `plan.md` must contain an explicit step that adds or updates the relevant note, and the plan must align `MEMORY.md` with that note in the same change. Local, mechanical, UI, copy and formatting changes without such lasting rationale are exempt. Major unimplemented work is scheduled as `proposed`; a change that lands a decision moves its note to `implemented` and rewrites the body to delivered facts.
+Schedule note work when the change lands a lasting decision whose rationale code, tests and existing documentation cannot adequately explain; then the `plan.md` must contain an explicit step that adds or updates the relevant note, and the plan must align `MEMORY.md` with that note in the same change. Local, mechanical, UI, copy and formatting changes without such lasting rationale are exempt.
 
 When the change adds a note or changes a recorded decision, `plan.md` must list the exact existing triplets and active inbound-link paths whose supersession is assessed, and its write scope must include those exact paths for the affected disposition. Never schedule a repository-wide audit or defer a known match to later cleanup.
 
 ## Completion checklist
 
 - The user approved the final full inventory, including any repaired review findings.
-- Every step names a complete exact write inventory: no directory, wildcard, glob, unresolved placeholder or vague "related files" entry; affected tests, fixtures, barrels and registries, schemas and migrations, tracked generated files, documentation, navigation, `MEMORY.md`, note triple sides and rename or delete endpoints are included.
-- Every plan that lands a lasting decision whose rationale code, tests and existing documentation cannot adequately explain schedules its note work and aligns `MEMORY.md`; a plan that adds a note or changes a recorded decision lists the exact existing triplets and active inbound-link paths whose supersession it assesses; local, mechanical, UI, copy and formatting changes without such lasting rationale are exempt.
+- Every step carries the complete exact write inventory required by `## Write-scope completeness`.
+- Note scheduling and supersession follow `## Agent Notes` above.
 - The six-file contract and single-review workflow are complete: shared plan ID/counts, mirrored structure, matching English digests, recorded pairs and passing `ai-workflow plan validate --plan <directory>`.
 - Planning ends at the frozen plan and never starts implementation: report the absolute project or workspace root, the frozen plan directory and the `plan validate` result, then route by `workspace_repos`.
   - A plan declaring at least one non-root participating repository must be split by plan-to-tasks before implementation. Immediately after the frozen pair passes `ai-workflow plan validate --plan <directory>`, the Completion checklist automatically invokes the `plan-to-tasks` preparation procedure in this session with the absolute frozen plan directory: show the complete approval preview, obtain explicit approval, write the task triplets and their pair records, `tasks/execution-order.yaml` and `workspace.yaml`, pass the final `ai-workflow plan validate --plan <directory>`, then run `ai-workflow workspace distribute --plan <directory>` for every participating repository and require `ai-workflow workspace status --plan <directory>` to report valid with every participating slice present. The task set is frozen only after that full distribution; report each participant's name, path, `depends_on` and slice state and the frozen delivery order, then tell the user to start a new session at <workspace-root> and invoke the coding skill with the absolute frozen plan directory to implement the frozen plan.
