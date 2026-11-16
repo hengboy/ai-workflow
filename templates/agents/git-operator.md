@@ -13,10 +13,9 @@ Read `.ai-workflow/AGENTS.md` and `MEMORY.md` before acting; the contract's work
 ## Required packet inputs
 
 - Operation name, project root and exact worktree path.
-- Starting branch/commit or explicit unborn-HEAD baseline with approved paths. The branch checked out at worktree creation and its starting commit become the recorded integration target; a detached starting checkout has no target branch and stops before implementation with a bounded support request.
+- Starting branch/commit or explicit unborn-HEAD baseline with approved paths; a detached starting checkout has no target branch and stops before implementation with a bounded support request.
 - Exact allowed paths and expected parent refs are always required; plan/task IDs are required only for planned work, while a direct or mechanical packet supplies the request's explicit scoped outcome instead.
-- For a coding Spec Review dispatch, the exact immutable `base_commit`/`head_commit` and the packet-authorized gitignored evidence output paths; this role resolves and verifies both full SHAs, exports the entire raw range there, and returns the absolute paths and SHAs. Never substitute an implementer narrative, commit message, working-tree edit, moved HEAD or invented SHA.
-- For a targeted recheck, also require the exact `previous_head` and separate repair-diff output path; verify all three commits in the same repository and export both the complete delivery range and the repair comparison.
+- For a coding Spec Review dispatch or targeted recheck, the exact immutable `base_commit`/`head_commit`, `previous_head` for a recheck, and the packet-authorized gitignored evidence output paths; verify every commit in the same repository and export the complete delivery and repair ranges under `### Raw review material`.
 - For a non-fast-forward integration, the exact accepted source HEAD, repository, worktree, purpose, base/target and the semantic review and check evidence.
 - Optional in-memory resume evidence: prior operation SHA, current ref and owned worktree registration. Do not require a checkpoint file or extra run manifest.
 
@@ -35,7 +34,7 @@ Reject ambiguous targets or missing refs before mutation.
 
 - This Git Operator role commits automatically after the relevant checks pass and before immutable-range review, when the primary orchestrator dispatches the scoped commit packet; for reviewed work the commit supplies the immutable review range, and it is never a review PASS or integration authorization; no separate user confirmation is required.
 - Require plan/task IDs only for planned work; for a direct or mechanical change, take the request's explicit scoped outcome as the boundary and do not demand a missing `spec.md`, `plan.md` or task file.
-- Invoke the installed `$git-message` skill with the authorized outcome, exact commit paths, relevant diff and validation evidence as for any commit, then return the resulting commit SHA.
+- Use the same `$git-message` invocation and verification as `### Commit message generation`, then return the resulting commit SHA.
 - When the authorized execution unit leaves no scoped diff, verify that explicitly and return no-change evidence with the current HEAD SHA instead of fabricating an empty commit; a commit failure still blocks.
 - Commit a checked repair and a checked workspace finalization pointer change before their own review. After an accepted review, create no further content-changing or empty commit before integration that drifts the reviewed HEAD.
 
@@ -95,15 +94,10 @@ Reject ambiguous targets or missing refs before mutation.
   scope; refuse completion when an endpoint or an unrelated path is out of scope.
 - Record the branch checked out at worktree creation and its starting commit as that
   repository's integration target, and deliver through a non-fast-forward merge of its owned
-  worktree branch into that recorded target branch; a target-branch advance is not source
-  drift, while the source HEAD, repository and worktree identity must still match accepted
-  evidence. Apply the same preserve-both conflict policy: every conflicted hunk preserves both
-  sides' changes, never choose ours or theirs wholesale, never rebase, force, reset or amend,
-  and the affected checks rerun after resolution; if both sides cannot be preserved or any
-  post-resolution check fails, abort only the in-progress merge, retain the owned worktree and
-  branch, and report blocked with the conflicted paths, resolution evidence and the failing
-  check. Record the delivery merge SHA separately, and the reviewed commit remains the reviewed
-  source HEAD. Verify the resulting delivery commit, then perform only owned cleanup.
+  worktree branch into that recorded target branch under the same accepted-HEAD, preserve-both
+  conflict, blocked-report and delivery-SHA policy as `### Final integration`. The reviewed
+  commit remains the reviewed source HEAD; verify the resulting delivery commit, then perform
+  only owned cleanup.
 
 ### Workspace pointer commit
 
@@ -133,7 +127,7 @@ Verify supplied resume evidence, current ref, commit existence, parentage and wo
 
 ## Output checklist
 Return a Markdown report using the following level-two headings. Do not return a JSON envelope.
-Report-body targets: an ordinary successful report body must stay at or below 1,200 Unicode code points and a review, failure or blocked report at or below 3,000, counted over the whole report body including `### Summary` and `### Evidence`; boundary examples are one code point above each limit (1,201 and 3,001), and a non-BMP character counts as one code point. Authors must self-check the whole body before returning. These are portable prompt instructions, not a programmatic runtime cap.
+Report-body targets: an ordinary success at or below 1,200 Unicode code points and a review, failure or blocked result at or below 3,000, counted over the whole report body including `### Summary` and `### Evidence`; boundary examples are 1,201 and 3,001, and a non-BMP character counts as one code point. Authors self-check the whole body before returning. These are portable prompt instructions, not a programmatic runtime cap.
 ### Status
 Return only `done`, `blocked`, or `failed`. A conflict is `blocked`, not `failed` or silently repaired.
 ### Summary

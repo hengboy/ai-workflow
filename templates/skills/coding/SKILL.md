@@ -36,19 +36,7 @@ still executes as one coding execution unit with its worktree and Git Operator
 commit, and it keeps the mandatory project-local temporary worktree at
 `<project>/.worktrees/<name>`: implement, validate and commit inside it, then
 merge back into the recorded target branch, so only the planning artifacts and
-the dual-axis review are skipped. At worktree creation Git Operator records the
-branch checked out at that moment and its starting commit as the integration
-target; after checks pass it merges the worktree branch into that recorded target
-branch with a non-fast-forward merge. A target-branch advance is not source drift;
-the source HEAD, repository and worktree identity must still match accepted
-evidence, and a detached starting checkout stops before implementation with a
-bounded support request. On a merge conflict Git Operator reconciles every
-conflicted hunk by preserving both sides' changes, never chooses ours or theirs
-wholesale, never rebases, forces, resets or amends, and the affected checks rerun
-after resolution; if both sides cannot be preserved or any post-resolution check
-fails, it aborts only the in-progress merge, retains the owned worktree and
-branch, and reports blocked with the conflicted paths, resolution evidence and
-the failing check. That same automatic commit gate covers planned, direct and
+the dual-axis review are skipped. That same automatic commit gate covers planned, direct and
 mechanical changes alike. After its relevant checks pass, the primary automatically delegates the
 scoped local commit to the `git-operator` sub-agent (Git Operator), with no separate
 commit confirmation; that commit supplies the review range and is not a review PASS
@@ -112,9 +100,7 @@ planning-only session still ends at its handoff.
   and no measured performance gain is claimed.
 - Delegated sub-agent results keep the `## Output checklist` Markdown shape —
   `### Status`, `### Summary`, `### Evidence` and `### Support Requests`; File Explorer
-  keeps `### Found Paths` — and add upper bounds: each `### Evidence` entry carries the
-  absolute path of the produced artifact or an explicit report reference plus at most one
-  sentence of conclusion, with no embedded diffs, logs, JSON bodies or code blocks.
+  keeps `### Found Paths`.
 - Delegated reports target the whole report body: at most 1,200 Unicode code points for an
   ordinary success and at most 3,000 for a review, failure or blocked result, including
   `### Summary` and `### Evidence`, with boundary examples one code point above each limit
@@ -165,10 +151,7 @@ After a safe patch changes the contract or owned rules, re-read `.ai-workflow/AG
 
 ## Preconditions
 
-- Explicitly read `.ai-workflow/AGENTS.md` and, unless this is Spec Review, `MEMORY.md`, or receive complete context injection, before acting; a demonstrably complete same-version native injection counts as loading, while uncertain or partial injection requires explicit reads. Load navigation only for an authorized lookup or a needed bounded entry; never eagerly read both navigation files merely because the project has them. Spec Review is the exception and follows the input boundary in its role file. The contract binds every agent. Read frozen `spec.md` and `plan.md` for planned work; a direct or mechanical change uses the request's explicit scope and acceptance evidence as its boundary.
-- A plan may be implemented whole or through split tasks. An assigned
-  `tasks/<taskId>.md` permits only its exact read/write scopes and declared
-  commands; an unsplit plan uses its explicit scope and acceptance criteria.
+- Explicitly read `.ai-workflow/AGENTS.md` and, unless this is Spec Review, `MEMORY.md`, or receive complete context injection, before acting; a demonstrably complete same-version native injection counts as loading, while uncertain or partial injection requires explicit reads. Read frozen `spec.md` and `plan.md` for planned work; an unsplit plan uses its explicit scope and acceptance criteria, while a direct or mechanical change uses the request's explicit scope and acceptance evidence as its boundary.
 - Before the first edit of each execution unit, compare every intended created,
   modified, deleted or renamed path with the frozen write scope. A path outside
   it is never written silently: classify it under `## Bounded scope amendment`,
@@ -191,14 +174,8 @@ After a safe patch changes the contract or owned rules, re-read `.ai-workflow/AG
   branch checked out at that moment and its starting commit as the integration target,
   then materialize the project's entire gitignored state into it except `.worktrees/`.
   `.ai-workflow/plans/` and dependencies stay visible and single-source at the project root;
-  `MEMORY.md`, navigation and notes arrive through Git. Every coding execution unit
-  implements, validates and commits inside that single worktree, then merges back into
-  the recorded target branch with a non-fast-forward merge; merge/remove only
-  its owned worktree and branch. A target-branch advance is not source drift, while the
-  source HEAD, repository and worktree identity must still match accepted evidence; a
-  detached starting checkout stops before implementation with a bounded support request.
-  Planning and TDD depth stay risk-proportional while
-  review boundaries follow the change class.
+  `MEMORY.md`, navigation and notes arrive through Git. Planning and TDD depth stay
+  risk-proportional while review boundaries follow the change class.
 - Create a Todo list before editing and keep it current, proportional to the
   change. Mark each item completed immediately when its work and acceptance
   evidence are verified; never batch status updates or leave finished items
@@ -208,9 +185,7 @@ After a safe patch changes the contract or owned rules, re-read `.ai-workflow/AG
   context and the frozen digest for plan files, plus repository, worktree and version
   provenance for a supplied locator result. Their content is never inlined. A
   demonstrably complete current authorized injection is acceptable; partial or
-  uncertain injection is not. Spec Review is the exception: its packet carries no
-  fixed-context bundle and no plan or task files, only frozen requirement references,
-  the immutable commit range, neutral routing metadata and raw evidence paths.
+  uncertain injection is not.
 - The primary reads its role-scoped fixed context once at session start as a reusable
   prefix and does not re-inject content per task: the full applicable contract,
   `MEMORY.md`, the complete frozen spec/plan once and current-phase task bodies. It
@@ -226,12 +201,6 @@ After a safe patch changes the contract or owned rules, re-read `.ai-workflow/AG
   only for an authorized lookup or a needed bounded entry. For a plan-referenced indexed
   feature it runs `ai-workflow context locate --project <root> --feature <id> --verify`
   and reads the exact paths in its `read_order` output.
-- A current verified locator result may be reused only within the same session and
-  repository while its provenance and the relevant anchor, authority, index and task
-  content stay current; a relevant change or uncertainty invalidates that reuse and
-  requires bounded rereading or reverification. A fresh session never counts the
-  parent's read as its own. A shell-less leaf requests the primary to arrange the
-  lookup and gains no tool.
 - No full re-injection alternative mode is provided.
 - A direct or mechanical unit without a frozen plan carries its complete explicit scope,
   with no missing-plan demand and no requirement for a `spec.md`, `plan.md` or task file.
@@ -361,16 +330,9 @@ never as a process acceptance requirement. The project contract is procedural
 authority only; Spec Review is the explicit exception to the generic role-scoped,
 `MEMORY.md` and notes loading rule and to generic accepted-results task packets, and
 it has no generic navigation bundle; a plan, task or note reference never pulls that
-extra context in silently. If a Spec Review receives extra narrative, request a fresh bounded dispatch;
-do not claim already loaded context can be deleted.
-
-Git Operator exports the entire raw range to packet-authorized gitignored evidence
-file paths and returns their absolute paths plus the verified full `base_commit` and
-`head_commit` SHAs. The primary obtains those paths and SHAs from Git Operator before
-Spec Review dispatch and passes these raw evidence references alongside the requirement
-inputs; the reviewer has only `read` and cannot read Git objects. Additional code
-context comes only from the same named commits after a bounded request, never from
-arbitrary repository access.
+extra context in silently. Additional code context comes only from the same named commits
+after a bounded request, never from arbitrary repository access. If a Spec Review receives
+extra narrative, request a fresh bounded dispatch; do not claim already loaded context can be deleted.
 
 The primary retains Test command, exit status and evidence as the runtime validation
 gate. A static Spec Review PASS covers requirement-to-code coverage only and is never
@@ -480,8 +442,7 @@ explicitly read `references/workspace.md` before creating a worktree or implemen
 record. This section covers the root-owned tasks of the one primary parent session;
 it is not a handoff route. After root tasks, continue the parent dispatch for child
 repositories; the primary parent session never hands off a child session, and
-`next_repository` is advisory. Apply the reference's root identity, delivery gate and
-root task/finalization-only routes.
+`next_repository` is advisory.
 
 ## Parent workspace execution
 
@@ -494,9 +455,7 @@ this is the active route for a child-participating frozen plan: the primary pare
 session never hands off a child session and remains the only dispatcher. Explicitly
 read `references/workspace.md` before approved preparation or any implementation
 state, then follow its parent execution and recovery procedure, including the
-checkpoint-boundary active rebuild in `references/workspace.md`. A child-participating
-preflight additionally requires `execution.blockers` empty and `workspace audit` valid
-true with no blockers before any worktree or implementation record.
+checkpoint-boundary active rebuild.
 
 ## Slice sessions
 

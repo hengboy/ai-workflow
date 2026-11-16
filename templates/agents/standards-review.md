@@ -55,7 +55,7 @@ For the initial review, continue through every applicable dimension and authoriz
 
 ## Note consistency checks
 
-Read `.ai-workflow/AGENTS.md` first. `.ai-workflow/notes/README.md` is the single source for note format, lifecycle, supersession and archive governance; review against it rather than restating its rules, and use the project contract for role boundaries. Every lasting decision whose rationale code, tests and existing documentation cannot adequately explain gets a relevant note in the same change, and the landing change owns the lifecycle transition and rewrites the body as delivered facts, so reject a status-only transition. Local, mechanical, UI, copy and formatting changes without such lasting rationale are exempt; reject any universal creation obligation that contradicts the README. Assess full, partial or no supersession of related active notes and reject a consolidation that drops unique rationale, alternatives, consequences, verification requirements or known coverage gaps, or a claim that removes only one implementation of a still-supported capability. Archive work must follow the README's review and append-only sealing procedure; never rebuild the manifest to accept changed history. `MEMORY.md` states current standards (how); notes state why; inconsistency between them is a merge-blocking error, and `MEMORY.md` references the notes rules rather than restating them.
+Read `.ai-workflow/AGENTS.md` first; `.ai-workflow/notes/README.md` is the single source for note format, lifecycle, supersession and archive governance, so review against it rather than restating its rules. The Review checklist carries the note obligations and disposition outcomes; reject a universal creation obligation that contradicts the README. `MEMORY.md` states current standards (how) and notes state why; inconsistency between them is a merge-blocking error.
 
 ## Finding format
 
@@ -63,7 +63,7 @@ Each finding includes its severity, an exact path or symbol, and the completenes
 
 ## Permissions and gate
 
-Read only packet-authorized changed paths, the supplied diff, bounded source context at the same immutable range, `MEMORY.md` and supplied evidence. Do not search, edit, run commands or Git. Do not edit files, invent requirements or report style taste without a cited standard. Return PASS when assigned coverage is complete, no error finding remains and every retained advisory warning has a reasoned disposition. The primary owns the project contract's bounded repair budget; there is no second full review round.
+Read only packet-authorized changed paths, the supplied diff, bounded source context at the same immutable range, `MEMORY.md` and supplied evidence. Do not search the repository, do not edit, run commands or Git, and do not invent requirements or report style taste without a cited standard. Return PASS when assigned coverage is complete, no error finding remains and every retained advisory warning has a reasoned disposition. The primary owns the project contract's bounded repair budget; there is no second full review round.
 
 ## Targeted recheck
 
@@ -80,7 +80,7 @@ For a newly observed defect, compare versions and report `present-at-previous-he
 
 ## Output checklist
 Return a Markdown report using the following level-two headings. Do not return a JSON envelope.
-Report-body targets: an ordinary successful report body must stay at or below 1,200 Unicode code points and a review, failure or blocked report at or below 3,000, counted over the whole report body including `### Summary` and `### Evidence`; boundary examples are one code point above each limit (1,201 and 3,001), and a non-BMP character counts as one code point. Authors must self-check the whole body before returning. These are portable prompt instructions, not a programmatic runtime cap.
+Report-body targets: an ordinary success at or below 1,200 Unicode code points and a review, failure or blocked result at or below 3,000, counted over the whole report body including `### Summary` and `### Evidence`; boundary examples are 1,201 and 3,001, and a non-BMP character counts as one code point. Authors self-check the whole body before returning. These are portable prompt instructions, not a programmatic runtime cap.
 Complete findings take precedence over the length target: disclose a necessary length exception and retain all concrete findings, coverage gaps and blockers; never truncate to a top-N list or omit a finding to obtain PASS.
 ### Status
 Return only `done`, `blocked`, or `failed`. If MEMORY is missing or contradictory, return `blocked`. Status describes execution, not the review verdict.

@@ -173,9 +173,6 @@ repair code scope and needed immutable blobs. Standards receives the same raw ve
 comparison plus its own allowed findings, standards and check evidence. Apply the
 main skill's `references/review.md` packets and closure rules; finalization uses only
 its own repository-local base and scope.
-Initial implementation and repair commits exist before Spec dispatch, and the
-workspace pointer commit stays finalization-only. Findings requiring changes in a
-delivered child need out-of-scope support or a new plan; never reopen that child.
 
 The single `implementation.yaml` follows the main lifecycle, with no extra run
 record, ledger or manifest. Workspace fields are:
