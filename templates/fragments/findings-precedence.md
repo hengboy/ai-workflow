@@ -1,1 +1,0 @@
-Complete findings take precedence over the length target: disclose a necessary length exception and retain all concrete findings, coverage gaps and blockers; never truncate to a top-N list or omit a finding to obtain PASS.

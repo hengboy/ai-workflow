@@ -16,7 +16,6 @@ const REVIEW_REFERENCE = 'templates/skills/coding/references/review.md';
 const MODULES = [
   'src/ops/context-budget.ts',
   'src/ops/doctor.ts',
-  'src/ops/template-fragments.ts',
   'src/ops/test-affected.ts',
   'src/install/verify.ts',
   'src/workflow/lint.ts',
@@ -32,7 +31,6 @@ const TEST_FILES = [
   'tests/unit/install-verify.test.ts',
   'tests/unit/ops-context-budget.test.ts',
   'tests/unit/ops-doctor.test.ts',
-  'tests/unit/ops-template-fragments.test.ts',
   'tests/unit/ops-test-affected.test.ts',
   'tests/unit/workflow-lint.test.ts',
   'tests/unit/workflow-metrics.test.ts',
@@ -288,32 +286,6 @@ describe('README advisory tooling and CI content (REQ-007 / AC-011)', () => {
     );
   });
 
-  it('documents check:templates, the fragment convention and the explicit --write mode', async () => {
-    const readme = await read(README);
-    expectNear(
-      readme,
-      /pnpm check:templates\b/i,
-      [
-        ['the fragment directory convention', /templates\/fragments\/<name>\.md/i],
-        ['the start marker', /<!-- fragment:<name> -->/i],
-        ['the end marker', /<!-- \/fragment:<name> -->/i],
-        ['drift detection', /drift between a fragment and a marked copy/i],
-        ['unknown fragment detection', /unknown fragment name/i],
-        ['unpaired marker detection', /unpaired marker/i],
-        ['duplicate occurrence detection', /duplicate occurrence/i],
-        ['unused fragment detection', /unused fragment file/i],
-        ['the --write mode', /check:templates --write/i],
-        ['re-inlining only marked regions', /re-inlines only the marked regions/i],
-        ['leaving unmarked text untouched', /leaves all unmarked text untouched/i],
-        ['the zero-fragment boundary', /zero[^.]{0,200}(?:no fragment file|pre-migration|full rollback)/i],
-      ],
-      'README check:templates section',
-    );
-    expect(flatten(readme), 'pnpm check includes the fragment check').toMatch(
-      /includes `check:templates`/i,
-    );
-  });
-
   it('documents the CI triggers, Node 22, lockfile install, note base, checks and generated diff', async () => {
     const readme = await read(README);
     expectNear(
@@ -369,7 +341,7 @@ describe('MEMORY operator-tooling standard (REQ-008 / AC-009)', () => {
 });
 
 describe('MEMORY advisory tooling and script content (REQ-007 / AC-011)', () => {
-  it('records plan lint, metrics, the advisory scripts and the fragment convention with their limits', async () => {
+  it('records plan lint, metrics and the advisory scripts with their limits', async () => {
     const memory = await read(MEMORY);
     const candidates = [windows(memory, /operator[- ]tooling/i, 400, 5000), windows(memory, /ai-workflow plan lint\b/i, 400, 5000)].flat();
     expect(candidates.length, 'MEMORY records the advisory tooling standard').toBeGreaterThan(0);
@@ -382,10 +354,6 @@ describe('MEMORY advisory tooling and script content (REQ-007 / AC-011)', () => 
         ['context:budget', /pnpm context:budget\b/i.test(candidate)],
         ['the --json report', /--json/i.test(candidate)],
         ['the --baseline option', /--baseline/i.test(candidate)],
-        ['check:templates', /pnpm check:templates\b/i.test(candidate)],
-        ['the fragment directory convention', /templates\/fragments\//i.test(candidate)],
-        ['the fragment markers', /<!-- fragment:<name> -->/i.test(candidate) && /<!-- \/fragment:<name> -->/i.test(candidate)],
-        ['the --write mode', /--write/i.test(candidate)],
         ['the advisory and not-a-gate boundary', NOT_A_GATE.test(candidate)],
         ['no threshold and no file write', /no threshold/i.test(candidate) && /writes no file/i.test(candidate)],
       ]
@@ -397,7 +365,7 @@ describe('MEMORY advisory tooling and script content (REQ-007 / AC-011)', () => 
     );
     expect(
       closest,
-      'one MEMORY standard must name plan lint, metrics, the advisory scripts, the fragment convention and their limits',
+      'one MEMORY standard must name plan lint, metrics, the advisory scripts and their limits',
     ).toEqual([]);
   });
 });

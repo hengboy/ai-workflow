@@ -4902,7 +4902,6 @@
         "src/install/verify.ts",
         "src/ops/context-budget.ts",
         "src/ops/doctor.ts",
-        "src/ops/template-fragments.ts",
         "src/ops/test-affected.ts",
         "src/workflow/dispatch.ts",
         "src/workflow/lint.ts",
@@ -5029,42 +5028,6 @@
         {
           "file": "src/ops/doctor.ts",
           "name": "runDoctor",
-          "kind": "function",
-          "visibility": "public"
-        },
-        {
-          "file": "src/ops/template-fragments.ts",
-          "name": "TemplateFragmentCheckResult",
-          "kind": "interface",
-          "visibility": "public"
-        },
-        {
-          "file": "src/ops/template-fragments.ts",
-          "name": "TemplateFragmentProblem",
-          "kind": "interface",
-          "visibility": "public"
-        },
-        {
-          "file": "src/ops/template-fragments.ts",
-          "name": "TemplateFragmentProblemKind",
-          "kind": "type",
-          "visibility": "public"
-        },
-        {
-          "file": "src/ops/template-fragments.ts",
-          "name": "checkTemplateFragments",
-          "kind": "function",
-          "visibility": "public"
-        },
-        {
-          "file": "src/ops/template-fragments.ts",
-          "name": "formatTemplateFragmentCheck",
-          "kind": "function",
-          "visibility": "public"
-        },
-        {
-          "file": "src/ops/template-fragments.ts",
-          "name": "writeTemplateFragments",
           "kind": "function",
           "visibility": "public"
         },
@@ -5259,7 +5222,6 @@
         ".ai-workflow/AGENTS.md",
         "MEMORY.md",
         "README.md",
-        "scripts/check-templates.ts",
         "scripts/context-budget.ts",
         "scripts/test-affected.ts",
         "src/cli.ts",
@@ -5276,7 +5238,6 @@
         "tests/behavior/memory-governance-content.test.ts",
         "tests/behavior/operator-tooling-content.test.ts",
         "tests/behavior/review-policy.test.ts",
-        "tests/behavior/template-fragments-content.test.ts",
         "tests/integration/doctor-cli.test.ts",
         "tests/integration/host-smoke-cli.test.ts",
         "tests/integration/plan-dispatch-cli.test.ts",
@@ -5287,7 +5248,6 @@
         "tests/unit/install-verify.test.ts",
         "tests/unit/ops-context-budget.test.ts",
         "tests/unit/ops-doctor.test.ts",
-        "tests/unit/ops-template-fragments.test.ts",
         "tests/unit/ops-test-affected.test.ts",
         "tests/unit/workflow-dispatch.test.ts",
         "tests/unit/workflow-lint.test.ts",
@@ -5574,7 +5534,6 @@
         ".ai-workflow/AGENTS.md",
         "MEMORY.md",
         "README.md",
-        "scripts/check-templates.ts",
         "scripts/context-budget.ts",
         "scripts/test-affected.ts",
         "src/cli.ts",
@@ -5582,7 +5541,6 @@
         "src/install/verify.ts",
         "src/ops/context-budget.ts",
         "src/ops/doctor.ts",
-        "src/ops/template-fragments.ts",
         "src/ops/test-affected.ts",
         "src/sync/gate.ts",
         "src/workflow/dispatch.ts",
@@ -5600,7 +5558,6 @@
         "tests/behavior/memory-governance-content.test.ts",
         "tests/behavior/operator-tooling-content.test.ts",
         "tests/behavior/review-policy.test.ts",
-        "tests/behavior/template-fragments-content.test.ts",
         "tests/helpers.ts",
         "tests/integration/doctor-cli.test.ts",
         "tests/integration/host-smoke-cli.test.ts",
@@ -5612,7 +5569,6 @@
         "tests/unit/install-verify.test.ts",
         "tests/unit/ops-context-budget.test.ts",
         "tests/unit/ops-doctor.test.ts",
-        "tests/unit/ops-template-fragments.test.ts",
         "tests/unit/ops-test-affected.test.ts",
         "tests/unit/workflow-dispatch.test.ts",
         "tests/unit/workflow-lint.test.ts",
