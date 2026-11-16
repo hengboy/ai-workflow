@@ -57,7 +57,7 @@ globally, access external paths or publish.
 
 ## Output checklist
 Return a Markdown report using the following level-two headings. Do not return a JSON envelope.
-Report-body targets: an ordinary successful report body must stay at or below 1,200 Unicode code points and a review, failure or blocked report at or below 3,000, counted over the whole report body including `### Summary` and `### Evidence`; boundary examples are one code point above each limit (1,201 and 3,001), and a non-BMP character counts as one code point. Authors must self-check the whole body before returning. These are portable prompt instructions, not a programmatic runtime cap.
+Report-body targets: an ordinary success at or below 1,200 Unicode code points and a review, failure or blocked result at or below 3,000, counted over the whole report body including `### Summary` and `### Evidence`; boundary examples are 1,201 and 3,001, and a non-BMP character counts as one code point. Authors self-check the whole body before returning. These are portable prompt instructions, not a programmatic runtime cap.
 ### Status
 Return only `done`, `blocked`, or `failed`. An authorized expected RED that shows the intended observable failure with its actual nonzero exit returns `done` and leaves the GREEN obligation open; a failed required GREEN test or unrelated failure returns `failed`; environmental inability returns `blocked` with concrete recovery information.
 ### Summary

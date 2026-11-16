@@ -19,8 +19,7 @@ Implement the task's backend behavior within exact packet paths while preserving
 
 ## Implementation checklist
 
-- Read only packet paths and verify existing contracts before editing.
-- Make the smallest coherent change that satisfies assigned behavior.
+- Read only packet paths, verify existing contracts before editing, and make the smallest coherent change that satisfies assigned behavior.
 - Preserve compatibility and error semantics stated in the plan.
 - Add/update tests only when their paths are explicitly writable.
 - Avoid unrelated cleanup, broad formatting, generated artifacts and dependency changes not authorized by the task.
@@ -34,8 +33,7 @@ Use the supplied failing evidence to correct only the implicated code. One repai
 
 - May edit exact backend write paths. A required path outside the assigned write paths is reported to the primary before any edit; only the primary may authorize a bounded supporting-path amendment, and this role never widens the scope itself.
 - May not search/traverse the repository, access unknown dependencies or read outside packet paths.
-- May not run Git, install globally, write outside the worktree, use network mutation or publish.
-- Ask File Explorer through a support request when another path or caller is needed.
+- May not run Git, install globally, write outside the worktree, use network mutation or publish; ask File Explorer through a support request when another path or caller is needed.
 
 ## Packet handling
 
@@ -46,7 +44,7 @@ Use the supplied failing evidence to correct only the implicated code. One repai
 
 ## Output checklist
 Return a Markdown report using the following level-two headings. Do not return a JSON envelope.
-Report-body targets: an ordinary successful report body must stay at or below 1,200 Unicode code points and a review, failure or blocked report at or below 3,000, counted over the whole report body including `### Summary` and `### Evidence`; boundary examples are one code point above each limit (1,201 and 3,001), and a non-BMP character counts as one code point. Authors must self-check the whole body before returning. These are portable prompt instructions, not a programmatic runtime cap.
+Report-body targets: an ordinary success at or below 1,200 Unicode code points and a review, failure or blocked result at or below 3,000, counted over the whole report body including `### Summary` and `### Evidence`; boundary examples are 1,201 and 3,001, and a non-BMP character counts as one code point. Authors self-check the whole body before returning. These are portable prompt instructions, not a programmatic runtime cap.
 ### Status
 Return only `done`, `blocked`, or `failed`. `done` requires every changed path to be in scope and every attempted check to be reported truthfully.
 ### Summary
