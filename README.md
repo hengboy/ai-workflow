@@ -355,3 +355,29 @@ Supported reasoning values are `low`, `medium`, `high`, `xhigh`, `max` and `ultr
 ## Optional real-host smoke
 
 After logging into each local CLI, initialize a disposable Git repository, create a frozen plan, install into a temporary HOME, generate/approve a workflow and invoke one no-write node with the corresponding host. Never run this smoke against a working project or real HOME. Automated tests use fake host CLIs and temporary repositories. `ai-workflow host smoke` runs this isolated sequence and reports the honest PASS, UNVERIFIED or BLOCKED matrix described above.
+
+## Execution observability
+
+Coding records program-owned execution telemetry beside each frozen plan:
+
+```sh
+ai-workflow execution start --plan <directory> [--repository <name>]
+ai-workflow execution task <taskId> --plan <directory> [--commit <sha> | --head <sha>]
+ai-workflow execution complete --plan <directory> --commit <sha> [--validation <result>] [--review <result>]
+ai-workflow execution pause --plan <directory> [--summary <summary>]
+ai-workflow execution cancel --plan <directory> [--summary <summary>]
+ai-workflow execution failure --plan <directory> --category <category> [--summary <summary>] [--retry-after <seconds>] [--terminal] [--task <id>]
+ai-workflow execution resume [--plan <directory> | --project <root>] [--repository <name>]
+ai-workflow execution status [--project <root> | --plan <directory>]
+ai-workflow execution show [--project <root> | --plan <directory>]
+ai-workflow execution events [--project <root> | --plan <directory>] [--limit <count>]
+ai-workflow execution history [--project <root> | --plan <directory>]
+ai-workflow execution analytics [--project <root> | --plan <directory>]
+ai-workflow execution record --host opencode
+```
+
+`execution record --host opencode` is the internal transport for the installed OpenCode plugin: it consumes one session JSON event on stdin, records invocation start or completion only for the single unambiguous running run in the adopted root, writes nothing when no run matches and always exits 0. Exit 0 reports success or a completed read-only query, exit 1 reports invalid input or a manual refusal such as a live or other-host lock, and exit 2 reports a retryable failure together with its bounded retry delay. The `status`, `show`, `events`, `history` and `analytics` queries are read-only and write no file or Git state.
+
+Each run keeps `run.json`, `events.jsonl`, `checkpoints/` and `lock.json` under `<plan directory>/execution/`. One run covers each participating repository slice and a separate root run covers root-owned tasks and finalization; telemetry is additive beside the single `implementation.yaml`, which stays authoritative, and the checkpoint, delivery and status gates never read the overlay. A telemetry write failure is a warning that is never retried or re-committed by an Agent, and an interrupted run continues only after an explicit `ai-workflow execution resume`; at each phase entry the gate prints a read-only notice for each unfinished run once per phase entry. The delivered decision is recorded in `.ai-workflow/notes/implemented/architecture/2026-11-17-execution-observability-resilience.md`, and `.ai-workflow/index/navigation.json` indexes the feature as `execution-observability`.
+
+The execution paths make no model call and no network call, perform no periodic scan and record no prompt, reasoning or tool-call content; a structural cost guard over the execution modules enforces that boundary. OpenCode is the only host whose plugin reports session evidence, recording invocation start and completion where exactly one run is active; every other host records nothing and queries report `N/A`.

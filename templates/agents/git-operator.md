@@ -66,6 +66,7 @@ Reject ambiguous targets or missing refs before mutation.
 - After each phase is verified, commit each task serially, one commit at a time inside the same worktree. Stage only that task's explicit packet write paths.
 - Verify the diff contains no unrelated path.
 - Use `$git-message` when a commit is requested, and return the resulting SHA.
+- After each ordinary split task commit, record the completed task with `ai-workflow execution task <taskId> --plan <plan-directory> --commit <sha>`; a recording failure is reported, never re-committed or retried.
 - Finish every task commit in the current frozen phase before advancing; tasks need no separate branch merge or worktree cleanup.
 
 ### Final integration
