@@ -570,7 +570,7 @@ export interface FailRunInput {
 /** Fail a non-terminal run terminally, recording the failure and workflow events before releasing the lock. */
 export async function failRun(input: FailRunInput): Promise<RunTransitionResult> {
   const config = input.config ?? DEFAULT_EXECUTION_CONFIG;
-  if (!FAILURE_CATEGORIES.includes(input.category)) throw new Error(`Unknown failure category: ${String(input.category)}`);
+  if (!FAILURE_CATEGORIES.includes(input.category)) throw new Error(`Unknown failure category: ${input.category}`);
   const paths = executionPaths(input.planDirectory);
   const warnings: string[] = [];
   const existing = await loadRun(paths, warnings);
@@ -814,7 +814,7 @@ export interface RecordFailureResult {
 export async function recordFailure(input: RecordFailureInput): Promise<RecordFailureResult> {
   const config = input.config ?? DEFAULT_EXECUTION_CONFIG;
   if (!FAILURE_CATEGORIES.includes(input.category)) {
-    throw new Error(`Unknown failure category: ${String(input.category)}`);
+    throw new Error(`Unknown failure category: ${input.category}`);
   }
   const paths = executionPaths(input.planDirectory);
   const warnings: string[] = [];

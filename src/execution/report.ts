@@ -156,8 +156,8 @@ export interface AnalyticsMetric {
   recovery_success_rate: number | typeof UNAVAILABLE;
   token_usage: number | typeof UNAVAILABLE;
   model_cost: number | typeof UNAVAILABLE;
-  validation_result: string | typeof UNAVAILABLE;
-  review_result: string | typeof UNAVAILABLE;
+  validation_result: string;
+  review_result: string;
   warnings: string[];
 }
 
@@ -494,7 +494,7 @@ function taskMetrics(tasks: ExecutionRun['tasks']): {
   return { successRate: round(completed / entries.length, 4), averageDuration: average };
 }
 
-function lastPayloadString(events: ExecutionEvent[], type: ExecutionEvent['type']): string | typeof UNAVAILABLE {
+function lastPayloadString(events: ExecutionEvent[], type: ExecutionEvent['type']): string {
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const event = events[index];
     if (event === undefined || event.type !== type) continue;
