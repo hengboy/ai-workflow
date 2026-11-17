@@ -596,6 +596,197 @@ export async function failRun(input: FailRunInput): Promise<RunTransitionResult>
   return { run, warnings };
 }
 
+/** One lifecycle event mapped from a workspace checkpoint into repository-local telemetry. */
+export interface WorkspaceTelemetryEvent {
+  type: 'start' | 'task' | 'reviewed' | 'delivered' | 'finalized';
+  purpose?: 'tasks' | 'finalization';
+  taskId?: string;
+  commit?: string;
+  head?: string;
+  validation?: string;
+  repair?: string;
+}
+
+/** Everything the workspace observer needs to update exactly one repository slice's run. */
+export interface WorkspaceTelemetryInput {
+  planDirectory: string;
+  repository: string;
+  planId: string;
+  planDigest: string;
+  planCreatedAt: string;
+  tasks: { id: string; repository: string }[];
+  phases: string[][];
+  globalPhase: number | null;
+  event: WorkspaceTelemetryEvent;
+}
+
+/** Local task ids of one repository in one one-based global phase. */
+function localTasksInPhase(input: WorkspaceTelemetryInput, phase: number): string[] {
+  const repository = new Map(input.tasks.map((task) => [task.id, task.repository]));
+  return (input.phases[phase - 1] ?? []).filter((id) => repository.get(id) === input.repository);
+}
+
+/** Every local task id paired with its one-based global phase. */
+function localTaskPhases(input: WorkspaceTelemetryInput): { id: string; phase: number }[] {
+  const repository = new Map(input.tasks.map((task) => [task.id, task.repository]));
+  const entries: { id: string; phase: number }[] = [];
+  input.phases.forEach((phase, index) => {
+    for (const id of phase) if (repository.get(id) === input.repository) entries.push({ id, phase: index + 1 });
+  });
+  return entries;
+}
+
+/**
+ * Mirror one successful workspace checkpoint into the local repository's execution run. The run,
+ * events and checkpoints live only beside that repository's authoritative record. The per-update
+ * lock serializes concurrent writers and is always released before returning, so a completed run
+ * leaves no lock behind. Every telemetry problem is reported as a warning and never thrown.
+ */
+export async function recordWorkspaceCheckpoint(input: WorkspaceTelemetryInput): Promise<string[]> {
+  const warnings: string[] = [];
+  const paths = executionPaths(input.planDirectory);
+  const config = DEFAULT_EXECUTION_CONFIG;
+  const nowIso = new Date().toISOString();
+
+  try {
+    const acquisition = await acquireLock(paths, { command: 'workspace checkpoint' });
+    if (!acquisition.acquired) {
+      warnings.push(`Unable to acquire the execution lock: ${acquisition.reason}`);
+      return warnings;
+    }
+    try {
+      const existing = await loadRun(paths, warnings);
+      if (existing !== undefined && (existing.plan_id !== input.planId || existing.plan_digest !== input.planDigest)) {
+        warnings.push('Existing execution run contradicts the frozen plan identity');
+        return warnings;
+      }
+
+      if (input.event.type === 'start') {
+        // A repeated identical start is already recorded, so it stays byte-idempotent.
+        if (existing !== undefined) return warnings;
+        const purpose = input.event.purpose ?? 'tasks';
+        const currentPhase = input.globalPhase ?? 1;
+        const run: ExecutionRun = {
+          run_id: randomUUID(),
+          plan_id: input.planId,
+          plan_digest: input.planDigest,
+          status: 'RUNNING',
+          plan_created_at: input.planCreatedAt,
+          created_at: nowIso,
+          updated_at: nowIso,
+          started_at: nowIso,
+          failure_count: 0,
+          repository: input.repository,
+        };
+        const local = localTaskPhases(input);
+        if (purpose === 'tasks') {
+          run.phase = String(currentPhase);
+          if (local.length > 0) {
+            const states: Record<string, TaskState> = {};
+            for (const entry of local) {
+              states[entry.id] = entry.phase <= currentPhase
+                ? { status: 'running', started_at: nowIso }
+                : { status: 'pending' };
+            }
+            run.tasks = states;
+          }
+        }
+        await persistRun(paths, run, warnings);
+        await appendEventSafe(paths, run, 'workflow.started', config, warnings);
+        if (purpose === 'tasks') {
+          for (const taskId of localTasksInPhase(input, currentPhase)) {
+            await appendEventSafe(paths, run, 'task.started', config, warnings, { taskId });
+          }
+        }
+        await persistCheckpoint(paths, run, config, warnings);
+        return warnings;
+      }
+
+      if (existing === undefined) {
+        warnings.push('No execution run records this workspace checkpoint');
+        return warnings;
+      }
+      if (existing.status !== 'RUNNING') {
+        warnings.push(`Cannot record a workspace checkpoint for a ${existing.status} run`);
+        return warnings;
+      }
+      const run: ExecutionRun = { ...existing, updated_at: nowIso };
+
+      if (input.event.type === 'task') {
+        const taskId = input.event.taskId;
+        if (taskId === undefined) {
+          warnings.push('A task checkpoint without a task id cannot be recorded');
+          return warnings;
+        }
+        const completed: TaskState = { status: 'completed', completed_at: nowIso };
+        if (input.event.commit !== undefined) completed.commit = input.event.commit;
+        else if (input.event.head !== undefined) completed.head = input.event.head;
+        run.tasks = { ...(run.tasks ?? {}), [taskId]: completed };
+
+        // Opening the next global phase restarts its local tasks, including the task whose
+        // completion arrived in this checkpoint, so the run mirrors the phase that just began.
+        const opened: string[] = [];
+        if (input.globalPhase !== null && String(input.globalPhase) !== run.phase) {
+          run.phase = String(input.globalPhase);
+          for (const openedId of localTasksInPhase(input, input.globalPhase)) {
+            run.tasks[openedId] = { status: 'running', started_at: nowIso };
+            opened.push(openedId);
+          }
+        }
+
+        await persistRun(paths, run, warnings);
+        await appendEventSafe(paths, run, 'task.completed', config, warnings, {
+          taskId,
+          payload: input.event.commit !== undefined ? { commit: input.event.commit } : { head: input.event.head ?? '' },
+        });
+        for (const openedId of opened) {
+          await appendEventSafe(paths, run, 'task.started', config, warnings, { taskId: openedId });
+        }
+        await persistCheckpoint(paths, run, config, warnings);
+        return warnings;
+      }
+
+      if (input.event.type === 'reviewed') {
+        await persistRun(paths, run, warnings);
+        if (input.event.validation !== undefined) {
+          await appendEventSafe(paths, run, 'validation.completed', config, warnings, { payload: { result: input.event.validation } });
+        }
+        if (input.event.repair !== undefined) {
+          await appendEventSafe(paths, run, 'repair.completed', config, warnings, { payload: { result: input.event.repair } });
+        }
+        const payload = input.event.commit === undefined ? undefined : { commit: input.event.commit };
+        await appendEventSafe(paths, run, 'review.completed', config, warnings, payload === undefined ? {} : { payload });
+        await persistCheckpoint(paths, run, config, warnings);
+        return warnings;
+      }
+
+      if (input.event.type === 'delivered') {
+        const rootDelivery = input.repository === 'workspace';
+        const next: ExecutionRun = rootDelivery ? { ...run } : { ...run, status: 'COMPLETED', completed_at: nowIso };
+        await persistRun(paths, next, warnings);
+        const payload = input.event.commit === undefined ? undefined : { commit: input.event.commit };
+        await appendEventSafe(paths, next, 'delivery.completed', config, warnings, payload === undefined ? {} : { payload });
+        if (!rootDelivery) await appendEventSafe(paths, next, 'workflow.completed', config, warnings);
+        await persistCheckpoint(paths, next, config, warnings);
+        return warnings;
+      }
+
+      const finalized: ExecutionRun = { ...run, status: 'COMPLETED', completed_at: nowIso };
+      await persistRun(paths, finalized, warnings);
+      const payload = input.event.commit === undefined ? undefined : { commit: input.event.commit };
+      await appendEventSafe(paths, finalized, 'delivery.completed', config, warnings, payload === undefined ? {} : { payload });
+      await appendEventSafe(paths, finalized, 'workflow.completed', config, warnings);
+      await persistCheckpoint(paths, finalized, config, warnings);
+      return warnings;
+    } finally {
+      await dropLock(paths, warnings);
+    }
+  } catch (error) {
+    warnings.push(`Unable to record workspace execution telemetry: ${errorMessage(error)}`);
+    return warnings;
+  }
+}
+
 /** Input accepted by failure recording, which keeps retryable runs alive. */
 export interface RecordFailureInput {
   planDirectory: string;

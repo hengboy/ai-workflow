@@ -1,6 +1,9 @@
+import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { parseMarkdown } from '../utils/frontmatter.js';
 import type { TaskDocument, TaskSchedule } from '../workflow/types.js';
 import { validateWorkspaceManifest } from '../workflow/workspace.js';
+import { recordWorkspaceCheckpoint, type WorkspaceTelemetryEvent } from '../execution/manager.js';
 import { resolveWorkspacePlan, type ResolvedWorkspacePlan } from './distribute.js';
 import {
   RESERVED_ROOT,
@@ -206,6 +209,7 @@ export interface CheckpointSuccess {
   repository: string;
   status: string;
   path: string;
+  warnings?: string[];
 }
 
 export interface CheckpointRefusal {
@@ -230,7 +234,9 @@ type TaskEvent =
   | { event: 'task'; task: string; kind: 'commit'; commit: string }
   | { event: 'task'; task: string; kind: 'no-change'; head: string };
 
-type SimpleEvent = { event: 'reviewed' | 'delivered' | 'finalized'; commit: string };
+type ReviewedEvent = { event: 'reviewed'; commit: string; validation?: string; repair?: string };
+
+type SimpleEvent = ReviewedEvent | { event: 'delivered' | 'finalized'; commit: string };
 
 type CheckpointEvent = StartEvent | TaskEvent | SimpleEvent;
 
@@ -256,6 +262,17 @@ function requireSha(raw: Record<string, unknown>, key: string, errors: string[])
   return value;
 }
 
+/** Accept an optional field only when it is absent or a non-empty string. */
+function optionalString(raw: Record<string, unknown>, key: string, errors: string[]): string | undefined {
+  const value = raw[key];
+  if (value === undefined) return undefined;
+  if (typeof value !== 'string' || value.length === 0) {
+    errors.push(`field "${key}" must be a non-empty string`);
+    return undefined;
+  }
+  return value;
+}
+
 /** Validate exactly one JSON event against the strict per-event schema; every error names its field. */
 function validateEvent(raw: unknown): { ok: true; event: CheckpointEvent } | { ok: false; errors: string[] } {
   if (!isPlainObject(raw)) return { ok: false, errors: ['event must be a JSON object'] };
@@ -266,7 +283,7 @@ function validateEvent(raw: unknown): { ok: true; event: CheckpointEvent } | { o
   const allowed: Record<string, string[]> = {
     start: ['event', 'purpose', 'source_root', 'repository', 'worktree', 'branch', 'target_branch', 'base_commit'],
     task: ['event', 'task', 'kind', 'commit', 'head'],
-    reviewed: ['event', 'commit'],
+    reviewed: ['event', 'commit', 'validation', 'repair'],
     delivered: ['event', 'commit'],
     finalized: ['event', 'commit'],
   };
@@ -305,6 +322,22 @@ function validateEvent(raw: unknown): { ok: true; event: CheckpointEvent } | { o
     return { ok: false, errors };
   }
 
+  if (name === 'reviewed') {
+    const commit = requireSha(raw, 'commit', errors);
+    const validation = optionalString(raw, 'validation', errors);
+    const repair = optionalString(raw, 'repair', errors);
+    if (errors.length) return { ok: false, errors };
+    return {
+      ok: true,
+      event: {
+        event: 'reviewed',
+        commit: commit as string,
+        ...(validation === undefined ? {} : { validation }),
+        ...(repair === undefined ? {} : { repair }),
+      },
+    };
+  }
+
   const commit = requireSha(raw, 'commit', errors);
   if (errors.length) return { ok: false, errors };
   return { ok: true, event: { event: name, commit: commit as string } };
@@ -328,6 +361,48 @@ function checkpointEquals(left: TaskCheckpoint, right: TaskCheckpoint): boolean 
   if (left.kind === 'commit' && right.kind === 'commit') return left.commit === right.commit;
   if (left.kind === 'no-change' && right.kind === 'no-change') return left.head === right.head;
   return false;
+}
+
+/** Read the frozen plan digest and creation time shared by every repository run in the workspace. */
+async function readPlanHeader(planDirectory: string): Promise<{ digest: string; createdAt: string }> {
+  const { attributes } = parseMarkdown(await readFile(join(planDirectory, 'plan.md'), 'utf8'));
+  const digest = attributes.digest;
+  const createdAt = attributes.created_at;
+  if (typeof digest !== 'string' || !/^sha256:[a-f0-9]{64}$/.test(digest)) {
+    throw new Error('Frozen plan.md is missing a valid digest');
+  }
+  if (typeof createdAt !== 'string' || createdAt.length === 0) {
+    throw new Error('Frozen plan.md is missing a created_at timestamp');
+  }
+  return { digest, createdAt };
+}
+
+/** Map one validated checkpoint event onto the repository-local telemetry event shape. */
+function telemetryEventOf(event: CheckpointEvent): WorkspaceTelemetryEvent {
+  switch (event.event) {
+    case 'start':
+      return { type: 'start', purpose: event.purpose };
+    case 'task':
+      return event.kind === 'commit'
+        ? { type: 'task', taskId: event.task, commit: event.commit }
+        : { type: 'task', taskId: event.task, head: event.head };
+    case 'reviewed':
+      return {
+        type: 'reviewed',
+        commit: event.commit,
+        ...(event.validation === undefined ? {} : { validation: event.validation }),
+        ...(event.repair === undefined ? {} : { repair: event.repair }),
+      };
+    default:
+      return { type: event.event, commit: event.commit };
+  }
+}
+
+/** Current one-based global phase after an authoritative write, or null when every task is done. */
+async function currentGlobalPhase(resolved: ResolvedWorkspacePlan): Promise<number | null> {
+  const analysis = await analyzeExecution(resolved);
+  const index = analysis.schedule.phases.findIndex((phase) => phase.parallel.some((id) => !analysis.doneTasks.has(id)));
+  return index === -1 ? null : index + 1;
 }
 
 /**
@@ -367,7 +442,32 @@ export async function checkpointWorkspace(planDirectory: string, repository: str
     }
 
     const analysis = await analyzeExecution(resolved);
-    const successful = (record: WorkspaceExecutionRecord): CheckpointSuccess => ({ valid: true, plan_id: plan.planId, repository, status: record.status, path: recordPath });
+    const telemetry = async (event: CheckpointEvent): Promise<string[]> => {
+      try {
+        const header = await readPlanHeader(plan.directory);
+        return await recordWorkspaceCheckpoint({
+          planDirectory: join(root, entry.path, '.ai-workflow', 'plans', plan.planId),
+          repository,
+          planId: plan.planId,
+          planDigest: header.digest,
+          planCreatedAt: header.createdAt,
+          tasks: resolved.tasks.map((task) => ({ id: task.id, repository: task.repo ?? '' })),
+          phases: resolved.schedule.phases.map((phase) => phase.parallel),
+          globalPhase: await currentGlobalPhase(resolved),
+          event: telemetryEventOf(event),
+        });
+      } catch (error) {
+        return [`Unable to record workspace execution telemetry: ${errorMessage(error)}`];
+      }
+    };
+    const successful = (record: WorkspaceExecutionRecord, warnings: string[] = []): CheckpointSuccess => ({
+      valid: true,
+      plan_id: plan.planId,
+      repository,
+      status: record.status,
+      path: recordPath,
+      ...(warnings.length === 0 ? {} : { warnings }),
+    });
 
     // Repository delivery barrier: a non-root repository may not checkpoint any event while a
     // declared dependency is not yet delivered. Completed records keep their idempotent success.
@@ -403,7 +503,7 @@ export async function checkpointWorkspace(planDirectory: string, repository: str
         execution: { purpose: event.purpose, source_root: event.source_root, repository: event.repository, worktree: event.worktree, branch: event.branch, target_branch: event.target_branch, base_commit: event.base_commit },
       };
       await writeWorkspaceRecord(recordPath, record);
-      return successful(record);
+      return successful(record, await telemetry(event));
     }
 
     if (existing !== undefined && existing.status === 'completed') {
@@ -429,7 +529,7 @@ export async function checkpointWorkspace(planDirectory: string, repository: str
       if (firstPendingIndex === -1 || phaseIndex !== firstPendingIndex) return refuse([`task "${event.task}" is not in the current global phase`]);
       const record: WorkspaceExecutionRecord = { ...existing, task_checkpoints: { ...(existing.task_checkpoints ?? {}), [event.task]: checkpoint } };
       await writeWorkspaceRecord(recordPath, record);
-      return successful(record);
+      return successful(record, await telemetry(event));
     }
 
     if (existing === undefined || existing.execution === undefined) return refuse([`repository "${repository}" has no execution anchor`]);
@@ -445,7 +545,7 @@ export async function checkpointWorkspace(planDirectory: string, repository: str
       if (existing.reviewed_commit !== undefined && existing.reviewed_commit !== event.commit) return refuse([`repository "${repository}" already reviewed a different commit`]);
       const record: WorkspaceExecutionRecord = { ...existing, reviewed_commit: event.commit };
       await writeWorkspaceRecord(recordPath, record);
-      return successful(record);
+      return successful(record, await telemetry(event));
     }
 
     if (event.event === 'delivered') {
@@ -457,12 +557,12 @@ export async function checkpointWorkspace(planDirectory: string, repository: str
         const record: WorkspaceExecutionRecord = { ...existing, root_tasks_commit: event.commit };
         delete record.reviewed_commit;
         await writeWorkspaceRecord(recordPath, record);
-        return successful(record);
+        return successful(record, await telemetry(event));
       }
       const completedAt = nowCst();
       const record: WorkspaceExecutionRecord = { ...existing, status: 'completed', completed_at: completedAt, commit: event.commit };
       await writeWorkspaceRecord(recordPath, record);
-      return successful(record);
+      return successful(record, await telemetry(event));
     }
 
     if (repository !== RESERVED_ROOT) return refuse(['finalized is only valid for the reserved workspace root']);
@@ -472,7 +572,7 @@ export async function checkpointWorkspace(planDirectory: string, repository: str
     const record: WorkspaceExecutionRecord = { ...existing, status: 'completed', completed_at: completedAt, commit: event.commit };
     delete record.reviewed_commit;
     await writeWorkspaceRecord(recordPath, record);
-    return successful(record);
+    return successful(record, await telemetry(event));
   } catch (error) {
     return refuse([errorMessage(error)]);
   }
