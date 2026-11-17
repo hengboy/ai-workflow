@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 # ai-workflow notes pairing --project <project-root> --write .ai-workflow/notes/implemented/feature/2026-10-09-workspace-coding-orchestration.md
-2026-10-09-workspace-coding-orchestration.md: 109794ea4613396abe44fb5b63aa838c384b0759
-2026-10-09-workspace-coding-orchestration.zh.md: e892b6a324ca6985e7d9e8241c93932bd9dbefb1
+2026-10-09-workspace-coding-orchestration.md: 90096af9a5f0dad298329dcb07e51ac750466dc7
+2026-10-09-workspace-coding-orchestration.zh.md: 58ec3908161a75b66f264c5bb8ae2bc80b149f5f

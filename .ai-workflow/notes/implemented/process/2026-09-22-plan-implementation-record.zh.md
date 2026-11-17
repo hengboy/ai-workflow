@@ -15,12 +15,13 @@ Status: implemented
 - 在最终合并与仅清理运行拥有的 worktree 和分支之后，同一文件变为 `status: completed`，带有 UTC+08:00 时区 ISO 8601 的 `completed_at` 与最终 commit SHA，并保留 `plan_id` 与 `started_at`。该更新是幂等的；当开始记录缺失时，仍写入省略 `started_at` 的有效完成记录。
 - 该记录只有 `in-progress` 与 `completed` 两个状态值。中断的普通或子仓库运行停留在 `status: in-progress`，仅保留开始字段；中断的根交付或定稿额外保留 `root_tasks_commit`，两者都绝不写入失败或放弃原因。只有冻结计划才会创建该记录；没有冻结计划的小修复不创建任何记录。
 - 工作区计划的根 `implementation.yaml` 可以额外携带可选的 `root_tasks_commit` SHA，用于记录根拥有任务前缀的交付。根前缀合并且其拥有的 worktree 被清理之后，该记录保持 `status: in-progress` 并带 `root_tasks_commit`，不含 `completed_at` 或 `commit`，并持续到最后一次 pointer 定稿；仅定稿的运行保留 `started_at` 与 `root_tasks_commit`，且只有到那时才把记录改写为 `completed`，带 `completed_at` 与最终提交。这不增加第三个状态值。
+- 该记录仍然是唯一的权威实施记录，同时由程序拥有的执行叠加层在其旁边观察运行。`ai-workflow execution start` 写入 in-progress 记录，`ai-workflow execution complete` 以完全相同的格式、两个状态、UTC+08:00 时间戳与幂等性写入 completed 记录；叠加层的运行、事件、检查点与锁文件绝不替换、改写或门禁该记录，代理调用这些命令而不是手写任一文件。叠加层新增 `src/execution/`、`ai-workflow execution` 命令组及其 README 命令参考，但不改变该记录的 schema、状态或读取器。
 - 该标准由 `templates/skills/coding/SKILL.md` 中的 `coding` 技能、`templates/project/AGENTS.md` 与 `.ai-workflow/AGENTS.md` 中的项目契约、`templates/project/MEMORY.md` 与 `MEMORY.md` 中的项目记忆以及 `README.md` 共同陈述。不得生成任何其他 workflow manifest 或运行记录，`ai-workflow plan validate` 与 `ai-workflow plan pairing` 既不要求也不读取 `implementation.yaml`。
 
 ## Alternatives considered
 
 - **写入按步骤或按任务的进度日志，并附带失败原因与耗时。** 放弃：已批准范围只需要维护者一眼可读的一个最小时间记录，而运行日志会重新引入禁令本想消除的运行记录面。
-- **为该记录新增 CLI 子命令、schema 或迁移。** 放弃：当记录只是现有读取器忽略的纯本地状态时，不需要新命令或新格式；保持 `ai-workflow plan validate` 与 `ai-workflow plan pairing` 不变可以避免兼容性面。
+- **为该记录新增 CLI 子命令、schema 或迁移。** 就记录本身而言放弃：当记录只是现有读取器忽略的纯本地状态时，不需要新的记录命令或格式；保持 `ai-workflow plan validate` 与 `ai-workflow plan pairing` 不变可以避免兼容性面。后来新增的独立 `ai-workflow execution` 命令组原样写入该记录，因此被放弃的形态——第二个权威记录格式——仍被否决，而由程序拥有的计时与证据落在其旁边。
 - **为该记录配 `.zh.md` 与 `.i18n.yaml` 同级文件，并要求计划校验读取它。** 放弃：该记录不是规划产物，把同级文件或校验变成强制要求，会把本地运行时元数据变成冻结的规划门禁。
 - **为历史计划与没有冻结计划的小修复补写记录。** 放弃：没有观测到的开始与完成时间无法如实重建，而未经规划的修复没有可记录的冻结 `plan_id`。
 - **增加终止态的失败或放弃状态。** 放弃：中断的运行有意与未完成的运行不可区分，因此 `in-progress` 仍是唯一的非终止状态，之后成功的运行只需把同一路径重写为完成态。
@@ -33,3 +34,4 @@ Status: implemented
 - 已安装的宿主技能与代理只有在下一次宿主安装或 profile 激活后才会获得新文本，因此运行时记录是在 rollout 之后下一次真实实施中被观察到，而不是由本计划自身产生。
 - 没有任何 active note 被全部或部分取代：[worktree 策略记录](./2026-09-14-project-local-worktree-policy.md)、[忽略状态共享记录](./2026-09-14-share-ignored-state-into-worktree.md)与[项目契约与 Agent Notes 替代记录](./2026-09-16-project-contract-and-agent-notes.md)仍然有效，本记录只增加了它们此前未允许的唯一豁免。该记录的时间戳时区后来由 [UTC+08:00 时间戳记录](./2026-09-23-implementation-record-utc-offset.md)固定。
 - 上文的根交付阶段由 [工作区执行一致性记录](../bug-fix/2026-10-08-workspace-execution-consistency.md) 详细说明；本记录保留其单记录、双状态决定，且其当前根前缀事实指向该记录。
+- 本记录的当前事实由[执行可观测性叠加层记录](../architecture/2026-11-17-execution-observability-resilience.md)扩展而非替换：本记录保留其格式、时间戳、两个状态与唯一权威，而该记录拥有其旁边的、由程序拥有的运行、事件与检查点证据。
