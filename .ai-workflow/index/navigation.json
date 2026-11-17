@@ -6263,6 +6263,12 @@
         },
         {
           "file": "src/execution/store.ts",
+          "name": "attemptCountsFromEvents",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/store.ts",
           "name": "ensureExecutionPaths",
           "kind": "function",
           "visibility": "public"
@@ -6270,6 +6276,12 @@
         {
           "file": "src/execution/store.ts",
           "name": "isProcessAlive",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/store.ts",
+          "name": "needsLeadingNewline",
           "kind": "function",
           "visibility": "public"
         },
@@ -6300,6 +6312,12 @@
         {
           "file": "src/execution/store.ts",
           "name": "releaseLock",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/store.ts",
+          "name": "taskStatesForCheckpoint",
           "kind": "function",
           "visibility": "public"
         },
@@ -6516,6 +6534,7 @@
       "tests": [
         "tests/behavior/execution-observability-content.test.ts",
         "tests/integration/execution-cli.test.ts",
+        "tests/integration/execution-e2e.test.ts",
         "tests/integration/execution-hooks.test.ts",
         "tests/integration/execution-recovery-cli.test.ts",
         "tests/integration/execution-workspace.test.ts",
@@ -6551,21 +6570,6 @@
           "kind": "imports",
           "from": "src/execution/commands.ts#completeExecutionCommand",
           "to": "src/execution/manager.ts#completeRun"
-        },
-        {
-          "kind": "imports",
-          "from": "src/execution/commands.ts#completeExecutionCommand",
-          "to": "src/execution/paths.ts#executionPaths"
-        },
-        {
-          "kind": "imports",
-          "from": "src/execution/commands.ts#completeExecutionCommand",
-          "to": "src/execution/store.ts#appendEvent"
-        },
-        {
-          "kind": "imports",
-          "from": "src/execution/commands.ts#completeExecutionCommand",
-          "to": "src/execution/store.ts#readRun"
         },
         {
           "kind": "imports",
@@ -6631,16 +6635,6 @@
           "kind": "imports",
           "from": "src/execution/commands.ts#startExecutionCommand",
           "to": "src/execution/manager.ts#startRun"
-        },
-        {
-          "kind": "imports",
-          "from": "src/execution/commands.ts#startExecutionCommand",
-          "to": "src/execution/paths.ts#executionPaths"
-        },
-        {
-          "kind": "imports",
-          "from": "src/execution/commands.ts#startExecutionCommand",
-          "to": "src/execution/store.ts#writeRun"
         },
         {
           "kind": "imports",
@@ -7035,6 +7029,11 @@
         {
           "kind": "imports",
           "from": "src/execution/recovery.ts#resumeRun",
+          "to": "src/execution/store.ts#attemptCountsFromEvents"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/recovery.ts#resumeRun",
           "to": "src/execution/store.ts#isProcessAlive"
         },
         {
@@ -7229,6 +7228,11 @@
         },
         {
           "kind": "imports",
+          "from": "src/execution/store.ts#attemptCountsFromEvents",
+          "to": "src/execution/types.ts#ExecutionEvent"
+        },
+        {
+          "kind": "imports",
           "from": "src/execution/store.ts#ensureExecutionPaths",
           "to": "src/execution/paths.ts#ExecutionPaths"
         },
@@ -7296,6 +7300,16 @@
           "kind": "imports",
           "from": "src/execution/store.ts#releaseLock",
           "to": "src/execution/paths.ts#ExecutionPaths"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/store.ts#taskStatesForCheckpoint",
+          "to": "src/execution/types.ts#ExecutionCheckpoint"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/store.ts#taskStatesForCheckpoint",
+          "to": "src/execution/types.ts#ExecutionRun"
         },
         {
           "kind": "imports",
@@ -7390,6 +7404,7 @@
         "templates/skills/coding/references/workspace.md",
         "tests/behavior/execution-observability-content.test.ts",
         "tests/integration/execution-cli.test.ts",
+        "tests/integration/execution-e2e.test.ts",
         "tests/integration/execution-hooks.test.ts",
         "tests/integration/execution-recovery-cli.test.ts",
         "tests/integration/execution-workspace.test.ts",
