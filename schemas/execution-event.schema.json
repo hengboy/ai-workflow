@@ -1,0 +1,55 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://ai-workflow.local/schemas/execution-event.schema.json",
+  "title": "Execution Event",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["event_id", "run_id", "plan_id", "type", "timestamp"],
+  "properties": {
+    "event_id": { "type": "string", "minLength": 1 },
+    "run_id": { "type": "string", "minLength": 1 },
+    "plan_id": { "type": "string", "minLength": 1 },
+    "type": {
+      "type": "string",
+      "enum": [
+        "workflow.started",
+        "workflow.completed",
+        "workflow.failed",
+        "workflow.paused",
+        "workflow.cancelled",
+        "task.started",
+        "task.completed",
+        "task.failed",
+        "agent.invoked",
+        "agent.completed",
+        "validation.completed",
+        "review.completed",
+        "repair.completed",
+        "delivery.completed",
+        "execution.interrupted",
+        "execution.resumed",
+        "execution.reconciled",
+        "failure.quota",
+        "failure.authentication",
+        "failure.rate_limit",
+        "failure.model_unavailable",
+        "failure.network_timeout",
+        "failure.network_disconnect",
+        "failure.agent_process_exit",
+        "failure.session_lost",
+        "failure.task_execution"
+      ]
+    },
+    "timestamp": { "$ref": "#/definitions/timestamp" },
+    "task_id": { "type": "string", "minLength": 1 },
+    "invocation_id": { "type": "string", "minLength": 1 },
+    "payload": { "type": "object" }
+  },
+  "definitions": {
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$"
+    }
+  }
+}

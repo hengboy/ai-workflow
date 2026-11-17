@@ -5683,6 +5683,1723 @@
         "tests/behavior/planning-decision-quality.test.ts"
       ],
       "shared_entry": true
+    },
+    {
+      "id": "execution-observability",
+      "name": "execution-observability",
+      "aliases": [
+        "execution run",
+        "execution events",
+        "execution recovery",
+        "execution telemetry"
+      ],
+      "module_root": "root",
+      "entries": [
+        "src/execution/commands.ts",
+        "src/execution/config.ts",
+        "src/execution/failure.ts",
+        "src/execution/hook.ts",
+        "src/execution/manager.ts",
+        "src/execution/paths.ts",
+        "src/execution/record.ts",
+        "src/execution/recovery.ts",
+        "src/execution/report.ts",
+        "src/execution/store.ts",
+        "src/execution/types.ts",
+        "src/execution/validate.ts"
+      ],
+      "symbols": [
+        {
+          "file": "src/execution/commands.ts",
+          "name": "CancelExecutionInput",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/commands.ts",
+          "name": "CompleteExecutionInput",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/commands.ts",
+          "name": "ExecutionCommandOutcome",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/commands.ts",
+          "name": "FailureExecutionInput",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/commands.ts",
+          "name": "PauseExecutionInput",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/commands.ts",
+          "name": "ResumeExecutionInput",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/commands.ts",
+          "name": "StartExecutionInput",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/commands.ts",
+          "name": "TaskExecutionInput",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/commands.ts",
+          "name": "analyticsExecutionCommand",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/commands.ts",
+          "name": "cancelExecutionCommand",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/commands.ts",
+          "name": "completeExecutionCommand",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/commands.ts",
+          "name": "eventsExecutionCommand",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/commands.ts",
+          "name": "failureExecutionCommand",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/commands.ts",
+          "name": "historyExecutionCommand",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/commands.ts",
+          "name": "pauseExecutionCommand",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/commands.ts",
+          "name": "resumeExecutionCommand",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/commands.ts",
+          "name": "showExecutionCommand",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/commands.ts",
+          "name": "startExecutionCommand",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/commands.ts",
+          "name": "statusExecutionCommand",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/commands.ts",
+          "name": "taskExecutionCommand",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/config.ts",
+          "name": "DEFAULT_EXECUTION_CONFIG",
+          "kind": "variable",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/config.ts",
+          "name": "ExecutionConfig",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/config.ts",
+          "name": "readExecutionConfig",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/failure.ts",
+          "name": "FailureGuidance",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/failure.ts",
+          "name": "classifyFailure",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/failure.ts",
+          "name": "redactFailureSummary",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/hook.ts",
+          "name": "HostRecordResult",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/hook.ts",
+          "name": "recordHostSession",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/manager.ts",
+          "name": "CompleteRunInput",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/manager.ts",
+          "name": "CompleteRunResult",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/manager.ts",
+          "name": "FailRunInput",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/manager.ts",
+          "name": "RecordFailureInput",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/manager.ts",
+          "name": "RecordFailureResult",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/manager.ts",
+          "name": "RecordTaskInput",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/manager.ts",
+          "name": "RecordTaskResult",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/manager.ts",
+          "name": "RunTransitionInput",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/manager.ts",
+          "name": "RunTransitionResult",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/manager.ts",
+          "name": "StartRunInput",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/manager.ts",
+          "name": "StartRunResult",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/manager.ts",
+          "name": "WorkspaceTelemetryEvent",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/manager.ts",
+          "name": "WorkspaceTelemetryInput",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/manager.ts",
+          "name": "cancelRun",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/manager.ts",
+          "name": "completeRun",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/manager.ts",
+          "name": "failRun",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/manager.ts",
+          "name": "pauseRun",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/manager.ts",
+          "name": "recordFailure",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/manager.ts",
+          "name": "recordTask",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/manager.ts",
+          "name": "recordWorkspaceCheckpoint",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/manager.ts",
+          "name": "startRun",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/paths.ts",
+          "name": "ExecutionPaths",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/paths.ts",
+          "name": "executionPaths",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/paths.ts",
+          "name": "isPlanDirectory",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/record.ts",
+          "name": "OrdinaryImplementationRecord",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/record.ts",
+          "name": "readOrdinaryRecord",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/record.ts",
+          "name": "writeOrdinaryRecord",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/recovery.ts",
+          "name": "FindUnfinishedRunsOptions",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/recovery.ts",
+          "name": "ResumePacket",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/recovery.ts",
+          "name": "ResumeRunInput",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/recovery.ts",
+          "name": "ResumeRunResult",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/recovery.ts",
+          "name": "RunLockState",
+          "kind": "type",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/recovery.ts",
+          "name": "UnfinishedRunDiscovery",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/recovery.ts",
+          "name": "UnfinishedRunNotice",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/recovery.ts",
+          "name": "findUnfinishedRuns",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/recovery.ts",
+          "name": "resumeRun",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/report.ts",
+          "name": "AnalyticsMetric",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/report.ts",
+          "name": "CheckpointProjection",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/report.ts",
+          "name": "ExecutionAnalyticsResult",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/report.ts",
+          "name": "ExecutionEventsResult",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/report.ts",
+          "name": "ExecutionHistoryResult",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/report.ts",
+          "name": "ExecutionShowResult",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/report.ts",
+          "name": "ExecutionStatusResult",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/report.ts",
+          "name": "HistoryRunEntry",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/report.ts",
+          "name": "LockProjection",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/report.ts",
+          "name": "LockState",
+          "kind": "type",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/report.ts",
+          "name": "QueryScope",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/report.ts",
+          "name": "StatusRunEntry",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/report.ts",
+          "name": "TaskCountProjection",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/report.ts",
+          "name": "executionAnalytics",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/report.ts",
+          "name": "executionEvents",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/report.ts",
+          "name": "executionHistory",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/report.ts",
+          "name": "executionShow",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/report.ts",
+          "name": "executionStatus",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/store.ts",
+          "name": "CheckpointReadResult",
+          "kind": "type",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/store.ts",
+          "name": "EventReadResult",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/store.ts",
+          "name": "ExecutionEventInput",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/store.ts",
+          "name": "ExecutionTelemetryError",
+          "kind": "class",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/store.ts",
+          "name": "LockAcquisition",
+          "kind": "type",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/store.ts",
+          "name": "LockOptions",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/store.ts",
+          "name": "LockRequest",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/store.ts",
+          "name": "ReadEventsOptions",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/store.ts",
+          "name": "acquireLock",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/store.ts",
+          "name": "appendEvent",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/store.ts",
+          "name": "ensureExecutionPaths",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/store.ts",
+          "name": "isProcessAlive",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/store.ts",
+          "name": "readEvents",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/store.ts",
+          "name": "readLatestCheckpoint",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/store.ts",
+          "name": "readLock",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/store.ts",
+          "name": "readRun",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/store.ts",
+          "name": "releaseLock",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/store.ts",
+          "name": "writeCheckpoint",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/store.ts",
+          "name": "writeRun",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/types.ts",
+          "name": "EXECUTION_EVENT_TYPES",
+          "kind": "variable",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/types.ts",
+          "name": "ExecutionCheckpoint",
+          "kind": "type",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/types.ts",
+          "name": "ExecutionEvent",
+          "kind": "type",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/types.ts",
+          "name": "ExecutionEventType",
+          "kind": "type",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/types.ts",
+          "name": "ExecutionLock",
+          "kind": "type",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/types.ts",
+          "name": "ExecutionRun",
+          "kind": "type",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/types.ts",
+          "name": "FAILURE_CATEGORIES",
+          "kind": "variable",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/types.ts",
+          "name": "FailureCategory",
+          "kind": "type",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/types.ts",
+          "name": "RUN_STATUSES",
+          "kind": "variable",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/types.ts",
+          "name": "RunStatus",
+          "kind": "type",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/types.ts",
+          "name": "TASK_STATUSES",
+          "kind": "variable",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/types.ts",
+          "name": "TaskStatus",
+          "kind": "type",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/validate.ts",
+          "name": "ExecutionRecordKind",
+          "kind": "type",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/validate.ts",
+          "name": "ExecutionValidationResult",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/validate.ts",
+          "name": "assertExecutionRecord",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/validate.ts",
+          "name": "validateExecutionRecord",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/generated/execution-checkpoint.schema.d.ts",
+          "name": "AgentBinding",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/generated/execution-checkpoint.schema.d.ts",
+          "name": "ExecutionCheckpoint",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/generated/execution-checkpoint.schema.d.ts",
+          "name": "TaskState",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/generated/execution-checkpoint.schema.d.ts",
+          "name": "Timestamp",
+          "kind": "type",
+          "visibility": "public"
+        },
+        {
+          "file": "src/generated/execution-event.schema.d.ts",
+          "name": "ExecutionEvent",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/generated/execution-event.schema.d.ts",
+          "name": "Timestamp",
+          "kind": "type",
+          "visibility": "public"
+        },
+        {
+          "file": "src/generated/execution-lock.schema.d.ts",
+          "name": "ExecutionLock",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/generated/execution-lock.schema.d.ts",
+          "name": "Timestamp",
+          "kind": "type",
+          "visibility": "public"
+        },
+        {
+          "file": "src/generated/execution-run.schema.d.ts",
+          "name": "AgentBinding",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/generated/execution-run.schema.d.ts",
+          "name": "ExecutionRun",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/generated/execution-run.schema.d.ts",
+          "name": "Failure",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/generated/execution-run.schema.d.ts",
+          "name": "TaskState",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/generated/execution-run.schema.d.ts",
+          "name": "Timestamp",
+          "kind": "type",
+          "visibility": "public"
+        },
+        {
+          "file": "src/sync/gate.ts",
+          "name": "ProjectGateExecutionNotice",
+          "kind": "interface",
+          "visibility": "public"
+        }
+      ],
+      "related_files": [
+        ".ai-workflow/AGENTS.md",
+        ".ai-workflow/notes/implemented/architecture/2026-11-17-execution-observability-resilience.i18n.yaml",
+        ".ai-workflow/notes/implemented/architecture/2026-11-17-execution-observability-resilience.md",
+        ".ai-workflow/notes/implemented/architecture/2026-11-17-execution-observability-resilience.zh.md",
+        "MEMORY.md",
+        "README.md",
+        "src/cli.ts",
+        "src/sync/gate.ts",
+        "src/workspace/execution.ts",
+        "templates/agents/git-operator.md",
+        "templates/hooks/opencode-v2.js",
+        "templates/hooks/opencode.js",
+        "templates/project/AGENTS.md",
+        "templates/skills/coding/SKILL.md",
+        "templates/skills/coding/references/workspace.md"
+      ],
+      "tests": [
+        "tests/behavior/execution-observability-content.test.ts",
+        "tests/integration/execution-cli.test.ts",
+        "tests/integration/execution-hooks.test.ts",
+        "tests/integration/execution-recovery-cli.test.ts",
+        "tests/integration/execution-workspace.test.ts",
+        "tests/unit/execution-failure.test.ts",
+        "tests/unit/execution-manager.test.ts",
+        "tests/unit/execution-recovery.test.ts",
+        "tests/unit/execution-schema.test.ts",
+        "tests/unit/execution-store.test.ts"
+      ],
+      "depends_on": [],
+      "relations": [
+        {
+          "kind": "imports",
+          "from": "src/execution/commands.ts#analyticsExecutionCommand",
+          "to": "src/execution/report.ts#QueryScope"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/commands.ts#analyticsExecutionCommand",
+          "to": "src/execution/report.ts#executionAnalytics"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/commands.ts#cancelExecutionCommand",
+          "to": "src/execution/manager.ts#cancelRun"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/commands.ts#completeExecutionCommand",
+          "to": "src/execution/config.ts#readExecutionConfig"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/commands.ts#completeExecutionCommand",
+          "to": "src/execution/manager.ts#completeRun"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/commands.ts#completeExecutionCommand",
+          "to": "src/execution/paths.ts#executionPaths"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/commands.ts#completeExecutionCommand",
+          "to": "src/execution/store.ts#appendEvent"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/commands.ts#completeExecutionCommand",
+          "to": "src/execution/store.ts#readRun"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/commands.ts#eventsExecutionCommand",
+          "to": "src/execution/report.ts#QueryScope"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/commands.ts#eventsExecutionCommand",
+          "to": "src/execution/report.ts#executionEvents"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/commands.ts#failureExecutionCommand",
+          "to": "src/execution/manager.ts#failRun"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/commands.ts#failureExecutionCommand",
+          "to": "src/execution/manager.ts#recordFailure"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/commands.ts#failureExecutionCommand",
+          "to": "src/execution/types.ts#FAILURE_CATEGORIES"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/commands.ts#failureExecutionCommand",
+          "to": "src/execution/types.ts#FailureCategory"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/commands.ts#historyExecutionCommand",
+          "to": "src/execution/report.ts#QueryScope"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/commands.ts#historyExecutionCommand",
+          "to": "src/execution/report.ts#executionHistory"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/commands.ts#pauseExecutionCommand",
+          "to": "src/execution/manager.ts#pauseRun"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/commands.ts#resumeExecutionCommand",
+          "to": "src/execution/recovery.ts#resumeRun"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/commands.ts#showExecutionCommand",
+          "to": "src/execution/report.ts#QueryScope"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/commands.ts#showExecutionCommand",
+          "to": "src/execution/report.ts#executionShow"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/commands.ts#startExecutionCommand",
+          "to": "src/execution/manager.ts#startRun"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/commands.ts#startExecutionCommand",
+          "to": "src/execution/paths.ts#executionPaths"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/commands.ts#startExecutionCommand",
+          "to": "src/execution/store.ts#writeRun"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/commands.ts#statusExecutionCommand",
+          "to": "src/execution/report.ts#QueryScope"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/commands.ts#statusExecutionCommand",
+          "to": "src/execution/report.ts#executionStatus"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/commands.ts#taskExecutionCommand",
+          "to": "src/execution/manager.ts#recordTask"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/failure.ts#classifyFailure",
+          "to": "src/execution/config.ts#ExecutionConfig"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/failure.ts#classifyFailure",
+          "to": "src/execution/types.ts#FailureCategory"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/manager.ts#CompleteRunInput",
+          "to": "src/execution/config.ts#ExecutionConfig"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/manager.ts#CompleteRunResult",
+          "to": "src/execution/types.ts#ExecutionRun"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/manager.ts#FailRunInput",
+          "to": "src/execution/config.ts#ExecutionConfig"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/manager.ts#FailRunInput",
+          "to": "src/execution/types.ts#FailureCategory"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/manager.ts#RecordFailureInput",
+          "to": "src/execution/config.ts#ExecutionConfig"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/manager.ts#RecordFailureInput",
+          "to": "src/execution/types.ts#FailureCategory"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/manager.ts#RecordFailureResult",
+          "to": "src/execution/failure.ts#FailureGuidance"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/manager.ts#RecordFailureResult",
+          "to": "src/execution/types.ts#ExecutionRun"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/manager.ts#RecordFailureResult",
+          "to": "src/execution/types.ts#FailureCategory"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/manager.ts#RecordTaskInput",
+          "to": "src/execution/config.ts#ExecutionConfig"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/manager.ts#RecordTaskResult",
+          "to": "src/execution/types.ts#ExecutionRun"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/manager.ts#RunTransitionInput",
+          "to": "src/execution/config.ts#ExecutionConfig"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/manager.ts#RunTransitionResult",
+          "to": "src/execution/types.ts#ExecutionRun"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/manager.ts#StartRunInput",
+          "to": "src/execution/config.ts#ExecutionConfig"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/manager.ts#StartRunResult",
+          "to": "src/execution/types.ts#ExecutionRun"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/manager.ts#StartRunResult",
+          "to": "src/workflow/types.ts#TaskDocument"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/manager.ts#cancelRun",
+          "to": "src/execution/config.ts#DEFAULT_EXECUTION_CONFIG"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/manager.ts#cancelRun",
+          "to": "src/execution/paths.ts#executionPaths"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/manager.ts#cancelRun",
+          "to": "src/execution/types.ts#ExecutionRun"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/manager.ts#completeRun",
+          "to": "src/execution/config.ts#DEFAULT_EXECUTION_CONFIG"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/manager.ts#completeRun",
+          "to": "src/execution/paths.ts#executionPaths"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/manager.ts#completeRun",
+          "to": "src/execution/record.ts#OrdinaryImplementationRecord"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/manager.ts#completeRun",
+          "to": "src/execution/record.ts#readOrdinaryRecord"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/manager.ts#completeRun",
+          "to": "src/execution/record.ts#writeOrdinaryRecord"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/manager.ts#completeRun",
+          "to": "src/execution/types.ts#ExecutionRun"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/manager.ts#completeRun",
+          "to": "src/workspace/record.ts#nowCst"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/manager.ts#failRun",
+          "to": "src/execution/config.ts#DEFAULT_EXECUTION_CONFIG"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/manager.ts#failRun",
+          "to": "src/execution/failure.ts#classifyFailure"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/manager.ts#failRun",
+          "to": "src/execution/failure.ts#redactFailureSummary"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/manager.ts#failRun",
+          "to": "src/execution/paths.ts#executionPaths"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/manager.ts#failRun",
+          "to": "src/execution/types.ts#ExecutionRun"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/manager.ts#failRun",
+          "to": "src/execution/types.ts#FAILURE_CATEGORIES"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/manager.ts#pauseRun",
+          "to": "src/execution/config.ts#DEFAULT_EXECUTION_CONFIG"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/manager.ts#pauseRun",
+          "to": "src/execution/paths.ts#executionPaths"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/manager.ts#pauseRun",
+          "to": "src/execution/types.ts#ExecutionRun"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/manager.ts#recordFailure",
+          "to": "src/execution/config.ts#DEFAULT_EXECUTION_CONFIG"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/manager.ts#recordFailure",
+          "to": "src/execution/failure.ts#classifyFailure"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/manager.ts#recordFailure",
+          "to": "src/execution/failure.ts#redactFailureSummary"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/manager.ts#recordFailure",
+          "to": "src/execution/paths.ts#executionPaths"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/manager.ts#recordFailure",
+          "to": "src/execution/types.ts#ExecutionRun"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/manager.ts#recordFailure",
+          "to": "src/execution/types.ts#FAILURE_CATEGORIES"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/manager.ts#recordTask",
+          "to": "src/execution/config.ts#DEFAULT_EXECUTION_CONFIG"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/manager.ts#recordTask",
+          "to": "src/execution/paths.ts#executionPaths"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/manager.ts#recordTask",
+          "to": "src/execution/store.ts#readRun"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/manager.ts#recordTask",
+          "to": "src/execution/types.ts#ExecutionRun"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/manager.ts#recordTask",
+          "to": "src/workflow/order.ts#readExecutionOrder"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/manager.ts#recordTask",
+          "to": "src/workflow/parse.ts#readTasks"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/manager.ts#recordWorkspaceCheckpoint",
+          "to": "src/execution/config.ts#DEFAULT_EXECUTION_CONFIG"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/manager.ts#recordWorkspaceCheckpoint",
+          "to": "src/execution/paths.ts#executionPaths"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/manager.ts#recordWorkspaceCheckpoint",
+          "to": "src/execution/store.ts#acquireLock"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/manager.ts#recordWorkspaceCheckpoint",
+          "to": "src/execution/types.ts#ExecutionRun"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/manager.ts#startRun",
+          "to": "src/execution/config.ts#DEFAULT_EXECUTION_CONFIG"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/manager.ts#startRun",
+          "to": "src/execution/paths.ts#executionPaths"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/manager.ts#startRun",
+          "to": "src/execution/record.ts#OrdinaryImplementationRecord"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/manager.ts#startRun",
+          "to": "src/execution/record.ts#readOrdinaryRecord"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/manager.ts#startRun",
+          "to": "src/execution/record.ts#writeOrdinaryRecord"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/manager.ts#startRun",
+          "to": "src/execution/types.ts#ExecutionRun"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/manager.ts#startRun",
+          "to": "src/workflow/order.ts#readExecutionOrder"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/manager.ts#startRun",
+          "to": "src/workflow/parse.ts#readTasks"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/manager.ts#startRun",
+          "to": "src/workspace/record.ts#nowCst"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/paths.ts#isPlanDirectory",
+          "to": "src/utils/fs.ts#exists"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/record.ts#writeOrdinaryRecord",
+          "to": "src/utils/fs.ts#atomicWrite"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/recovery.ts#ResumePacket",
+          "to": "src/execution/types.ts#ExecutionRun"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/recovery.ts#ResumeRunInput",
+          "to": "src/execution/config.ts#ExecutionConfig"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/recovery.ts#UnfinishedRunNotice",
+          "to": "src/execution/types.ts#ExecutionRun"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/recovery.ts#findUnfinishedRuns",
+          "to": "src/execution/paths.ts#executionPaths"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/recovery.ts#findUnfinishedRuns",
+          "to": "src/execution/store.ts#readRun"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/recovery.ts#findUnfinishedRuns",
+          "to": "src/execution/types.ts#ExecutionRun"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/recovery.ts#resumeRun",
+          "to": "src/execution/config.ts#DEFAULT_EXECUTION_CONFIG"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/recovery.ts#resumeRun",
+          "to": "src/execution/paths.ts#executionPaths"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/recovery.ts#resumeRun",
+          "to": "src/execution/record.ts#OrdinaryImplementationRecord"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/recovery.ts#resumeRun",
+          "to": "src/execution/record.ts#readOrdinaryRecord"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/recovery.ts#resumeRun",
+          "to": "src/execution/store.ts#acquireLock"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/recovery.ts#resumeRun",
+          "to": "src/execution/store.ts#isProcessAlive"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/recovery.ts#resumeRun",
+          "to": "src/execution/store.ts#readEvents"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/recovery.ts#resumeRun",
+          "to": "src/execution/store.ts#readLatestCheckpoint"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/recovery.ts#resumeRun",
+          "to": "src/execution/store.ts#readLock"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/recovery.ts#resumeRun",
+          "to": "src/execution/store.ts#writeCheckpoint"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/recovery.ts#resumeRun",
+          "to": "src/execution/store.ts#writeRun"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/recovery.ts#resumeRun",
+          "to": "src/execution/types.ts#ExecutionLock"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/recovery.ts#resumeRun",
+          "to": "src/execution/types.ts#ExecutionRun"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/recovery.ts#resumeRun",
+          "to": "src/workflow/parse.ts#readPlan"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/report.ts#ExecutionEventsResult",
+          "to": "src/execution/types.ts#ExecutionEvent"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/report.ts#HistoryRunEntry",
+          "to": "src/execution/types.ts#RunStatus"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/report.ts#StatusRunEntry",
+          "to": "src/execution/types.ts#ExecutionRun"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/report.ts#StatusRunEntry",
+          "to": "src/execution/types.ts#RunStatus"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/report.ts#executionAnalytics",
+          "to": "src/execution/paths.ts#executionPaths"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/report.ts#executionAnalytics",
+          "to": "src/execution/store.ts#readEvents"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/report.ts#executionAnalytics",
+          "to": "src/execution/store.ts#readRun"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/report.ts#executionAnalytics",
+          "to": "src/execution/types.ts#ExecutionEvent"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/report.ts#executionEvents",
+          "to": "src/execution/paths.ts#executionPaths"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/report.ts#executionEvents",
+          "to": "src/execution/store.ts#EventReadResult"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/report.ts#executionEvents",
+          "to": "src/execution/store.ts#readEvents"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/report.ts#executionEvents",
+          "to": "src/execution/store.ts#readRun"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/report.ts#executionHistory",
+          "to": "src/execution/paths.ts#executionPaths"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/report.ts#executionHistory",
+          "to": "src/execution/store.ts#readRun"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/report.ts#executionShow",
+          "to": "src/execution/paths.ts#executionPaths"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/report.ts#executionShow",
+          "to": "src/execution/store.ts#readEvents"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/report.ts#executionShow",
+          "to": "src/execution/store.ts#readLatestCheckpoint"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/store.ts#CheckpointReadResult",
+          "to": "src/execution/types.ts#ExecutionCheckpoint"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/store.ts#EventReadResult",
+          "to": "src/execution/types.ts#ExecutionEvent"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/store.ts#ExecutionEventInput",
+          "to": "src/execution/types.ts#ExecutionEvent"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/store.ts#LockAcquisition",
+          "to": "src/execution/types.ts#ExecutionLock"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/store.ts#acquireLock",
+          "to": "src/execution/paths.ts#ExecutionPaths"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/store.ts#acquireLock",
+          "to": "src/execution/types.ts#ExecutionLock"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/store.ts#acquireLock",
+          "to": "src/execution/validate.ts#assertExecutionRecord"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/store.ts#appendEvent",
+          "to": "src/execution/config.ts#DEFAULT_EXECUTION_CONFIG"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/store.ts#appendEvent",
+          "to": "src/execution/config.ts#ExecutionConfig"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/store.ts#appendEvent",
+          "to": "src/execution/paths.ts#ExecutionPaths"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/store.ts#appendEvent",
+          "to": "src/execution/types.ts#ExecutionEvent"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/store.ts#appendEvent",
+          "to": "src/execution/validate.ts#validateExecutionRecord"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/store.ts#appendEvent",
+          "to": "src/utils/fs.ts#appendFsync"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/store.ts#ensureExecutionPaths",
+          "to": "src/execution/paths.ts#ExecutionPaths"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/store.ts#readEvents",
+          "to": "src/execution/paths.ts#ExecutionPaths"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/store.ts#readEvents",
+          "to": "src/execution/types.ts#ExecutionEvent"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/store.ts#readEvents",
+          "to": "src/execution/validate.ts#validateExecutionRecord"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/store.ts#readLatestCheckpoint",
+          "to": "src/execution/paths.ts#ExecutionPaths"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/store.ts#readLatestCheckpoint",
+          "to": "src/execution/types.ts#ExecutionCheckpoint"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/store.ts#readLatestCheckpoint",
+          "to": "src/execution/validate.ts#validateExecutionRecord"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/store.ts#readLock",
+          "to": "src/execution/paths.ts#ExecutionPaths"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/store.ts#readLock",
+          "to": "src/execution/types.ts#ExecutionLock"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/store.ts#readLock",
+          "to": "src/execution/validate.ts#assertExecutionRecord"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/store.ts#readRun",
+          "to": "src/execution/paths.ts#ExecutionPaths"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/store.ts#readRun",
+          "to": "src/execution/types.ts#ExecutionRun"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/store.ts#readRun",
+          "to": "src/execution/validate.ts#assertExecutionRecord"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/store.ts#releaseLock",
+          "to": "src/execution/paths.ts#ExecutionPaths"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/store.ts#writeCheckpoint",
+          "to": "src/execution/config.ts#DEFAULT_EXECUTION_CONFIG"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/store.ts#writeCheckpoint",
+          "to": "src/execution/config.ts#ExecutionConfig"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/store.ts#writeCheckpoint",
+          "to": "src/execution/paths.ts#ExecutionPaths"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/store.ts#writeCheckpoint",
+          "to": "src/execution/types.ts#ExecutionCheckpoint"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/store.ts#writeCheckpoint",
+          "to": "src/execution/validate.ts#assertExecutionRecord"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/store.ts#writeCheckpoint",
+          "to": "src/utils/fs.ts#atomicWrite"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/store.ts#writeRun",
+          "to": "src/execution/paths.ts#ExecutionPaths"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/store.ts#writeRun",
+          "to": "src/execution/types.ts#ExecutionRun"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/store.ts#writeRun",
+          "to": "src/execution/validate.ts#assertExecutionRecord"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/store.ts#writeRun",
+          "to": "src/utils/fs.ts#atomicWrite"
+        },
+        {
+          "kind": "imports",
+          "from": "src/sync/gate.ts#ProjectGateExecutionNotice",
+          "to": "src/execution/recovery.ts#UnfinishedRunNotice"
+        },
+        {
+          "kind": "imports",
+          "from": "src/workspace/execution.ts#checkpointWorkspace",
+          "to": "src/execution/manager.ts#recordWorkspaceCheckpoint"
+        }
+      ],
+      "owner_role": "shared",
+      "responsibility": "Execution observability records one per-repository run with scoped events, checkpoints and analytics while `implementation.yaml` remains the only authoritative run record, and supports pause, failure and recovery without inventing authoritative state; the bounded structural cost guard keeps all telemetry local with no model call, network access or periodic scan.",
+      "read_scope": [
+        ".ai-workflow/AGENTS.md",
+        ".ai-workflow/notes/implemented/architecture/2026-11-17-execution-observability-resilience.i18n.yaml",
+        ".ai-workflow/notes/implemented/architecture/2026-11-17-execution-observability-resilience.md",
+        ".ai-workflow/notes/implemented/architecture/2026-11-17-execution-observability-resilience.zh.md",
+        "MEMORY.md",
+        "README.md",
+        "src/cli.ts",
+        "src/execution/commands.ts",
+        "src/execution/config.ts",
+        "src/execution/failure.ts",
+        "src/execution/hook.ts",
+        "src/execution/manager.ts",
+        "src/execution/paths.ts",
+        "src/execution/record.ts",
+        "src/execution/recovery.ts",
+        "src/execution/report.ts",
+        "src/execution/store.ts",
+        "src/execution/types.ts",
+        "src/execution/validate.ts",
+        "src/sync/gate.ts",
+        "src/workspace/execution.ts",
+        "templates/agents/git-operator.md",
+        "templates/hooks/opencode-v2.js",
+        "templates/hooks/opencode.js",
+        "templates/project/AGENTS.md",
+        "templates/skills/coding/SKILL.md",
+        "templates/skills/coding/references/workspace.md",
+        "tests/behavior/execution-observability-content.test.ts",
+        "tests/integration/execution-cli.test.ts",
+        "tests/integration/execution-hooks.test.ts",
+        "tests/integration/execution-recovery-cli.test.ts",
+        "tests/integration/execution-workspace.test.ts",
+        "tests/unit/execution-failure.test.ts",
+        "tests/unit/execution-manager.test.ts",
+        "tests/unit/execution-recovery.test.ts",
+        "tests/unit/execution-schema.test.ts",
+        "tests/unit/execution-store.test.ts"
+      ],
+      "shared_entry": false
     }
   ]
 }

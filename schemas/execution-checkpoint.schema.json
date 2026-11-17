@@ -1,0 +1,67 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://ai-workflow.local/schemas/execution-checkpoint.schema.json",
+  "title": "Execution Checkpoint",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "checkpoint_id",
+    "run_id",
+    "plan_id",
+    "plan_digest",
+    "task_states",
+    "attempt_counts",
+    "created_at"
+  ],
+  "properties": {
+    "checkpoint_id": { "type": "string", "minLength": 1 },
+    "run_id": { "type": "string", "minLength": 1 },
+    "plan_id": { "type": "string", "minLength": 1 },
+    "plan_digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "task_states": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/definitions/taskState" }
+    },
+    "attempt_counts": {
+      "type": "object",
+      "additionalProperties": { "type": "integer", "minimum": 0 }
+    },
+    "created_at": { "$ref": "#/definitions/timestamp" },
+    "repository": { "type": "string", "minLength": 1 },
+    "phase": { "type": "string", "minLength": 1 },
+    "agent_binding": { "$ref": "#/definitions/agentBinding" },
+    "last_persisted_event_id": { "type": "string", "minLength": 1 }
+  },
+  "definitions": {
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$"
+    },
+    "taskState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status"],
+      "properties": {
+        "status": { "type": "string", "enum": ["pending", "running", "completed", "failed"] },
+        "commit": { "type": "string", "pattern": "^(?:[a-f0-9]{40}|[a-f0-9]{64})$" },
+        "head": { "type": "string", "pattern": "^(?:[a-f0-9]{40}|[a-f0-9]{64})$" }
+      }
+    },
+    "agentBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["invocation_id", "host", "session_id"],
+      "properties": {
+        "invocation_id": { "type": "string", "minLength": 1 },
+        "host": { "type": "string", "minLength": 1 },
+        "session_id": { "type": "string", "minLength": 1 },
+        "parent_session_id": { "type": "string", "minLength": 1 },
+        "role": { "type": "string", "minLength": 1 },
+        "model": { "type": "string", "minLength": 1 },
+        "tokens": { "type": "integer", "minimum": 0 },
+        "cost": { "type": "number", "minimum": 0 }
+      }
+    }
+  }
+}

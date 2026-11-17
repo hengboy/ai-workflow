@@ -1,0 +1,39 @@
+# Agent Note: Execution observability overlay
+
+Status: implemented
+
+English | [中文](2026-11-17-execution-observability-resilience.zh.md)
+
+## Problem
+
+The single `implementation.yaml` told a maintainer whether a frozen plan had started or finished, but nothing carried what the run was doing between those two points. A reader could not tell which task or phase was in progress, which validation, review or delivery evidence a task carried, why a run stopped, or whether an interruption could continue, so each such question pressed toward an agent-written progress log or a second authoritative store that would compete with the record.
+
+## Decision
+
+- The overlay is program-owned. `src/execution/` owns the store, lifecycle, recovery, reporting and command surface, and every write happens inside the workflow CLI at an existing boundary: `ai-workflow execution start`, `execution task`, `execution complete`, `execution pause`, `execution cancel`, `execution failure` and `execution resume` for a plan slice, `ai-workflow workspace checkpoint` mirroring an applied checkpoint event, and the internal `execution record --host opencode` transport for host session evidence. No agent hand-writes a run, event, checkpoint or lock file.
+- Each run keeps `run.json`, the append-only `events.jsonl` stream, retained `checkpoints/` and `lock.json` under the frozen plan's `execution/` directory. Events are local and owner-only, checkpoints keep a bounded history with a default of ten, and every file stays inside the ignored `.ai-workflow/plans/` boundary, so no tracked artifact, schema migration or adopting-project change is introduced.
+- `implementation.yaml` remains the sole authoritative workflow record for status, UTC+08:00 timestamps and the final commit. `execution start` writes the in-progress record and `execution complete` writes the completed record with the same format, idempotency and interrupted-run semantics, while the overlay only observes: it never replaces the record, never rewrites a contradictory record, and no checkpoint, delivery, workspace-status or acceptance gate reads it.
+- A run covers one repository plan slice, and a workspace plan keeps a separate root run for root-owned tasks and finalization. Runs stay local to their own repository and lock, so no merged synthetic workspace run, cross-repository state merge or shared lock exists.
+- Recovery separates detection from action. Discovery is read-only and reports each unfinished run with its lock state, and the phase gate prints that notice once per phase entry. Continuing an unfinished run requires an explicit `ai-workflow execution resume`, which refuses a live or other-host lock, a plan digest mismatch, a contradictory authoritative record or wholly corrupt storage, prefers the last valid checkpoint and never replays a completed task or a model request.
+- Failure classification returns bounded guidance instead of acting. A classified failure carries the retry, pause or repair action, total retry attempts honor the configured limit with an explicit Retry-After override, and the stored summary is redacted and length-bounded before it is written; the CLI issues no model request and cannot replay one.
+- The structural cost guard is explicit: no model call, no network call and no periodic scan. Queries are read-only and deterministic, unavailable values report `N/A`, and the only agent evidence is what a host supplies: the OpenCode session lifecycle records invocation start and completion, while every other host records nothing and reports `N/A` rather than inventing an invocation.
+- The delivered decision is stated together by the project contract's execution telemetry section, `MEMORY.md`, `README.md`, the coding skill, the workspace reference and the Git Operator role, and the boundary is covered by store, lifecycle, recovery, workspace mirroring, host recording, content and end-to-end cost-guard tests.
+
+## Alternatives considered
+
+- **Merge every participating repository into one workspace run.** Declined: each repository owns its tasks, delivery, worktree and lock, so a merged run would add cross-repository state merging and lock coordination without removing any existing boundary.
+- **Drive lifecycle calls from prompts at every boundary.** Declined: it adds normal-path agent steps and a hand-write surface, while the existing commands, the checkpoint command and the host hook already cover the boundaries.
+- **Make the run file the authoritative state.** Declined: it would rebuild workspace status, audit, delivery gates and recovery around a second source of truth, with high regression risk and no gain over the record.
+- **Retry the model automatically inside the CLI.** Declined: the CLI issues no model request, so it cannot retry one and must never replay a request it did not send; classification returns guidance to the caller instead.
+- **Start a run during Planning.** Declined: Planning has no execution state and forbids a planning-session run, so the run begins at implementation start beside the digest and timestamps the record already carries.
+
+## Consequences
+
+- An operator reads one local overlay to learn the current run status, the task and phase in progress, the recorded validation, review and delivery evidence, the failure category and the resume decision, while the authoritative record still answers whether the plan started or finished and when.
+- A telemetry write failure prints a warning that never blocks a checkpoint, delivery or status gate, never retries by itself and never re-commits, so degraded storage surfaces as visible context rather than as a changed authoritative byte or exit code.
+- Delivery, workspace-readiness and acceptance gates keep their prior evidence requirements, so an overlay value is explanatory and no run status authorizes a transition of the record, a checkpoint, a delivery or an acceptance decision.
+- This record partially supersedes [the implementation record](../process/2026-09-22-plan-implementation-record.md): that record keeps its format, timestamps, two statuses and sole authority, answers its earlier no-new-CLI-subcommand alternative through the separate execution command group, and gains the overlay fact here.
+- This record partially supersedes [the workspace coding orchestration record](../feature/2026-10-09-workspace-coding-orchestration.md): that record keeps its activation, worktree, checkpoint, delivery-barrier and review decisions and replaces only its no-extra-run-state fact with per-repository execution telemetry beside the authoritative record.
+- This record partially supersedes [the workflow semantics record](../process/2026-11-02-workflow-semantics-context.md): that record keeps every earlier domain and its rationale, and adds the execution-status domain with run statuses, event and checkpoint evidence and degraded telemetry.
+- No active record is superseded in full: [the submodule workspace record](./2026-09-30-submodule-workspace.md), [the workspace execution consistency record](../bug-fix/2026-10-08-workspace-execution-consistency.md) and [the implementation-record timestamp record](../process/2026-09-23-implementation-record-utc-offset.md) keep their boundary, single-record and timezone decisions, and their current execution facts point here.
+- Installed host skills, agent prompts and the rebuilt CLI carry this behavior only after the next host install or profile activation, so an adopted project observes the overlay on its next real implementation after that rollout.

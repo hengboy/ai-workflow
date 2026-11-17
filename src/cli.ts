@@ -26,6 +26,21 @@ import { listNotes } from './notes/index.js';
 import { validateNotes } from './notes/validate.js';
 import { sealArchive } from './notes/archive.js';
 import { listPairs, recordPairs, verifyPairs } from './notes/pair.js';
+import { recordHostSession } from './execution/hook.js';
+import {
+  analyticsExecutionCommand,
+  cancelExecutionCommand,
+  completeExecutionCommand,
+  eventsExecutionCommand,
+  failureExecutionCommand,
+  historyExecutionCommand,
+  pauseExecutionCommand,
+  resumeExecutionCommand,
+  showExecutionCommand,
+  startExecutionCommand,
+  statusExecutionCommand,
+  taskExecutionCommand,
+} from './execution/commands.js';
 
 const hosts = ['codex', 'claude', 'opencode'] as const;
 function hostList(value: string): Host[] { if (value === 'all') return [...hosts]; if (!hosts.includes(value as Host)) throw new Error(`Invalid host: ${value}`); return [value as Host]; }
@@ -355,4 +370,143 @@ workspace.command('checkpoint').requiredOption('--plan <directory>').requiredOpt
   print(result);
   if (!result.valid) process.exitCode = 1;
 });
+const execution = program.command('execution');
+execution.command('record')
+  .requiredOption('--host <host>')
+  .action(async ({ host }: { host: string }) => {
+    const input = await readStdin().catch(() => '');
+    print(await recordHostSession(host, input));
+    process.exitCode = 0;
+  });
+execution.command('start')
+  .requiredOption('--plan <directory>')
+  .option('--repository <name>', 'repository name bound to this run')
+  .action(async ({ plan, repository }: { plan: string; repository?: string }) => {
+    const outcome = await startExecutionCommand({ plan, ...(repository === undefined ? {} : { repository }) });
+    print(outcome.body);
+    process.exitCode = outcome.exitCode;
+  });
+execution.command('task')
+  .argument('<task>', 'task id from the frozen schedule')
+  .requiredOption('--plan <directory>')
+  .option('--commit <sha>', 'full commit that delivered the task')
+  .option('--head <sha>', 'full verified HEAD for a no-change task')
+  .action(async (task: string, { plan, commit, head }: { plan: string; commit?: string; head?: string }) => {
+    const outcome = await taskExecutionCommand({
+      plan,
+      task,
+      ...(commit === undefined ? {} : { commit }),
+      ...(head === undefined ? {} : { head }),
+    });
+    print(outcome.body);
+    process.exitCode = outcome.exitCode;
+  });
+execution.command('complete')
+  .requiredOption('--plan <directory>')
+  .requiredOption('--commit <sha>')
+  .option('--validation <result>', 'validation result recorded before completion')
+  .option('--review <result>', 'review result recorded before completion')
+  .action(async ({ plan, commit, validation, review }: { plan: string; commit: string; validation?: string; review?: string }) => {
+    const outcome = await completeExecutionCommand({
+      plan,
+      commit,
+      ...(validation === undefined ? {} : { validation }),
+      ...(review === undefined ? {} : { review }),
+    });
+    print(outcome.body);
+    process.exitCode = outcome.exitCode;
+  });
+execution.command('pause')
+  .requiredOption('--plan <directory>')
+  .option('--summary <summary>')
+  .action(async ({ plan, summary }: { plan: string; summary?: string }) => {
+    const outcome = await pauseExecutionCommand({ plan, ...(summary === undefined ? {} : { summary }) });
+    print(outcome.body);
+    process.exitCode = outcome.exitCode;
+  });
+execution.command('cancel')
+  .requiredOption('--plan <directory>')
+  .option('--summary <summary>')
+  .action(async ({ plan, summary }: { plan: string; summary?: string }) => {
+    const outcome = await cancelExecutionCommand({ plan, ...(summary === undefined ? {} : { summary }) });
+    print(outcome.body);
+    process.exitCode = outcome.exitCode;
+  });
+execution.command('resume')
+  .option('--plan <directory>')
+  .option('--project <project>', projectOption)
+  .option('--repository <name>', 'expected repository name bound to this run')
+  .action(async ({ plan, project, repository }: { plan?: string; project?: string; repository?: string }) => {
+    const outcome = await resumeExecutionCommand({
+      ...(plan === undefined ? {} : { plan }),
+      ...(project === undefined ? {} : { project }),
+      ...(repository === undefined ? {} : { repository }),
+    });
+    print(outcome.body);
+    process.exitCode = outcome.exitCode;
+  });
+execution.command('failure')
+  .requiredOption('--plan <directory>')
+  .requiredOption('--category <category>')
+  .option('--summary <summary>')
+  .option('--retry-after <seconds>', 'Retry-After delay in whole seconds')
+  .option('--terminal', 'fail the run instead of retrying or pausing')
+  .option('--task <id>', 'task that failed, for task-execution failures')
+  .action(async ({ plan, category, summary, retryAfter, terminal, task }: { plan: string; category: string; summary?: string; retryAfter?: string; terminal?: boolean; task?: string }) => {
+    const outcome = await failureExecutionCommand({
+      plan,
+      category,
+      ...(summary === undefined ? {} : { summary }),
+      ...(retryAfter === undefined ? {} : { retryAfter }),
+      ...(terminal === undefined ? {} : { terminal }),
+      ...(task === undefined ? {} : { task }),
+    });
+    print(outcome.body);
+    process.exitCode = outcome.exitCode;
+  });
+execution.command('status')
+  .option('--project <project>', projectOption)
+  .option('--plan <directory>')
+  .action(async ({ project, plan }: { project?: string; plan?: string }) => {
+    const outcome = await statusExecutionCommand({ ...(project === undefined ? {} : { project }), ...(plan === undefined ? {} : { plan }) });
+    print(outcome.body);
+    process.exitCode = outcome.exitCode;
+  });
+execution.command('show')
+  .option('--project <project>', projectOption)
+  .option('--plan <directory>')
+  .action(async ({ project, plan }: { project?: string; plan?: string }) => {
+    const outcome = await showExecutionCommand({ ...(project === undefined ? {} : { project }), ...(plan === undefined ? {} : { plan }) });
+    print(outcome.body);
+    process.exitCode = outcome.exitCode;
+  });
+execution.command('events')
+  .option('--project <project>', projectOption)
+  .option('--plan <directory>')
+  .option('--limit <count>', 'maximum number of newest events')
+  .action(async ({ project, plan, limit }: { project?: string; plan?: string; limit?: string }) => {
+    const outcome = await eventsExecutionCommand({
+      ...(project === undefined ? {} : { project }),
+      ...(plan === undefined ? {} : { plan }),
+      ...(limit === undefined ? {} : { limit }),
+    });
+    print(outcome.body);
+    process.exitCode = outcome.exitCode;
+  });
+execution.command('history')
+  .option('--project <project>', projectOption)
+  .option('--plan <directory>')
+  .action(async ({ project, plan }: { project?: string; plan?: string }) => {
+    const outcome = await historyExecutionCommand({ ...(project === undefined ? {} : { project }), ...(plan === undefined ? {} : { plan }) });
+    print(outcome.body);
+    process.exitCode = outcome.exitCode;
+  });
+execution.command('analytics')
+  .option('--project <project>', projectOption)
+  .option('--plan <directory>')
+  .action(async ({ project, plan }: { project?: string; plan?: string }) => {
+    const outcome = await analyticsExecutionCommand({ ...(project === undefined ? {} : { project }), ...(plan === undefined ? {} : { plan }) });
+    print(outcome.body);
+    process.exitCode = outcome.exitCode;
+  });
 program.parseAsync().catch((error: unknown) => { process.stderr.write(`ai-workflow: ${error instanceof Error ? error.message : String(error)}\n`); process.exitCode = 1; });

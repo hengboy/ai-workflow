@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { atomicWrite } from '../utils/fs.js';
 import { packagePath } from '../utils/schema.js';
+import { findUnfinishedRuns, type UnfinishedRunNotice } from '../execution/recovery.js';
 import { synchronizeProject, type SyncReport, type SynchronizeProjectOptions } from './index.js';
 
 export interface ProjectGateInput {
@@ -19,6 +20,12 @@ export interface ProjectGateOptions extends Pick<SynchronizeProjectOptions, 'run
   runtimeDirectory?: string;
 }
 
+/** Read-only unfinished-run notice attached to a phase-entry result. */
+export interface ProjectGateExecutionNotice {
+  unfinished: UnfinishedRunNotice[];
+  warnings: string[];
+}
+
 export interface ProjectGateResult {
   decision: 'allow' | 'deny' | 'skip';
   project: string;
@@ -26,6 +33,7 @@ export interface ProjectGateResult {
   context: string;
   authority?: string;
   exemption?: 'sync_actor' | 'authority_read';
+  execution?: ProjectGateExecutionNotice;
 }
 
 const authorityPaths = new Set([
@@ -126,6 +134,31 @@ function reportResult(report: SyncReport, authority?: string): ProjectGateResult
   return { decision: report.proceed ? 'allow' : 'deny', project: report.project, report, context, ...(authority === undefined ? {} : { authority }) };
 }
 
+function lockDescription(lock: UnfinishedRunNotice['lock']): string {
+  if (lock === 'stale') return 'lock is stale';
+  if (lock === 'held') return 'lock is held by a live process';
+  if (lock === 'other-host') return 'lock is held by another host';
+  if (lock === 'unreadable') return 'lock is unreadable';
+  return 'lock is not held';
+}
+
+function executionContextLine(run: UnfinishedRunNotice): string {
+  return `Execution run ${run.plan_id} (run ${run.run_id}) is ${run.status}; ${lockDescription(run.lock)}; resume with ai-workflow execution resume --plan ${run.plan_directory}.`;
+}
+
+/** Discover the phase-entry execution notice without ever letting discovery fail the gate. */
+async function executionNotice(projectRoot: string): Promise<ProjectGateExecutionNotice> {
+  try {
+    const discovery = await findUnfinishedRuns(projectRoot);
+    return { unfinished: discovery.runs, warnings: discovery.warnings };
+  } catch (error) {
+    return {
+      unfinished: [],
+      warnings: [`Unable to discover unfinished execution runs: ${error instanceof Error ? error.message : String(error)}`],
+    };
+  }
+}
+
 async function resolveAdoptedRoot(start: string): Promise<{ root: string; adopted: boolean }> {
   let projectRoot = start;
   while (true) {
@@ -205,7 +238,14 @@ export async function runProjectGate(input: ProjectGateInput, options: ProjectGa
     if (report.proceed && [...report.created, ...report.updated].some((path) => authorityPaths.has(path))) {
       authority = await readFile(join(report.project, '.ai-workflow/AGENTS.md'), 'utf8');
     }
-    const result = reportResult(report, authority);
+    const base = reportResult(report, authority);
+    const execution = await executionNotice(projectRoot);
+    const noticeLines = execution.unfinished.map(executionContextLine).join('\n');
+    const result: ProjectGateResult = {
+      ...base,
+      context: noticeLines.length === 0 ? base.context : `${base.context}\n${noticeLines}`,
+      execution,
+    };
     const unit: ProjectGateUnit = { version: 1, unit: randomUUID(), phase: true, result };
     await atomicWrite(path, `${JSON.stringify(unit)}\n`);
     return result;

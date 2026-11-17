@@ -596,6 +596,14 @@ describe('MEMORY records current standards rather than delivery transcripts (REQ
     expect(memory, 'MEMORY.md carries no step or phase transcript').not.toMatch(
       /\b(?:step|phase)\s+\d+/i,
     );
-    expect(memory, 'MEMORY.md carries no run record').not.toMatch(/implementation\.yaml|task_checkpoints/i);
+    expect(memory, 'MEMORY.md carries no run-record transcript payload').not.toMatch(
+      /task_checkpoints|run_id|started_at:|completed_at:/i,
+    );
+    if (/implementation\.yaml/i.test(memory)) {
+      expect(
+        memory,
+        'any implementation.yaml mention stays an authoritative-boundary statement, not a record listing',
+      ).toMatch(/implementation\.yaml[^.]{0,200}authoritative/i);
+    }
   });
 });

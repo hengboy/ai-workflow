@@ -11,6 +11,7 @@ Status: implemented
 ## Decision
 
 - 状态语义：项目契约是委派执行、评审判断、测试观察、实施记录完成、检查点与工作区就绪、门控决策、同步报告与定位器结果的共同权威，并为每个域规定所有者、必需证据与允许的下一步动作。技能与角色应用这些定义，同时保留各自独立的义务。
+- 执行状态：八个运行状态 `CREATED`、`RUNNING`、`PAUSED`、`INTERRUPTED`、`RESUMING`、`COMPLETED`、`FAILED` 与 `CANCELLED` 构成实施记录之旁的独立域，其证据是仅追加的事件流与保留的检查点。继续被中断的运行记录为 resume 而非重放，不可读的叠加层是降级遥测状态，只发出警告而不改变记录或任何门禁；任何运行状态都不授权实施记录转换、交付或验收决定。
 - 例行委派：一个已接受任务可在每个纵向行为边界使用全新的范围明确 Test、实现与验证委派，按需依次进行 RED1、implementation1、GREEN1、RED2、implementation2 与 GREEN2，同时冻结阶段顺序与串行范围任务提交保持不变。预期 RED 指明意图观察到的失败及其实际非零退出，并保留下一步 GREEN 义务；例行切片与验证不消耗也不扩张评审后的修复与复验预算。已完成的会话绝不复用或恢复。
 - 评审结果：已完成的评审可报告执行 `done`，而其结论为非 PASS；当每条建议都有有理有据的处理且不存在未解决的阻断项时，允许在建议保持可见的情况下 `PASS`。缺少必需输入为 `blocked`，执行失败为 `failed`，任何看似成功的状态都不能替代验收。
 - 安装恢复：实际采用状态选择入口，未采用的项目使用普通 `init`，仅当采用及其前置条件存在时使用 `init --upgrade`。缺少前置条件返回确切路径且不覆盖本地数据，目录存在或预检都不授权安装。
@@ -40,3 +41,4 @@ Status: implemented
 - No-supersession: [Review boundaries and repair](./2026-10-14-review-boundaries-and-repair.md) 保留其独立的分流、聚合修复、复验与集成决策；本记录应用已发布的状态语义，不取代该策略。
 - No-supersession: [Standards code review](./2026-11-02-standards-code-review.md) 保留其已交付代码判断、严重度映射与只读边界；本记录不取代该轴。
 - No-supersession: [Workspace session handoff after Planning and splitting](../bug-fix/2026-10-08-workspace-session-handoff.md) 保留其条件式交接与分发所有权；本记录不取代该交接。
+- 执行状态域由[执行可观测性叠加层记录](../architecture/2026-11-17-execution-observability-resilience.md)中由程序拥有的执行叠加层交付，该记录仅通过新增该域部分取代本记录；每个早先的域、其所有者与证据保持当前。

@@ -2,11 +2,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { constants } from 'node:fs';
 import { access, chmod, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import { runProjectGate, type ProjectGateInput, type ProjectGateResult } from '../../src/sync/gate.js';
+import { runProjectGate, readStoredProjectGate, type ProjectGateInput, type ProjectGateResult } from '../../src/sync/gate.js';
 import type { SyncStatus } from '../../src/sync/index.js';
 import { TemplateSourceTimeoutError } from '../../src/sync/source.js';
 import { changedPaths, fakeGit, snapshotTree, temporary, type TestGitRunner } from '../helpers.js';
 import { exists } from '../../src/utils/fs.js';
+import { hostname } from 'node:os';
+import { workspacePlanFixture } from '../helpers.js';
+import { startRun } from '../../src/execution/manager.js';
+import { executionPaths } from '../../src/execution/paths.js';
 
 const COMMIT = 'a'.repeat(40);
 
@@ -871,5 +875,165 @@ describe('project sync gate clone timeout classification (AC-004/AC-005)', () =>
     const stored = await parseRuntimeFile(await singleRuntimeFile(runtimeDirectory)) as { result?: { decision?: unknown; report?: { status?: unknown } } };
     expect(stored.result?.decision).toBe('allow');
     expect(stored.result?.report?.status).toBe('unverified');
+  });
+});
+
+// Additive phase-entry execution notice. Every existing test above is left untouched. The
+// fixture root is a valid adoption that also owns an unfinished execution run, and the fake
+// sync source pattern keeps source acquisition fully injected and offline.
+type GateWithExecution = ProjectGateResult & {
+  execution?: {
+    unfinished: Array<{ plan_id: string; plan_directory: string; run_id: string; status: string; lock: string; updated_at?: string }>;
+    warnings: string[];
+  };
+};
+
+const RECOVERY_PLAN_ID = '20261117-gate-unfinished';
+
+/** A valid adopted root carrying one real unfinished run, created through the lifecycle manager. */
+async function adoptedRootWithUnfinishedRun(root: string): Promise<string> {
+  await writeAdoptedTarget(root, COMMIT);
+  const planDirectory = await workspacePlanFixture(root, {
+    planId: RECOVERY_PLAN_ID,
+    requirements: ['REQ-001'],
+    acceptanceCriteria: ['AC-001'],
+    tasks: [],
+    phases: [],
+  });
+  await startRun({ planDirectory });
+  return planDirectory;
+}
+
+/** Turn the started run's lock into a same-host stale lock so staleness is nameable. */
+async function makeRunLockStale(planDirectory: string): Promise<void> {
+  const lockPath = executionPaths(planDirectory).lock;
+  const lock = JSON.parse(await readFile(lockPath, 'utf8')) as Record<string, unknown>;
+  await writeFile(lockPath, `${JSON.stringify({ ...lock, pid: 2_000_000_000, host: hostname() }, null, 2)}\n`);
+}
+
+function syncOptions(runGit: TestGitRunner, runtimeDirectory: string): { runGit: TestGitRunner; runtimeDirectory: string } {
+  return { runGit, runtimeDirectory };
+}
+
+describe('project sync gate phase-entry execution notice (REQ-010 / AC-017)', () => {
+  it('AC-017: adds one read-only context line naming plan, run, status, lock staleness and the resume command, and stores it', async () => {
+    const root = await temporary('ai-workflow-gate-exec-notice-');
+    const runtimeDirectory = await temporary('ai-workflow-gate-exec-notice-runtime-');
+    roots.push(root, runtimeDirectory);
+    const planDirectory = await adoptedRootWithUnfinishedRun(root);
+    await makeRunLockStale(planDirectory);
+    const executionBefore = await snapshotTree(join(planDirectory, 'execution'));
+    const fake = fakeGit({ commit: COMMIT, files: sourceFiles(COMMIT) });
+
+    const result = await runProjectGate(
+      { host: 'claude', event: 'PhaseEntry', sessionId: 'notice-session', cwd: root },
+      syncOptions(fake.runGit, runtimeDirectory),
+    ) as GateWithExecution;
+
+    expect(result.decision).toBe('allow');
+    expect(result.report?.status).toBe('synchronized');
+    expect(result.report?.verified).toBe(true);
+    expect(result.execution, 'PhaseEntry adds the execution notice').toBeDefined();
+    expect(result.execution!.unfinished).toHaveLength(1);
+    expect(result.execution!.warnings).toEqual([]);
+    const entry = result.execution!.unfinished[0]!;
+    expect(entry.plan_id).toBe(RECOVERY_PLAN_ID);
+    expect(entry.plan_directory).toBe(planDirectory);
+    expect(typeof entry.run_id).toBe('string');
+    expect(entry.run_id.length).toBeGreaterThan(0);
+    expect(entry.status).toBe('RUNNING');
+    expect(entry.lock).toBe('stale');
+
+    const lines = result.context.split('\n').filter((line) => line.includes(RECOVERY_PLAN_ID));
+    expect(lines, 'exactly one context line per unfinished run').toHaveLength(1);
+    expect(lines[0]).toContain(entry.run_id);
+    expect(lines[0]).toContain('RUNNING');
+    expect(lines[0]).toMatch(/stale/i);
+    expect(lines[0]).toContain(`ai-workflow execution resume --plan ${planDirectory}`);
+
+    expect(changedPaths(executionBefore, await snapshotTree(join(planDirectory, 'execution'))), 'the gate writes no execution file').toEqual([]);
+    const stored = await readStoredProjectGate({ host: 'claude', project: root, runtimeDirectory }) as GateWithExecution | undefined;
+    expect(stored, 'the notice is part of the stored result').toEqual(result);
+  });
+
+  it('AC-017: later native events reuse the stored notice after run state changes or is deleted', async () => {
+    const root = await temporary('ai-workflow-gate-exec-reuse-');
+    const runtimeDirectory = await temporary('ai-workflow-gate-exec-reuse-runtime-');
+    roots.push(root, runtimeDirectory);
+    const planDirectory = await adoptedRootWithUnfinishedRun(root);
+    const fake = fakeGit({ commit: COMMIT, files: sourceFiles(COMMIT) });
+    const options = syncOptions(fake.runGit, runtimeDirectory);
+
+    const stored = await runProjectGate(
+      { host: 'claude', event: 'PhaseEntry', sessionId: 'reuse-session', cwd: root },
+      options,
+    ) as GateWithExecution;
+    expect(stored.execution?.unfinished).toHaveLength(1);
+    const cloneAfterPhase = fake.cloneCount();
+    const gitAfterPhase = fake.invocationCount();
+
+    // Change the authoritative-looking run status, then remove the run entirely. Neither may
+    // alter a later native event's cached notice or trigger a rescan.
+    const runPath = executionPaths(planDirectory).run;
+    const run = JSON.parse(await readFile(runPath, 'utf8')) as Record<string, unknown>;
+    await writeFile(runPath, `${JSON.stringify({ ...run, status: 'COMPLETED' }, null, 2)}\n`);
+    const changed = await runProjectGate(
+      { host: 'claude', event: 'SessionStart', sessionId: 'reuse-session', cwd: root },
+      options,
+    ) as GateWithExecution;
+    expect(changed.execution).toEqual(stored.execution);
+    expect(changed.context).toBe(stored.context);
+
+    await rm(runPath);
+    for (const event of ['UserPromptSubmit', 'PreToolUse'] as const) {
+      const replay = await runProjectGate(
+        { host: 'claude', event, sessionId: 'other-session', cwd: root, toolName: 'Bash', toolInput: { command: 'ls' } },
+        options,
+      ) as GateWithExecution;
+      expect(replay, `${event} must replay the stored result verbatim`).toEqual(stored);
+      expect(replay.execution).toEqual(stored.execution);
+    }
+    expect(fake.cloneCount(), 'native events never rescan the source').toBe(cloneAfterPhase);
+    expect(fake.invocationCount(), 'native events issue no git invocations').toBe(gitAfterPhase);
+  });
+
+  it('AC-017: a native event without a phase entry has no execution field', async () => {
+    const root = await temporary('ai-workflow-gate-exec-nophase-');
+    const runtimeDirectory = await temporary('ai-workflow-gate-exec-nophase-runtime-');
+    roots.push(root, runtimeDirectory);
+    await adoptedRootWithUnfinishedRun(root);
+    const fake = fakeGit({ commit: COMMIT, files: sourceFiles(COMMIT) });
+
+    const result = await runProjectGate(
+      { host: 'claude', event: 'PreToolUse', sessionId: 'no-phase', cwd: root, toolName: 'Bash', toolInput: { command: 'ls' } },
+      syncOptions(fake.runGit, runtimeDirectory),
+    ) as GateWithExecution;
+
+    expect(result.decision).toBe('allow');
+    expect(result.report).toBeUndefined();
+    expect(result.execution, 'no PhaseEntry means no execution notice').toBeUndefined();
+  });
+
+  it('AC-017: a corrupt run file yields a warning without failing the gate or changing the sync report', async () => {
+    const root = await temporary('ai-workflow-gate-exec-corrupt-');
+    const runtimeDirectory = await temporary('ai-workflow-gate-exec-corrupt-runtime-');
+    roots.push(root, runtimeDirectory);
+    const planDirectory = await adoptedRootWithUnfinishedRun(root);
+    await writeFile(executionPaths(planDirectory).run, '{ not valid json\n');
+    const fake = fakeGit({ commit: COMMIT, files: sourceFiles(COMMIT) });
+
+    const result = await runProjectGate(
+      { host: 'codex', event: 'PhaseEntry', sessionId: 'corrupt-run', cwd: root, toolName: 'Bash', toolInput: { command: 'ls' } },
+      syncOptions(fake.runGit, runtimeDirectory),
+    ) as GateWithExecution;
+
+    expect(result.decision, 'a corrupt run never fails the gate').toBe('allow');
+    expect(result.report?.status).toBe('synchronized');
+    expect(result.report?.verified).toBe(true);
+    expect(result.report?.proceed).toBe(true);
+    expect(result.execution).toBeDefined();
+    expect(result.execution!.unfinished).toEqual([]);
+    expect(result.execution!.warnings.length).toBeGreaterThan(0);
+    expect(result.execution!.warnings.some((warning) => warning.includes(RECOVERY_PLAN_ID)), 'the warning names the corrupt plan').toBe(true);
   });
 });

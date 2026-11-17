@@ -196,6 +196,25 @@ every recorded SHA and commit parentage is a hard precondition for a task, revie
 delivered or finalized event; `ai-workflow workspace audit --plan <directory>`
 re-verifies the recorded SHAs.
 
+## Execution telemetry per repository
+
+Workspace execution keeps one run per participating repository slice and a separate
+root run for root-owned tasks and finalization; the root run never merges with a
+slice run into a synthetic cross-repository run. Each repository's `execution/`
+directory lives under its own slice plan directory, so `run.json`, `events.jsonl`,
+`checkpoints/` and `lock.json` stay local to that repository and its own writes.
+
+The telemetry is additive: the single `implementation.yaml` stays the authoritative
+run record, and the checkpoint, delivery and status gates never read the overlay, so
+telemetry never changes a checkpoint, delivery or status gate. A telemetry write
+failure is reported as a warning without retrying, and it never blocks, rewrites or
+authorizes the authoritative record. Every query over the stored run, event and
+checkpoint data is read-only.
+
+A `reviewed` checkpoint event may additionally carry optional `validation` and
+`repair` results. They are recorded as telemetry only and change no event sequence,
+status, delivery gate or review verdict.
+
 ## Workspace root sessions
 
 For parent `workspace.yaml` with `role: workspace` and a non-root participant,

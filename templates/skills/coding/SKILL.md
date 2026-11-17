@@ -415,24 +415,42 @@ planning artifacts.
 ## Implementation Record
 
 Do not generate workflow manifests or run records except the single permitted
-implementation record at `<project>/.ai-workflow/plans/<planId>/implementation.yaml`.
+implementation record at `<project>/.ai-workflow/plans/<planId>/implementation.yaml`,
+written and updated only through the execution commands below.
 Only a frozen plan creates this record. A direct or mechanical change without a
 frozen plan creates no record. The only two status values are `in-progress` and
 `completed`; no failure status exists. Every timestamp is ISO 8601 in UTC+08:00,
 for example `2026-09-23T15:04:05+08:00`.
 
+`ai-workflow execution start --plan <plan-directory>` writes the record before the
+first implementation step, and `ai-workflow execution complete --plan <plan-directory>
+--commit <sha>` rewrites the same file after the final merge and owned cleanup.
 Preserve `plan_id`, existing `started_at` and any `root_tasks_commit` on updates.
-Completion follows final merge and cleanup of only the owned worktree and branch.
 
-| Lifecycle point | Same-record update |
+| Lifecycle point | Command and same-record result |
 | --- | --- |
-| Before the first implementation step | Write `plan_id`, `status: in-progress` and `started_at`, with no `completed_at`. |
-| Resume or interruption | Keep the start record; interrupted work stays `in-progress`, never with a failure or abandonment reason. Later success rewrites it as completed. |
-| Ordinary plan, root-only plan or child slice completion | Update in place (idempotent) to `status: completed`, `completed_at` and final commit SHA (`commit`). If the start record is missing, still write a valid completed record that omits `started_at`. |
-| Child-participating root task delivery | After merge and owned cleanup, keep `status: in-progress` with full lowercase 40- or 64-hex `root_tasks_commit`; no `completed_at` or final `commit` until pointer finalization. One record, no new status or artifact. |
+| Before the first implementation step | `ai-workflow execution start --plan <plan-directory>` writes `plan_id`, `status: in-progress` and `started_at`, with no `completed_at`. |
+| Resume or interruption | Keep the start record; interrupted work stays `in-progress`, never with a failure or abandonment reason. Continuing requires an explicit `ai-workflow execution resume --plan <plan-directory>`, and later success rewrites the record as completed. |
+| Ordinary plan, root-only plan or child slice completion | `ai-workflow execution complete --plan <plan-directory> --commit <sha>` updates in place (idempotent) to `status: completed`, `completed_at` and final commit SHA (`commit`). If the start record is missing, it still writes a valid completed record that omits `started_at`. |
+| Child-participating root task delivery | After merge and owned cleanup, the workspace checkpoint keeps `status: in-progress` with full lowercase 40- or 64-hex `root_tasks_commit`; no `completed_at` or final `commit` until pointer finalization. One record, no new status or artifact. |
 | Child-participating root without tasks | Delivery is implicit with a null commit: no artificial root-delivery worktree or record; create a worktree only for authorized finalization. |
 | Root finalization | Stay `in-progress` through interruption; after final merge and owned cleanup, set `status: completed`, `completed_at` and final workspace `commit`, retaining root delivery evidence. |
 | Completed root finalization reentry | Verify matching `plan_id`, full final commit and delivery/pointer evidence read-only. Report without a new worktree, record rewrite or task reexecution; invalid/unavailable evidence requires bounded support. |
+
+### Program-owned execution telemetry
+
+`implementation.yaml` stays the only authoritative implementation record; the
+program-owned telemetry overlay under
+`<project>/.ai-workflow/plans/<planId>/execution/` is supplementary state that never
+replaces it. Agents never hand-write run, event, checkpoint or lock files: the
+execution commands and `ai-workflow workspace checkpoint` own every overlay write.
+After each ordinary split task commit, Git Operator records the completed task with
+`ai-workflow execution task <taskId> --plan <plan-directory> --commit <sha>` and
+reports a recording failure instead of retrying or re-committing it.
+Classify each exception through `ai-workflow execution failure --plan <plan-directory>
+--category <category>`, and require an explicit `ai-workflow execution resume
+--plan <plan-directory>` after an interruption. The overlay makes no model call, no
+network call and no periodic scan, and every query is read-only.
 
 Workspace execution adds its fields and the checkpoint-only write protocol in `references/workspace.md`; explicitly read it before any workspace record operation.
 
