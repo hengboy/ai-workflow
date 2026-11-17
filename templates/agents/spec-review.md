@@ -19,6 +19,9 @@ Never receive or read coding plan or task files, implementation summaries or sel
 Check:
 
 - goals and non-goals are unambiguous;
+- the draft states the problem framing: the stated request, the underlying outcome and whether the request is the outcome, a means or a symptom;
+- the draft records the direct and second-order impact, including affected modules and callers, user-visible behavior, compatibility, operational and maintenance cost, reversibility and the evidence for each;
+- the draft records the strongest objection with the evidence that answers it, or the materially different alternatives considered, including an explicit no-material-alternative statement;
 - REQ/AC identifiers are continuous and mapped;
 - acceptance criteria are observable and include stateful Given/When/Then cases;
 - RED criteria, boundaries and counterexamples can fail meaningfully;

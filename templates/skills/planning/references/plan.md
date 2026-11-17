@@ -32,6 +32,26 @@ Apply Planning's [Document contract](../SKILL.md#document-contract). The Chinese
 | --- | --- | --- | --- |
 | REQ-001 | AC-001 | Step 1 | Targeted behavior test |
 
+## Problem framing and alternatives
+
+- Leading approach: state the approach this plan implements.
+- Strongest objection: state the strongest objection to that approach and the consequence if it holds.
+- Answer: state the evidence that answers the objection, or the alternative that survives it.
+- Materially different alternatives considered: list every materially different alternative considered and why it was declined.
+- No material alternative: when no materially different alternative exists, state `No material alternative` explicitly and never invent a nominal alternative to fill the section.
+
+## Impact and blast radius
+
+| Surface | Direct effect | Second-order effect | Evidence |
+| --- | --- | --- | --- |
+| Affected modules and callers | Name each affected module and its callers. | State the downstream effect on those callers. | Name the check or artifact that proves it. |
+| User-visible behavior | State the observable behavior change. | State the follow-on behavior change. | Name the behavior test or manual evidence. |
+| Compatibility | State the public-interface, format or migration effect. | State the effect on existing consumers. | Name the compatibility or migration check. |
+| Operational and maintenance cost | State the added operational and maintenance cost. | State the long-term maintenance effect. | Name the evidence for that cost. |
+| Reversibility | State how the change is reverted. | State what remains after a revert. | Name the rollback evidence. |
+
+A cross-module, public-interface or migration change requires this full impact table. A bounded planned change may state the impact proportionally, in one line per surface or one bounded sentence, and still names each direct and second-order effect with its evidence.
+
 ## Implementation sequence
 
 Keep the sequence cohesive and priority-ordered: merge tightly related behavior and its tests into one step, and do not create per-file or mechanical steps that only add execution overhead.
