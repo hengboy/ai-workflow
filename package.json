@@ -18,12 +18,14 @@
     "test:affected": "tsx scripts/test-affected.ts",
     "context:budget": "tsx scripts/context-budget.ts",
     "check": "pnpm check:notes && pnpm types:generate && pnpm typecheck && pnpm lint && pnpm build && pnpm test",
-    "dev": "tsx src/cli.ts"
+    "dev": "tsx src/cli.ts",
+    "install:global": "tsx scripts/install-global.ts"
   },
   "dependencies": {
     "ajv": "^8.17.1",
     "ajv-formats": "^3.0.1",
     "commander": "^14.0.0",
+    "typescript": "^5.9.2",
     "yaml": "^2.8.1"
   },
   "devDependencies": {
@@ -32,7 +34,6 @@
     "eslint": "^9.34.0",
     "json-schema-to-typescript": "^15.0.4",
     "tsx": "^4.20.5",
-    "typescript": "^5.9.2",
     "typescript-eslint": "^8.41.0",
     "vitest": "^3.2.4"
   },
