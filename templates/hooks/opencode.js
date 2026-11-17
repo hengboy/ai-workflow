@@ -98,6 +98,35 @@ export const AiWorkflowSyncPlugin = async ({ client }) => {
     return tool === 'read' && contractTarget(sessionID, args)?.path === join(project, '.ai-workflow/AGENTS.md');
   }
 
+  function bindingFields(...sources) {
+    const fields = {};
+    for (const source of sources) {
+      if (!source || typeof source !== 'object') continue;
+      if (fields.parent_session_id === undefined && typeof source.parentID === 'string') fields.parent_session_id = source.parentID;
+      if (fields.role === undefined && typeof source.role === 'string') fields.role = source.role;
+      if (fields.model === undefined && typeof source.model === 'string') fields.model = source.model;
+      if (fields.model === undefined && typeof source.model?.id === 'string') fields.model = source.model.id;
+      if (fields.tokens === undefined && typeof source.tokens === 'number') fields.tokens = source.tokens;
+      if (fields.cost === undefined && typeof source.cost === 'number') fields.cost = source.cost;
+    }
+    return fields;
+  }
+
+  // The recorder is spawned detached from the gate path: it never blocks the host and every
+  // spawn, stream or exit problem is swallowed so recording cannot break a session.
+  async function recordSession(type, sessionID, extra = {}) {
+    if (typeof sessionID !== 'string' || !sessionID) return;
+    let cwd = directories.get(sessionID);
+    if (!cwd) {
+      try { cwd = (await lookup(sessionID)).directory; } catch { return; }
+    }
+    directories.set(sessionID, cwd);
+    const child = spawn(executable, [cli, 'execution', 'record', '--host', 'opencode'], { cwd });
+    child.on('error', () => {});
+    child.stdin.on('error', () => {});
+    child.stdin.end(JSON.stringify({ event: type, cwd, session_id: sessionID, ...extra }));
+  }
+
   return {
     event: async ({ event }) => {
       if (event.type === 'server.connected') {
@@ -109,6 +138,7 @@ export const AiWorkflowSyncPlugin = async ({ client }) => {
       }
       const id = event.properties.info?.id ?? event.properties.sessionID;
       if (event.type === 'session.deleted') {
+        void recordSession('session.deleted', id).catch(() => {});
         results.delete(id);
         directories.delete(id);
         loadedAuthority.delete(id);
@@ -116,6 +146,9 @@ export const AiWorkflowSyncPlugin = async ({ client }) => {
       } else if (event.type === 'session.created' || event.type === 'session.compacted' || (event.type === 'session.updated' && !results.has(id))) {
         starts.set(id, event.type === 'session.created' ? 'startup' : event.type === 'session.compacted' ? 'compact' : 'resume');
         loadedAuthority.delete(id);
+        if (event.type === 'session.created') void recordSession('session.created', id, bindingFields(event.properties.info)).catch(() => {});
+      } else if (event.type === 'session.error') {
+        void recordSession('session.error', id).catch(() => {});
       }
     },
     'chat.message': async (input) => {

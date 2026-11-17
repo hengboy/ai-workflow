@@ -104,19 +104,52 @@ export default {
       return tool === 'read' && contractTarget(sessionID, args)?.path === join(project, '.ai-workflow/AGENTS.md');
     }
 
+    function bindingFields(...sources) {
+      const fields = {};
+      for (const source of sources) {
+        if (!source || typeof source !== 'object') continue;
+        if (fields.parent_session_id === undefined && typeof source.parentID === 'string') fields.parent_session_id = source.parentID;
+        if (fields.role === undefined && typeof source.role === 'string') fields.role = source.role;
+        if (fields.model === undefined && typeof source.model === 'string') fields.model = source.model;
+        if (fields.model === undefined && typeof source.model?.id === 'string') fields.model = source.model.id;
+        if (fields.tokens === undefined && typeof source.tokens === 'number') fields.tokens = source.tokens;
+        if (fields.cost === undefined && typeof source.cost === 'number') fields.cost = source.cost;
+      }
+      return fields;
+    }
+
+    // The recorder is spawned detached from the gate path: it never blocks the host and every
+    // spawn, stream or exit problem is swallowed so recording cannot break a session.
+    async function recordSession(type, sessionID, extra = {}) {
+      if (typeof sessionID !== 'string' || !sessionID) return;
+      let cwd = directories.get(sessionID);
+      if (!cwd) {
+        try { cwd = (await lookup(sessionID)).directory; } catch { return; }
+      }
+      directories.set(sessionID, cwd);
+      const child = spawn(executable, [cli, 'execution', 'record', '--host', 'opencode'], { cwd });
+      child.on('error', () => {});
+      child.stdin.on('error', () => {});
+      child.stdin.end(JSON.stringify({ event: type, cwd, session_id: sessionID, ...extra }));
+    }
+
     void (async () => {
       for await (const event of ctx.event.subscribe({ signal: controller.signal })) {
         if (event.type === 'session.created') {
           starts.set(event.data.sessionID, 'startup');
           loadedAuthority.delete(event.data.sessionID);
+          void recordSession('session.created', event.data.sessionID, bindingFields(event.data.info, event.data.session, event.data)).catch(() => {});
         } else if (event.type === 'session.compaction.ended') {
           starts.set(event.data.sessionID, 'compact');
           loadedAuthority.delete(event.data.sessionID);
         } else if (event.type === 'session.deleted') {
+          void recordSession('session.deleted', event.data.sessionID).catch(() => {});
           results.delete(event.data.sessionID);
           directories.delete(event.data.sessionID);
           loadedAuthority.delete(event.data.sessionID);
           starts.delete(event.data.sessionID);
+        } else if (event.type === 'session.error') {
+          void recordSession('session.error', event.data.sessionID).catch(() => {});
         }
       }
     })();

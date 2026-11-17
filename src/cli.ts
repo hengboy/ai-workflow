@@ -26,6 +26,7 @@ import { listNotes } from './notes/index.js';
 import { validateNotes } from './notes/validate.js';
 import { sealArchive } from './notes/archive.js';
 import { listPairs, recordPairs, verifyPairs } from './notes/pair.js';
+import { recordHostSession } from './execution/hook.js';
 import {
   analyticsExecutionCommand,
   cancelExecutionCommand,
@@ -370,6 +371,13 @@ workspace.command('checkpoint').requiredOption('--plan <directory>').requiredOpt
   if (!result.valid) process.exitCode = 1;
 });
 const execution = program.command('execution');
+execution.command('record')
+  .requiredOption('--host <host>')
+  .action(async ({ host }: { host: string }) => {
+    const input = await readStdin().catch(() => '');
+    print(await recordHostSession(host, input));
+    process.exitCode = 0;
+  });
 execution.command('start')
   .requiredOption('--plan <directory>')
   .option('--repository <name>', 'repository name bound to this run')
