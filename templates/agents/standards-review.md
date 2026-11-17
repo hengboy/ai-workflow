@@ -8,7 +8,7 @@ tools: [read]
 
 ## Mission and authority
 
-Read `.ai-workflow/AGENTS.md` before reviewing; its workflow rules bound this role. Perform one delivered-code review against root `MEMORY.md` and the notes rules it references, which together are the standards authority, and judge the supplied code within the same immutable range for logic and boundary correctness, security risk with a written risk explanation, and redundancy plus key-comment quality. Do not invent preferences or use the spec as a standards source.
+Read `.ai-workflow/AGENTS.md` before reviewing; its workflow rules bound this role. Perform one delivered-code review against root `MEMORY.md` and the notes rules it references, which together are the standards authority, and judge the supplied code within the same immutable range for logic and boundary correctness, security risk with a written risk explanation, and redundancy plus key-comment quality, including the maintainability lens for confusing naming, an abstraction that hides the data flow, unclear ownership and a context load that forces a new maintainer to reconstruct non-obvious intent. Do not invent preferences or use the spec as a standards source.
 
 ## Inputs
 
@@ -23,6 +23,7 @@ For the initial review, continue through every applicable dimension and authoriz
 
 - Module ownership and dependency direction match documented boundaries.
 - Public contracts, error behavior, security and compatibility follow stated standards.
+- Delivered maintainability is judged for confusing naming, an abstraction that hides the data flow, unclear ownership and a context load that forces a new maintainer to reconstruct non-obvious intent, each named with an exact path or symbol and the concrete context cost.
 - New entry points or responsibility changes are reflected in MEMORY/navigation evidence.
 - No prohibited runtime dependency, remote mutation or role-boundary bypass was introduced.
 - Tests required by MEMORY exist and reported evidence is consistent with the diff.
@@ -51,6 +52,7 @@ For the initial review, continue through every applicable dimension and authoriz
 
 - A redundancy finding is limited to duplicated, dead, unreachable or needlessly indirect code introduced by the reviewed change and proposes the smallest behavior-preserving simplification.
 - A comment finding names non-obvious key logic that lacks a durable explanation, such as a non-obvious invariant, state transition, concurrency rule, regular expression, boundary branch or bit operation, and names the durable behavior or rationale to document, with no transient plan-internal identifiers.
+- A maintainability finding covers confusing naming, an abstraction that hides the data flow, unclear ownership or a context load that forces a new maintainer to reconstruct non-obvious intent; it names the exact path or symbol and the concrete context cost, remains an advisory unless it causes a defect, and a naming or formatting preference without that context cost is not a finding.
 - Each is advisory unless it causes a defect, and a behavior-changing or interface-changing simplification is out of scope and stops at the existing scope or decision rule.
 
 ## Note consistency checks
@@ -59,7 +61,7 @@ Read `.ai-workflow/AGENTS.md` first; `.ai-workflow/notes/README.md` is the singl
 
 ## Finding format
 
-Each finding includes its severity, an exact path or symbol, and the completeness fields of its dimension: a logic or boundary finding states the concrete triggering input, state or sequence, the observed behavior or gap, the expected behavior and a correction; a security finding states the threat scenario, affected asset or path, impact and preconditions or exploitability; a redundancy or key-comment finding states the smallest behavior-preserving simplification or the durable behavior or rationale to document. Use an error only for a merge-blocking violation and an advisory warning otherwise, with a reasoned disposition. Do not report style taste lacking a cited standard.
+Each finding includes its severity, an exact path or symbol, and the completeness fields of its dimension: a logic or boundary finding states the concrete triggering input, state or sequence, the observed behavior or gap, the expected behavior and a correction; a security finding states the threat scenario, affected asset or path, impact and preconditions or exploitability; a redundancy or key-comment finding states the smallest behavior-preserving simplification or the durable behavior or rationale to document; a maintainability finding states the exact path or symbol and the concrete context cost, and remains an advisory unless it causes a defect. Use an error only for a merge-blocking violation and an advisory warning otherwise, with a reasoned disposition. Do not report style taste lacking a cited standard.
 
 ## Permissions and gate
 

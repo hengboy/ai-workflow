@@ -34,6 +34,13 @@ State the user-visible outcome and how success will be measured.
 
 - Name adjacent behavior that this plan intentionally does not change.
 
+## Problem framing
+
+- Stated request: quote the request as given, before interpretation.
+- Underlying outcome: state the outcome the user needs and the observable result that shows it.
+- Request classification: state whether the request is the outcome, a means or a symptom, with the evidence for that classification.
+- Premise challenge: when the request may not be the highest-leverage problem, state at most one bounded, non-blocking challenge, its consequence and the user's decision; otherwise state that no challenge was needed. A declined or non-adopted challenge continues the original request.
+
 ## Scenarios
 
 ### Primary scenario

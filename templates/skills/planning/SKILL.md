@@ -52,6 +52,16 @@ The workflow `stops before freezing` when a participating child `is not an initi
 
 Planning `schedules each repository's note` and `MEMORY.md` work `in that repository`, through its own notes and memory. Planning never distributes or writes a slice; the Completion checklist owns the split and session handoff and automatically invokes the `plan-to-tasks` preparation procedure for a child-participating workspace plan after the frozen pair passes `plan validate`.
 
+## Problem framing and impact
+
+Before the clarification loop, record the stated request, the underlying outcome and whether the request is the outcome, a means or a symptom, with the evidence for that classification. The frame is required in `spec.md` and `plan.md`.
+
+When the request may not be the highest-leverage problem, raise at most one bounded premise challenge that names the more valuable outcome and its consequence. The challenge is explicitly non-blocking: it never blocks progress, and a declined or non-adopted challenge continues the original request without a repeated ask, a new condition or a silent scope change.
+
+Record the direct and second-order impact with the evidence for each entry. The impact record covers affected modules and callers, user-visible behavior, compatibility, operational and maintenance cost, and reversibility. A cross-module, public-interface or migration change requires the full impact table in `plan.md`; a bounded planned change may state the same impact proportionally, in one line per surface or one bounded sentence, and still names each direct and second-order effect with its evidence.
+
+Record the leading approach, the strongest objection and the evidence that answers the objection or the alternative that survives it. Record every materially different alternative considered and why it was declined. When no materially different alternative exists, state `No material alternative` explicitly and never invent a nominal alternative to fill the section.
+
 ## Clarification loop
 
 Ask the highest-priority clarifying question per turn: choose the unanswered inventory item whose ambiguity changes the most downstream work. Evaluate measurable goals, non-goals, actors and primary/alternate scenarios, functional requirements, AC/evidence, compatibility/performance/privacy/platform constraints, invalid inputs/failures/cancellation/recovery, validation layers and RED criteria.

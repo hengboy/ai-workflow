@@ -245,8 +245,9 @@ amendment from the commit, final report or review.
    public interface and observable boundary for Test; stop for clarification if unclear.
 2. Have Test write one behavior test, then run it to confirm its expected failure. A test that
    passes initially is not coverage evidence; investigate before continuing. For a
-   defect, first reproduce it with a stable public-interface regression test and
-   retain it after the direct fix.
+   defect, first reproduce it with a stable public-interface regression test; state the
+   triggering condition and the cause, fix the cause rather than the symptom, and retain
+   the regression test after the direct fix.
 3. Write only the smallest production change that makes that test pass, and run
    the same test again.
 4. Repeat steps 1-3 vertically for every behavior. Do not write all tests first

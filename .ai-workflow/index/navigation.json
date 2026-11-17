@@ -5629,6 +5629,58 @@
         "tests/behavior/plan-write-scope-content.test.ts"
       ],
       "shared_entry": true
+    },
+    {
+      "id": "planning-decision-quality",
+      "name": "planning-decision-quality",
+      "aliases": [
+        "planning decision quality",
+        "problem framing",
+        "maintainability lens"
+      ],
+      "module_root": "root",
+      "entries": [
+        "templates/agents/spec-review.md",
+        "templates/agents/standards-review.md",
+        "templates/project/AGENTS.md",
+        "templates/skills/coding/SKILL.md",
+        "templates/skills/planning/SKILL.md",
+        "templates/skills/planning/references/plan.md",
+        "templates/skills/planning/references/spec.md"
+      ],
+      "symbols": [],
+      "related_files": [
+        ".ai-workflow/AGENTS.md",
+        ".ai-workflow/notes/implemented/process/2026-11-17-planning-decision-quality.i18n.yaml",
+        ".ai-workflow/notes/implemented/process/2026-11-17-planning-decision-quality.md",
+        ".ai-workflow/notes/implemented/process/2026-11-17-planning-decision-quality.zh.md",
+        "MEMORY.md",
+        "README.md"
+      ],
+      "tests": [
+        "tests/behavior/planning-decision-quality.test.ts"
+      ],
+      "depends_on": [],
+      "relations": [],
+      "owner_role": "shared",
+      "responsibility": "Planning problem framing compares the stated request with the underlying outcome and raises at most one bounded non-blocking challenge, records direct and second-order impact with evidence and the strongest objection or materially different alternatives, a direct defect fix states and fixes the cause with a retained public-interface regression test, and Standards Review's maintainability lens names an exact path or symbol plus its concrete context cost and stays advisory unless it causes a defect.",
+      "read_scope": [
+        ".ai-workflow/AGENTS.md",
+        ".ai-workflow/notes/implemented/process/2026-11-17-planning-decision-quality.i18n.yaml",
+        ".ai-workflow/notes/implemented/process/2026-11-17-planning-decision-quality.md",
+        ".ai-workflow/notes/implemented/process/2026-11-17-planning-decision-quality.zh.md",
+        "MEMORY.md",
+        "README.md",
+        "templates/agents/spec-review.md",
+        "templates/agents/standards-review.md",
+        "templates/project/AGENTS.md",
+        "templates/skills/coding/SKILL.md",
+        "templates/skills/planning/SKILL.md",
+        "templates/skills/planning/references/plan.md",
+        "templates/skills/planning/references/spec.md",
+        "tests/behavior/planning-decision-quality.test.ts"
+      ],
+      "shared_entry": true
     }
   ]
 }
