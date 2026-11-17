@@ -379,7 +379,7 @@ export async function executionShow(scope: QueryScope): Promise<ExecutionShowRes
   const location = target.kind === 'plan' ? await requirePlanLocation(target.plan) : await singleProjectLocation(target.project);
   const paths = executionPaths(location.planDirectory);
   const entry = await statusEntry(location);
-  const lock = location.kind === 'directory' ? await lockProjection(paths, false) : { state: 'unreadable' as const };
+  const lock = location.kind === 'directory' ? await lockProjection(paths, true) : { state: 'unreadable' as const };
 
   let checkpoint: CheckpointProjection;
   let events: { count: number; truncated: boolean; warnings: string[] };

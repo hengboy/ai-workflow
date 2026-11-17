@@ -11,12 +11,14 @@ import { readOrdinaryRecord, type OrdinaryImplementationRecord } from './record.
 import {
   acquireLock,
   appendEvent,
+  attemptCountsFromEvents,
   isProcessAlive,
   readEvents,
   readLatestCheckpoint,
   readLock,
   readRun,
   releaseLock,
+  taskStatesForCheckpoint,
   writeCheckpoint,
   writeRun,
 } from './store.js';
@@ -324,30 +326,24 @@ function contradictoryTask(run: ExecutionRun, events: ExecutionEvent[]): string 
   return undefined;
 }
 
-function taskStates(run: ExecutionRun): ExecutionCheckpoint['task_states'] {
-  const states: ExecutionCheckpoint['task_states'] = {};
-  for (const [taskId, state] of Object.entries(run.tasks ?? {})) {
-    const copy: ExecutionCheckpoint['task_states'][string] = { status: state.status };
-    if (state.commit !== undefined) copy.commit = state.commit;
-    if (state.head !== undefined) copy.head = state.head;
-    states[taskId] = copy;
-  }
-  return states;
-}
-
-function checkpointFor(run: ExecutionRun, now: string): ExecutionCheckpoint {
+function checkpointFor(
+  run: ExecutionRun,
+  now: string,
+  details: { attemptCounts: Record<string, number>; lastPersistedEventId?: string },
+): ExecutionCheckpoint {
   const checkpoint: ExecutionCheckpoint = {
     checkpoint_id: randomUUID(),
     run_id: run.run_id,
     plan_id: run.plan_id,
     plan_digest: run.plan_digest,
-    task_states: taskStates(run),
-    attempt_counts: {},
+    task_states: taskStatesForCheckpoint(run.tasks),
+    attempt_counts: details.attemptCounts,
     created_at: now,
   };
   if (run.repository !== undefined) checkpoint.repository = run.repository;
   if (run.phase !== undefined) checkpoint.phase = run.phase;
   if (run.agent !== undefined) checkpoint.agent_binding = run.agent;
+  if (details.lastPersistedEventId !== undefined) checkpoint.last_persisted_event_id = details.lastPersistedEventId;
   return checkpoint;
 }
 
@@ -358,15 +354,17 @@ async function appendRecoveryEvent(
   config: ExecutionConfig,
   warnings: string[],
   payload?: Record<string, unknown>,
-): Promise<void> {
+): Promise<string | undefined> {
   try {
-    await appendEvent(
+    const event = await appendEvent(
       paths,
       { run_id: run.run_id, plan_id: run.plan_id, type, ...(payload === undefined ? {} : { payload }) },
       config,
     );
+    return event.event_id;
   } catch (error) {
     warnings.push(`Unable to record ${type}: ${errorMessage(error)}`);
+    return undefined;
   }
 }
 
@@ -561,8 +559,9 @@ export async function resumeRun(input: ResumeRunInput): Promise<ResumeRunResult>
   }
 
   const resumed: ExecutionRun = { ...run, status: 'RUNNING', updated_at: now };
+  let lastEventId: string | undefined;
   if (staleLock && run.status === 'RUNNING') {
-    await appendRecoveryEvent(paths, resumed, 'execution.interrupted', config, warnings, {
+    lastEventId = await appendRecoveryEvent(paths, resumed, 'execution.interrupted', config, warnings, {
       payload: { reason: 'stale lock' },
     });
   }
@@ -571,11 +570,15 @@ export async function resumeRun(input: ResumeRunInput): Promise<ResumeRunResult>
   } catch (error) {
     warnings.push(`Unable to write the execution run: ${errorMessage(error)}`);
   }
-  await appendRecoveryEvent(paths, resumed, 'execution.resumed', config, warnings);
+  const resumedEventId = await appendRecoveryEvent(paths, resumed, 'execution.resumed', config, warnings);
+  if (resumedEventId !== undefined) lastEventId = resumedEventId;
 
   // Checkpoints sort by their recorded creation time, so a resume checkpoint uses the real
   // write time rather than a caller-supplied logical clock and stays the newest record.
-  const checkpoint = checkpointFor(resumed, new Date().toISOString());
+  const checkpoint = checkpointFor(resumed, new Date().toISOString(), {
+    attemptCounts: attemptCountsFromEvents(events.events),
+    ...(lastEventId === undefined ? {} : { lastPersistedEventId: lastEventId }),
+  });
   try {
     await writeCheckpoint(paths, checkpoint, config);
   } catch (error) {

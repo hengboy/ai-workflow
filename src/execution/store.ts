@@ -59,7 +59,7 @@ export interface ExecutionEventInput {
 }
 
 /** True when an existing stream lacks a terminating newline on its final line. */
-async function needsLeadingNewline(path: string): Promise<boolean> {
+export async function needsLeadingNewline(path: string): Promise<boolean> {
   let handle: Awaited<ReturnType<typeof open>> | undefined;
   try {
     handle = await open(path, 'r');
@@ -179,6 +179,33 @@ export async function readEvents(
     return { events: events.slice(events.length - limit), warnings, truncated: true };
   }
   return { events, warnings, truncated: false };
+}
+
+/** Project run task states onto the checkpoint's narrower task state shape. */
+export function taskStatesForCheckpoint(tasks: ExecutionRun['tasks']): ExecutionCheckpoint['task_states'] {
+  const states: ExecutionCheckpoint['task_states'] = {};
+  for (const [taskId, state] of Object.entries(tasks ?? {})) {
+    const copy: ExecutionCheckpoint['task_states'][string] = { status: state.status };
+    if (state.commit !== undefined) copy.commit = state.commit;
+    if (state.head !== undefined) copy.head = state.head;
+    states[taskId] = copy;
+  }
+  return states;
+}
+
+/**
+ * Count recorded failure attempts from the durable event stream. A task-specific failure counts
+ * under its task id and every other failure counts under its category.
+ */
+export function attemptCountsFromEvents(events: ExecutionEvent[]): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const event of events) {
+    if (!event.type.startsWith('failure.')) continue;
+    const category = event.type.slice('failure.'.length);
+    const key = event.task_id ?? category;
+    counts[key] = (counts[key] ?? 0) + 1;
+  }
+  return counts;
 }
 
 /** Build a lexicographically sortable, filesystem-safe checkpoint file name. */

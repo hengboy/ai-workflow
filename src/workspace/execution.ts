@@ -535,6 +535,8 @@ export async function checkpointWorkspace(planDirectory: string, repository: str
     if (existing === undefined || existing.execution === undefined) return refuse([`repository "${repository}" has no execution anchor`]);
 
     if (event.event === 'reviewed') {
+      // A repeated review for the same commit is already recorded, so no telemetry is replayed.
+      if (existing.reviewed_commit === event.commit) return successful(existing);
       if (existing.execution.purpose === 'tasks') {
         const allDone = repositoryTasks(resolved.tasks, repository).every((task) => analysis.doneTasks.has(task.id));
         if (!allDone) return refuse([`review requires every task of repository "${repository}" to be checkpointed`]);

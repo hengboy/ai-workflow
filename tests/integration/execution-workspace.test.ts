@@ -566,3 +566,22 @@ async function checkpointRemainingPhaseOne(fixture: Fixture): Promise<void> {
   await checkpointOk(fixture.planDirectory, 'lib', taskEvent(TASK_LIB_ONE, 'no-change', SHA_LIB_ONE));
   await checkpointOk(fixture.planDirectory, 'workspace', taskEvent(TASK_ROOT_ONE, 'commit', SHA_ROOT_ONE));
 }
+
+describe('workspace reviewed checkpoint idempotency', () => {
+  it('keeps the event count unchanged for a second identical reviewed checkpoint', async () => {
+    const fixture = await buildWorkspace();
+    await startAll(fixture);
+    await checkpointPhaseOne(fixture);
+    await checkpointOk(fixture.planDirectory, 'app', taskEvent(TASK_APP_TWO, 'commit', SHA_APP_TWO));
+
+    const reviewedEvent = { event: 'reviewed', commit: SHA_REVIEW, validation: 'passed', repair: 'fixed' };
+    const first = expectSuccess(await checkpoint(fixture.planDirectory, 'app', reviewedEvent));
+    expect(first.repository).toBe('app');
+    const eventCount = (await readEvents(fixture.appPlan)).length;
+    expect(eventCount).toBeGreaterThan(0);
+
+    const repeat = expectSuccess(await checkpoint(fixture.planDirectory, 'app', reviewedEvent));
+    expect(repeat.repository).toBe('app');
+    expect((await readEvents(fixture.appPlan)).length).toBe(eventCount);
+  }, TIMEOUT);
+});

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { open, readFile } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { parseMarkdown } from '../utils/frontmatter.js';
 import { appendFsync, atomicWrite } from '../utils/fs.js';
@@ -14,7 +14,16 @@ import type { ExecutionPaths } from './paths.js';
 import { executionPaths } from './paths.js';
 import type { OrdinaryImplementationRecord } from './record.js';
 import { readOrdinaryRecord, writeOrdinaryRecord } from './record.js';
-import { acquireLock, readRun, releaseLock, writeCheckpoint } from './store.js';
+import {
+  acquireLock,
+  attemptCountsFromEvents,
+  needsLeadingNewline,
+  readEvents,
+  readRun,
+  releaseLock,
+  taskStatesForCheckpoint,
+  writeCheckpoint,
+} from './store.js';
 import type {
   ExecutionCheckpoint,
   ExecutionEvent,
@@ -102,23 +111,6 @@ async function persistRun(paths: ExecutionPaths, run: ExecutionRun, warnings: st
   }
 }
 
-async function needsLeadingNewline(path: string): Promise<boolean> {
-  let handle: Awaited<ReturnType<typeof open>> | undefined;
-  try {
-    handle = await open(path, 'r');
-    const info = await handle.stat();
-    if (info.size === 0) return false;
-    const buffer = Buffer.alloc(1);
-    await handle.read(buffer, 0, 1, info.size - 1);
-    return (buffer[0] ?? 0) !== 0x0a;
-  } catch (error) {
-    if (isMissing(error)) return false;
-    throw error;
-  } finally {
-    if (handle) await handle.close();
-  }
-}
-
 /** Append one event as a single fsynced JSONL line, reporting any telemetry failure as a warning. */
 async function appendEventSafe(
   paths: ExecutionPaths,
@@ -127,7 +119,7 @@ async function appendEventSafe(
   config: ExecutionConfig,
   warnings: string[],
   options: { taskId?: string; payload?: Record<string, unknown> } = {},
-): Promise<void> {
+): Promise<string | undefined> {
   const event: ExecutionEvent = {
     event_id: randomUUID(),
     run_id: run.run_id,
@@ -141,30 +133,31 @@ async function appendEventSafe(
   const validation = validateExecutionRecord('event', event);
   if (!validation.valid) {
     warnings.push(`Unable to record ${type}: ${validation.errors.join('; ')}`);
-    return;
+    return undefined;
   }
   const serialized = JSON.stringify(event);
   if (Buffer.byteLength(serialized, 'utf8') > config.maxEventLineBytes) {
     warnings.push(`Unable to record ${type}: event exceeds the ${config.maxEventLineBytes}-byte limit`);
-    return;
+    return undefined;
   }
   try {
     const prefix = (await needsLeadingNewline(paths.events)) ? '\n' : '';
     await appendFsync(paths.events, `${prefix}${serialized}\n`);
+    return event.event_id;
   } catch (error) {
     warnings.push(`Unable to record ${type}: ${errorMessage(error)}`);
+    return undefined;
   }
 }
 
-function taskStatesForCheckpoint(tasks: ExecutionRun['tasks']): ExecutionCheckpoint['task_states'] {
-  const states: ExecutionCheckpoint['task_states'] = {};
-  for (const [taskId, state] of Object.entries(tasks ?? {})) {
-    const copy: ExecutionCheckpoint['task_states'][string] = { status: state.status };
-    if (state.commit !== undefined) copy.commit = state.commit;
-    if (state.head !== undefined) copy.head = state.head;
-    states[taskId] = copy;
+/** Attempt counts recorded by the durable stream, or an empty map when telemetry is unreadable. */
+async function attemptCountsFor(paths: ExecutionPaths): Promise<Record<string, number>> {
+  try {
+    return attemptCountsFromEvents((await readEvents(paths)).events);
+  } catch {
+    // A broken telemetry path leaves the counts empty; checkpoint writing reports its own warning.
+    return {};
   }
-  return states;
 }
 
 async function persistCheckpoint(
@@ -172,6 +165,7 @@ async function persistCheckpoint(
   run: ExecutionRun,
   config: ExecutionConfig,
   warnings: string[],
+  lastPersistedEventId?: string,
 ): Promise<void> {
   const checkpoint: ExecutionCheckpoint = {
     checkpoint_id: randomUUID(),
@@ -179,12 +173,13 @@ async function persistCheckpoint(
     plan_id: run.plan_id,
     plan_digest: run.plan_digest,
     task_states: taskStatesForCheckpoint(run.tasks),
-    attempt_counts: {},
+    attempt_counts: await attemptCountsFor(paths),
     created_at: new Date().toISOString(),
   };
   if (run.repository !== undefined) checkpoint.repository = run.repository;
   if (run.phase !== undefined) checkpoint.phase = run.phase;
   if (run.agent !== undefined) checkpoint.agent_binding = run.agent;
+  if (lastPersistedEventId !== undefined) checkpoint.last_persisted_event_id = lastPersistedEventId;
   try {
     await writeCheckpoint(paths, checkpoint, config);
   } catch (error) {
@@ -248,6 +243,7 @@ function deriveInitialTasks(
 /** Input accepted by the start transition. */
 export interface StartRunInput {
   planDirectory: string;
+  repository?: string;
   config?: ExecutionConfig;
 }
 
@@ -265,6 +261,9 @@ export interface StartRunResult {
  * failures are collected as warnings while the authoritative record still advances.
  */
 export async function startRun(input: StartRunInput): Promise<StartRunResult> {
+  if (input.repository !== undefined && input.repository.trim().length === 0) {
+    throw new Error('Invalid repository: expected a non-empty string');
+  }
   const config = input.config ?? DEFAULT_EXECUTION_CONFIG;
   const paths = executionPaths(input.planDirectory);
   const warnings: string[] = [];
@@ -311,18 +310,20 @@ export async function startRun(input: StartRunInput): Promise<StartRunResult> {
     failure_count: existing?.failure_count ?? 0,
     started_at: existing?.started_at ?? nowIso,
   };
-  if (existing?.repository !== undefined) run.repository = existing.repository;
+  const repository = input.repository ?? existing?.repository;
+  if (repository !== undefined) run.repository = repository;
   if (existing?.last_failure !== undefined) run.last_failure = existing.last_failure;
   const phase = existing?.phase ?? (schedule === undefined ? undefined : '1');
   if (phase !== undefined) run.phase = phase;
   if (derived.states !== undefined) run.tasks = derived.states;
 
   await persistRun(paths, run, warnings);
-  await appendEventSafe(paths, run, 'workflow.started', config, warnings);
+  let lastEventId = await appendEventSafe(paths, run, 'workflow.started', config, warnings);
   for (const taskId of derived.opened) {
-    await appendEventSafe(paths, run, 'task.started', config, warnings, { taskId });
+    const eventId = await appendEventSafe(paths, run, 'task.started', config, warnings, { taskId });
+    if (eventId !== undefined) lastEventId = eventId;
   }
-  await persistCheckpoint(paths, run, config, warnings);
+  await persistCheckpoint(paths, run, config, warnings, lastEventId);
 
   return { adopted: existing !== undefined, run, tasks, warnings };
 }
@@ -371,7 +372,9 @@ export async function recordTask(input: RecordTaskInput): Promise<RecordTaskResu
     if (!matches) throw new Error(`Task ${input.taskId} is already completed with a different reference`);
     return { idempotent: true, openedPhase: [], run, warnings };
   }
-  if (current.status !== 'running') throw new Error(`Task ${input.taskId} is not running`);
+  if (current.status !== 'running' && current.status !== 'failed') {
+    throw new Error(`Task ${input.taskId} is not running or awaiting repair`);
+  }
 
   const nowIso = new Date().toISOString();
   const completed: TaskState = { ...current, status: 'completed', completed_at: nowIso };
@@ -404,14 +407,15 @@ export async function recordTask(input: RecordTaskInput): Promise<RecordTaskResu
   if (phase !== undefined) updated.phase = phase;
 
   await persistRun(paths, updated, warnings);
-  await appendEventSafe(paths, updated, 'task.completed', config, warnings, {
+  let lastEventId = await appendEventSafe(paths, updated, 'task.completed', config, warnings, {
     taskId: input.taskId,
     payload: hasCommit ? { commit: reference } : { head: reference },
   });
   for (const taskId of opened) {
-    await appendEventSafe(paths, updated, 'task.started', config, warnings, { taskId });
+    const eventId = await appendEventSafe(paths, updated, 'task.started', config, warnings, { taskId });
+    if (eventId !== undefined) lastEventId = eventId;
   }
-  await persistCheckpoint(paths, updated, config, warnings);
+  await persistCheckpoint(paths, updated, config, warnings, lastEventId);
 
   return { idempotent: false, openedPhase: opened, run: updated, warnings };
 }
@@ -420,6 +424,8 @@ export async function recordTask(input: RecordTaskInput): Promise<RecordTaskResu
 export interface CompleteRunInput {
   planDirectory: string;
   commit: string;
+  validation?: string;
+  review?: string;
   config?: ExecutionConfig;
 }
 
@@ -428,6 +434,29 @@ export interface CompleteRunResult {
   recovered: boolean;
   run: ExecutionRun;
   warnings: string[];
+}
+
+/** Append the optional validation and review results ahead of the canonical completion event. */
+async function appendCompletionEvidence(
+  paths: ExecutionPaths,
+  run: ExecutionRun,
+  config: ExecutionConfig,
+  warnings: string[],
+  input: CompleteRunInput,
+): Promise<string | undefined> {
+  let lastEventId: string | undefined;
+  if (input.validation !== undefined) {
+    lastEventId = await appendEventSafe(paths, run, 'validation.completed', config, warnings, {
+      payload: { result: input.validation },
+    });
+  }
+  if (input.review !== undefined) {
+    const eventId = await appendEventSafe(paths, run, 'review.completed', config, warnings, {
+      payload: { result: input.review },
+    });
+    if (eventId !== undefined) lastEventId = eventId;
+  }
+  return lastEventId;
 }
 
 /**
@@ -448,6 +477,7 @@ export async function completeRun(input: CompleteRunInput): Promise<CompleteRunR
     if (record?.status !== 'completed' || record.commit !== input.commit) {
       throw new Error('Execution run is already completed with a different commit');
     }
+    await dropLock(paths, warnings);
     return { recovered: false, run: withAuthoritativeStart(existing, record.started_at), warnings };
   }
 
@@ -478,8 +508,10 @@ export async function completeRun(input: CompleteRunInput): Promise<CompleteRunR
       run.started_at = toUtcTimestamp(record.started_at, nowIso);
     }
     await persistRun(paths, run, warnings);
-    await appendEventSafe(paths, run, 'workflow.completed', config, warnings);
-    await persistCheckpoint(paths, run, config, warnings);
+    let lastEventId = await appendCompletionEvidence(paths, run, config, warnings, input);
+    const completedEventId = await appendEventSafe(paths, run, 'workflow.completed', config, warnings);
+    if (completedEventId !== undefined) lastEventId = completedEventId;
+    await persistCheckpoint(paths, run, config, warnings, lastEventId);
     await dropLock(paths, warnings);
     return { recovered: true, run: withAuthoritativeStart(run, record.started_at), warnings };
   }
@@ -498,8 +530,10 @@ export async function completeRun(input: CompleteRunInput): Promise<CompleteRunR
   if (record?.started_at !== undefined) completed.started_at = record.started_at;
   await writeOrdinaryRecord(recordPath, completed);
   await persistRun(paths, run, warnings);
-  await appendEventSafe(paths, run, 'workflow.completed', config, warnings);
-  await persistCheckpoint(paths, run, config, warnings);
+  let lastEventId = await appendCompletionEvidence(paths, run, config, warnings, input);
+  const completedEventId = await appendEventSafe(paths, run, 'workflow.completed', config, warnings);
+  if (completedEventId !== undefined) lastEventId = completedEventId;
+  await persistCheckpoint(paths, run, config, warnings, lastEventId);
   await dropLock(paths, warnings);
 
   return { recovered: false, run: withAuthoritativeStart(run, completed.started_at), warnings };
@@ -535,8 +569,8 @@ export async function pauseRun(input: RunTransitionInput): Promise<RunTransition
   const payload = summaryPayload(input.summary);
   await persistRun(paths, run, warnings);
   await appendEventSafe(paths, run, 'execution.interrupted', config, warnings, payload === undefined ? {} : { payload });
-  await appendEventSafe(paths, run, 'workflow.paused', config, warnings, payload === undefined ? {} : { payload });
-  await persistCheckpoint(paths, run, config, warnings);
+  const lastEventId = await appendEventSafe(paths, run, 'workflow.paused', config, warnings, payload === undefined ? {} : { payload });
+  await persistCheckpoint(paths, run, config, warnings, lastEventId);
   await dropLock(paths, warnings);
   return { run, warnings };
 }
@@ -553,8 +587,8 @@ export async function cancelRun(input: RunTransitionInput): Promise<RunTransitio
   const run: ExecutionRun = { ...existing, status: 'CANCELLED', updated_at: new Date().toISOString() };
   const payload = summaryPayload(input.summary);
   await persistRun(paths, run, warnings);
-  await appendEventSafe(paths, run, 'workflow.cancelled', config, warnings, payload === undefined ? {} : { payload });
-  await persistCheckpoint(paths, run, config, warnings);
+  const lastEventId = await appendEventSafe(paths, run, 'workflow.cancelled', config, warnings, payload === undefined ? {} : { payload });
+  await persistCheckpoint(paths, run, config, warnings, lastEventId);
   await dropLock(paths, warnings);
   return { run, warnings };
 }
@@ -590,8 +624,8 @@ export async function failRun(input: FailRunInput): Promise<RunTransitionResult>
   const payload = summaryPayload(input.summary);
   await persistRun(paths, run, warnings);
   await appendEventSafe(paths, run, failureEventType(input.category), config, warnings, payload === undefined ? {} : { payload });
-  await appendEventSafe(paths, run, 'workflow.failed', config, warnings, payload === undefined ? {} : { payload });
-  await persistCheckpoint(paths, run, config, warnings);
+  const lastEventId = await appendEventSafe(paths, run, 'workflow.failed', config, warnings, payload === undefined ? {} : { payload });
+  await persistCheckpoint(paths, run, config, warnings, lastEventId);
   await dropLock(paths, warnings);
   return { run, warnings };
 }
@@ -692,13 +726,14 @@ export async function recordWorkspaceCheckpoint(input: WorkspaceTelemetryInput):
           }
         }
         await persistRun(paths, run, warnings);
-        await appendEventSafe(paths, run, 'workflow.started', config, warnings);
+        let lastEventId = await appendEventSafe(paths, run, 'workflow.started', config, warnings);
         if (purpose === 'tasks') {
           for (const taskId of localTasksInPhase(input, currentPhase)) {
-            await appendEventSafe(paths, run, 'task.started', config, warnings, { taskId });
+            const eventId = await appendEventSafe(paths, run, 'task.started', config, warnings, { taskId });
+            if (eventId !== undefined) lastEventId = eventId;
           }
         }
-        await persistCheckpoint(paths, run, config, warnings);
+        await persistCheckpoint(paths, run, config, warnings, lastEventId);
         return warnings;
       }
 
@@ -723,8 +758,7 @@ export async function recordWorkspaceCheckpoint(input: WorkspaceTelemetryInput):
         else if (input.event.head !== undefined) completed.head = input.event.head;
         run.tasks = { ...(run.tasks ?? {}), [taskId]: completed };
 
-        // Opening the next global phase restarts its local tasks, including the task whose
-        // completion arrived in this checkpoint, so the run mirrors the phase that just began.
+        // Advancing to a new global phase opens exactly this repository's tasks of that new phase.
         const opened: string[] = [];
         if (input.globalPhase !== null && String(input.globalPhase) !== run.phase) {
           run.phase = String(input.globalPhase);
@@ -735,28 +769,39 @@ export async function recordWorkspaceCheckpoint(input: WorkspaceTelemetryInput):
         }
 
         await persistRun(paths, run, warnings);
-        await appendEventSafe(paths, run, 'task.completed', config, warnings, {
+        let lastEventId = await appendEventSafe(paths, run, 'task.completed', config, warnings, {
           taskId,
           payload: input.event.commit !== undefined ? { commit: input.event.commit } : { head: input.event.head ?? '' },
         });
         for (const openedId of opened) {
-          await appendEventSafe(paths, run, 'task.started', config, warnings, { taskId: openedId });
+          const eventId = await appendEventSafe(paths, run, 'task.started', config, warnings, { taskId: openedId });
+          if (eventId !== undefined) lastEventId = eventId;
         }
-        await persistCheckpoint(paths, run, config, warnings);
+        await persistCheckpoint(paths, run, config, warnings, lastEventId);
         return warnings;
       }
 
       if (input.event.type === 'reviewed') {
         await persistRun(paths, run, warnings);
+        let lastEventId: string | undefined;
         if (input.event.validation !== undefined) {
-          await appendEventSafe(paths, run, 'validation.completed', config, warnings, { payload: { result: input.event.validation } });
+          lastEventId = await appendEventSafe(paths, run, 'validation.completed', config, warnings, { payload: { result: input.event.validation } });
         }
         if (input.event.repair !== undefined) {
-          await appendEventSafe(paths, run, 'repair.completed', config, warnings, { payload: { result: input.event.repair } });
+          const eventId = await appendEventSafe(paths, run, 'repair.completed', config, warnings, { payload: { result: input.event.repair } });
+          if (eventId !== undefined) lastEventId = eventId;
         }
         const payload = input.event.commit === undefined ? undefined : { commit: input.event.commit };
-        await appendEventSafe(paths, run, 'review.completed', config, warnings, payload === undefined ? {} : { payload });
-        await persistCheckpoint(paths, run, config, warnings);
+        const eventId = await appendEventSafe(
+          paths,
+          run,
+          'review.completed',
+          config,
+          warnings,
+          payload === undefined ? {} : { payload },
+        );
+        if (eventId !== undefined) lastEventId = eventId;
+        await persistCheckpoint(paths, run, config, warnings, lastEventId);
         return warnings;
       }
 
@@ -765,9 +810,12 @@ export async function recordWorkspaceCheckpoint(input: WorkspaceTelemetryInput):
         const next: ExecutionRun = rootDelivery ? { ...run } : { ...run, status: 'COMPLETED', completed_at: nowIso };
         await persistRun(paths, next, warnings);
         const payload = input.event.commit === undefined ? undefined : { commit: input.event.commit };
-        await appendEventSafe(paths, next, 'delivery.completed', config, warnings, payload === undefined ? {} : { payload });
-        if (!rootDelivery) await appendEventSafe(paths, next, 'workflow.completed', config, warnings);
-        await persistCheckpoint(paths, next, config, warnings);
+        let lastEventId = await appendEventSafe(paths, next, 'delivery.completed', config, warnings, payload === undefined ? {} : { payload });
+        if (!rootDelivery) {
+          const eventId = await appendEventSafe(paths, next, 'workflow.completed', config, warnings);
+          if (eventId !== undefined) lastEventId = eventId;
+        }
+        await persistCheckpoint(paths, next, config, warnings, lastEventId);
         return warnings;
       }
 
@@ -775,8 +823,8 @@ export async function recordWorkspaceCheckpoint(input: WorkspaceTelemetryInput):
       await persistRun(paths, finalized, warnings);
       const payload = input.event.commit === undefined ? undefined : { commit: input.event.commit };
       await appendEventSafe(paths, finalized, 'delivery.completed', config, warnings, payload === undefined ? {} : { payload });
-      await appendEventSafe(paths, finalized, 'workflow.completed', config, warnings);
-      await persistCheckpoint(paths, finalized, config, warnings);
+      const lastEventId = await appendEventSafe(paths, finalized, 'workflow.completed', config, warnings);
+      await persistCheckpoint(paths, finalized, config, warnings, lastEventId);
       return warnings;
     } finally {
       await dropLock(paths, warnings);
@@ -851,15 +899,17 @@ export async function recordFailure(input: RecordFailureInput): Promise<RecordFa
   if (payload !== undefined) failureOptions.payload = payload;
 
   await persistRun(paths, run, warnings);
-  await appendEventSafe(paths, run, failureEventType(input.category), config, warnings, failureOptions);
+  let lastEventId = await appendEventSafe(paths, run, failureEventType(input.category), config, warnings, failureOptions);
   if (markTaskFailed && input.taskId !== undefined) {
-    await appendEventSafe(paths, run, 'task.failed', config, warnings, { taskId: input.taskId });
+    const eventId = await appendEventSafe(paths, run, 'task.failed', config, warnings, { taskId: input.taskId });
+    if (eventId !== undefined) lastEventId = eventId;
   }
   if (guidance.action === 'pause' && existing.status !== 'PAUSED') {
-    await appendEventSafe(paths, run, 'workflow.paused', config, warnings, payload === undefined ? {} : { payload });
+    const eventId = await appendEventSafe(paths, run, 'workflow.paused', config, warnings, payload === undefined ? {} : { payload });
+    if (eventId !== undefined) lastEventId = eventId;
     await dropLock(paths, warnings);
   }
-  await persistCheckpoint(paths, run, config, warnings);
+  await persistCheckpoint(paths, run, config, warnings, lastEventId);
 
   const result: RecordFailureResult = {
     action: guidance.action,

@@ -1,14 +1,15 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { readFile, rm, writeFile } from 'node:fs/promises';
+import { hostname } from 'node:os';
 import { join } from 'node:path';
 import { parseMarkdown } from '../../src/utils/frontmatter.js';
 import { readPlan } from '../../src/workflow/parse.js';
 import { DEFAULT_EXECUTION_CONFIG } from '../../src/execution/config.js';
 import { executionPaths } from '../../src/execution/paths.js';
 import { readEvents, readLatestCheckpoint, readLock, readRun, writeRun } from '../../src/execution/store.js';
-import type { ExecutionEvent, ExecutionRun } from '../../src/execution/types.js';
+import type { ExecutionCheckpoint, ExecutionEvent, ExecutionRun } from '../../src/execution/types.js';
 import { readOrdinaryRecord, writeOrdinaryRecord } from '../../src/execution/record.js';
-import { cancelRun, completeRun, failRun, pauseRun, recordTask, startRun } from '../../src/execution/manager.js';
+import { cancelRun, completeRun, failRun, pauseRun, recordFailure, recordTask, startRun } from '../../src/execution/manager.js';
 import { frozenPlan, temporary, workspacePlanFixture } from '../helpers.js';
 
 // Public boundary under test: the lenient authoritative-record reader/writer and the
@@ -40,6 +41,17 @@ async function eventsOfType(paths: Paths, type: ExecutionEvent['type'], taskId?:
   return (await readEvents(paths)).events.filter(
     (event) => event.type === type && (taskId === undefined || event.task_id === taskId),
   );
+}
+
+async function latestCheckpoint(paths: Paths): Promise<ExecutionCheckpoint> {
+  const result = await readLatestCheckpoint(paths);
+  expect(result.status, 'latest checkpoint is readable').toBe('ok');
+  if (result.status !== 'ok') throw new Error('latest checkpoint is not readable');
+  return result.checkpoint;
+}
+
+async function lastEventId(paths: Paths): Promise<string | undefined> {
+  return (await readEvents(paths)).events.at(-1)?.event_id;
 }
 
 async function planMeta(planDirectory: string): Promise<{ planId: string; digest: string; createdAt: string }> {
@@ -396,5 +408,84 @@ describe('non-blocking telemetry failure', () => {
     expect(result.warnings.length).toBeGreaterThan(0);
     const record = await readOrdinaryRecord(join(planDirectory, 'implementation.yaml'), '20260831-example');
     expect(record?.status).toBe('in-progress');
+  });
+});
+
+describe('checkpoint recovery state', () => {
+  it('persists the last event id at start and after transitions', async () => {
+    const { planDirectory, paths } = await splitFixture();
+    await startRun({ planDirectory, config: DEFAULT_EXECUTION_CONFIG });
+
+    const startedCheckpoint = await latestCheckpoint(paths);
+    const startedEventId = await lastEventId(paths);
+    expect(startedEventId).toBeDefined();
+    expect(startedCheckpoint.last_persisted_event_id).toBeTruthy();
+    expect(startedCheckpoint.last_persisted_event_id).toBe(startedEventId);
+
+    await recordTask({ planDirectory, taskId: T1, commit: sha('a') });
+    const afterTask = await latestCheckpoint(paths);
+    expect(afterTask.last_persisted_event_id).toBe(await lastEventId(paths));
+
+    await recordFailure({ planDirectory, category: 'task_execution', taskId: T2, summary: 'build failed' });
+    await recordFailure({ planDirectory, category: 'network_timeout', summary: 'timed out' });
+    const afterFailure = await latestCheckpoint(paths);
+    expect(afterFailure.last_persisted_event_id).toBeTruthy();
+    expect(afterFailure.last_persisted_event_id).toBe(await lastEventId(paths));
+  });
+
+  it('records concrete attempt counts for a task failure and a global failure', async () => {
+    const { planDirectory, paths } = await splitFixture();
+    await startRun({ planDirectory, config: DEFAULT_EXECUTION_CONFIG });
+
+    await recordFailure({ planDirectory, category: 'task_execution', taskId: T2, summary: 'build failed' });
+    await recordFailure({ planDirectory, category: 'network_timeout', summary: 'timed out' });
+
+    const checkpoint = await latestCheckpoint(paths);
+    expect(checkpoint.attempt_counts[T2]).toBe(1);
+    expect(checkpoint.attempt_counts.network_timeout).toBe(1);
+  });
+});
+
+describe('failed-task repair re-entry', () => {
+  it('records a repaired task as completed and opens the next phase on the last peer', async () => {
+    const { planDirectory, paths } = await splitFixture();
+    await startRun({ planDirectory, config: DEFAULT_EXECUTION_CONFIG });
+
+    const failed = await recordFailure({ planDirectory, category: 'task_execution', taskId: T2, summary: 'build failed' });
+    expect(failed.run.tasks?.[T2]?.status).toBe('failed');
+    await recordTask({ planDirectory, taskId: T1, commit: sha('a') });
+
+    const repaired = await recordTask({ planDirectory, taskId: T2, commit: sha('b') });
+    expect(repaired.idempotent).toBe(false);
+    expect(repaired.run.tasks?.[T2]?.status).toBe('completed');
+    expect(repaired.run.tasks?.[T2]?.commit).toBe(sha('b'));
+    expect(repaired.run.tasks?.[T3]?.status).toBe('running');
+    expect(repaired.openedPhase).toContain(T3);
+    expect(await eventsOfType(paths, 'task.completed', T2)).toHaveLength(1);
+    expect(await eventsOfType(paths, 'task.started', T3)).toHaveLength(1);
+  });
+});
+
+describe('idempotent completion lock residue', () => {
+  it('removes a same-host crash-residue lock on an idempotent repeat', async () => {
+    const root = await newRoot();
+    const planDirectory = await frozenPlan(root, false);
+    const paths = executionPaths(planDirectory);
+    await startRun({ planDirectory, config: DEFAULT_EXECUTION_CONFIG });
+    await completeRun({ planDirectory, commit: sha('c') });
+    expect(await readLock(paths)).toBeUndefined();
+
+    await writeFile(paths.lock, `${JSON.stringify({
+      owner_id: 'crash-residue-owner',
+      pid: 2_000_000_000,
+      host: hostname(),
+      acquired_at: new Date().toISOString(),
+      command: 'execution start',
+    }, null, 2)}\n`);
+    expect(await readLock(paths)).toBeDefined();
+
+    const repeated = await completeRun({ planDirectory, commit: sha('c') });
+    expect(repeated.run.status).toBe('COMPLETED');
+    expect(await readLock(paths)).toBeUndefined();
   });
 });

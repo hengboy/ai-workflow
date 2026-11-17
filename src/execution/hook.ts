@@ -136,7 +136,11 @@ async function recordInvocation(active: ActiveRun, host: string, data: Record<st
 }
 
 /** Record completion only when the same invocation started and has not completed yet. */
-async function recordCompletion(active: ActiveRun, sessionId: string): Promise<HostRecordResult> {
+async function recordCompletion(
+  active: ActiveRun,
+  sessionId: string,
+  outcome?: 'error',
+): Promise<HostRecordResult> {
   const stream = await readEvents(active.paths);
   const invoked = stream.events.some((event) => event.type === 'agent.invoked' && event.invocation_id === sessionId);
   if (!invoked) return noOp('no matching invocation');
@@ -148,6 +152,7 @@ async function recordCompletion(active: ActiveRun, sessionId: string): Promise<H
     plan_id: active.run.plan_id,
     type: 'agent.completed',
     invocation_id: sessionId,
+    ...(outcome === undefined ? {} : { payload: { outcome } }),
   });
   return { recorded: true, event: 'agent.completed', invocation_id: sessionId, run_id: active.run.run_id, warnings: [] };
 }
@@ -187,7 +192,7 @@ export async function recordHostSession(host: string, raw: string): Promise<Host
     if (target === undefined) return noOp('no active run');
 
     if (event === 'session.created') return await recordInvocation(target, host, data, sessionId);
-    return await recordCompletion(target, sessionId);
+    return await recordCompletion(target, sessionId, event === 'session.error' ? 'error' : undefined);
   } catch {
     return noOp('host session could not be recorded');
   }

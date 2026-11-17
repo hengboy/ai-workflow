@@ -238,7 +238,7 @@ describe('execution end-to-end CLI evidence', () => {
     expect(types.indexOf('execution.resumed')).toBeGreaterThan(interrupted);
 
     const shown = await expectOk(await execution('show', '--plan', planDirectory));
-    expect(shown.lock.state).toBe('held');
+    expect(shown.lock.state).toBe('stale');
     const reacquired = await readJson(lockPath);
     expect(reacquired.host).toBe(HOST);
     expect(reacquired.pid).toBeGreaterThan(0);
@@ -505,5 +505,29 @@ describe('execution end-to-end CLI evidence', () => {
       const text = await readFile(join(sourceDirectory, name), 'utf8');
       for (const [label, pattern] of forbidden) expect(pattern.test(text), `${name} contains ${label}`).toBe(false);
     }
+  }, TIMEOUT);
+});
+
+describe('execution status degraded projection', () => {
+  it('marks a plan with a file execution path degraded and a normal plan healthy', async () => {
+    const root = await temporary('ai-workflow-e2e-degraded-');
+    const brokenPlan = await frozenPlan(root, false);
+    await writeFile(join(brokenPlan, 'execution'), 'execution path is a regular file\n');
+
+    const normalPlan = await workspacePlanFixture(root, splitSpec(PLAN_NORMAL));
+    await expectOk(await execution('start', '--plan', normalPlan));
+
+    const result = await execution('status', '--project', root);
+    expect(result.code, outputOf(result)).toBe(0);
+    const body = parseJson(result);
+    const runs = body.runs as Json[];
+    const broken = runs.find((run) => run.plan_directory === brokenPlan);
+    expect(broken, 'plan with a file execution path is reported').toBeDefined();
+    expect(broken?.degraded).toBe(true);
+    expect(Array.isArray(broken?.warnings)).toBe(true);
+    expect(broken?.warnings.length).toBeGreaterThan(0);
+    const normal = runs.find((run) => run.plan_directory === normalPlan);
+    expect(normal, 'normal plan is reported').toBeDefined();
+    expect(normal?.degraded).toBe(false);
   }, TIMEOUT);
 });

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { spawn } from 'node:child_process';
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
+import { hostname } from 'node:os';
 import { join } from 'node:path';
 import { parse as parseYaml } from 'yaml';
 import {
@@ -418,7 +419,7 @@ describe('execution show', () => {
     expect(Array.isArray(body.events.warnings)).toBe(true);
     expect(typeof body.diagnostics.degraded).toBe('boolean');
     expect(Array.isArray(body.diagnostics.warnings)).toBe(true);
-    expect(body.lock.state).toBe('held');
+    expect(body.lock.state).toBe('stale');
 
     const empty = await temporary('ai-workflow-execution-empty-');
     const zero = await execution('show', '--project', empty);
@@ -545,5 +546,58 @@ describe('execution query commands are read-only and deterministic', () => {
     const eventsA = await execution('events', '--plan', planDirectory);
     const eventsB = await execution('events', '--plan', planDirectory);
     expect(eventsA.stdout).toBe(eventsB.stdout);
+  }, TIMEOUT);
+});
+
+describe('execution start and completion boundary regressions', () => {
+  it('refuses a blank repository without writing the record or run, then a normal start succeeds', async () => {
+    const { planDirectory } = await splitFixture();
+    expectRefusal(await execution('start', '--plan', planDirectory, '--repository', ''));
+
+    const paths = [...(await snapshotTree(planDirectory)).keys()];
+    expect(paths).not.toContain('implementation.yaml');
+    expect(paths).not.toContain('execution/run.json');
+
+    const normal = await execution('start', '--plan', planDirectory);
+    expect(normal.code, outputOf(normal)).toBe(0);
+    expect(parseJson(normal).valid).toBe(true);
+  }, TIMEOUT);
+
+  it('appends no validation or review events on a refused completion of a paused run', async () => {
+    const { planDirectory } = await startSplit();
+    const paused = await execution('pause', '--plan', planDirectory);
+    expect(paused.code, outputOf(paused)).toBe(0);
+
+    const recordBefore = await readFile(join(planDirectory, 'implementation.yaml'), 'utf8');
+    const runBefore = await readFile(join(planDirectory, 'execution', 'run.json'), 'utf8');
+    const eventsBefore = await readEvents(planDirectory);
+
+    expectRefusal(await execution('complete', '--plan', planDirectory, '--commit', SHA_ONE, '--validation', 'x', '--review', 'y'));
+
+    const eventsAfter = await readEvents(planDirectory);
+    const types = eventsAfter.map(eventType);
+    expect(types).not.toContain('validation.completed');
+    expect(types).not.toContain('review.completed');
+    expect(eventsAfter).toHaveLength(eventsBefore.length);
+    expect(await readFile(join(planDirectory, 'implementation.yaml'), 'utf8')).toBe(recordBefore);
+    expect(await readFile(join(planDirectory, 'execution', 'run.json'), 'utf8')).toBe(runBefore);
+  }, TIMEOUT);
+
+  it('shows a same-host dead-pid lock as stale, matching status', async () => {
+    const { planDirectory } = await startSplit();
+    const lockPath = join(planDirectory, 'execution', 'lock.json');
+    const lock = JSON.parse(await readFile(lockPath, 'utf8')) as Json;
+    await writeFile(lockPath, `${JSON.stringify({ ...lock, host: hostname(), pid: 2_000_000_000 }, null, 2)}\n`);
+
+    const shownResult = await execution('show', '--plan', planDirectory);
+    expect(shownResult.code, outputOf(shownResult)).toBe(0);
+    const shown = parseJson(shownResult);
+    expect(shown.lock.state).toBe('stale');
+
+    const statusResult = await execution('status', '--plan', planDirectory);
+    expect(statusResult.code, outputOf(statusResult)).toBe(0);
+    const status = parseJson(statusResult);
+    expect(status.runs[0].lock.state).toBe('stale');
+    expect(shown.lock.state).toBe(status.runs[0].lock.state);
   }, TIMEOUT);
 });

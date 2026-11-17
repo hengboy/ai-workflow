@@ -1,5 +1,3 @@
-import { executionPaths } from './paths.js';
-import { appendEvent, readRun, writeRun } from './store.js';
 import { readExecutionConfig } from './config.js';
 import { cancelRun, completeRun, failRun, pauseRun, recordFailure, recordTask, startRun } from './manager.js';
 import { resumeRun } from './recovery.js';
@@ -44,12 +42,11 @@ export interface StartExecutionInput {
 /** Start or adopt one repository run and optionally bind its repository name. */
 export async function startExecutionCommand(input: StartExecutionInput): Promise<ExecutionCommandOutcome> {
   return await success(async () => {
-    const result = await startRun({ planDirectory: input.plan });
-    let run = result.run;
-    if (input.repository !== undefined) {
-      run = { ...run, repository: input.repository };
-      await writeRun(executionPaths(input.plan), run);
-    }
+    const result = await startRun({
+      planDirectory: input.plan,
+      ...(input.repository === undefined ? {} : { repository: input.repository }),
+    });
+    const run = result.run;
     return {
       valid: true,
       plan_id: run.plan_id,
@@ -103,48 +100,19 @@ export interface CompleteExecutionInput {
 }
 
 /**
- * Complete a running run. Optional validation and review results are recorded before the
- * canonical completion event so their order stays stable in the event stream.
+ * Complete a running run. Optional validation and review results are passed into the completion
+ * transition so they are recorded only for a completion-eligible run and ahead of the canonical
+ * completion event.
  */
 export async function completeExecutionCommand(input: CompleteExecutionInput): Promise<ExecutionCommandOutcome> {
   return await success(async () => {
-    const paths = executionPaths(input.plan);
-    const warnings: string[] = [];
-    let existing;
-    try {
-      existing = await readRun(paths);
-    } catch {
-      existing = undefined;
-    }
-    if (existing !== undefined && existing.status !== 'COMPLETED') {
-      const config = readExecutionConfig();
-      if (input.validation !== undefined) {
-        try {
-          await appendEvent(paths, {
-            run_id: existing.run_id,
-            plan_id: existing.plan_id,
-            type: 'validation.completed',
-            payload: { result: input.validation },
-          }, config);
-        } catch (error) {
-          warnings.push(`Unable to record validation.completed: ${errorMessage(error)}`);
-        }
-      }
-      if (input.review !== undefined) {
-        try {
-          await appendEvent(paths, {
-            run_id: existing.run_id,
-            plan_id: existing.plan_id,
-            type: 'review.completed',
-            payload: { result: input.review },
-          }, config);
-        } catch (error) {
-          warnings.push(`Unable to record review.completed: ${errorMessage(error)}`);
-        }
-      }
-    }
-
-    const result = await completeRun({ planDirectory: input.plan, commit: input.commit });
+    const result = await completeRun({
+      planDirectory: input.plan,
+      commit: input.commit,
+      config: readExecutionConfig(),
+      ...(input.validation === undefined ? {} : { validation: input.validation }),
+      ...(input.review === undefined ? {} : { review: input.review }),
+    });
     return {
       valid: true,
       plan_id: result.run.plan_id,
@@ -152,7 +120,7 @@ export async function completeExecutionCommand(input: CompleteExecutionInput): P
       status: result.run.status,
       commit: input.commit,
       recovered: result.recovered,
-      warnings: [...warnings, ...result.warnings],
+      warnings: result.warnings,
     };
   });
 }
@@ -278,35 +246,27 @@ export async function resumeExecutionCommand(input: ResumeExecutionInput): Promi
   return { body: { ...result.packet }, exitCode: result.exitCode };
 }
 
-async function query(build: () => Promise<Record<string, unknown>>): Promise<ExecutionCommandOutcome> {
-  try {
-    return { body: await build(), exitCode: 0 };
-  } catch (error) {
-    return refusal(error);
-  }
-}
-
 /** Read-only project or plan status. */
 export async function statusExecutionCommand(scope: QueryScope): Promise<ExecutionCommandOutcome> {
-  return await query(async () => ({ ...(await executionStatus(scope)) }));
+  return await success(async () => ({ ...(await executionStatus(scope)) }));
 }
 
 /** Read-only single-run inspection. */
 export async function showExecutionCommand(scope: QueryScope): Promise<ExecutionCommandOutcome> {
-  return await query(async () => ({ ...(await executionShow(scope)) }));
+  return await success(async () => ({ ...(await executionShow(scope)) }));
 }
 
 /** Read-only bounded event tail. */
 export async function eventsExecutionCommand(scope: QueryScope & { limit?: string }): Promise<ExecutionCommandOutcome> {
-  return await query(async () => ({ ...(await executionEvents(scope)) }));
+  return await success(async () => ({ ...(await executionEvents(scope)) }));
 }
 
 /** Read-only per-run history. */
 export async function historyExecutionCommand(scope: QueryScope): Promise<ExecutionCommandOutcome> {
-  return await query(async () => ({ ...(await executionHistory(scope)) }));
+  return await success(async () => ({ ...(await executionHistory(scope)) }));
 }
 
 /** Read-only analytics derived from stored run and event data. */
 export async function analyticsExecutionCommand(scope: QueryScope): Promise<ExecutionCommandOutcome> {
-  return await query(async () => ({ ...(await executionAnalytics(scope)) }));
+  return await success(async () => ({ ...(await executionAnalytics(scope)) }));
 }
