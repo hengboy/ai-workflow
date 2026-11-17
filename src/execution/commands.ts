@@ -2,6 +2,7 @@ import { executionPaths } from './paths.js';
 import { appendEvent, readRun, writeRun } from './store.js';
 import { readExecutionConfig } from './config.js';
 import { cancelRun, completeRun, failRun, pauseRun, recordFailure, recordTask, startRun } from './manager.js';
+import { resumeRun } from './recovery.js';
 import {
   executionAnalytics,
   executionEvents,
@@ -259,6 +260,22 @@ export async function failureExecutionCommand(input: FailureExecutionInput): Pro
   } catch (error) {
     return refusal(error);
   }
+}
+
+export interface ResumeExecutionInput {
+  plan?: string;
+  project?: string;
+  repository?: string;
+}
+
+/** Resolve and validate an explicit resume request, printing the bounded recovery packet. */
+export async function resumeExecutionCommand(input: ResumeExecutionInput): Promise<ExecutionCommandOutcome> {
+  const result = await resumeRun({
+    ...(input.plan === undefined ? {} : { planDirectory: input.plan }),
+    ...(input.project === undefined ? {} : { projectRoot: input.project }),
+    ...(input.repository === undefined ? {} : { repository: input.repository }),
+  });
+  return { body: { ...result.packet }, exitCode: result.exitCode };
 }
 
 async function query(build: () => Promise<Record<string, unknown>>): Promise<ExecutionCommandOutcome> {

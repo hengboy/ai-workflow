@@ -34,6 +34,7 @@ import {
   failureExecutionCommand,
   historyExecutionCommand,
   pauseExecutionCommand,
+  resumeExecutionCommand,
   showExecutionCommand,
   startExecutionCommand,
   statusExecutionCommand,
@@ -420,6 +421,19 @@ execution.command('cancel')
   .option('--summary <summary>')
   .action(async ({ plan, summary }: { plan: string; summary?: string }) => {
     const outcome = await cancelExecutionCommand({ plan, ...(summary === undefined ? {} : { summary }) });
+    print(outcome.body);
+    process.exitCode = outcome.exitCode;
+  });
+execution.command('resume')
+  .option('--plan <directory>')
+  .option('--project <project>', projectOption)
+  .option('--repository <name>', 'expected repository name bound to this run')
+  .action(async ({ plan, project, repository }: { plan?: string; project?: string; repository?: string }) => {
+    const outcome = await resumeExecutionCommand({
+      ...(plan === undefined ? {} : { plan }),
+      ...(project === undefined ? {} : { project }),
+      ...(repository === undefined ? {} : { repository }),
+    });
     print(outcome.body);
     process.exitCode = outcome.exitCode;
   });
