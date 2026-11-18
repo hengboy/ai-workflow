@@ -18,7 +18,7 @@ import {
 
 const TIMEOUT = 120_000;
 const PLAN_ID = '20261117-execution-workspace';
-const PLAN_CREATED_AT = '2026-09-30T00:00:00.000Z';
+const PLAN_CREATED_AT = '2026-09-30T08:00:00+08:00';
 
 const SHA_BASE = 'a'.repeat(40);
 const SHA_APP_ONE = 'b'.repeat(40);

@@ -209,7 +209,10 @@ run record, and the checkpoint, delivery and status gates never read the overlay
 telemetry never changes a checkpoint, delivery or status gate. A telemetry write
 failure is reported as a warning without retrying, and it never blocks, rewrites or
 authorizes the authoritative record. Every query over the stored run, event and
-checkpoint data is read-only.
+checkpoint data is read-only. Every timestamp a repository execution command
+writes is ISO 8601 UTC+08:00 (`YYYY-MM-DDTHH:mm:ss+08:00`, no milliseconds) and
+matches `implementation.yaml`, and an already-stored `Z` timestamp remains readable
+and is never migrated.
 
 A `reviewed` checkpoint event may additionally carry optional `validation` and
 `repair` results. They are recorded as telemetry only and change no event sequence,

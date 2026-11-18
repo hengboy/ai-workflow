@@ -6,7 +6,7 @@ import { appendFsync, atomicWrite } from '../utils/fs.js';
 import { readExecutionOrder } from '../workflow/order.js';
 import { readPlan, readTasks } from '../workflow/parse.js';
 import type { TaskDocument, TaskPhase, TaskSchedule } from '../workflow/types.js';
-import { nowCst } from '../workspace/record.js';
+import { cstTimestamp, nowCst, toCstTimestamp } from '../workspace/record.js';
 import type { ExecutionConfig } from './config.js';
 import { DEFAULT_EXECUTION_CONFIG } from './config.js';
 import { classifyFailure, redactFailureSummary, type FailureGuidance } from './failure.js';
@@ -57,12 +57,6 @@ function isTerminal(status: RunStatus): boolean {
   return status === 'COMPLETED' || status === 'FAILED' || status === 'CANCELLED';
 }
 
-function toUtcTimestamp(value: string | undefined, fallback: string): string {
-  if (value === undefined) return fallback;
-  const parsed = Date.parse(value);
-  return Number.isNaN(parsed) ? fallback : new Date(parsed).toISOString();
-}
-
 /** Return the run as read, with the authoritative record's start time for externally visible views. */
 function withAuthoritativeStart(run: ExecutionRun, startedAt: string | undefined): ExecutionRun {
   return startedAt === undefined ? run : { ...run, started_at: startedAt };
@@ -88,7 +82,7 @@ async function readPlanMeta(planDirectory: string): Promise<PlanMeta> {
   if (Number.isNaN(parsedCreatedAt)) {
     throw new Error('Frozen plan.md has an invalid created_at timestamp');
   }
-  return { planId: plan.planId, digest: plan.digest, createdAt: new Date(parsedCreatedAt).toISOString() };
+  return { planId: plan.planId, digest: plan.digest, createdAt: cstTimestamp(new Date(parsedCreatedAt)) };
 }
 
 /** Read the run document, treating an absent or unreadable overlay as recoverable telemetry state. */
@@ -129,7 +123,7 @@ async function appendEventSafe(
     run_id: run.run_id,
     plan_id: run.plan_id,
     type,
-    timestamp: new Date().toISOString(),
+    timestamp: nowCst(),
   };
   if (options.taskId !== undefined) event.task_id = options.taskId;
   if (options.payload !== undefined) event.payload = options.payload;
@@ -178,7 +172,7 @@ async function persistCheckpoint(
     plan_digest: run.plan_digest,
     task_states: taskStatesForCheckpoint(run.tasks),
     attempt_counts: await attemptCountsFor(paths),
-    created_at: new Date().toISOString(),
+    created_at: nowCst(),
   };
   if (run.repository !== undefined) checkpoint.repository = run.repository;
   if (run.phase !== undefined) checkpoint.phase = run.phase;
@@ -222,7 +216,7 @@ function deriveInitialTasks(
   existingPhase: string | undefined,
 ): { states: ExecutionRun['tasks']; opened: string[] } {
   if (schedule === undefined) return { states: existing, opened: [] };
-  const nowIso = new Date().toISOString();
+  const nowIso = nowCst();
   const current = phaseIndex(existingPhase, schedule.phases.length);
   const states: Record<string, TaskState> = {};
   const opened: string[] = [];
@@ -293,7 +287,7 @@ export async function startRun(input: StartRunInput): Promise<StartRunResult> {
 
   await takeLock(paths, 'execution start', warnings);
 
-  const nowIso = new Date().toISOString();
+  const nowIso = nowCst();
   const startedAt = priorRecord?.started_at ?? nowCst();
   const record: OrdinaryImplementationRecord = {
     plan_id: meta.planId,
@@ -380,7 +374,7 @@ export async function recordTask(input: RecordTaskInput): Promise<RecordTaskResu
     throw new Error(`Task ${input.taskId} is not running or awaiting repair`);
   }
 
-  const nowIso = new Date().toISOString();
+  const nowIso = nowCst();
   const completed: TaskState = { ...current, status: 'completed', completed_at: nowIso };
   if (hasCommit) completed.commit = reference;
   else completed.head = reference;
@@ -489,13 +483,13 @@ export async function completeRun(input: CompleteRunInput): Promise<CompleteRunR
     if (record.commit !== input.commit) {
       throw new Error('The completed implementation record carries a different commit');
     }
-    const nowIso = new Date().toISOString();
+    const nowIso = nowCst();
     const run: ExecutionRun = existing
       ? {
           ...existing,
           status: 'COMPLETED',
           updated_at: nowIso,
-          completed_at: toUtcTimestamp(record.completed_at, nowIso),
+          completed_at: toCstTimestamp(record.completed_at, nowIso),
         }
       : {
           run_id: randomUUID(),
@@ -506,10 +500,10 @@ export async function completeRun(input: CompleteRunInput): Promise<CompleteRunR
           created_at: nowIso,
           updated_at: nowIso,
           failure_count: 0,
-          completed_at: toUtcTimestamp(record.completed_at, nowIso),
+          completed_at: toCstTimestamp(record.completed_at, nowIso),
         };
     if (record.started_at !== undefined) {
-      run.started_at = toUtcTimestamp(record.started_at, nowIso);
+      run.started_at = toCstTimestamp(record.started_at, nowIso);
     }
     await persistRun(paths, run, warnings);
     let lastEventId = await appendCompletionEvidence(paths, run, config, warnings, input);
@@ -523,7 +517,7 @@ export async function completeRun(input: CompleteRunInput): Promise<CompleteRunR
   if (!existing) throw new Error('No execution run to complete');
   if (existing.status !== 'RUNNING') throw new Error(`Cannot complete a ${existing.status} run`);
 
-  const nowIso = new Date().toISOString();
+  const nowIso = nowCst();
   const run: ExecutionRun = { ...existing, status: 'COMPLETED', updated_at: nowIso, completed_at: nowIso };
   const completed: OrdinaryImplementationRecord = {
     plan_id: meta.planId,
@@ -569,7 +563,7 @@ export async function pauseRun(input: RunTransitionInput): Promise<RunTransition
   if (!existing) throw new Error('No execution run to pause');
   if (existing.status !== 'RUNNING') throw new Error(`Cannot pause a ${existing.status} run`);
 
-  const run: ExecutionRun = { ...existing, status: 'PAUSED', updated_at: new Date().toISOString() };
+  const run: ExecutionRun = { ...existing, status: 'PAUSED', updated_at: nowCst() };
   const payload = summaryPayload(input.summary);
   await persistRun(paths, run, warnings);
   await appendEventSafe(paths, run, 'execution.interrupted', config, warnings, payload === undefined ? {} : { payload });
@@ -588,7 +582,7 @@ export async function cancelRun(input: RunTransitionInput): Promise<RunTransitio
   if (!existing) throw new Error('No execution run to cancel');
   if (isTerminal(existing.status)) throw new Error(`Cannot cancel a ${existing.status} run`);
 
-  const run: ExecutionRun = { ...existing, status: 'CANCELLED', updated_at: new Date().toISOString() };
+  const run: ExecutionRun = { ...existing, status: 'CANCELLED', updated_at: nowCst() };
   const payload = summaryPayload(input.summary);
   await persistRun(paths, run, warnings);
   const lastEventId = await appendEventSafe(paths, run, 'workflow.cancelled', config, warnings, payload === undefined ? {} : { payload });
@@ -615,7 +609,7 @@ export async function failRun(input: FailRunInput): Promise<RunTransitionResult>
   if (!existing) throw new Error('No execution run to fail');
   if (isTerminal(existing.status)) throw new Error(`Cannot fail a ${existing.status} run`);
 
-  const nowIso = new Date().toISOString();
+  const nowIso = nowCst();
   const summary = redactFailureSummary(input.summary ?? '');
   const guidance = classifyFailure(input.category, existing.failure_count + 1, config);
   const run: ExecutionRun = {
@@ -684,7 +678,7 @@ export async function recordWorkspaceCheckpoint(input: WorkspaceTelemetryInput):
   const warnings: string[] = [];
   const paths = executionPaths(input.planDirectory);
   const config = DEFAULT_EXECUTION_CONFIG;
-  const nowIso = new Date().toISOString();
+  const nowIso = nowCst();
 
   try {
     const acquisition = await acquireLock(paths, { command: 'workspace checkpoint' });
@@ -878,7 +872,7 @@ export async function recordFailure(input: RecordFailureInput): Promise<RecordFa
 
   const failureCount = existing.failure_count + 1;
   const guidance = classifyFailure(input.category, failureCount, config);
-  const nowIso = new Date().toISOString();
+  const nowIso = nowCst();
   const summary = redactFailureSummary(input.summary ?? '');
   const run: ExecutionRun = {
     ...existing,

@@ -4,6 +4,7 @@ import { hostname } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import { readExecutionOrder } from '../workflow/order.js';
 import { readPlan, readTasks } from '../workflow/parse.js';
+import { nowCst, toCstTimestamp } from '../workspace/record.js';
 import type { ExecutionConfig } from './config.js';
 import { DEFAULT_EXECUTION_CONFIG } from './config.js';
 import { executionPaths, type ExecutionPaths } from './paths.js';
@@ -81,12 +82,6 @@ function isMissing(error: unknown): boolean {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
-}
-
-function timestamp(value: string | undefined, fallback: string): string {
-  if (value === undefined) return fallback;
-  const parsed = Date.parse(value);
-  return Number.isNaN(parsed) ? fallback : new Date(parsed).toISOString();
 }
 
 async function planDirectories(root: string, maxPlans: number): Promise<string[]> {
@@ -412,7 +407,7 @@ export async function resumeRun(input: ResumeRunInput): Promise<ResumeRunResult>
   const warnings: string[] = [];
   const config = input.config ?? DEFAULT_EXECUTION_CONFIG;
   const currentHost = input.host ?? hostname();
-  const now = timestamp(input.now, new Date().toISOString());
+  const now = toCstTimestamp(input.now, nowCst());
 
   let planDirectory: string;
   if (input.planDirectory !== undefined) {
@@ -525,10 +520,10 @@ export async function resumeRun(input: ResumeRunInput): Promise<ResumeRunResult>
       ...run,
       status: 'COMPLETED',
       updated_at: now,
-      completed_at: timestamp(record.completed_at, now),
+      completed_at: toCstTimestamp(record.completed_at, now),
     };
     if (reconciled.started_at === undefined && record.started_at !== undefined) {
-      reconciled.started_at = timestamp(record.started_at, now);
+      reconciled.started_at = toCstTimestamp(record.started_at, now);
     }
     try {
       await writeRun(paths, reconciled);
@@ -575,7 +570,7 @@ export async function resumeRun(input: ResumeRunInput): Promise<ResumeRunResult>
 
   // Checkpoints sort by their recorded creation time, so a resume checkpoint uses the real
   // write time rather than a caller-supplied logical clock and stays the newest record.
-  const checkpoint = checkpointFor(resumed, new Date().toISOString(), {
+  const checkpoint = checkpointFor(resumed, nowCst(), {
     attemptCounts: attemptCountsFromEvents(events.events),
     ...(lastEventId === undefined ? {} : { lastPersistedEventId: lastEventId }),
   });

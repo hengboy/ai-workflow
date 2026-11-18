@@ -17,6 +17,8 @@ import { renderFrozenMarkdown } from '../../src/workflow/digest.js';
 // run-lifecycle manager. Frozen plan/task fixtures are produced by the shared helpers so
 // their self-referential digests are genuine and `readPlan` accepts them.
 
+const CST_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\+08:00$/;
+
 type Paths = ReturnType<typeof executionPaths>;
 
 const roots: string[] = [];
@@ -175,7 +177,10 @@ describe('startRun', () => {
     expect(result.run.status).toBe('RUNNING');
     expect(result.run.plan_id).toBe(meta.planId);
     expect(result.run.plan_digest).toBe(meta.digest);
-    expect(result.run.plan_created_at).toBe(meta.createdAt);
+    expect(result.run.plan_created_at).toBe('2026-08-31T08:00:00+08:00');
+    expect(result.run.created_at).toMatch(CST_TIMESTAMP);
+    expect(result.run.updated_at).toMatch(CST_TIMESTAMP);
+    expect(result.run.started_at).toMatch(CST_TIMESTAMP);
     expect(await readRun(paths)).toEqual(result.run);
 
     const record = await readOrdinaryRecord(join(planDirectory, 'implementation.yaml'), meta.planId);
@@ -183,8 +188,14 @@ describe('startRun', () => {
     expect(record?.started_at).toMatch(/\+08:00$/);
     expect(result.warnings).toEqual([]);
     expect(await eventTypes(paths)).toEqual(['workflow.started']);
-    expect(await readLock(paths)).toBeDefined();
-    expect((await readLatestCheckpoint(paths)).status).toBe('ok');
+    for (const event of (await readEvents(paths)).events) {
+      expect(event.timestamp).toMatch(CST_TIMESTAMP);
+    }
+    const startedCheckpoint = await latestCheckpoint(paths);
+    expect(startedCheckpoint.created_at).toMatch(CST_TIMESTAMP);
+    const lock = await readLock(paths);
+    expect(lock).toBeDefined();
+    expect(lock?.acquired_at).toMatch(CST_TIMESTAMP);
   });
 
   it('normalizes a non-UTC created_at offset to the UTC instant before persisting the run', async () => {
@@ -201,7 +212,7 @@ describe('startRun', () => {
     const result = await startRun({ planDirectory, config: DEFAULT_EXECUTION_CONFIG });
 
     expect(result.run.status).toBe('RUNNING');
-    expect(result.run.plan_created_at).toBe('2026-08-30T16:00:00.000Z');
+    expect(result.run.plan_created_at).toBe('2026-08-31T00:00:00+08:00');
     expect(await readRun(paths)).toEqual(result.run);
     expect(result.warnings).toEqual([]);
   });
@@ -321,7 +332,8 @@ describe('completion, pause and terminal transitions', () => {
     const done = await completeRun({ planDirectory, commit: sha('c') });
     expect(done.recovered).toBe(false);
     expect(done.run.status).toBe('COMPLETED');
-    expect(done.run.completed_at).toBeDefined();
+    expect(done.run.completed_at).toMatch(CST_TIMESTAMP);
+    expect(done.run.updated_at).toMatch(CST_TIMESTAMP);
     expect(done.run.started_at).toBe(startedAt);
     expect(done.warnings).toEqual([]);
     const record = await readOrdinaryRecord(join(planDirectory, 'implementation.yaml'), '20260831-example');

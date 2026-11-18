@@ -4046,6 +4046,18 @@
         },
         {
           "file": "src/workspace/record.ts",
+          "name": "cstTimestamp",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workspace/record.ts",
+          "name": "toCstTimestamp",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/workspace/record.ts",
           "name": "nowCst",
           "kind": "function",
           "visibility": "public"
@@ -6776,6 +6788,11 @@
         },
         {
           "kind": "imports",
+          "from": "src/execution/manager.ts#cancelRun",
+          "to": "src/workspace/record.ts#nowCst"
+        },
+        {
+          "kind": "imports",
           "from": "src/execution/manager.ts#completeRun",
           "to": "src/execution/config.ts#DEFAULT_EXECUTION_CONFIG"
         },
@@ -6811,6 +6828,11 @@
         },
         {
           "kind": "imports",
+          "from": "src/execution/manager.ts#completeRun",
+          "to": "src/workspace/record.ts#toCstTimestamp"
+        },
+        {
+          "kind": "imports",
           "from": "src/execution/manager.ts#failRun",
           "to": "src/execution/config.ts#DEFAULT_EXECUTION_CONFIG"
         },
@@ -6841,6 +6863,11 @@
         },
         {
           "kind": "imports",
+          "from": "src/execution/manager.ts#failRun",
+          "to": "src/workspace/record.ts#nowCst"
+        },
+        {
+          "kind": "imports",
           "from": "src/execution/manager.ts#pauseRun",
           "to": "src/execution/config.ts#DEFAULT_EXECUTION_CONFIG"
         },
@@ -6853,6 +6880,11 @@
           "kind": "imports",
           "from": "src/execution/manager.ts#pauseRun",
           "to": "src/execution/types.ts#ExecutionRun"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/manager.ts#pauseRun",
+          "to": "src/workspace/record.ts#nowCst"
         },
         {
           "kind": "imports",
@@ -6883,6 +6915,11 @@
           "kind": "imports",
           "from": "src/execution/manager.ts#recordFailure",
           "to": "src/execution/types.ts#FAILURE_CATEGORIES"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/manager.ts#recordFailure",
+          "to": "src/workspace/record.ts#nowCst"
         },
         {
           "kind": "imports",
@@ -6916,6 +6953,11 @@
         },
         {
           "kind": "imports",
+          "from": "src/execution/manager.ts#recordTask",
+          "to": "src/workspace/record.ts#nowCst"
+        },
+        {
+          "kind": "imports",
           "from": "src/execution/manager.ts#recordWorkspaceCheckpoint",
           "to": "src/execution/config.ts#DEFAULT_EXECUTION_CONFIG"
         },
@@ -6933,6 +6975,11 @@
           "kind": "imports",
           "from": "src/execution/manager.ts#recordWorkspaceCheckpoint",
           "to": "src/execution/types.ts#ExecutionRun"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/manager.ts#recordWorkspaceCheckpoint",
+          "to": "src/workspace/record.ts#nowCst"
         },
         {
           "kind": "imports",
@@ -7096,6 +7143,16 @@
         },
         {
           "kind": "imports",
+          "from": "src/execution/recovery.ts#resumeRun",
+          "to": "src/workspace/record.ts#nowCst"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/recovery.ts#resumeRun",
+          "to": "src/workspace/record.ts#toCstTimestamp"
+        },
+        {
+          "kind": "imports",
           "from": "src/execution/report.ts#ExecutionEventsResult",
           "to": "src/execution/types.ts#ExecutionEvent"
         },
@@ -7216,6 +7273,11 @@
         },
         {
           "kind": "imports",
+          "from": "src/execution/store.ts#acquireLock",
+          "to": "src/workspace/record.ts#nowCst"
+        },
+        {
+          "kind": "imports",
           "from": "src/execution/store.ts#appendEvent",
           "to": "src/execution/config.ts#DEFAULT_EXECUTION_CONFIG"
         },
@@ -7243,6 +7305,11 @@
           "kind": "imports",
           "from": "src/execution/store.ts#appendEvent",
           "to": "src/utils/fs.ts#appendFsync"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/store.ts#appendEvent",
+          "to": "src/workspace/record.ts#nowCst"
         },
         {
           "kind": "imports",

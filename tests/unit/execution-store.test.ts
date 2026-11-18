@@ -302,7 +302,7 @@ describe('run storage', () => {
 });
 
 describe('event stream', () => {
-  it('appends one generated event object per line with a UTC timestamp', async () => {
+  it('appends one generated event object per line with a UTC+08:00 timestamp', async () => {
     const { paths } = await planFixture();
     await ensureExecutionPaths(paths);
     const first: EventInput = { run_id: 'run-1', plan_id: PLAN_ID, type: 'workflow.started' };
@@ -330,7 +330,7 @@ describe('event stream', () => {
     expect(storedFirst.type).toBe('workflow.started');
     expect(storedFirst.event_id).toBeTypeOf('string');
     expect(storedFirst.event_id.length).toBeGreaterThan(0);
-    expect(storedFirst.timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/);
+    expect(storedFirst.timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\+08:00$/);
     expect(storedSecond.task_id).toBe('task-1');
     expect(storedSecond.invocation_id).toBe('invocation-1');
     expect(storedSecond.payload).toEqual({ phase: 'phase-1' });
@@ -533,6 +533,15 @@ describe('execution lock', () => {
     expect(result.lock).toEqual(request);
     expect(validateExecutionRecord('lock', result.lock)).toEqual({ valid: true, errors: [] });
     expect(await readLock(paths)).toEqual(request);
+  });
+
+  it('writes a +08:00 acquired_at when the request omits it', async () => {
+    const { paths } = await planFixture();
+    const result = await acquireLock(paths, { command: 'execution start' });
+    expect(result.acquired).toBe(true);
+    if (!result.acquired) throw new Error('expected the lock to be acquired');
+    expect(result.lock.acquired_at).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\+08:00$/);
+    expect((await readLock(paths))?.acquired_at).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\+08:00$/);
   });
 
   it('refuses a lock held by a live process on the same host', async () => {
