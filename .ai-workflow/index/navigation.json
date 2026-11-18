@@ -1222,6 +1222,12 @@
         },
         {
           "file": "src/sync/gate.ts",
+          "name": "ProjectGateAuthorityRef",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/sync/gate.ts",
           "name": "ProjectGateInput",
           "kind": "interface",
           "visibility": "public"
@@ -2748,6 +2754,11 @@
         },
         {
           "kind": "imports",
+          "from": "src/sync/gate.ts#runProjectGate",
+          "to": "src/utils/hash.ts#sha256"
+        },
+        {
+          "kind": "imports",
           "from": "src/sync/index.ts#SynchronizeProjectOptions",
           "to": "src/sync/source.ts#GitRunner"
         },
@@ -3822,6 +3833,7 @@
         ".ai-workflow/notes/implemented/process/2026-09-16-project-contract-and-agent-notes.md",
         ".ai-workflow/notes/implemented/process/2026-11-02-workflow-semantics-context.md",
         ".ai-workflow/notes/implemented/process/2026-11-02-workflow-semantics-context.zh.md",
+        ".ai-workflow/notes/implemented/process/2026-11-18-sync-contract-reference.md",
         ".ai-workflow/notes/implemented/simplification/2026-10-09-public-git-template-source.md",
         ".ai-workflow/notes/implemented/simplification/2026-10-10-generated-local-instructions.md",
         "MEMORY.md",
@@ -3834,6 +3846,7 @@
         "src/sync/source.ts",
         "templates/project/MEMORY.md",
         "templates/contract/AGENTS.md",
+        "templates/hooks/opencode-v2.js",
         "templates/hooks/opencode.js",
         "templates/skills/coding/SKILL.md",
         "templates/skills/plan-to-tasks/SKILL.md",
@@ -3857,7 +3870,7 @@
       "depends_on": [],
       "relations": [],
       "owner_role": "shared",
-      "responsibility": "Delivered file-level project template synchronization: exactly five markerless generated files replaced as complete files with root MEMORY init-only and local, plus the preserved single-skill-start gate that runs one automatic synchronization per actual root, stores the result outside the project, serves native events with zero source requests and allows with a no-check context when absent, together with the unchanged manual command and additive host entries; setup recovery routes ordinary init versus upgrade by actual adoption state without treating directory presence or the preflight as authorization",
+      "responsibility": "Delivered file-level project template synchronization: exactly five markerless generated files replaced as complete files with root MEMORY init-only and local, plus the preserved single-skill-start gate that runs one automatic synchronization per actual root, stores a version 2 unit outside the project, serves native events with zero source requests and allows with a no-check context when absent, exposes the compact authority_ref holding the absolute contract path, its sha256 digest and byte count instead of the contract body, and gates ordinary tools on a one-shot decision-plus-context notice plus a completed digest-matching contract read, together with the unchanged manual command, raw gate JSON, host-native shapes and additive host entries; setup recovery routes ordinary init versus upgrade by actual adoption state without treating directory presence or the preflight as authorization",
       "read_scope": [
         ".ai-workflow/AGENTS.md",
         ".ai-workflow/notes/implemented/architecture/2026-09-14-user-level-agent-contract.md",
@@ -3867,6 +3880,7 @@
         ".ai-workflow/notes/implemented/process/2026-09-16-project-contract-and-agent-notes.md",
         ".ai-workflow/notes/implemented/process/2026-11-02-workflow-semantics-context.md",
         ".ai-workflow/notes/implemented/process/2026-11-02-workflow-semantics-context.zh.md",
+        ".ai-workflow/notes/implemented/process/2026-11-18-sync-contract-reference.md",
         ".ai-workflow/notes/implemented/simplification/2026-10-09-public-git-template-source.md",
         ".ai-workflow/notes/implemented/simplification/2026-10-10-generated-local-instructions.md",
         "MEMORY.md",
@@ -3878,6 +3892,7 @@
         "src/sync/index.ts",
         "src/sync/source.ts",
         "templates/contract/AGENTS.md",
+        "templates/hooks/opencode-v2.js",
         "templates/hooks/opencode.js",
         "templates/project/AGENTS.md",
         "templates/project/MEMORY.md",
@@ -5647,6 +5662,7 @@
         "templates/project/AGENTS.md",
         "templates/skills/coding/SKILL.md",
         "templates/skills/planning/SKILL.md",
+        "templates/skills/planning/references/digest.md",
         "templates/skills/planning/references/plan.md",
         "templates/skills/planning/references/spec.md"
       ],
@@ -5657,7 +5673,8 @@
         ".ai-workflow/notes/implemented/process/2026-11-17-planning-decision-quality.md",
         ".ai-workflow/notes/implemented/process/2026-11-17-planning-decision-quality.zh.md",
         "MEMORY.md",
-        "README.md"
+        "README.md",
+        "templates/skills/planning/references/digest.md"
       ],
       "tests": [
         "tests/behavior/planning-decision-quality.test.ts"
@@ -5678,6 +5695,7 @@
         "templates/project/AGENTS.md",
         "templates/skills/coding/SKILL.md",
         "templates/skills/planning/SKILL.md",
+        "templates/skills/planning/references/digest.md",
         "templates/skills/planning/references/plan.md",
         "templates/skills/planning/references/spec.md",
         "tests/behavior/planning-decision-quality.test.ts"
