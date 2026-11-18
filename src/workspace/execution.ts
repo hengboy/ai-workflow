@@ -374,7 +374,11 @@ async function readPlanHeader(planDirectory: string): Promise<{ digest: string; 
   if (typeof createdAt !== 'string' || createdAt.length === 0) {
     throw new Error('Frozen plan.md is missing a created_at timestamp');
   }
-  return { digest, createdAt };
+  const parsedCreatedAt = Date.parse(createdAt);
+  if (Number.isNaN(parsedCreatedAt)) {
+    throw new Error('Frozen plan.md has an invalid created_at timestamp');
+  }
+  return { digest, createdAt: new Date(parsedCreatedAt).toISOString() };
 }
 
 /** Map one validated checkpoint event onto the repository-local telemetry event shape. */

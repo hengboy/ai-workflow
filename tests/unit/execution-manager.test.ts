@@ -10,7 +10,8 @@ import { readEvents, readLatestCheckpoint, readLock, readRun, writeRun } from '.
 import type { ExecutionCheckpoint, ExecutionEvent, ExecutionRun } from '../../src/execution/types.js';
 import { readOrdinaryRecord, writeOrdinaryRecord } from '../../src/execution/record.js';
 import { cancelRun, completeRun, failRun, pauseRun, recordFailure, recordTask, startRun } from '../../src/execution/manager.js';
-import { frozenPlan, temporary, workspacePlanFixture } from '../helpers.js';
+import { frozenPlan, temporary, workspacePlanFixture, writePlanTriplet } from '../helpers.js';
+import { renderFrozenMarkdown } from '../../src/workflow/digest.js';
 
 // Public boundary under test: the lenient authoritative-record reader/writer and the
 // run-lifecycle manager. Frozen plan/task fixtures are produced by the shared helpers so
@@ -184,6 +185,25 @@ describe('startRun', () => {
     expect(await eventTypes(paths)).toEqual(['workflow.started']);
     expect(await readLock(paths)).toBeDefined();
     expect((await readLatestCheckpoint(paths)).status).toBe('ok');
+  });
+
+  it('normalizes a non-UTC created_at offset to the UTC instant before persisting the run', async () => {
+    const root = await newRoot();
+    const planDirectory = join(root, '.ai-workflow/plans/20260831-offset');
+    const specBody = '# Specification\n\n## REQ-001 Works\n\n## AC-001 Observable';
+    const planBody = '# Implementation Plan\n\nImplement REQ-001 and verify AC-001.';
+    const attributes = { plan_id: '20260831-offset', status: 'frozen', created_at: '2026-08-31T00:00:00.000+08:00', supersedes: null, requirement_count: 1, acceptance_criteria_count: 1, digest: 'sha256:placeholder' };
+    const frozen: (body: string) => string = (body) => renderFrozenMarkdown(attributes, body);
+    await writePlanTriplet(planDirectory, 'spec.md', specBody, specBody, frozen);
+    await writePlanTriplet(planDirectory, 'plan.md', planBody, planBody, frozen);
+    const paths = executionPaths(planDirectory);
+
+    const result = await startRun({ planDirectory, config: DEFAULT_EXECUTION_CONFIG });
+
+    expect(result.run.status).toBe('RUNNING');
+    expect(result.run.plan_created_at).toBe('2026-08-30T16:00:00.000Z');
+    expect(await readRun(paths)).toEqual(result.run);
+    expect(result.warnings).toEqual([]);
   });
 
   it('adopts a CREATED run, preserving run_id, plan_id and plan_digest', async () => {
