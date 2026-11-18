@@ -354,6 +354,136 @@ describe('project synchronization published documentation', () => {
 });
 
 /**
+ * REQ-005 / AC-010 and AC-011, REQ-007 / AC-007 and AC-008: the compact path-and-digest
+ * contract reference is published consistently across the delivered contract and its tracked
+ * mirror, the global loading-entry source, the README, the synchronization and coding
+ * skills, and MEMORY. These assertions read the shipped templates and project files as
+ * public deliverables: they state delivered-content obligations, not a live-compliance or
+ * runtime-cap claim. Tests may name requirement identifiers.
+ */
+function flattenContent(text: string): string {
+  return text.replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * Affirmative claims that the gate injects or replays the contract are forbidden; the
+ * required negated statements ("does not replay the full contract", "never replays the
+ * full contract", "not a complete contract injection") are allowed. Returns each match
+ * whose surrounding clause carries no negation marker. Clause boundaries ('.', ';', ',',
+ * ':') reset the negation scope.
+ */
+function affirmativeContractInjectionClaims(text: string): string[] {
+  const pattern =
+    /(?:injects?|replays?|injection|injected|replayed)\b[^.]{0,80}(?:contract body|full contract|complete contract)|(?:contract body|full contract|complete contract)[^.]{0,60}(?:injection|injected|replayed|injects?|replays?)/gi;
+  const negation = /\b(?:not|never|no|cannot|without|nor)\b|n't/i;
+  const offenders: string[] = [];
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(text)) !== null) {
+    const before = text.slice(0, match.index);
+    const window = before.slice(Math.max(0, before.length - 120));
+    const clauseStart = Math.max(
+      window.lastIndexOf('.'),
+      window.lastIndexOf(';'),
+      window.lastIndexOf(','),
+      window.lastIndexOf(':'),
+    );
+    const clause = window.slice(clauseStart + 1);
+    if (!negation.test(clause) && !negation.test(match[0])) offenders.push(match[0]);
+  }
+  return offenders;
+}
+
+/** Raw slice of a heading-delimited section, stopping at the next heading of the given levels. */
+function sectionContent(text: string, marker: string, stops: readonly string[]): string {
+  const start = text.indexOf(marker);
+  if (start === -1) return '';
+  const body = text.slice(start + marker.length);
+  let end = -1;
+  for (const stop of stops) {
+    const at = body.indexOf(stop);
+    if (at !== -1 && (end === -1 || at < end)) end = at;
+  }
+  return end === -1 ? body : body.slice(0, end);
+}
+
+describe('compact path-and-digest reference published guidance (REQ-005 / AC-010, AC-011; REQ-007 / AC-007, AC-008)', () => {
+  const CONTRACT_SOURCE = 'templates/project/AGENTS.md';
+  const CONTRACT_MIRROR = '.ai-workflow/AGENTS.md';
+
+  it('AC-010: the contract source and tracked mirror are byte-identical and state the notice is not a complete injection', async () => {
+    const sourceBytes = await readFile(packagePath(CONTRACT_SOURCE));
+    const mirrorBytes = await readFile(packagePath(CONTRACT_MIRROR));
+    expect(
+      mirrorBytes.equals(sourceBytes),
+      'the tracked .ai-workflow/AGENTS.md mirror equals templates/project/AGENTS.md byte-for-byte',
+    ).toBe(true);
+    for (const label of [CONTRACT_SOURCE, CONTRACT_MIRROR] as const) {
+      const text = await readFile(packagePath(label), 'utf8');
+      const sync = flattenContent(sectionContent(text, '## Work-boundary synchronization', ['\n## ']));
+      expect(sync, `${label} publishes a Work-boundary synchronization section`).not.toBe('');
+      expect(
+        sync,
+        `${label} states a path-and-digest notice is not a complete injection`,
+      ).toMatch(/not a complete (?:contract )?injection/i);
+      expect(sync, `${label} names the compact authority_ref reference`).toMatch(/authority_ref/);
+    }
+  });
+
+  it('AC-011: the loading entry, README, skills and MEMORY state the gate does not replay the full contract and every role explicitly reads it', async () => {
+    const surfaces = [
+      'templates/contract/AGENTS.md',
+      'README.md',
+      'templates/skills/sync-ai-workflow/SKILL.md',
+      'templates/skills/coding/SKILL.md',
+      'MEMORY.md',
+    ] as const;
+    for (const path of surfaces) {
+      const text = flattenContent(await readFile(packagePath(path), 'utf8'));
+      expect(
+        text,
+        `${path} states the gate does not replay the full contract`,
+      ).toMatch(/does not replay the full contract|never replays the full contract/i);
+      expect(
+        text,
+        `${path} states every role explicitly reads the contract`,
+      ).toMatch(/explicitly reads? the (?:project )?contract/i);
+    }
+    for (const path of ['README.md', 'templates/skills/sync-ai-workflow/SKILL.md'] as const) {
+      const text = flattenContent(await readFile(packagePath(path), 'utf8'));
+      expect(text, `${path} names the compact authority_ref reference`).toMatch(/authority_ref/);
+      expect(text, `${path} names the path-and-digest reference`).toMatch(/path[- ]and[- ]digest/i);
+    }
+  });
+
+  it('AC-007/AC-008: README and the synchronization skill document the raw gate result with authority_ref, never the contract body', async () => {
+    const readme = flattenContent(await readFile(packagePath('README.md'), 'utf8'));
+    const skillRaw = await readFile(packagePath('templates/skills/sync-ai-workflow/SKILL.md'), 'utf8');
+    const skill = flattenContent(skillRaw);
+    for (const [label, text] of [
+      ['README.md', readme],
+      ['templates/skills/sync-ai-workflow/SKILL.md', skill],
+    ] as const) {
+      expect(text, `${label} names authority_ref in the raw gate result`).toMatch(/authority_ref/);
+      expect(
+        text,
+        `${label} no longer documents a retired optional authority field`,
+      ).not.toMatch(/optional [`']?authority[`']?(?!_ref)/i);
+      expect(
+        affirmativeContractInjectionClaims(text),
+        `${label} never affirmatively claims the contract body or the full contract is injected or replayed`,
+      ).toEqual([]);
+    }
+    const protocol = flattenContent(sectionContent(skillRaw, '## Native gate protocol', ['\n## ']));
+    expect(protocol, 'the sync skill publishes a Native gate protocol section').not.toBe('');
+    expect(protocol, 'the sync skill native gate protocol table names authority_ref').toMatch(/authority_ref/);
+    expect(
+      protocol,
+      'the sync skill native gate protocol table no longer names a retired optional authority field',
+    ).not.toMatch(/optional [`']?authority[`']?(?!_ref)/i);
+  });
+});
+
+/**
  * REQ-005 / AC-009, AC-010: the transport change preserves the exact five managed
  * synchronization targets and installs no runtime-enforcement or live-compliance claim.
  * These read the shipped module and README as public deliverables.

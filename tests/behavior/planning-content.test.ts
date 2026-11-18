@@ -420,6 +420,41 @@ describe('native prompt contracts', () => {
     expect(messageSkill, 'the type list stays').toMatch(/feat[^\n]{0,60}fix[^\n]{0,60}docs/);
     expect(messageSkill, 'the Chinese summary convention stays').toMatch(/Chinese summary/i);
   });
+  // The planning references must publish the hard `plan validate` constraints so an
+  // author sees what freezing requires instead of restating them elsewhere.
+  it('publishes the hard plan validate constraints in the planning references', async () => {
+    const spec = await readFile(packagePath('templates', 'skills', 'planning', 'references', 'spec.md'), 'utf8');
+    const plan = await readFile(packagePath('templates', 'skills', 'planning', 'references', 'plan.md'), 'utf8');
+    const digest = await readFile(packagePath('templates', 'skills', 'planning', 'references', 'digest.md'), 'utf8');
+    const combined = [spec, plan, digest].join('\n');
+
+    // Both frozen documents state the plan_id format.
+    for (const [file, text] of [['spec.md', spec], ['plan.md', plan]] as const) {
+      expect(text, `${file} names plan_id`).toMatch(/plan_id/);
+      expect(text, `${file} states the plan_id format`).toMatch(/\[0-9\]\{8\}-\[a-z0-9\]\+\(\?:-\[a-z0-9\]\+\)\*/);
+    }
+    // Both documents must be frozen, stated as a normative rule.
+    expect(combined).toMatch(/(both|each|spec\.md and plan\.md)[\s\S]{0,140}status: frozen/i);
+    // Declared counts equal the number of REQ- / AC- headings.
+    expect(combined).toMatch(/requirement_count[\s\S]{0,300}?(?:equal|match|number of|counts?)[\s\S]{0,120}?REQ-/i);
+    expect(combined).toMatch(/acceptance_criteria_count[\s\S]{0,300}?(?:equal|match|number of|counts?)[\s\S]{0,120}?AC-/i);
+    // Frontmatter exists only on the English side; the Chinese side carries none.
+    expect(combined).toMatch(/\.zh\.md[\s\S]{0,120}no YAML frontmatter/i);
+    expect(combined).toMatch(/frontmatter[^.\n]{0,80}only[^.\n]{0,80}(?:English|英文)|only[^.\n]{0,80}frontmatter[^.\n]{0,80}(?:English|英文)|frontmatter[^.\n]{0,80}(?:English|英文)[^.\n]{0,80}only/i);
+    // The Chinese side mirrors the English heading structure.
+    expect(combined).toMatch(/mirror[\s\S]{0,80}(?:headings?|structure|sections?)|(?:headings?|structure|sections?)[\s\S]{0,80}mirror/i);
+    // The consistency record holds exactly two hash lines and nothing else.
+    expect(combined).toMatch(/\.i18n\.yaml[\s\S]{0,300}exactly two|exactly two[\s\S]{0,300}\.i18n\.yaml/i);
+    expect(combined).toMatch(/<doc>\.md: <40-hex git blob hash>|40-hex git blob hash/i);
+    expect(combined).toMatch(/comment[\s\S]{0,80}(?:allowed|permitted|ignored|skipped|only)/i);
+    // Task documents require tasks/execution-order.yaml, enforced by plan validate.
+    expect(combined).toMatch(/tasks\/execution-order\.yaml/);
+    expect(combined).toMatch(/Missing execution order[\s\S]{0,160}tasks\/execution-order\.yaml|tasks\/execution-order\.yaml[\s\S]{0,160}Missing execution order/i);
+    // The plan directory is gitignored.
+    expect(combined).toMatch(/\.ai-workflow\/plans[\s\S]{0,160}(?:gitignored|git-ignored|ignored)|(?:gitignored|git-ignored)[\s\S]{0,160}\.ai-workflow\/plans/i);
+    // Navigation is rendered, not hand-edited.
+    expect(combined).toMatch(/ai-workflow context refresh --project[^\n]{0,60}--render-only[^\n]{0,60}--write/);
+  });
   // the commit-message reference repeats the standalone rule for both
   // the subject and the body.
   it('requires the commit-message reference to keep the subject and body standalone', async () => {

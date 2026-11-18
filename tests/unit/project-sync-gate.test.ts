@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createHash } from 'node:crypto';
 import { constants } from 'node:fs';
 import { access, chmod, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
@@ -13,6 +14,10 @@ import { startRun } from '../../src/execution/manager.js';
 import { executionPaths } from '../../src/execution/paths.js';
 
 const COMMIT = 'a'.repeat(40);
+
+/** The compact contract reference the gate must expose instead of a full contract body. */
+interface AuthorityRef { path: string; digest: string; bytes: number }
+type WithAuthorityRef = ProjectGateResult & { authority_ref?: AuthorityRef };
 
 /** The fixed generated source allowlist: exactly the five replaceable documents. */
 const SOURCE_PATHS = [
@@ -179,8 +184,8 @@ interface SeverityCase {
     status: SyncStatus;
     verified: boolean;
     proceed: boolean;
-    /** The current on-disk contract must be exposed for re-read when this run safely changed it. */
-    authority: boolean;
+    /** The current on-disk contract reference must be exposed when this run safely changed it. */
+    authorityRef: boolean;
     /** Only the synchronized case proves an actual patch reached the contract. */
     updatedContains?: string[];
   };
@@ -192,13 +197,13 @@ interface SeverityCase {
 // is preserved as a regression guard while the trigger cadence changes.
 const severityCases: SeverityCase[] = [
   {
-    name: 'a phase entry on an adopted project with a safe full-file update allows and exposes the fresh contract authority',
+    name: 'a phase entry on an adopted project with a safe full-file update allows and exposes the fresh contract reference',
     host: 'claude',
     setup: async (root, commit) => {
       await writeAdoptedTarget(root, commit);
       return fixedHeadGit(commit, sourceFiles(commit));
     },
-    expected: { decision: 'allow', status: 'synchronized', verified: true, proceed: true, authority: true, updatedContains: ['.ai-workflow/AGENTS.md'] },
+    expected: { decision: 'allow', status: 'synchronized', verified: true, proceed: true, authorityRef: true, updatedContains: ['.ai-workflow/AGENTS.md'] },
   },
   {
     name: 'a failed source branch allows warning continuation instead of a host denial',
@@ -207,7 +212,7 @@ const severityCases: SeverityCase[] = [
       await writeAdoptedTarget(root, commit);
       return headFailureGit();
     },
-    expected: { decision: 'allow', status: 'unverified', verified: false, proceed: true, authority: false },
+    expected: { decision: 'allow', status: 'unverified', verified: false, proceed: true, authorityRef: false },
   },
   {
     name: 'a generated target carrying legacy section markers denies with a visible manual-replacement reason',
@@ -216,7 +221,7 @@ const severityCases: SeverityCase[] = [
       await writeAdoptedTarget(root, commit, { '.ai-workflow/AGENTS.md': LEGACY_MARKER_AGENTS });
       return fixedHeadGit(commit, sourceFiles(commit));
     },
-    expected: { decision: 'deny', status: 'conflict', verified: false, proceed: false, authority: false },
+    expected: { decision: 'deny', status: 'conflict', verified: false, proceed: false, authorityRef: false },
   },
   {
     name: 'an ordinary filesystem failure denies with a visible reason',
@@ -226,7 +231,7 @@ const severityCases: SeverityCase[] = [
       await writeAdoptedTarget(root, commit);
       return fixedHeadGit(commit, sourceFiles(commit));
     },
-    expected: { decision: 'deny', status: 'failed', verified: false, proceed: false, authority: false },
+    expected: { decision: 'deny', status: 'failed', verified: false, proceed: false, authorityRef: false },
   },
 ];
 
@@ -237,7 +242,7 @@ describe('project sync gate phase-entry report mapping (AC-001/AC-003)', () => {
     roots.push(root, runtimeDirectory);
     const runGit = await testCase.setup(root, COMMIT);
 
-    let result: ProjectGateResult | undefined;
+    let result: WithAuthorityRef | undefined;
     let thrown: unknown;
     const readOnlyTarget = testCase.readOnlyDirectory === undefined ? undefined : join(root, testCase.readOnlyDirectory);
     if (readOnlyTarget) await chmod(readOnlyTarget, 0o555);
@@ -249,7 +254,7 @@ describe('project sync gate phase-entry report mapping (AC-001/AC-003)', () => {
       result = await runProjectGate(
         { host: testCase.host, event: 'PhaseEntry', sessionId: 'session-1', cwd: root, toolName: 'Bash', toolInput: { command: 'ls' } },
         { runGit, runtimeDirectory },
-      );
+      ) as WithAuthorityRef;
     } catch (error) {
       thrown = error;
     } finally {
@@ -285,18 +290,34 @@ describe('project sync gate phase-entry report mapping (AC-001/AC-003)', () => {
       for (const path of testCase.expected.updatedContains) expect(gate.report!.updated).toContain(path);
     }
 
-    // `authority` is the current on-disk contract to reload, not an upstream freshness
+    // `authority_ref` is the current on-disk contract reference, not an upstream freshness
     // claim. Any invocation that safely published a contract change must expose it.
     // Results with no safe contract update (source unverified with zero writes, conflict,
     // failed) are not required to expose it and are intentionally left unasserted here.
-    if (testCase.expected.authority) {
-      const contract = await readFile(join(root, '.ai-workflow/AGENTS.md'), 'utf8');
-      expect(gate.authority, 'the current contract must be exposed for re-read').toBe(contract);
-      expect(gate.authority).toContain(`Fresh shared context at ${COMMIT}`);
+    if (testCase.expected.authorityRef) {
+      const contractPath = join(root, '.ai-workflow/AGENTS.md');
+      const contractBytes = await readFile(contractPath);
+      expect(gate.authority_ref, 'the current contract must be referenced, not embedded').toEqual({
+        path: contractPath,
+        digest: `sha256:${createHash('sha256').update(contractBytes).digest('hex')}`,
+        bytes: contractBytes.byteLength,
+      });
+      expect(gate.authority_ref!.digest, 'the digest must be a sha256 reference').toMatch(/^sha256:[0-9a-f]{64}$/);
+      expect(gate.context, 'the context must carry no contract body').not.toContain('Fresh shared context at');
+      expect(gate.context.length, 'the context must stay below 1000 characters').toBeLessThan(1000);
     }
 
-    // AC-001: a phase entry stores exactly one complete, parsable root-keyed cache entry.
+    // AC-001/AC-002: a phase entry stores exactly one complete, parsable root-keyed version 2
+    // cache entry that carries the reference and no contract body.
     const cacheFile = await singleRuntimeFile(runtimeDirectory);
+    const storedText = await readFile(cacheFile, 'utf8');
+    const stored = JSON.parse(storedText) as { version?: unknown; result?: Record<string, unknown> };
+    expect(stored.version, 'the stored unit must be version 2').toBe(2);
+    if (testCase.expected.authorityRef) {
+      expect(stored.result?.authority_ref, 'the stored unit must carry the reference').toEqual(gate.authority_ref);
+      expect(stored.result, 'the stored unit must carry no authority key').not.toHaveProperty('authority');
+      expect(storedText, 'the stored unit must contain no contract body').not.toContain('Fresh shared context at');
+    }
     expect(await parseRuntimeFile(cacheFile), 'the stored cache entry must be a complete JSON object').toBeTruthy();
   });
 });
@@ -310,13 +331,13 @@ describe('project sync gate native event cache reuse (AC-002/AC-003)', () => {
     const source = { commit: 'a'.repeat(40), files: sourceFiles('a'.repeat(40)) };
     const fake = fakeGit(source);
     const options = { runGit: fake.runGit, runtimeDirectory };
-    const invoke = (input: Omit<ProjectGateInput, 'host'>): Promise<ProjectGateResult> =>
-      runProjectGate({ host: 'claude', toolName: 'Bash', toolInput: { command: 'ls' }, ...input }, options);
+    const invoke = (input: Omit<ProjectGateInput, 'host'>): Promise<WithAuthorityRef> =>
+      runProjectGate({ host: 'claude', toolName: 'Bash', toolInput: { command: 'ls' }, ...input }, options) as Promise<WithAuthorityRef>;
 
     const stored = await invoke({ event: 'PhaseEntry', sessionId: 'session-1', cwd: root });
     expect(stored.decision).toBe('allow');
     expect(stored.report?.source.commit).toBe(source.commit);
-    expect(stored.authority, 'a safe contract update must store the authority payload').toBeDefined();
+    expect(stored.authority_ref, 'a safe contract update must store the contract reference').toBeDefined();
     const cloneAfterPhase = fake.cloneCount();
     const gitAfterPhase = fake.invocationCount();
     const runtimeAfterPhase = await snapshotTree(runtimeDirectory);
@@ -334,7 +355,12 @@ describe('project sync gate native event cache reuse (AC-002/AC-003)', () => {
       const replay = await invoke(native);
       expect(replay, `${native.event} must return the stored result verbatim`).toEqual(stored);
       expect(replay.decision, native.event).toBe('allow');
+      expect(replay.report?.status, native.event).toBe(stored.report?.status);
+      expect(replay.report?.verified, native.event).toBe(stored.report?.verified);
+      expect(replay.report?.proceed, native.event).toBe(stored.report?.proceed);
+      expect(replay.authority_ref, `${native.event} must replay the same reference`).toEqual(stored.authority_ref);
       expect(replay.report?.source.commit, native.event).toBe(source.commit);
+      expect(replay.context.length, `${native.event} must keep a short replay context`).toBeLessThan(1000);
     }
 
     expect(fake.cloneCount(), 'native events must never clone the source').toBe(cloneAfterPhase);
@@ -376,7 +402,7 @@ describe('project sync gate no stored result (AC-004)', () => {
   function expectNoCheck(result: ProjectGateResult): void {
     expect(result.decision).toBe('allow');
     expect(result.report, 'a missing check must not fabricate a report').toBeUndefined();
-    expect(result.authority, 'a missing check must not fabricate authority').toBeUndefined();
+    expect((result as WithAuthorityRef).authority_ref, 'a missing check must not fabricate a reference').toBeUndefined();
     expect(result.context.length).toBeGreaterThan(0);
     expect(result.context, 'the no-check context must state that no check has run').toMatch(/no[\s\S]{0,80}(check|synchroni)/i);
   }
@@ -483,10 +509,10 @@ describe('project sync gate unadopted project (AC-005)', () => {
       const runtimeBefore = await snapshotTree(runtimeDirectory);
       const rootBefore = await snapshotTree(root);
 
-      const gate = await runProjectGate({ host: 'codex', cwd: root, ...event }, { runGit: fake.runGit, runtimeDirectory });
+      const gate = await runProjectGate({ host: 'codex', cwd: root, ...event }, { runGit: fake.runGit, runtimeDirectory }) as WithAuthorityRef;
 
       expect(gate.decision, event.event).toBe('skip');
-      expect(gate.authority, event.event).toBeUndefined();
+      expect(gate.authority_ref, event.event).toBeUndefined();
       expect(gate.report, `${event.event}: a skip must not fabricate a report`).toBeUndefined();
       expect(fake.cloneCount(), `${event.event}: an unadopted project must not clone the source`).toBe(0);
       expect(fake.invocationCount(), `${event.event}: an unadopted project must issue zero git invocations`).toBe(0);
@@ -510,8 +536,8 @@ describe('project sync gate single-start lifecycle (AC-001/AC-002)', () => {
     const source = { commit: 'a'.repeat(40), files: sourceFiles('a'.repeat(40)) };
     const fake = fakeGit(source);
     const options = { runGit: fake.runGit, runtimeDirectory };
-    const invoke = (input: Omit<ProjectGateInput, 'host'>): Promise<ProjectGateResult> =>
-      runProjectGate({ host: 'claude', toolName: 'Bash', toolInput: { command: 'ls' }, ...input }, options);
+    const invoke = (input: Omit<ProjectGateInput, 'host'>): Promise<WithAuthorityRef> =>
+      runProjectGate({ host: 'claude', toolName: 'Bash', toolInput: { command: 'ls' }, ...input }, options) as Promise<WithAuthorityRef>;
 
     // One phase entry resolves the source for the actual root.
     const A = source.commit;
@@ -571,7 +597,7 @@ describe('project sync gate single-start lifecycle (AC-001/AC-002)', () => {
     expect(worktreeNative.decision).toBe('allow');
     expect(worktreeNative.project).toBe(worktreeRoot);
     expect(worktreeNative.report, 'an unprimed worktree must not replay the parent report').toBeUndefined();
-    expect(worktreeNative.authority, 'an unprimed worktree must not replay the parent authority').toBeUndefined();
+    expect(worktreeNative.authority_ref, 'an unprimed worktree must not replay the parent reference').toBeUndefined();
     expect(fake.cloneCount(), 'an unprimed worktree native event must not clone the source').toBe(2);
     expect(changedPaths(worktreeBefore, await snapshotTree(worktreeRoot)), 'an unprimed worktree must not be edited').toEqual([]);
     expect(await runtimeFiles(runtimeDirectory)).toHaveLength(1);
@@ -611,8 +637,8 @@ describe('project sync gate actor and authority exemptions (AC-003)', () => {
     await writeAdoptedTarget(root, COMMIT, { '.ai-workflow/AGENTS.md': LEGACY_MARKER_AGENTS });
     const fake = fakeGit({ commit: COMMIT, files: sourceFiles(COMMIT) });
     const options = { runGit: fake.runGit, runtimeDirectory };
-    const invoke = (toolName: string, toolInput: unknown): Promise<ProjectGateResult> =>
-      runProjectGate({ host: 'opencode', event: 'PreToolUse', sessionId: 'exempt-session', cwd: root, toolName, toolInput }, options);
+    const invoke = (toolName: string, toolInput: unknown): Promise<WithAuthorityRef> =>
+      runProjectGate({ host: 'opencode', event: 'PreToolUse', sessionId: 'exempt-session', cwd: root, toolName, toolInput }, options) as Promise<WithAuthorityRef>;
 
     const contractPath = join(root, '.ai-workflow/AGENTS.md');
     const contract = await readFile(contractPath, 'utf8');
@@ -652,7 +678,7 @@ describe('project sync gate actor and authority exemptions (AC-003)', () => {
       const authorityRead = await invoke(toolName, { [key]: contractPath });
       expect(authorityRead.decision, `authority read: ${toolName}`).toBe('allow');
       expectNoFreshness(authorityRead);
-      if (authorityRead.authority !== undefined) expect(authorityRead.authority).toBe(contract);
+      if (authorityRead.authority_ref !== undefined) expect(authorityRead.authority_ref.path).toBe(contractPath);
       const stillDenied = await invoke('Bash', { command: 'ls -la' });
       expect(stillDenied.decision).toBe('deny');
     }
@@ -717,8 +743,8 @@ describe('project sync gate supported project path routing (AC-002/AC-003)', () 
     await writeFile(join(operationRoot, 'src/file.ts'), 'export const routed = true;\n');
     const fake = fakeGit({ commit: COMMIT, files: sourceFiles(COMMIT) });
     const options = { runGit: fake.runGit, runtimeDirectory };
-    const invoke = (input: Omit<ProjectGateInput, 'host'>): Promise<ProjectGateResult> =>
-      runProjectGate({ host: 'claude', toolName: 'Bash', toolInput: { command: 'ls' }, ...input }, options);
+    const invoke = (input: Omit<ProjectGateInput, 'host'>): Promise<WithAuthorityRef> =>
+      runProjectGate({ host: 'claude', toolName: 'Bash', toolInput: { command: 'ls' }, ...input }, options) as Promise<WithAuthorityRef>;
 
     const operationAgents = join(operationRoot, '.ai-workflow/AGENTS.md');
     expect(await readFile(operationAgents, 'utf8')).not.toContain(`Fresh shared context at ${COMMIT}`);
@@ -798,14 +824,123 @@ describe('project sync gate project-owned memory (REQ-002 / AC-011)', () => {
     const result = await runProjectGate(
       { host: 'claude', event: 'PhaseEntry', sessionId: 'memory-session', cwd: root },
       { runGit: fake.runGit, runtimeDirectory },
-    );
+    ) as WithAuthorityRef;
 
     expect(result.decision).toBe('allow');
     expect(result.report?.status).toBe('synchronized');
     expect(result.report?.created).not.toContain('MEMORY.md');
     expect(result.report?.updated).not.toContain('MEMORY.md');
-    expect(result.authority, 'project MEMORY is not a generated authority path').toBeUndefined();
+    expect(result.authority_ref, 'project MEMORY is not a generated authority path').toBeUndefined();
     expect(await readFile(memoryPath), 'project MEMORY bytes are preserved').toEqual(memoryBefore);
+  });
+});
+
+describe('project sync gate no-update phase entry (AC-003)', () => {
+  it('AC-003: an already-current adoption stores a reference-free version 2 result that replays with zero requests', async () => {
+    const root = await temporary('ai-workflow-gate-current-');
+    const runtimeDirectory = await temporary('ai-workflow-gate-current-runtime-');
+    roots.push(root, runtimeDirectory);
+    await writeAdoptionPrerequisites(root);
+    for (const [sourcePath, targetPath] of Object.entries(TARGETS)) {
+      await writeFile(join(root, targetPath), sourceContent(sourcePath, COMMIT));
+    }
+    const fake = fakeGit({ commit: COMMIT, files: sourceFiles(COMMIT) });
+    const options = { runGit: fake.runGit, runtimeDirectory };
+
+    const result = await runProjectGate(
+      { host: 'claude', event: 'PhaseEntry', sessionId: 'current-session', cwd: root },
+      options,
+    ) as WithAuthorityRef;
+
+    expect(result.decision).toBe('allow');
+    expect(result.report?.status).toBe('synchronized');
+    expect(result.authority_ref, 'a phase entry that updates no managed authority file must not expose a reference').toBeUndefined();
+    expect(result.context, 'the context must carry no contract body').not.toContain('Fresh shared context at');
+    expect(result.context.length, 'the context must stay below 1000 characters').toBeLessThan(1000);
+
+    const storedText = await readFile(await singleRuntimeFile(runtimeDirectory), 'utf8');
+    const stored = JSON.parse(storedText) as { version?: unknown; result?: Record<string, unknown> };
+    expect(stored.version, 'the stored unit must be version 2').toBe(2);
+    expect(stored.result, 'the stored unit must carry no reference').not.toHaveProperty('authority_ref');
+    expect(storedText, 'the stored unit must contain no contract body').not.toContain('Fresh shared context at');
+
+    const gitAfterPhase = fake.invocationCount();
+    const cloneAfterPhase = fake.cloneCount();
+    const replay = await runProjectGate(
+      { host: 'claude', event: 'PreToolUse', sessionId: 'current-session', cwd: root, toolName: 'Bash', toolInput: { command: 'ls' } },
+      options,
+    ) as WithAuthorityRef;
+    expect(replay.decision).toBe('allow');
+    expect(replay.report?.status).toBe('synchronized');
+    expect(replay.report?.verified).toBe(true);
+    expect(replay.report?.proceed).toBe(true);
+    expect(replay.authority_ref, 'the replay must carry no reference').toBeUndefined();
+    expect(replay.context.length, 'the replay context must stay below 1000 characters').toBeLessThan(1000);
+    expect(fake.cloneCount(), 'the replay must not clone the source').toBe(cloneAfterPhase);
+    expect(fake.invocationCount(), 'the replay must issue zero git invocations').toBe(gitAfterPhase);
+  });
+});
+
+describe('project sync gate legacy version 1 unit invalidation (AC-009)', () => {
+  it('AC-009: a version 1 unit with a full contract body is treated as no check and the next phase entry rewrites it as version 2', async () => {
+    const root = await temporary('ai-workflow-gate-legacy-');
+    const runtimeDirectory = await temporary('ai-workflow-gate-legacy-runtime-');
+    roots.push(root, runtimeDirectory);
+    await writeAdoptedTarget(root, COMMIT);
+    const fake = fakeGit({ commit: COMMIT, files: sourceFiles(COMMIT) });
+    const options = { runGit: fake.runGit, runtimeDirectory };
+
+    const primed = await runProjectGate(
+      { host: 'claude', event: 'PhaseEntry', sessionId: 'prime', cwd: root },
+      options,
+    );
+    expect(primed.report?.status).toBe('synchronized');
+
+    // Hand-write a version 1 unit embedding the full contract body at the exact cache path.
+    const cacheFile = await singleRuntimeFile(runtimeDirectory);
+    const primedUnit = JSON.parse(await readFile(cacheFile, 'utf8')) as { result?: { report?: unknown } };
+    const contract = await readFile(join(root, '.ai-workflow/AGENTS.md'), 'utf8');
+    const legacy = {
+      version: 1,
+      unit: 'hand-written-legacy',
+      phase: true,
+      result: {
+        decision: 'allow',
+        project: root,
+        report: primedUnit.result?.report,
+        context: `ai-workflow sync: synchronized\nProject: ${root}\n${contract}`,
+        authority: contract,
+      },
+    };
+    await writeFile(cacheFile, `${JSON.stringify(legacy)}\n`);
+    const cloneAfterPrime = fake.cloneCount();
+    const gitAfterPrime = fake.invocationCount();
+    const runtimeBefore = await snapshotTree(runtimeDirectory);
+    const rootBefore = await snapshotTree(root);
+
+    const replay = await runProjectGate(
+      { host: 'claude', event: 'PreToolUse', sessionId: 'after-legacy', cwd: root, toolName: 'Bash', toolInput: { command: 'ls' } },
+      options,
+    ) as WithAuthorityRef;
+    expect(replay.decision, 'a version 1 unit must not block or be trusted as a current check').toBe('allow');
+    expect(replay.report, 'a version 1 unit must not be replayed as a check').toBeUndefined();
+    expect(replay.authority_ref, 'a version 1 unit must not fabricate a reference').toBeUndefined();
+    expect(replay.context, 'the no-check context must state that no check has run').toMatch(/no[\s\S]{0,80}(check|synchroni)/i);
+    expect(fake.cloneCount(), 'a version 1 unit must not trigger a source clone').toBe(cloneAfterPrime);
+    expect(fake.invocationCount(), 'a version 1 unit must not trigger a git invocation').toBe(gitAfterPrime);
+    expect(changedPaths(runtimeBefore, await snapshotTree(runtimeDirectory)), 'a version 1 unit must not be rewritten').toEqual([]);
+    expect(changedPaths(rootBefore, await snapshotTree(root)), 'a version 1 unit must not touch the project').toEqual([]);
+
+    // A following phase entry rewrites the unit as version 2 with no contract body.
+    const rewritten = await runProjectGate(
+      { host: 'claude', event: 'PhaseEntry', sessionId: 'after-legacy-phase', cwd: root },
+      options,
+    ) as WithAuthorityRef;
+    expect(rewritten.report?.status).toBe('synchronized');
+    const rewrittenText = await readFile(cacheFile, 'utf8');
+    const rewrittenUnit = JSON.parse(rewrittenText) as { version?: unknown };
+    expect(rewrittenUnit.version, 'a following phase entry must rewrite the unit as version 2').toBe(2);
+    expect(rewrittenText, 'the rewritten unit must contain no contract body').not.toContain('Fresh shared context at');
   });
 });
 
@@ -845,7 +980,7 @@ describe('project sync gate clone timeout classification (AC-004/AC-005)', () =>
       phase?: unknown;
       result?: { decision?: unknown; report?: { status?: unknown } };
     };
-    expect(stored.version, 'the stored entry must be versioned').toBe(1);
+    expect(stored.version, 'the stored unit must be version 2').toBe(2);
     expect(stored.phase).toBe(true);
     expect(stored.result?.decision).toBe('deny');
     expect(stored.result?.report?.status).toBe('failed');

@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { readFile, stat } from 'node:fs/promises';
 import { basename, dirname, join, resolve } from 'node:path';
 
@@ -41,13 +42,24 @@ function invokeHook(input) {
   });
 }
 
+/** Exact bytes of a contract file, fingerprinted as the gate's `sha256:<hex>` reference. */
+function digestBytes(bytes) {
+  return `sha256:${createHash('sha256').update(bytes).digest('hex')}`;
+}
+
+/** A notice is distinct when either its decision or its context differs from the last push. */
+function noticeSignature(result) {
+  return `${result.decision}\n${result.context}`;
+}
+
 export default {
   id: 'ai-workflow.sync',
   async setup(ctx) {
     const results = new Map();
     const directories = new Map();
-    const loadedAuthority = new Map();
+    const authorityDigests = new Map();
     const starts = new Map();
+    const notices = new Map();
     const controller = new AbortController();
 
     async function lookup(id) {
@@ -87,10 +99,10 @@ export default {
       return result;
     }
 
-    function rememberAuthority(sessionID, project, authority) {
-      const roots = loadedAuthority.get(sessionID) ?? new Map();
-      roots.set(project, authority);
-      loadedAuthority.set(sessionID, roots);
+    function rememberAuthority(sessionID, project, digest) {
+      const roots = authorityDigests.get(sessionID) ?? new Map();
+      roots.set(project, digest);
+      authorityDigests.set(sessionID, roots);
     }
 
     function contractTarget(sessionID, args) {
@@ -100,8 +112,15 @@ export default {
       return { root: dirname(dirname(path)), path };
     }
 
-    function readsAuthority(sessionID, tool, args, project) {
-      return tool === 'read' && contractTarget(sessionID, args)?.path === join(project, '.ai-workflow/AGENTS.md');
+    /** The read gate is satisfied only by the current on-disk bytes matching the stored reference. */
+    async function authoritySatisfied(sessionID, project, reference) {
+      const stored = authorityDigests.get(sessionID)?.get(project);
+      if (stored === undefined || stored !== reference.digest) return false;
+      try {
+        return digestBytes(await readFile(reference.path)) === reference.digest;
+      } catch {
+        return false;
+      }
     }
 
     function bindingFields(...sources) {
@@ -135,19 +154,28 @@ export default {
 
     void (async () => {
       for await (const event of ctx.event.subscribe({ signal: controller.signal })) {
-        if (event.type === 'session.created') {
+        if (event.type === 'server.connected') {
+          results.clear();
+          directories.clear();
+          authorityDigests.clear();
+          starts.clear();
+          notices.clear();
+        } else if (event.type === 'session.created') {
           starts.set(event.data.sessionID, 'startup');
-          loadedAuthority.delete(event.data.sessionID);
+          authorityDigests.delete(event.data.sessionID);
+          notices.delete(event.data.sessionID);
           void recordSession('session.created', event.data.sessionID, bindingFields(event.data.info, event.data.session, event.data)).catch(() => {});
         } else if (event.type === 'session.compaction.ended') {
           starts.set(event.data.sessionID, 'compact');
-          loadedAuthority.delete(event.data.sessionID);
+          authorityDigests.delete(event.data.sessionID);
+          notices.delete(event.data.sessionID);
         } else if (event.type === 'session.deleted') {
           void recordSession('session.deleted', event.data.sessionID).catch(() => {});
           results.delete(event.data.sessionID);
           directories.delete(event.data.sessionID);
-          loadedAuthority.delete(event.data.sessionID);
+          authorityDigests.delete(event.data.sessionID);
           starts.delete(event.data.sessionID);
+          notices.delete(event.data.sessionID);
         } else if (event.type === 'session.error') {
           void recordSession('session.error', event.data.sessionID).catch(() => {});
         }
@@ -155,34 +183,38 @@ export default {
     })();
 
     await ctx.session.hook('prompt', async (event) => {
-      loadedAuthority.delete(event.sessionID);
       await synchronize(event.sessionID, 'UserPromptSubmit');
     });
 
     await ctx.session.hook('context', async (event) => {
       if (!event.sessionID) return;
       const result = await synchronize(event.sessionID, 'PreToolUse');
-      event.system.push({ type: 'text', text: result.context });
-      if (result.authority !== undefined) rememberAuthority(event.sessionID, result.project, result.authority);
+      if (result.exemption !== undefined) return;
+      const signature = noticeSignature(result);
+      if (notices.get(event.sessionID) !== signature) {
+        event.system.push({ type: 'text', text: result.context });
+        notices.set(event.sessionID, signature);
+      }
     });
 
     await ctx.tool.hook('execute.before', async (event) => {
       const result = await synchronize(event.sessionID, 'PreToolUse', event.tool, event.input);
       if (result.decision === 'deny') throw new Error(result.context);
-      const loaded = loadedAuthority.get(event.sessionID)?.get(result.project);
-      if (result.authority !== undefined && loaded !== result.authority && !readsAuthority(event.sessionID, event.tool, event.input, result.project)) {
-        throw new Error(`${result.context}\nRead ${join(result.project, '.ai-workflow/AGENTS.md')} before ordinary project work continues.`);
-      }
+      const reference = result.authority_ref;
+      if (reference === undefined || result.exemption !== undefined) return;
+      if (await authoritySatisfied(event.sessionID, result.project, reference)) return;
+      throw new Error(`${result.context}\nRead ${reference.path} before ordinary project work continues.`);
     });
 
     await ctx.tool.hook('execute.after', async (event) => {
       if (event.tool !== 'read') return;
+      if (event.status !== undefined && event.status !== 'completed') return;
       const session = await lookup(event.sessionID);
       directories.set(event.sessionID, session.directory);
       const target = contractTarget(event.sessionID, event.input);
       if (target === undefined) return;
-      const content = await readFile(target.path, 'utf8').catch(() => undefined);
-      if (content !== undefined) rememberAuthority(event.sessionID, target.root, content);
+      const bytes = await readFile(target.path).catch(() => undefined);
+      if (bytes !== undefined) rememberAuthority(event.sessionID, target.root, digestBytes(bytes));
     });
 
     return () => controller.abort();

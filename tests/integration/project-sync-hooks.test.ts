@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { delimiter, dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -12,14 +13,14 @@ import { changedPaths, snapshotTree, temporary, withGitShim, writeGitFixture, wr
 
 /**
  * Frozen single-start synchronization cadence for `src/cli.ts` / `src/sync/gate.ts` (plan
- * `20261009-sync-once-at-skill-start`, Step 2).
+ * `20261118-sync-injection-slimming`).
  *
  * Command:
  *   node src/cli.ts sync-hook --host <claude|codex|opencode> [--phase] [--project <actual-root>]
  * Reads exactly one native JSON object from stdin (unless `--phase` is given).
  *
  * The single automatic trigger is the phase form. It always prints the raw gate JSON
- * (`decision`, `project`, `context`, optional `authority` and `report`) for every host. Every
+ * (`decision`, `project`, `context`, optional `authority_ref` and `report`) for every host. Every
  * native stdin event reads the stored per-actual-root result and issues zero source requests;
  * a missing stored result is a `allow` without a nested report whose context states that no
  * check has run. A stored `deny` (conflict) never clears on a native event or on an exemption.
@@ -59,6 +60,8 @@ const repoRoot = process.cwd();
 const tsxLoader = pathToFileURL(join(repoRoot, 'node_modules/tsx/dist/loader.mjs')).href;
 const cliEntry = join(repoRoot, 'src/cli.ts');
 const builtCli = packagePath('dist', 'cli.js');
+/** Distinctive bytes of the source template; they must never flow into a gate context. */
+const contractBodyMarker = 'Fresh shared context.';
 
 const A = 'a'.repeat(40);
 const B = 'b'.repeat(40);
@@ -232,6 +235,21 @@ async function hookFixture(): Promise<{ home: string; temporaryDirectory: string
   return { home, temporaryDirectory, log: join(logDirectory, 'heads.log') };
 }
 
+/** Independent digest of a contract file, never through a product helper. */
+async function contractDigest(path: string): Promise<{ digest: string; bytes: number }> {
+  const contents = await readFile(path);
+  return { digest: `sha256:${createHash('sha256').update(contents).digest('hex')}`, bytes: contents.byteLength };
+}
+
+/** The current gate must reference the on-disk contract instead of embedding its body. */
+async function expectContractReference(result: HookGateResult, project: string): Promise<void> {
+  const path = join(project, '.ai-workflow/AGENTS.md');
+  const { digest, bytes } = await contractDigest(path);
+  expect(result.authority_ref, 'a managed contract update must carry the compact reference').toEqual({ path, digest, bytes });
+  expect('authority' in result, 'the raw result must not carry the contract body field').toBe(false);
+  expect(result.context, 'the context must be a path notice, never the contract body').not.toContain(contractBodyMarker);
+}
+
 function expectNoCheck(context: string): void {
   expect(context, 'the no-check context must state that no check has run').toMatch(/no[\s\S]{0,80}(check|synchroni)/i);
 }
@@ -253,22 +271,22 @@ interface MappingCase {
   target?: Record<string, string>;
   failing?: boolean;
   deny?: boolean;
-  authority: boolean;
+  authorityRef: boolean;
   contextIncludes: string[];
 }
 
 const mappingCases: MappingCase[] = [
   {
-    name: 'synchronized allow with the current updated contract context',
+    name: 'synchronized allow with the current updated contract reference',
     expectedStatus: 'synchronized',
-    authority: true,
-    contextIncludes: ['Managed workflow artifacts are current', 'Fresh shared context.'],
+    authorityRef: true,
+    contextIncludes: ['Managed workflow artifacts are current', 'Project contract: '],
   },
   {
     name: 'unverified warning allows with visible context',
     expectedStatus: 'unverified',
     failing: true,
-    authority: false,
+    authorityRef: false,
     contextIncludes: ['unverified', 'Warning:'],
   },
   {
@@ -276,7 +294,7 @@ const mappingCases: MappingCase[] = [
     expectedStatus: 'conflict',
     target: { '.ai-workflow/AGENTS.md': legacyAgents },
     deny: true,
-    authority: false,
+    authorityRef: false,
     contextIncludes: ['conflict', 'Conflict:'],
   },
 ];
@@ -285,7 +303,7 @@ const hosts = ['claude', 'codex', 'opencode'] as const;
 
 describe('project sync hook adapter', () => {
   it.each(hosts.flatMap((host) => mappingCases.map((testCase) => ({ host, ...testCase }))))(
-    'AC-007/AC-012: $host maps $name from the primed cache without a source request',
+    'AC-007/AC-008: $host maps $name from the primed cache without a source request',
     async ({ host, ...testCase }) => {
       const project = await adoptedProject(testCase.target);
       const git = await gitFixture(testCase.source ?? baseSourceFiles, testCase.failing ? 'rate limited' : undefined);
@@ -304,6 +322,10 @@ describe('project sync hook adapter', () => {
       expect(primed.report?.status).toBe(testCase.expectedStatus);
       expect(primed.project).toBe(project);
       for (const text of testCase.contextIncludes) expect(primed.context, 'prime context').toContain(text);
+      expect('authority' in primed, 'the raw gate JSON must not carry the contract body field').toBe(false);
+      if (testCase.authorityRef) await expectContractReference(primed, project);
+      else expect(primed.authority_ref, 'no managed contract update must reference the contract').toBeUndefined();
+      expect(primed.context, 'the raw context must not embed the contract body').not.toContain(contractBodyMarker);
       expect(await observedHeads(fixture.log), 'only the phase entry may query the source').toEqual([A]);
 
       const afterPrime = await snapshotTree(project);
@@ -323,13 +345,16 @@ describe('project sync hook adapter', () => {
         expect(gate.project).toBe(project);
         expect(gate.report?.status).toBe(testCase.expectedStatus);
         for (const text of testCase.contextIncludes) expect(gate.context, 'replayed context').toContain(text);
-        if (testCase.authority) expect(typeof gate.authority).toBe('string');
-        else expect(gate.authority).toBeUndefined();
+        expect('authority' in gate, 'the replayed raw gate JSON must not carry the contract body field').toBe(false);
+        if (testCase.authorityRef) await expectContractReference(gate, project);
+        else expect(gate.authority_ref, 'a reference-free stored result must replay without one').toBeUndefined();
+        expect(gate.context, 'the replayed context must not embed the contract body').not.toContain(contractBodyMarker);
       } else {
         const output = JSON.parse(native.stdout) as NativeOutput;
         const context = nativeContext(output);
         expect(context.length).toBeGreaterThan(0);
         for (const text of testCase.contextIncludes) expect(context, 'replayed context').toContain(text);
+        expect(context, 'host-native replay must not embed the contract body').not.toContain(contractBodyMarker);
         expect(output.hookSpecificOutput?.hookEventName).toBe('PreToolUse');
         if (testCase.deny) {
           // A blocking report must not become an exit 2 denial: it uses the explicit shape.
@@ -394,6 +419,7 @@ describe('project sync hook adapter', () => {
     expect(storedA.decision).toBe('allow');
     expect(storedA.project).toBe(projectA);
     expect(storedA.report?.source.commit).toBe(A);
+    await expectContractReference(storedA, projectA);
     expect(await observedHeads(fixture.log)).toEqual([A]);
 
     // (c) Every native event at head B reuses A, including a resume SessionStart.
@@ -522,6 +548,7 @@ function pluginSdk(initial: Record<string, PluginSessionState>): PluginSdk {
 
 interface PluginHooks {
   'experimental.chat.system.transform': (input: { sessionID: string }, output: { system: string[] }) => Promise<void>;
+  'chat.message': (input: { sessionID: string }) => Promise<void>;
   'tool.execute.before': (input: { sessionID: string; tool: string }, output: { args: Record<string, unknown> }) => Promise<void>;
   'tool.execute.after': (input: { sessionID: string; tool: string; args: Record<string, unknown> }) => Promise<void>;
 }
@@ -551,7 +578,7 @@ async function primeBuilt(project: string, head: string): Promise<HookGateResult
 }
 
 describe('opencode plugin boundary', () => {
-  it('REQ-004/AC-003/AC-004: injects the primed contract, serves an unprimed root with a no-check, then requires the primed contract read', async () => {
+  it('REQ-002/REQ-003/AC-004/AC-005/AC-006: pushes one short notice per stored result, then gates ordinary tools on the digest read', async () => {
     const home = await temporary('ai-workflow-plugin-home-');
     const contextDirectory = await temporary('ai-workflow-plugin-context-');
     const fixtureLogDirectory = await temporary('ai-workflow-plugin-log-');
@@ -567,6 +594,7 @@ describe('opencode plugin boundary', () => {
     const sdk = pluginSdk({ S: { directory: rootA } });
     const plugin = await loadInstalledPlugin(home, sdk, contextDirectory);
     const contextBefore = await snapshotTree(contextDirectory);
+    const contractA = join(rootA, '.ai-workflow/AGENTS.md');
     const contractB = join(rootB, '.ai-workflow/AGENTS.md');
 
     await withProcessEnvironment({
@@ -579,13 +607,38 @@ describe('opencode plugin boundary', () => {
       // Prime rootA at A. The plugin's first event (a synthesized SessionStart) must reuse it.
       const primedA = await primeBuilt(rootA, A);
       expect(primedA.report?.status).toBe('synchronized');
+      await expectContractReference(primedA, rootA);
       expect(await observedHeads(log)).toEqual([A]);
 
-      const injected = { system: [] as string[] };
-      await plugin['experimental.chat.system.transform']({ sessionID: 'S' }, injected);
-      expect(injected.system.join('\n'), 'the primed contract must be injected before ordinary work').toContain('Fresh shared context.');
+      // The notice is a one-shot path reference: exactly one short notice on the first call,
+      // none on a second call with the unchanged stored result, never the contract body.
+      const first = { system: [] as string[] };
+      await plugin['experimental.chat.system.transform']({ sessionID: 'S' }, first);
+      expect(first.system.length, 'the first system transform pushes exactly one short notice').toBe(1);
+      expect(first.system[0]).toContain(`Project contract: ${contractA}`);
+      expect(first.system[0]).not.toContain(contractBodyMarker);
+      const second = { system: [] as string[] };
+      await plugin['experimental.chat.system.transform']({ sessionID: 'S' }, second);
+      expect(second.system, 'a second call with the unchanged stored result pushes no notice').toEqual([]);
+
+      // The injected notice must not count as a completed read: the ordinary tool is refused
+      // with a bounded path message until the exact contract was read.
+      const preReadRefusal = await plugin['tool.execute.before']({ sessionID: 'S', tool: 'bash' }, { args: { command: 'ls' } })
+        .then(() => undefined, (error: Error) => error);
+      expect(preReadRefusal, 'the injected notice must not satisfy the digest read gate').toBeInstanceOf(Error);
+      expect(preReadRefusal?.message).toContain(contractA);
+      expect(preReadRefusal?.message).toMatch(/before ordinary project work continues/);
+      expect(preReadRefusal?.message).not.toContain(contractBodyMarker);
+
+      await plugin['tool.execute.before']({ sessionID: 'S', tool: 'read' }, { args: { filePath: contractA } });
+      await plugin['tool.execute.after']({ sessionID: 'S', tool: 'read', args: { filePath: contractA } });
       await plugin['tool.execute.before']({ sessionID: 'S', tool: 'bash' }, { args: { command: 'ls' } });
       expect(await observedHeads(log), 'a primed plugin session must not query the source').toEqual([A]);
+
+      // A later user turn must not invalidate the completed read.
+      await plugin['chat.message']({ sessionID: 'S' });
+      await plugin['tool.execute.before']({ sessionID: 'S', tool: 'bash' }, { args: { command: 'ls' } });
+      expect(await observedHeads(log), 'a user turn must not query the source or clear the read').toEqual([A]);
 
       // The SDK session directory moves to an unprimed root: the ordinary tool proceeds with
       // the no-check context, writes nothing and issues no source request.
@@ -598,12 +651,20 @@ describe('opencode plugin boundary', () => {
       expect(await observedHeads(log), 'an unprimed root must not query the source').toEqual([A]);
       expect(changedPaths(rootBBefore, await snapshotTree(rootB)), 'an unprimed root must stay unchanged').toEqual([]);
 
-      // Prime rootB at B externally; the ordinary tool now rejects until rootB's contract is read.
+      // Prime rootB at B: the stored result changed, so the next notice for S is pushed once.
       const primedB = await primeBuilt(rootB, B);
       expect(primedB.report?.status).toBe('synchronized');
+      await expectContractReference(primedB, rootB);
       expect(await observedHeads(log)).toEqual([A, B]);
       process.env.AI_WORKFLOW_FIXTURE_HEAD = C;
+      const refreshed = { system: [] as string[] };
+      await plugin['experimental.chat.system.transform']({ sessionID: 'S' }, refreshed);
+      expect(refreshed.system.length, 'a changed stored result pushes one new notice').toBe(1);
+      expect(refreshed.system[0]).toContain(B);
+      expect(refreshed.system[0]).toContain(`Project contract: ${contractB}`);
+      expect(refreshed.system[0]).not.toContain(contractBodyMarker);
 
+      // The read gate applies for the new root as well; an un-read root refuses ordinary work.
       await expect(plugin['tool.execute.before']({ sessionID: 'S', tool: 'bash' }, { args: { command: 'ls' } }))
         .rejects.toThrow(/before ordinary project work continues/);
 
@@ -611,17 +672,48 @@ describe('opencode plugin boundary', () => {
       await plugin['tool.execute.after']({ sessionID: 'S', tool: 'read', args: { filePath: contractB } });
       await plugin['tool.execute.before']({ sessionID: 'S', tool: 'bash' }, { args: { command: 'ls' } });
 
-      // A child session on the same actual root reuses the stored result with no new HEAD query.
+      // A child session on the same actual root receives the path and the read instruction,
+      // never the contract body; the parent's read does not authorize the child.
       sdk.sessions.set('P', { directory: rootB });
       sdk.sessions.set('C', { directory: rootB, parentID: 'P' });
       const parentOutput = { system: [] as string[] };
       await plugin['experimental.chat.system.transform']({ sessionID: 'P' }, parentOutput);
-      expect(parentOutput.system.join('\n')).toContain('Fresh shared context.');
+      expect(parentOutput.system.length, 'a fresh same-root session receives exactly one notice').toBe(1);
+      expect(parentOutput.system[0]).toContain(`Project contract: ${contractB}`);
+      expect(parentOutput.system[0]).not.toContain(contractBodyMarker);
       const headsBeforeChild = await observedHeads(log);
       const childOutput = { system: [] as string[] };
       await plugin['experimental.chat.system.transform']({ sessionID: 'C' }, childOutput);
-      expect(childOutput.system.join('\n'), 'a same-root child reuses the parent result').toBe(parentOutput.system.join('\n'));
+      expect(childOutput.system.length, 'a same-root child receives exactly one path-only notice').toBe(1);
+      expect(childOutput.system[0]).toContain(contractB);
+      expect(childOutput.system[0]).toMatch(/read/i);
+      expect(childOutput.system[0]).not.toContain(contractBodyMarker);
       expect(await observedHeads(log), 'the reused result performs no new HEAD query').toEqual(headsBeforeChild);
+      await expect(plugin['tool.execute.before']({ sessionID: 'C', tool: 'bash' }, { args: { command: 'ls' } }),
+        'the parent read must not authorize the child').rejects.toThrow(/before ordinary project work continues/);
+      await plugin['tool.execute.before']({ sessionID: 'C', tool: 'read' }, { args: { filePath: contractB } });
+      await plugin['tool.execute.after']({ sessionID: 'C', tool: 'read', args: { filePath: contractB } });
+      await plugin['tool.execute.before']({ sessionID: 'C', tool: 'bash' }, { args: { command: 'ls' } });
+
+      // An out-of-band contract edit invalidates the completed read: the digest no longer
+      // matches the stored reference, so the next ordinary call is denied again.
+      await writeFile(contractB, '# out-of-band contract edit\n');
+      await expect(plugin['tool.execute.before']({ sessionID: 'S', tool: 'bash' }, { args: { command: 'ls' } }),
+        'a bytes-changed contract must not silently satisfy the stored reference').rejects.toThrow(/before ordinary project work continues/);
+
+      // A changed stored result still pushes exactly one notice when it is a deny, never
+      // suppressing the warning or deny case behind the deduplication.
+      await writeFile(contractB, legacyAgents);
+      const denyPrime = await primeBuilt(rootB, C);
+      expect(denyPrime.decision).toBe('deny');
+      expect(denyPrime.report?.status).toBe('conflict');
+      const deniedNotice = { system: [] as string[] };
+      await plugin['experimental.chat.system.transform']({ sessionID: 'S' }, deniedNotice);
+      expect(deniedNotice.system.length, 'a changed deny notice is pushed, never deduplicated away').toBe(1);
+      expect(deniedNotice.system[0]).toContain('conflict');
+      const deniedAgain = { system: [] as string[] };
+      await plugin['experimental.chat.system.transform']({ sessionID: 'S' }, deniedAgain);
+      expect(deniedAgain.system, 'an unchanged deny notice is pushed only once per stored result').toEqual([]);
     });
 
     expect(changedPaths(contextBefore, await snapshotTree(contextDirectory))).toEqual([]);
@@ -631,7 +723,7 @@ describe('opencode plugin boundary', () => {
     }
   }, 90_000);
 
-  it('REQ-004/AC-003/AC-007: replays a stored conflict without clearing it on the exact actor and with no HEAD request', async () => {
+  it('REQ-002/REQ-007/AC-004/AC-007: replays a stored conflict without clearing it on the exact actor and with no HEAD request', async () => {
     const home = await temporary('ai-workflow-plugin-conflict-home-');
     const contextDirectory = await temporary('ai-workflow-plugin-conflict-context-');
     const fixtureLogDirectory = await temporary('ai-workflow-plugin-conflict-log-');
@@ -661,7 +753,11 @@ describe('opencode plugin boundary', () => {
       const injected = { system: [] as string[] };
       await plugin['experimental.chat.system.transform']({ sessionID: 'S' }, injected);
       expect(injected.system.join('\n')).toContain('conflict');
+      expect(injected.system[0]).not.toContain(contractBodyMarker);
       expect(sdk.toasts.some((toast) => toast.variant === 'error' && (toast.message ?? '').includes('conflict'))).toBe(true);
+      const replayedDeny = { system: [] as string[] };
+      await plugin['experimental.chat.system.transform']({ sessionID: 'S' }, replayedDeny);
+      expect(replayedDeny.system, 'an unchanged stored deny notice is pushed only once per stored result').toEqual([]);
 
       // A malformed ownership target blocks the ordinary tool.
       await expect(plugin['tool.execute.before']({ sessionID: 'S', tool: 'bash' }, { args: { command: 'ls' } })).rejects.toThrow(/conflict/);
@@ -678,7 +774,7 @@ describe('opencode plugin boundary', () => {
     await expectNoProjectMetadata(rootA);
   }, 90_000);
 
-  it('REQ-004/AC-007: replays a stored source warning with visible context and no HEAD request', async () => {
+  it('REQ-002/REQ-007/AC-004/AC-007: replays a stored source warning with visible context and no HEAD request', async () => {
     const home = await temporary('ai-workflow-plugin-warning-home-');
     const contextDirectory = await temporary('ai-workflow-plugin-warning-context-');
     const fixtureLogDirectory = await temporary('ai-workflow-plugin-warning-log-');
@@ -708,9 +804,15 @@ describe('opencode plugin boundary', () => {
       const injected = { system: [] as string[] };
       await plugin['experimental.chat.system.transform']({ sessionID: 'S' }, injected);
       const context = injected.system.join('\n');
+      expect(injected.system.length, 'the first system transform pushes exactly one short notice').toBe(1);
       expect(context).toContain('unverified');
       expect(context).not.toContain('current at');
+      expect(context).not.toContain(contractBodyMarker);
       expect(sdk.toasts.some((toast) => toast.variant === 'warning')).toBe(true);
+
+      const again = { system: [] as string[] };
+      await plugin['experimental.chat.system.transform']({ sessionID: 'S' }, again);
+      expect(again.system, 'an unchanged stored warning notice is pushed only once per stored result').toEqual([]);
 
       expect(await observedHeads(log), 'the stored warning must never re-query the source').toEqual([A]);
     });
@@ -760,10 +862,15 @@ describe('opencode plugin boundary', () => {
         expect(await observedHeads(log)).toEqual([A, B]);
         process.env.AI_WORKFLOW_FIXTURE_HEAD = C;
 
-        // The parent session root injects its own primed contract and stays allowed.
+        // The parent session root also satisfies its own digest read before ordinary work;
+        // the path notice replaces the injected body but is not a completed read.
+        const sessionContract = join(sessionRoot, '.ai-workflow/AGENTS.md');
         const injected = { system: [] as string[] };
         await plugin['experimental.chat.system.transform']({ sessionID: 'S' }, injected);
-        expect(injected.system.join('\n'), 'the parent root injects its primed contract').toContain('Fresh shared context.');
+        expect(injected.system.join('\n'), 'the parent root injects its primed notice').toContain(`Project contract: ${sessionContract}`);
+        expect(injected.system.join('\n')).not.toContain(contractBodyMarker);
+        await plugin['tool.execute.before']({ sessionID: 'S', tool: 'read' }, { args: { filePath: sessionContract } });
+        await plugin['tool.execute.after']({ sessionID: 'S', tool: 'read', args: { filePath: sessionContract } });
         const sessionRootAfterLoad = await snapshotTree(sessionRoot);
         await plugin['tool.execute.before']({ sessionID: 'S', tool: 'bash' }, { args: { command: 'ls' } });
         expect(await readFile(operationContract, 'utf8'), 'the child root must be primed before its operation').toContain('Fresh shared context.');
@@ -780,7 +887,8 @@ describe('opencode plugin boundary', () => {
         // A later parent system transform must not discard the child contract read.
         const reinjected = { system: [] as string[] };
         await plugin['experimental.chat.system.transform']({ sessionID: 'S' }, reinjected);
-        expect(reinjected.system.join('\n')).toContain('Fresh shared context.');
+        expect(reinjected.system, 'an unchanged stored result pushes no duplicate notice').toEqual([]);
+        expect(reinjected.system.join('\n')).not.toContain(contractBodyMarker);
 
         // The child Bash workdir and a child file read now proceed.
         await childBash();
@@ -813,7 +921,7 @@ describe('opencode plugin boundary', () => {
 interface OpenCodeV2SessionState { directory: string; parentID?: string }
 
 describe('opencode v2 plugin definition boundary', () => {
-  it('injects the primed contract, serves an unprimed root with a no-check, then requires the primed contract read', async () => {
+  it('REQ-002/REQ-003/AC-004/AC-005/AC-006: pushes one short notice per stored result, then gates ordinary tools on the digest read', async () => {
     const home = await temporary('ai-workflow-plugin-v2-home-');
     const contextDirectory = await temporary('ai-workflow-plugin-v2-context-');
     const fixtureLogDirectory = await temporary('ai-workflow-plugin-v2-log-');
@@ -855,13 +963,16 @@ describe('opencode v2 plugin definition boundary', () => {
     await pluginModule.default!.setup!(ctx);
 
     const contextHook = registrations.get('session.context')!;
+    const promptHook = registrations.get('session.prompt')!;
     const beforeHook = registrations.get('tool.execute.before')!;
     const afterHook = registrations.get('tool.execute.after')!;
     expect(typeof contextHook, 'session.context hook').toBe('function');
+    expect(typeof promptHook, 'session.prompt hook').toBe('function');
     expect(typeof beforeHook, 'tool.execute.before hook').toBe('function');
     expect(typeof afterHook, 'tool.execute.after hook').toBe('function');
 
     const contextBefore = await snapshotTree(contextDirectory);
+    const contractA = join(rootA, '.ai-workflow/AGENTS.md');
     const contractB = join(rootB, '.ai-workflow/AGENTS.md');
 
     await withProcessEnvironment({
@@ -871,16 +982,41 @@ describe('opencode v2 plugin definition boundary', () => {
       AI_WORKFLOW_FIXTURE_HEAD: A,
       AI_WORKFLOW_FIXTURE_LOG: log,
     }, async () => {
-      // Prime rootA at A: its injected session context carries the updated contract.
+      // Prime rootA at A: the stored result carries the compact reference for the updated contract.
       const primedA = await primeBuilt(rootA, A);
       expect(primedA.report?.status).toBe('synchronized');
+      await expectContractReference(primedA, rootA);
       expect(await observedHeads(log)).toEqual([A]);
 
-      const primedContext = { sessionID: 'S', system: [] as Array<{ type: string; text: string }> };
-      await contextHook(primedContext);
-      expect(primedContext.system.map((entry) => entry.text).join('\n'), 'the primed contract must be injected before ordinary work').toContain('Fresh shared context.');
+      // One-shot notice: exactly one short notice on the first context call, none on the
+      // second call with the unchanged stored result, never the contract body.
+      const firstContext = { sessionID: 'S', system: [] as Array<{ type: string; text: string }> };
+      await contextHook(firstContext);
+      expect(firstContext.system.length, 'the first session.context call pushes exactly one short notice').toBe(1);
+      expect(firstContext.system[0]!.text).toContain(`Project contract: ${contractA}`);
+      expect(firstContext.system[0]!.text).not.toContain(contractBodyMarker);
+      const secondContext = { sessionID: 'S', system: [] as Array<{ type: string; text: string }> };
+      await contextHook(secondContext);
+      expect(secondContext.system, 'a second call with the unchanged stored result pushes no notice').toEqual([]);
+
+      // The injected notice must not count as a completed read: the ordinary tool is refused
+      // with a bounded path message until the exact contract was read.
+      const preReadRefusal = await beforeHook({ sessionID: 'S', tool: 'bash', input: { command: 'ls' } })
+        .then(() => undefined, (error: Error) => error);
+      expect(preReadRefusal, 'the injected notice must not satisfy the digest read gate').toBeInstanceOf(Error);
+      expect(preReadRefusal?.message).toContain(contractA);
+      expect(preReadRefusal?.message).toMatch(/before ordinary project work continues/);
+      expect(preReadRefusal?.message).not.toContain(contractBodyMarker);
+
+      await beforeHook({ sessionID: 'S', tool: 'read', input: { filePath: contractA } });
+      await afterHook({ sessionID: 'S', tool: 'read', input: { filePath: contractA }, status: 'completed', result: { content: '' } });
       await beforeHook({ sessionID: 'S', tool: 'bash', input: { command: 'ls' } });
       expect(await observedHeads(log), 'a primed plugin session must not query the source').toEqual([A]);
+
+      // A later user turn must not invalidate the completed read.
+      await promptHook({ sessionID: 'S' });
+      await beforeHook({ sessionID: 'S', tool: 'bash', input: { command: 'ls' } });
+      expect(await observedHeads(log), 'a user turn must not query the source or clear the read').toEqual([A]);
 
       // The session moves to an unprimed root: the no-check context is injected, the ordinary
       // tool proceeds, nothing is written and no source request is issued.
@@ -893,12 +1029,21 @@ describe('opencode v2 plugin definition boundary', () => {
       expect(await observedHeads(log), 'an unprimed root must not query the source').toEqual([A]);
       expect(changedPaths(rootBBefore, await snapshotTree(rootB)), 'an unprimed root must stay unchanged').toEqual([]);
 
-      // Prime rootB at B; the ordinary tool now rejects until rootB's contract is read.
+      // Prime rootB at B: the stored result changed, so the next notice for S is pushed once.
       const primedB = await primeBuilt(rootB, B);
       expect(primedB.report?.status).toBe('synchronized');
+      await expectContractReference(primedB, rootB);
       expect(await observedHeads(log)).toEqual([A, B]);
       process.env.AI_WORKFLOW_FIXTURE_HEAD = C;
 
+      const refreshed = { sessionID: 'S', system: [] as Array<{ type: string; text: string }> };
+      await contextHook(refreshed);
+      expect(refreshed.system.length, 'a changed stored result pushes one new notice').toBe(1);
+      expect(refreshed.system[0]!.text).toContain(B);
+      expect(refreshed.system[0]!.text).toContain(`Project contract: ${contractB}`);
+      expect(refreshed.system[0]!.text).not.toContain(contractBodyMarker);
+
+      // The read gate applies for the new root as well; an un-read root refuses ordinary work.
       await expect(beforeHook({ sessionID: 'S', tool: 'bash', input: { command: 'ls' } }))
         .rejects.toThrow(/before ordinary project work continues/);
 
@@ -906,18 +1051,48 @@ describe('opencode v2 plugin definition boundary', () => {
       await afterHook({ sessionID: 'S', tool: 'read', input: { filePath: contractB }, status: 'completed', result: { content: '' } });
       await beforeHook({ sessionID: 'S', tool: 'bash', input: { command: 'ls' } });
 
-      // A child session on the same actual root reuses the parent result with no new HEAD query.
+      // A child session on the same actual root receives the path and the read instruction,
+      // never the contract body; the parent's read does not authorize the child.
       sessions.set('P', { directory: rootB });
       sessions.set('C', { directory: rootB, parentID: 'P' });
       const parentOutput = { sessionID: 'P', system: [] as Array<{ type: string; text: string }> };
       await contextHook(parentOutput);
-      const parentText = parentOutput.system.map((entry) => entry.text).join('\n');
-      expect(parentText).toContain('Fresh shared context.');
+      expect(parentOutput.system.length, 'a fresh same-root session receives exactly one notice').toBe(1);
+      expect(parentOutput.system[0]!.text).toContain(`Project contract: ${contractB}`);
+      expect(parentOutput.system[0]!.text).not.toContain(contractBodyMarker);
       const headsBeforeChild = await observedHeads(log);
       const childOutput = { sessionID: 'C', system: [] as Array<{ type: string; text: string }> };
       await contextHook(childOutput);
-      expect(childOutput.system.map((entry) => entry.text).join('\n'), 'a same-root child reuses the parent result').toBe(parentText);
+      expect(childOutput.system.length, 'a same-root child receives exactly one path-only notice').toBe(1);
+      expect(childOutput.system[0]!.text).toContain(contractB);
+      expect(childOutput.system[0]!.text).toMatch(/read/i);
+      expect(childOutput.system[0]!.text).not.toContain(contractBodyMarker);
       expect(await observedHeads(log), 'the reused result performs no new HEAD query').toEqual(headsBeforeChild);
+      await expect(beforeHook({ sessionID: 'C', tool: 'bash', input: { command: 'ls' } }),
+        'the parent read must not authorize the child').rejects.toThrow(/before ordinary project work continues/);
+      await beforeHook({ sessionID: 'C', tool: 'read', input: { filePath: contractB } });
+      await afterHook({ sessionID: 'C', tool: 'read', input: { filePath: contractB }, status: 'completed', result: { content: '' } });
+      await beforeHook({ sessionID: 'C', tool: 'bash', input: { command: 'ls' } });
+
+      // An out-of-band contract edit invalidates the completed read: the digest no longer
+      // matches the stored reference, so the next ordinary call is denied again.
+      await writeFile(contractB, '# out-of-band contract edit\n');
+      await expect(beforeHook({ sessionID: 'S', tool: 'bash', input: { command: 'ls' } }),
+        'a bytes-changed contract must not silently satisfy the stored reference').rejects.toThrow(/before ordinary project work continues/);
+
+      // A changed stored result still pushes exactly one notice when it is a deny, never
+      // suppressing the warning or deny case behind the deduplication.
+      await writeFile(contractB, legacyAgents);
+      const denyPrime = await primeBuilt(rootB, C);
+      expect(denyPrime.decision).toBe('deny');
+      expect(denyPrime.report?.status).toBe('conflict');
+      const deniedNotice = { sessionID: 'S', system: [] as Array<{ type: string; text: string }> };
+      await contextHook(deniedNotice);
+      expect(deniedNotice.system.length, 'a changed deny notice is pushed, never deduplicated away').toBe(1);
+      expect(deniedNotice.system[0]!.text).toContain('conflict');
+      const deniedAgain = { sessionID: 'S', system: [] as Array<{ type: string; text: string }> };
+      await contextHook(deniedAgain);
+      expect(deniedAgain.system, 'an unchanged deny notice is pushed only once per stored result').toEqual([]);
     });
 
     expect(changedPaths(contextBefore, await snapshotTree(contextDirectory))).toEqual([]);

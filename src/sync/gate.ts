@@ -3,6 +3,7 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { atomicWrite } from '../utils/fs.js';
+import { sha256 } from '../utils/hash.js';
 import { packagePath } from '../utils/schema.js';
 import { findUnfinishedRuns, type UnfinishedRunNotice } from '../execution/recovery.js';
 import { synchronizeProject, type SyncReport, type SynchronizeProjectOptions } from './index.js';
@@ -26,12 +27,22 @@ export interface ProjectGateExecutionNotice {
   warnings: string[];
 }
 
+/**
+ * Compact fingerprint of the on-disk project contract. The gate exposes this reference
+ * instead of embedding the contract body in its result context.
+ */
+export interface ProjectGateAuthorityRef {
+  path: string;
+  digest: string;
+  bytes: number;
+}
+
 export interface ProjectGateResult {
   decision: 'allow' | 'deny' | 'skip';
   project: string;
   report?: SyncReport;
   context: string;
-  authority?: string;
+  authority_ref?: ProjectGateAuthorityRef;
   exemption?: 'sync_actor' | 'authority_read';
   execution?: ProjectGateExecutionNotice;
 }
@@ -81,10 +92,20 @@ function toolExemption(input: ProjectGateInput, projectRoot: string): ProjectGat
 }
 
 interface ProjectGateUnit {
-  version: 1;
+  version: 2;
   unit: string;
   phase: true;
   result: ProjectGateResult;
+}
+
+/** Accept only the compact reference shape; any other value invalidates the whole unit. */
+function validAuthorityRef(value: unknown): boolean {
+  if (value === undefined) return true;
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
+  const reference = value as Record<string, unknown>;
+  return typeof reference.path === 'string' && reference.path !== ''
+    && typeof reference.digest === 'string' && /^sha256:[0-9a-f]{64}$/.test(reference.digest)
+    && typeof reference.bytes === 'number' && Number.isInteger(reference.bytes) && reference.bytes > 0;
 }
 
 async function readUnit(path: string): Promise<ProjectGateUnit | undefined> {
@@ -93,16 +114,17 @@ async function readUnit(path: string): Promise<ProjectGateUnit | undefined> {
       version?: unknown;
       unit?: unknown;
       phase?: unknown;
-      result?: ProjectGateResult | null;
+      result?: (ProjectGateResult & { authority?: unknown }) | null;
     } | null;
     const result = state?.result;
-    if (state?.version !== 1 || typeof state.unit !== 'string' || !result
+    if (state?.version !== 2 || typeof state.unit !== 'string' || !result
       || state.phase !== true
       || typeof result.project !== 'string' || typeof result.context !== 'string'
       || !['allow', 'deny', 'skip'].includes(result.decision)
-      || (result.authority !== undefined && typeof result.authority !== 'string')) return undefined;
+      || result.authority !== undefined
+      || !validAuthorityRef(result.authority_ref)) return undefined;
     if (result.decision === 'skip') {
-      if (result.report !== undefined || result.authority !== undefined) return undefined;
+      if (result.report !== undefined || result.authority_ref !== undefined) return undefined;
     } else {
       const report = result.report;
       if (!report || report.project !== result.project
@@ -120,7 +142,7 @@ async function readUnit(path: string): Promise<ProjectGateUnit | undefined> {
   } catch { return undefined; }
 }
 
-function reportResult(report: SyncReport, authority?: string): ProjectGateResult {
+function reportResult(report: SyncReport, reference?: ProjectGateAuthorityRef): ProjectGateResult {
   const context = [
     `ai-workflow sync: ${report.status}`,
     `Project: ${report.project}`,
@@ -129,9 +151,12 @@ function reportResult(report: SyncReport, authority?: string): ProjectGateResult
     ...(report.updated.length ? [`Updated: ${report.updated.join(', ')}`] : []),
     ...report.warnings.map((entry) => `Warning: ${[entry.path, entry.section, entry.reason].filter(Boolean).join(': ')}`),
     ...report.conflicts.map((entry) => `Conflict: ${[entry.path, entry.section, entry.reason].filter(Boolean).join(': ')}`),
-    ...(authority === undefined ? [] : ['Read the current project contract before ordinary work continues:', authority]),
+    ...(reference === undefined ? [] : [
+      `Project contract: ${reference.path}`,
+      `Read the current project contract before ordinary work continues: ${reference.path}`,
+    ]),
   ].join('\n');
-  return { decision: report.proceed ? 'allow' : 'deny', project: report.project, report, context, ...(authority === undefined ? {} : { authority }) };
+  return { decision: report.proceed ? 'allow' : 'deny', project: report.project, report, context, ...(reference === undefined ? {} : { authority_ref: reference }) };
 }
 
 function lockDescription(lock: UnfinishedRunNotice['lock']): string {
@@ -199,7 +224,7 @@ export async function runProjectGate(input: ProjectGateInput, options: ProjectGa
   const operationStart = operationDirectory(input);
   let projectRoot = operationStart;
   let report: SyncReport | undefined;
-  let authority: string | undefined;
+  let authorityRef: ProjectGateAuthorityRef | undefined;
   try {
     const resolved = await resolveAdoptedRoot(operationStart);
     projectRoot = resolved.root;
@@ -236,9 +261,11 @@ export async function runProjectGate(input: ProjectGateInput, options: ProjectGa
       ...(options.runGit === undefined ? {} : { runGit: options.runGit }),
     });
     if (report.proceed && [...report.created, ...report.updated].some((path) => authorityPaths.has(path))) {
-      authority = await readFile(join(report.project, '.ai-workflow/AGENTS.md'), 'utf8');
+      const authorityPath = join(report.project, '.ai-workflow/AGENTS.md');
+      const content = await readFile(authorityPath);
+      authorityRef = { path: authorityPath, digest: sha256(content), bytes: Buffer.byteLength(content) };
     }
-    const base = reportResult(report, authority);
+    const base = reportResult(report, authorityRef);
     const execution = await executionNotice(projectRoot);
     const noticeLines = execution.unfinished.map(executionContextLine).join('\n');
     const result: ProjectGateResult = {
@@ -246,7 +273,7 @@ export async function runProjectGate(input: ProjectGateInput, options: ProjectGa
       context: noticeLines.length === 0 ? base.context : `${base.context}\n${noticeLines}`,
       execution,
     };
-    const unit: ProjectGateUnit = { version: 1, unit: randomUUID(), phase: true, result };
+    const unit: ProjectGateUnit = { version: 2, unit: randomUUID(), phase: true, result };
     await atomicWrite(path, `${JSON.stringify(unit)}\n`);
     return result;
   } catch (error) {
