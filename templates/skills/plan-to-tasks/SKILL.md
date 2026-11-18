@@ -41,6 +41,7 @@ At skill session start, invoke exactly once for the actual project root:
 `ai-workflow sync-hook --host <current-host> --phase --project <actual-root>`.
 Follow `decision`, not the exit code: `deny` or a `conflict`/`failed` `report.status` stops the split, and `skip` means no adoption.
 Later steps, split phases and native host events reuse that root's stored result with no source request; a missing, corrupt or unreadable check allows with visible no-freshness context.
+A proceeding result with non-empty `created` or `updated` requires one scoped local maintenance commit of exactly those reported managed paths by the `git-operator` sub-agent (Git Operator) before ordinary work; it is the plan-to-tasks session's only permitted Git dispatch, and planning artifacts and task files are never committed. Stage only the reported managed paths, preserve every unrelated staged, unstaged or untracked change, and never include planning artifacts, task files or product edits. A `skip`, an empty `created` and `updated` set, or a non-proceeding `deny`, `conflict` or `failed` result produces no commit, no empty commit and no Git dispatch. A blocked or failed maintenance commit stops the split with a bounded support request, and ordinary work does not continue; this maintenance commit is not an implementation commit, reviewed range or integration authorization.
 After a safe patch changes the contract or owned workflow rules, read `.ai-workflow/AGENTS.md` again before ordinary work; frozen spec/plan/task bytes are immutable and never synchronization input, and contradictory authority stops the split with a bounded support request.
 
 ## Decomposition rules
@@ -91,7 +92,7 @@ After approval, follow the mandatory task template and this write order:
 4. Run the final `ai-workflow plan validate --plan <directory>` over the written artifacts. Missing or invalid execution order blocks completion. Only after it passes, complete any workspace distribution below.
 5. A child-participating workspace task set is not frozen by that validation alone: it becomes frozen only after the distribution below succeeds for every participating repository with `ai-workflow workspace status --plan <directory>` valid and every participating slice present. Until then repair the cause, re-record changed task artifacts with `ai-workflow plan pairing --plan <directory> --write --all`, revalidate with `ai-workflow plan validate --plan <directory>` and rerun the distribution; never regenerate the task set.
 
-Never modify frozen `spec.md` or `plan.md`; task files are immutable once the task set is frozen, and a changed task after the freeze requires a new version. They remain local, untracked artifacts in the plan's gitignored `.ai-workflow/` directory. Plan-to-tasks creates no Git commit: do not dispatch Git Operator and do not stage or commit task files.
+Never modify frozen `spec.md` or `plan.md`; task files are immutable once the task set is frozen, and a changed task after the freeze requires a new version. They remain local, untracked artifacts in the plan's gitignored `.ai-workflow/` directory. Apart from the scoped phase-start maintenance commit of reported managed paths, plan-to-tasks dispatches no Git operation and never stages or commits task files, planning artifacts or frozen documents.
 
 ## Workspace split
 
