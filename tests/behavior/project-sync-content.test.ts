@@ -513,3 +513,125 @@ describe('preserved five-target allowlist and truthful transport labels (REQ-005
     );
   });
 });
+
+/**
+ * REQ-001..REQ-005 / AC-001..AC-007: the phase-start managed maintenance-commit rule. These
+ * read the shipped skills and published documents as public deliverables and assert semantic
+ * behavior with independent expected values, not exact sentences. Only test names, assertion
+ * labels and local constants carry requirement identifiers; shipped documentation never does.
+ */
+const PHASE_SKILLS = ['planning', 'coding', 'plan-to-tasks'] as const;
+const MAINTENANCE_FIELDS = /\b(?:created|updated)\b/i;
+const NO_COMMIT = /no[^.]{0,40}(?:Git )?commit|without[^.]{0,40}commit|never[^.]{0,40}commit/i;
+const BLOCKED_COMMIT = /(?:blocked|failed)[^.]{0,120}(?:commit|Git Operator)|(?:commit|Git Operator)[^.]{0,120}(?:blocked|failed)/i;
+
+/** True when one `anchor` occurrence has every `neighbor` within `window` characters. */
+function hasAllNearby(text: string, anchor: RegExp, neighbors: readonly RegExp[], window = 520): boolean {
+  const anchored = new RegExp(anchor.source, anchor.flags.includes('g') ? anchor.flags : `${anchor.flags}g`);
+  const plain = neighbors.map((re) => new RegExp(re.source, re.flags.replace(/g/g, '')));
+  for (let match = anchored.exec(text); match !== null; match = anchored.exec(text)) {
+    const from = Math.max(0, match.index - window);
+    const to = Math.min(text.length, match.index + match[0].length + window);
+    const slice = text.slice(from, to);
+    if (plain.every((re) => re.test(slice))) return true;
+  }
+  return false;
+}
+
+/** True when one window holds both report fields and every `neighbor`, avoiding single-field coincidences. */
+function hasFieldsAndNearby(text: string, neighbors: readonly RegExp[], window = 520): boolean {
+  const fields = new RegExp(MAINTENANCE_FIELDS.source, 'gi');
+  const plain = neighbors.map((re) => new RegExp(re.source, re.flags.replace(/g/g, '')));
+  for (let match = fields.exec(text); match !== null; match = fields.exec(text)) {
+    const from = Math.max(0, match.index - window);
+    const to = Math.min(text.length, match.index + match[0].length + window);
+    const slice = text.slice(from, to);
+    if (/\bcreated\b/i.test(slice) && /\bupdated\b/i.test(slice) && plain.every((re) => re.test(slice))) return true;
+  }
+  return false;
+}
+
+async function shippedSkill(name: string): Promise<string> {
+  return flattenContent(await readFile(packagePath('templates', 'skills', name, 'SKILL.md'), 'utf8'));
+}
+
+describe('phase-start managed maintenance commit published rule (REQ-001..REQ-005 / AC-001..AC-007)', () => {
+  for (const name of PHASE_SKILLS) {
+    it(`AC-001/AC-003: ${name} requires one scoped Git Operator commit of the reported paths before ordinary work`, async () => {
+      const text = await shippedSkill(name);
+      expect(
+        hasFieldsAndNearby(text, [
+          /Git Operator|git-operator/i,
+          /commit/i,
+          /(?:before|prior to)[^.]{0,120}work|at (?:skill |the )?session start|phase[- ]start/i,
+        ]),
+        `${name} ties created/updated to a Git Operator commit before ordinary work (REQ-001 / AC-001)`,
+      ).toBe(true);
+      expect(
+        hasFieldsAndNearby(text, [/only[^.]{0,80}(?:reported|managed|listed)|exactly[^.]{0,60}(?:reported|those|paths)/i]),
+        `${name} bounds the commit to the reported managed paths (REQ-003 / AC-003)`,
+      ).toBe(true);
+      expect(
+        hasFieldsAndNearby(text, [/unrelated/i, /staged|unstaged|untracked/i, /preserv|remain[^.]{0,20}uncommitted/i]),
+        `${name} preserves unrelated staged, unstaged and untracked changes (REQ-003 / AC-003)`,
+      ).toBe(true);
+      expect(
+        hasFieldsAndNearby(text, [/planning artifact|task file|product (?:edit|code|change)/i]),
+        `${name} never commits planning artifacts, task files or product edits (REQ-003 / AC-003)`,
+      ).toBe(true);
+      if (name === 'planning' || name === 'plan-to-tasks') {
+        expect(
+          hasFieldsAndNearby(text, [/only[^.]{0,80}(?:Git|dispatch)/i]),
+          `${name} states this maintenance commit is its only permitted Git dispatch (AC-003)`,
+        ).toBe(true);
+      }
+    });
+
+    it(`AC-002/AC-004: ${name} states the no-commit guards and the blocked-commit stop`, async () => {
+      const text = await shippedSkill(name);
+      expect(
+        hasAllNearby(text, NO_COMMIT, [/\bskip\b/i, /empty/i]),
+        `${name} makes skip and an empty created/updated set produce no commit (REQ-002 / AC-002)`,
+      ).toBe(true);
+      expect(
+        hasAllNearby(text, NO_COMMIT, [/deny|conflict|failed/i, /dispatch|operation/i]),
+        `${name} makes a non-proceeding deny/conflict/failed result produce no Git dispatch (REQ-002 / AC-002)`,
+      ).toBe(true);
+      expect(
+        hasAllNearby(text, BLOCKED_COMMIT, [/support request/i, /stop|halt|not continue|does not continue/i]),
+        `${name} stops with a bounded support request on a blocked or failed commit (REQ-004 / AC-004)`,
+      ).toBe(true);
+    });
+  }
+
+  it('AC-005/AC-006: the contract, its byte-identical mirror, MEMORY and README publish the same rule', async () => {
+    const sourceBytes = await readFile(packagePath('templates', 'project', 'AGENTS.md'));
+    const mirrorBytes = await readFile(packagePath('.ai-workflow', 'AGENTS.md'));
+    expect(mirrorBytes.equals(sourceBytes), 'the tracked mirror stays byte-identical to the contract source (AC-005)').toBe(true);
+
+    const published = [
+      'templates/project/AGENTS.md',
+      '.ai-workflow/AGENTS.md',
+      'MEMORY.md',
+      'README.md',
+    ] as const;
+    for (const path of published) {
+      const text = flattenContent(await readFile(packagePath(path), 'utf8'));
+      const label = `${path} publishes the phase-start maintenance-commit rule (AC-005, AC-006)`;
+      expect(hasFieldsAndNearby(text, [/Git Operator|git-operator/i, /commit/i]), `${label}: commit`).toBe(true);
+      expect(hasAllNearby(text, NO_COMMIT, [/\bskip\b/i, /empty/i]), `${label}: empty/skip guard`).toBe(true);
+      expect(hasAllNearby(text, NO_COMMIT, [/deny|conflict|failed/i]), `${label}: non-proceeding guard`).toBe(true);
+      expect(hasAllNearby(text, BLOCKED_COMMIT, [/support request/i, /stop|halt|not continue/i]), `${label}: blocked stop`).toBe(true);
+    }
+  });
+
+  it('AC-007: the manual sync skill still performs no Git and never instructs a maintenance commit', async () => {
+    const text = await shippedSkill('sync-ai-workflow');
+    expect(text, 'manual synchronization still performs no Git operation (AC-007)').toMatch(
+      /performs no Git operation|no Git operation|performs no Git/i,
+    );
+    expect(text, 'manual synchronization never instructs a maintenance commit (AC-007)').not.toMatch(
+      /maintenance commit|dispatch[^.]{0,60}Git Operator[^.]{0,80}commit/i,
+    );
+  });
+});
