@@ -84,7 +84,11 @@ async function readPlanMeta(planDirectory: string): Promise<PlanMeta> {
   if (typeof attributes.created_at !== 'string' || attributes.created_at.length === 0) {
     throw new Error('Frozen plan.md is missing a created_at timestamp');
   }
-  return { planId: plan.planId, digest: plan.digest, createdAt: attributes.created_at };
+  const parsedCreatedAt = Date.parse(attributes.created_at);
+  if (Number.isNaN(parsedCreatedAt)) {
+    throw new Error('Frozen plan.md has an invalid created_at timestamp');
+  }
+  return { planId: plan.planId, digest: plan.digest, createdAt: new Date(parsedCreatedAt).toISOString() };
 }
 
 /** Read the run document, treating an absent or unreadable overlay as recoverable telemetry state. */
