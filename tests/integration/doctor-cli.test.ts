@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { execFile } from 'node:child_process';
-import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { promisify } from 'node:util';
 import { initializeProject, install } from '../../src/install/index.js';
@@ -102,7 +102,7 @@ async function writeStoredCheck(tempDirectory: string, project: string, host: Ho
     report: healthySyncReport(project),
     context: `ai-workflow sync: synchronized\nProject: ${project}`,
   };
-  await writeFile(path, `${JSON.stringify({ version: 1, unit: 'doctor-cli-test', phase: true, result })}\n`);
+  await writeFile(path, `${JSON.stringify({ version: 2, unit: 'doctor-cli-test', phase: true, result })}\n`);
 }
 
 function parseReport(result: CliResult): DoctorReport {
@@ -255,6 +255,33 @@ describe('doctor CLI', () => {
     expect(report.valid).toBe(false);
     const check = report.checks.find((item) => item.status !== 'pass' && /git-message\/SKILL\.md/.test(item.detail));
     expect(check).toBeDefined();
+  });
+
+  it('reports a version 1 stored unit with a full contract body as no stored check, not as a valid result (AC-009)', async () => {
+    const project = await healthyProject();
+    const home = await installedHome(['claude']);
+    const tempDirectory = await isolatedTmp();
+    const path = storedCheckPath(tempDirectory, 'claude', project);
+    await mkdir(dirname(path), { recursive: true });
+    const contract = await readFile(join(project, '.ai-workflow/AGENTS.md'), 'utf8');
+    const legacyResult = {
+      decision: 'allow',
+      project,
+      report: healthySyncReport(project),
+      context: `ai-workflow sync: synchronized\nProject: ${project}\n${contract}`,
+      authority: contract,
+    };
+    await writeFile(path, `${JSON.stringify({ version: 1, unit: 'doctor-cli-test', phase: true, result: legacyResult })}\n`);
+
+    const result = await runCli(['doctor', '--project', project, '--home', home, '--json'], { tempDirectory });
+
+    expect(result.code).toBe(2);
+    const report = parseReport(result);
+    const check = report.checks.find((item) => item.id === 'sync.stored.claude');
+    expect(check).toBeDefined();
+    expect(check!.status).toBe('warn');
+    expect(check!.detail).toMatch(/no stored synchronization check/i);
+    expect(check!.detail).not.toMatch(/synchronized at/i);
   });
 
   it('adds plan checks for --plan while plan validate output stays unchanged', async () => {
