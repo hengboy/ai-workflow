@@ -7,6 +7,7 @@ import { recordWorkspaceCheckpoint, type WorkspaceTelemetryEvent } from '../exec
 import { resolveWorkspacePlan, type ResolvedWorkspacePlan } from './distribute.js';
 import {
   RESERVED_ROOT,
+  cstTimestamp,
   errorMessage,
   implementationRecordPath,
   isFullSha,
@@ -378,7 +379,7 @@ async function readPlanHeader(planDirectory: string): Promise<{ digest: string; 
   if (Number.isNaN(parsedCreatedAt)) {
     throw new Error('Frozen plan.md has an invalid created_at timestamp');
   }
-  return { digest, createdAt: new Date(parsedCreatedAt).toISOString() };
+  return { digest, createdAt: cstTimestamp(new Date(parsedCreatedAt)) };
 }
 
 /** Map one validated checkpoint event onto the repository-local telemetry event shape. */

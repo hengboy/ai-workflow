@@ -451,7 +451,11 @@ reports a recording failure instead of retrying or re-committing it.
 Classify each exception through `ai-workflow execution failure --plan <plan-directory>
 --category <category>`, and require an explicit `ai-workflow execution resume
 --plan <plan-directory>` after an interruption. The overlay makes no model call, no
-network call and no periodic scan, and every query is read-only.
+network call and no periodic scan, and every query is read-only. Every timestamp
+the execution commands write under `<plan-directory>/execution/` is ISO 8601
+UTC+08:00 (`YYYY-MM-DDTHH:mm:ss+08:00`, no milliseconds) and matches
+`implementation.yaml`, and an already-stored `Z` timestamp remains readable
+without migration.
 
 Workspace execution adds its fields and the checkpoint-only write protocol in `references/workspace.md`; explicitly read it before any workspace record operation.
 

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { chmod, mkdir, open, readFile, readdir, rm } from 'node:fs/promises';
+import { chmod, mkdir, open, readFile, readdir, rm, stat } from 'node:fs/promises';
 import { hostname } from 'node:os';
 import { join } from 'node:path';
 import type { ExecutionConfig } from './config.js';
@@ -8,6 +8,7 @@ import type { ExecutionPaths } from './paths.js';
 import type { ExecutionCheckpoint, ExecutionEvent, ExecutionLock, ExecutionRun } from './types.js';
 import { assertExecutionRecord, validateExecutionRecord } from './validate.js';
 import { appendFsync, atomicWrite, syncDirectory } from '../utils/fs.js';
+import { nowCst } from '../workspace/record.js';
 
 /** Raised when telemetry bytes cannot be recorded, so callers can warn and continue. */
 export class ExecutionTelemetryError extends Error {
@@ -90,7 +91,7 @@ export async function appendEvent(
     run_id: input.run_id,
     plan_id: input.plan_id,
     type: input.type,
-    timestamp: new Date().toISOString(),
+    timestamp: nowCst(),
   };
   if (input.task_id !== undefined) event.task_id = input.task_id;
   if (input.invocation_id !== undefined) event.invocation_id = input.invocation_id;
@@ -208,6 +209,28 @@ export function attemptCountsFromEvents(events: ExecutionEvent[]): Record<string
   return counts;
 }
 
+/** Timestamp and write-order keys for one checkpoint file, used only to break same-second ties. */
+async function checkpointAge(paths: ExecutionPaths, name: string): Promise<{ createdAt: number; mtimeMs: number }> {
+  const path = join(paths.checkpoints, name);
+  let createdAt = Number.NEGATIVE_INFINITY;
+  let mtimeMs = Number.NEGATIVE_INFINITY;
+  try {
+    mtimeMs = (await stat(path)).mtimeMs;
+  } catch {
+    // A vanished file stays the oldest candidate and its removal stays best-effort.
+  }
+  try {
+    const parsed = JSON.parse(await readFile(path, 'utf8')) as { created_at?: unknown };
+    if (typeof parsed.created_at === 'string') {
+      const value = Date.parse(parsed.created_at);
+      if (!Number.isNaN(value)) createdAt = value;
+    }
+  } catch {
+    // An unreadable or malformed file keeps the oldest timestamp key.
+  }
+  return { createdAt, mtimeMs };
+}
+
 /** Build a lexicographically sortable, filesystem-safe checkpoint file name. */
 function checkpointFileName(checkpoint: ExecutionCheckpoint): string {
   const stamp = checkpoint.created_at.replace(/[:.]/g, '-');
@@ -226,12 +249,14 @@ export async function writeCheckpoint(
   await ensureExecutionPaths(paths);
   await atomicWrite(target, `${JSON.stringify(checkpoint, null, 2)}\n`);
 
-  const names = (await readdir(paths.checkpoints)).filter((name) => name.endsWith('.json')).sort();
+  const names = (await readdir(paths.checkpoints)).filter((name) => name.endsWith('.json'));
   const retention = Math.max(1, Math.trunc(config.checkpointHistory));
   const excess = names.length - retention;
-  for (let index = 0; index < excess; index += 1) {
-    const name = names[index];
-    if (name) await rm(join(paths.checkpoints, name), { force: true });
+  if (excess > 0) {
+    // Seconds-precision timestamps can tie, so file-name order alone no longer proves age.
+    const ages = await Promise.all(names.map(async (name) => ({ name, ...(await checkpointAge(paths, name)) })));
+    ages.sort((left, right) => left.createdAt - right.createdAt || left.mtimeMs - right.mtimeMs || (left.name < right.name ? -1 : left.name > right.name ? 1 : 0));
+    for (const entry of ages.slice(0, excess)) await rm(join(paths.checkpoints, entry.name), { force: true });
   }
   return checkpoint;
 }
@@ -253,8 +278,9 @@ export async function readLatestCheckpoint(paths: ExecutionPaths): Promise<Check
   }
   if (names.length === 0) return { status: 'absent', warnings: [] };
 
-  names.sort().reverse();
+  names.sort();
   const warnings: string[] = [];
+  const valid: { checkpoint: ExecutionCheckpoint; name: string }[] = [];
   for (const name of names) {
     const path = join(paths.checkpoints, name);
     let parsed: unknown;
@@ -269,9 +295,16 @@ export async function readLatestCheckpoint(paths: ExecutionPaths): Promise<Check
       warnings.push(`checkpoint ${name} is invalid: ${validation.errors.join('; ')}`);
       continue;
     }
-    return { status: 'ok', checkpoint: parsed as ExecutionCheckpoint, warnings };
+    valid.push({ checkpoint: parsed as ExecutionCheckpoint, name });
   }
-  return { status: 'manual', warnings };
+  if (valid.length === 0) return { status: 'manual', warnings };
+  const candidates = await Promise.all(
+    valid.map(async (entry) => ({ ...entry, ...(await checkpointAge(paths, entry.name)) })),
+  );
+  candidates.sort((left, right) => right.createdAt - left.createdAt || right.mtimeMs - left.mtimeMs || (left.name < right.name ? 1 : left.name > right.name ? -1 : 0));
+  const newest = candidates[0];
+  if (newest === undefined) return { status: 'manual', warnings };
+  return { status: 'ok', checkpoint: newest.checkpoint, warnings };
 }
 
 /** Caller-supplied lock identity; absent fields receive sensible local defaults. */
@@ -377,7 +410,7 @@ export async function acquireLock(
       owner_id: request.owner_id ?? randomUUID(),
       pid: request.pid ?? process.pid,
       host: request.host ?? currentHost,
-      acquired_at: request.acquired_at ?? new Date().toISOString(),
+      acquired_at: request.acquired_at ?? nowCst(),
       command: request.command,
     };
     assertExecutionRecord('lock', lock, paths.lock);

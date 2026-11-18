@@ -265,7 +265,7 @@ describe('execution schema contracts', () => {
 
     expectKeyword(validate, { ...EVENT_FIXTURE, type: 'task.retried' }, 'enum', '/type');
     expectKeyword(validate, { ...EVENT_FIXTURE, unexpected_root_field: true }, 'additionalProperties', '');
-    expectInvalidAt(validate, { ...EVENT_FIXTURE, timestamp: '2026-11-17T15:20:00+08:00' }, '/timestamp');
+    expectInvalidAt(validate, { ...EVENT_FIXTURE, timestamp: '2026-11-17T15:20:00+09:00' }, '/timestamp');
     expectValid(validate, { ...EVENT_FIXTURE, timestamp: '2026-11-17T23:59:59Z' }, 'UTC timestamp');
   });
 
@@ -286,6 +286,35 @@ describe('execution schema contracts', () => {
       'additionalProperties',
       '',
     );
+  });
+
+  it('accepts UTC+08:00 timestamps in all four schemas and rejects an unrelated offset', async () => {
+    const PLUS8 = '2026-11-17T15:20:00+08:00';
+    const PLUS9 = '2026-11-17T16:20:00+09:00';
+
+    const run = await compileSchema(RUN_SCHEMA);
+    expectValid(
+      run.validate,
+      { ...RUN_FIXTURE, plan_created_at: PLUS8, created_at: PLUS8, updated_at: PLUS8, started_at: PLUS8, completed_at: PLUS8 },
+      'run +08:00',
+    );
+    expectInvalidAt(run.validate, { ...RUN_FIXTURE, plan_created_at: PLUS9 }, '/plan_created_at');
+    expectInvalidAt(run.validate, { ...RUN_FIXTURE, created_at: PLUS9 }, '/created_at');
+    expectInvalidAt(run.validate, { ...RUN_FIXTURE, updated_at: PLUS9 }, '/updated_at');
+    expectInvalidAt(run.validate, { ...RUN_FIXTURE, started_at: PLUS9 }, '/started_at');
+    expectInvalidAt(run.validate, { ...RUN_FIXTURE, completed_at: PLUS9 }, '/completed_at');
+
+    const event = await compileSchema(EVENT_SCHEMA);
+    expectValid(event.validate, { ...EVENT_FIXTURE, timestamp: PLUS8 }, 'event +08:00');
+    expectInvalidAt(event.validate, { ...EVENT_FIXTURE, timestamp: PLUS9 }, '/timestamp');
+
+    const checkpoint = await compileSchema(CHECKPOINT_SCHEMA);
+    expectValid(checkpoint.validate, { ...CHECKPOINT_FIXTURE, created_at: PLUS8 }, 'checkpoint +08:00');
+    expectInvalidAt(checkpoint.validate, { ...CHECKPOINT_FIXTURE, created_at: PLUS9 }, '/created_at');
+
+    const lock = await compileSchema(LOCK_SCHEMA);
+    expectValid(lock.validate, { ...LOCK_FIXTURE, acquired_at: PLUS8 }, 'lock +08:00');
+    expectInvalidAt(lock.validate, { ...LOCK_FIXTURE, acquired_at: PLUS9 }, '/acquired_at');
   });
 
   it('validates execution locks with a positive integer pid and a strict root', async () => {

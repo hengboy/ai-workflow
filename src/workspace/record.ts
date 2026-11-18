@@ -158,11 +158,23 @@ export function implementationRecordPath(root: string, repositoryPath: string, p
   return join(root, repositoryPath, '.ai-workflow', 'plans', planId, 'implementation.yaml');
 }
 
-/** An ISO 8601 timestamp in the fixed UTC+08:00 planning timezone. */
-export function nowCst(): string {
-  const shifted = new Date(Date.now() + 8 * 60 * 60 * 1000);
+/** Format one instant as an ISO 8601 UTC+08:00 timestamp with seconds precision and no milliseconds. */
+export function cstTimestamp(date: Date): string {
+  const shifted = new Date(date.getTime() + 8 * 60 * 60 * 1000);
   const pad = (value: number): string => String(value).padStart(2, '0');
   return `${shifted.getUTCFullYear()}-${pad(shifted.getUTCMonth() + 1)}-${pad(shifted.getUTCDate())}T${pad(shifted.getUTCHours())}:${pad(shifted.getUTCMinutes())}:${pad(shifted.getUTCSeconds())}+08:00`;
+}
+
+/** Normalize a stored timestamp to UTC+08:00, falling back when it is absent or unparseable. */
+export function toCstTimestamp(value: string | undefined, fallback: string): string {
+  if (value === undefined) return fallback;
+  const parsed = Date.parse(value);
+  return Number.isNaN(parsed) ? fallback : cstTimestamp(new Date(parsed));
+}
+
+/** The current instant as an ISO 8601 UTC+08:00 timestamp. */
+export function nowCst(): string {
+  return cstTimestamp(new Date());
 }
 
 export { errorMessage };

@@ -4,6 +4,7 @@ import type { ExecutionPaths } from './paths.js';
 import { executionPaths } from './paths.js';
 import { appendEvent, readEvents, readRun, writeRun } from './store.js';
 import type { ExecutionRun } from './types.js';
+import { nowCst } from '../workspace/record.js';
 
 /** Host events that may open or close a recorded agent invocation. */
 const HOST_EVENTS = ['session.created', 'session.deleted', 'session.error'] as const;
@@ -123,7 +124,7 @@ async function recordInvocation(active: ActiveRun, host: string, data: Record<st
   const run: ExecutionRun = {
     ...active.run,
     agent: agentBinding(host, data, sessionId),
-    updated_at: new Date().toISOString(),
+    updated_at: nowCst(),
   };
   await writeRun(active.paths, run);
   await appendEvent(active.paths, {
