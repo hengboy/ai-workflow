@@ -96,6 +96,15 @@ Describe what is reverted, what data remains valid, and how recovery is verified
 | --- | --- | --- |
 | State one concrete risk. | State the bounded mitigation. | Name the validating check. |
 
+## Freeze validation
+
+`ai-workflow plan validate --plan <directory>` applies the same freeze rules to `plan.md`:
+
+- `plan_id` matches `^[0-9]{8}-[a-z0-9]+(?:-[a-z0-9]+)*$`, an eight-digit date followed by one or more hyphenated `[a-z0-9]+` segments, and is identical in `spec.md` and `plan.md`; both documents declare `status: frozen`.
+- Task documents require `tasks/execution-order.yaml`; a plan that has task documents but no order file fails validation with the `Missing execution order` error naming that path.
+- The plan directory under `.ai-workflow/plans/` is gitignored; never stage or commit it.
+- Render navigation rather than hand-editing it: `ai-workflow context refresh --project <root> --render-only --write`.
+
 ## Example
 
 For the notification preference requirement in `spec.md`, a completed step could read:

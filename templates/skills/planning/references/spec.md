@@ -26,6 +26,15 @@ Apply Planning's [Document contract](../SKILL.md#document-contract). The Chinese
 （中文正文，结构镜像英文侧；无 YAML frontmatter。）
 ```
 
+## Freeze validation
+
+`ai-workflow plan validate --plan <directory>` enforces these conditions on the frozen pair; a document that violates one is not frozen.
+
+- `plan_id` matches `^[0-9]{8}-[a-z0-9]+(?:-[a-z0-9]+)*$`, an eight-digit date followed by one or more hyphenated `[a-z0-9]+` segments, and is identical in `spec.md` and `plan.md`.
+- Both `spec.md` and `plan.md` declare `status: frozen`.
+- `requirement_count` equals the number of `REQ-` headings and `acceptance_criteria_count` equals the number of `AC-` headings in the body.
+- YAML frontmatter exists only on the English side; the Chinese `.zh.md` carries no YAML frontmatter and mirrors the English heading structure.
+
 ## Goal
 
 State the user-visible outcome and how success will be measured.
