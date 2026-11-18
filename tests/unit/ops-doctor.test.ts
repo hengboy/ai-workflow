@@ -102,7 +102,7 @@ async function writeStoredCheck(runtime: string, project: string, host: Host): P
     report: healthySyncReport(project),
     context: `ai-workflow sync: synchronized\nProject: ${project}`,
   };
-  await writeFile(path, `${JSON.stringify({ version: 1, unit: 'doctor-test', phase: true, result })}\n`);
+  await writeFile(path, `${JSON.stringify({ version: 2, unit: 'doctor-test', phase: true, result })}\n`);
 }
 
 async function healthyFixture(hosts: Host[] = ['claude']): Promise<{ project: string; home: string; runtime: string }> {
