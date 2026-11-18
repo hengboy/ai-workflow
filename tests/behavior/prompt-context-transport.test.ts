@@ -268,6 +268,7 @@ describe('compact core contract with retained-obligation mapping (REQ-003 / AC-0
       ['aggregate repair with one targeted recheck', /aggregate repair[\s\S]{0,400}targeted recheck|targeted recheck[\s\S]{0,400}aggregate repair/i],
       ['worktree confinement', /(?:project-local )?temporary worktree|single worktree/i],
       ['synchronization preflight', /sync-hook[^.]{0,80}--phase/i],
+      ['path-and-digest reference is not a complete injection', /not a complete (?:contract )?injection/i],
       ['notes governance pointer', /\.ai-workflow\/notes\/README\.md/],
       ['durable-artifact identifier prohibition', /transient plan-internal identifiers/i],
       ['navigation JSON authority', /navigation\.json[^.]{0,80}authoritative|JSON is authoritative/i],

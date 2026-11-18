@@ -61,8 +61,10 @@ The `ai-workflow sync-hook` entry has two output shapes:
 
 | Form | Output to follow |
 | --- | --- |
-| `--phase` on every host; OpenCode stdin gate | Raw gate JSON: top-level `decision` (`allow`, `deny`, `skip`), `project`, `context`, optional `authority`, and `SyncReport` nested under `report` (absent for `skip` or an actor exemption). Read both `decision` and the nested `report` when present. |
+| `--phase` on every host; OpenCode stdin gate | Raw gate JSON: top-level `decision` (`allow`, `deny`, `skip`), `project`, `context`, optional `authority_ref`, and `SyncReport` nested under `report` (absent for `skip` or an actor exemption). Read both `decision` and the nested `report` when present. |
 | Claude Code and Codex stdin gates | Host-native `systemMessage`; `hookSpecificOutput` with `hookEventName`, `additionalContext`, plus `permissionDecision`/`permissionDecisionReason` on a `PreToolUse` deny. A `UserPromptSubmit` block has top-level `decision: block` with `reason`. These gates never expose raw `allow`/`deny`/`skip`. |
+
+`authority_ref` is a path-and-digest notice with the absolute contract path, its `sha256:` digest and byte count; it is not a complete contract injection and not the contract body, so the gate does not replay the full contract and every role explicitly reads the contract before ordinary work.
 
 Never run `sync-hook --host <host>` by hand without the host payload on stdin. Every handled form exits 0 even on a deny; follow the host protocol rather than that exit code.
 

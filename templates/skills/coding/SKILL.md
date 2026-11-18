@@ -146,6 +146,7 @@ At this skill session's start, invoke the shared native entry exactly once for t
 `ai-workflow sync-hook --host <current-host> --phase --project <actual-root>`.
 Follow `decision`, not the exit code (0 even on denial): `deny` or a `conflict`/`failed` `report.status` stops the phase; warnings proceed without a freshness claim; `skip` means no adoption.
 Later steps, phases and native host events reuse the actual root's stored result; a missing, corrupt or unreadable check allows with visible no-freshness context and no source request.
+The stored result carries a compact path-and-digest contract reference, never the contract body; that notice is not a complete contract injection, the gate does not replay the full contract, and every role explicitly reads the contract before ordinary work.
 Preflight writes only managed instructions in the actual root or coding worktree, with no Git or product edit.
 After a safe patch changes the contract or owned rules, re-read `.ai-workflow/AGENTS.md` before ordinary work; frozen `spec.md`, `plan.md`, tasks and write scopes never change, and contradictions stop the phase with bounded support.
 
