@@ -61,7 +61,14 @@ describe('native prompt contracts', () => {
     for (const name of ['planning', 'plan-to-tasks']) {
       const text = await readFile(packagePath('templates', 'skills', name, 'SKILL.md'), 'utf8');
       expect(text).toMatch(/gitignored/i);
-      expect(text).toMatch(/do not stage or commit/i);
+      // The only Git dispatch is the bounded phase-start maintenance commit of the
+      // reported managed paths; the role's own artifacts stay uncommitted.
+      expect(text).toMatch(/only permitted Git dispatch/i);
+      expect(text).toMatch(/created[^\n]{0,40}updated/i);
+      expect(text).toMatch(/git-operator[^\n]{0,80}Git Operator/i);
+      expect(text).toMatch(/stage only[^\n]{0,60}reported managed paths/i);
+      expect(text).toMatch(/never include[^\n]{0,120}(?:planning artifacts|task files)/i);
+      expect(text).toMatch(/not an implementation commit/i);
       expect(text).not.toMatch(/automatic local commit/i);
       expect(text).not.toMatch(/directly\s+dispatch(?:es|ed)?\s+Git\s+Operator/i);
     }
@@ -228,9 +235,21 @@ describe('native prompt contracts', () => {
       const text = await readFile(packagePath('templates', 'skills', name, 'SKILL.md'), 'utf8');
       // Planning and task artifacts live under the gitignored .ai-workflow directory.
       expect(text).toMatch(/gitignored/i);
-      // The specialist neither stages nor commits its own artifacts.
-      expect(text).toMatch(/do not stage or commit/i);
-      // REQ-002: no automatic commit or Git Operator dispatch from these roles.
+      // The only permitted Git dispatch is the scoped phase-start maintenance commit
+      // of exactly the paths a proceeding synchronization reported (created/updated),
+      // performed by Git Operator and explicitly not an implementation commit.
+      expect(text).toMatch(/only permitted Git dispatch/i);
+      expect(text).toMatch(/created[^\n]{0,40}updated/i);
+      expect(text).toMatch(/git-operator[^\n]{0,80}Git Operator/i);
+      expect(text).toMatch(/stage only[^\n]{0,60}reported managed paths/i);
+      expect(text).toMatch(/preserve every unrelated stage[^\n]{0,80}untracked change/i);
+      // The specialist never stages or commits its own artifacts, task files or
+      // frozen documents; the bounded exception excludes them.
+      expect(text).toMatch(/never include[^\n]{0,120}(?:planning artifacts|task files)/i);
+      expect(text).toMatch(/never stages? or commits?[^\n]{0,120}(?:planning artifacts|task files)/i);
+      expect(text).toMatch(/planning artifacts[^\n]{0,40}task files[^\n]{0,40}never committed/i);
+      expect(text).toMatch(/not an implementation commit/i);
+      // REQ-002: no automatic commit or direct implementation Git Operator dispatch from these roles.
       expect(text).not.toMatch(/automatic local commit/i);
       expect(text).not.toMatch(/directly\s+dispatch(?:es|ed)?\s+Git\s+Operator/i);
       expect(text).not.toMatch(/Git Operator must use `\$git-message`/);
