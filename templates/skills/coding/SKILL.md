@@ -28,7 +28,7 @@ procedure and distributed the slices; the coding session verifies the delivery g
 present) before any worktree or implementation record and implements without repeating
 the completed preparation. Ordinary or root-only plans hand off to a new coding session.
 Do not start implementation in that planning session: no worktree, no implementation
-record, no implementation or review dispatch, and no commit. The new session implements
+record, no implementation or review dispatch, and no implementation commit. The new session implements
 within the frozen plan.
 
 A direct or mechanical change
@@ -146,8 +146,9 @@ At this skill session's start, invoke the shared native entry exactly once for t
 `ai-workflow sync-hook --host <current-host> --phase --project <actual-root>`.
 Follow `decision`, not the exit code (0 even on denial): `deny` or a `conflict`/`failed` `report.status` stops the phase; warnings proceed without a freshness claim; `skip` means no adoption.
 Later steps, phases and native host events reuse the actual root's stored result; a missing, corrupt or unreadable check allows with visible no-freshness context and no source request.
+A proceeding result with non-empty `created` or `updated` requires one scoped local maintenance commit of exactly those reported managed paths by the `git-operator` sub-agent (Git Operator) before ordinary work. Stage only the reported managed paths, preserve every unrelated staged, unstaged or untracked change, and never include planning artifacts, task files or product edits. A `skip`, an empty `created` and `updated` set, or a non-proceeding `deny`, `conflict` or `failed` result produces no commit, no empty commit and no Git dispatch. A blocked or failed maintenance commit stops the phase with a bounded support request, and ordinary work does not continue; this maintenance commit is not an implementation commit, reviewed range or integration authorization.
 The stored result carries a compact path-and-digest contract reference, never the contract body; that notice is not a complete contract injection, the gate does not replay the full contract, and every role explicitly reads the contract before ordinary work.
-Preflight writes only managed instructions in the actual root or coding worktree, with no Git or product edit.
+The preflight itself writes only managed instructions in the actual root or coding worktree, with no Git, staging or product edit; the synchronization core, hook, gate and manual sync stay no-Git, and that scoped maintenance commit is this session's only synchronization-related Git operation, while ordinary implementation Git stays governed by the rest of this skill.
 After a safe patch changes the contract or owned rules, re-read `.ai-workflow/AGENTS.md` before ordinary work; frozen `spec.md`, `plan.md`, tasks and write scopes never change, and contradictions stop the phase with bounded support.
 
 ## Preconditions

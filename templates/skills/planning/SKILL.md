@@ -36,6 +36,7 @@ At skill session start, invoke exactly once for the actual project root:
 `ai-workflow sync-hook --host <current-host> --phase --project <actual-root>`.
 Follow `decision`, not the exit code: `deny` or a `conflict`/`failed` `report.status` stops the phase, and `skip` means no adoption.
 Later steps, phases and native host events reuse that root's stored result with no source request; a missing, corrupt or unreadable check allows with visible no-freshness context.
+A proceeding result with non-empty `created` or `updated` requires one scoped local maintenance commit of exactly those reported managed paths by the `git-operator` sub-agent (Git Operator) before ordinary work; it is the planning session's only permitted Git dispatch, and planning artifacts and task files are never committed. Stage only the reported managed paths, preserve every unrelated staged, unstaged or untracked change, and never include planning artifacts, task files or product edits. A `skip`, an empty `created` and `updated` set, or a non-proceeding `deny`, `conflict` or `failed` result produces no commit, no empty commit and no Git dispatch. A blocked or failed maintenance commit stops the phase with a bounded support request, and ordinary work does not continue; this maintenance commit is not an implementation commit, reviewed range or integration authorization.
 After a safe patch changes the contract or owned workflow rules, re-read `.ai-workflow/AGENTS.md` before ordinary work; frozen `spec.md`, `plan.md` and task files are never synchronization input, and contradictory new authority stops the phase with a bounded support request, never a broader frozen scope.
 
 ## Workspace planning
@@ -149,7 +150,7 @@ After approval:
 6. Re-read all six files; verify shared plan ID, counts, frozen status and content digests.
 7. Record the pair with `ai-workflow plan pairing --plan <directory> --write spec plan`, then run `ai-workflow plan validate --plan <directory>`. This is a hard completion gate: repair missing companions, wrong switchers, structure mismatches or stale digests, re-record and revalidate until it passes. No completion or Plan-to-tasks/Coding handoff while any triplet is incomplete.
 
-The planning primary owns writes; Spec Review is read-only. Planning artifacts are gitignored local, untracked files. Planning creates no Git commit: do not dispatch Git Operator and do not stage or commit any planning artifact.
+The planning primary owns writes; Spec Review is read-only. Planning artifacts are gitignored local, untracked files. Apart from the scoped phase-start maintenance commit of reported managed paths, planning dispatches no Git operation and never stages or commits planning artifacts, frozen documents or review material.
 
 ## Agent Notes
 
@@ -173,4 +174,4 @@ When the change adds a note or changes a recorded decision, `plan.md` must list 
     ```text
     Start a new session at <workspace-root> and invoke the coding skill with the absolute frozen plan directory <absolute plan directory> to implement the frozen plan.
     ```
-- Apart from the chained task artifacts and slices that the `plan-to-tasks` preparation procedure writes for a child-participating workspace plan, the planning session created no task, slice, worktree, implementation record, workflow, run, code file or commit.
+- Apart from the chained task artifacts and slices that the `plan-to-tasks` preparation procedure writes for a child-participating workspace plan and the scoped phase-start maintenance commit of reported managed paths, the planning session created no task, slice, worktree, implementation record, workflow, run, code file or implementation commit.
