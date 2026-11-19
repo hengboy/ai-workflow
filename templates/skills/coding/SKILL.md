@@ -28,7 +28,7 @@ procedure and distributed the slices; the coding session verifies the delivery g
 present) before any worktree or implementation record and implements without repeating
 the completed preparation. Ordinary or root-only plans hand off to a new coding session.
 Do not start implementation in that planning session: no worktree, no implementation
-record, no implementation or review dispatch, and no commit. The new session implements
+record, no implementation or review dispatch, and no implementation commit. The new session implements
 within the frozen plan.
 
 A direct or mechanical change

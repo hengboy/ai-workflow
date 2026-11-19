@@ -174,4 +174,4 @@ When the change adds a note or changes a recorded decision, `plan.md` must list 
     ```text
     Start a new session at <workspace-root> and invoke the coding skill with the absolute frozen plan directory <absolute plan directory> to implement the frozen plan.
     ```
-- Apart from the chained task artifacts and slices that the `plan-to-tasks` preparation procedure writes for a child-participating workspace plan, the planning session created no task, slice, worktree, implementation record, workflow, run, code file or commit.
+- Apart from the chained task artifacts and slices that the `plan-to-tasks` preparation procedure writes for a child-participating workspace plan and the scoped phase-start maintenance commit of reported managed paths, the planning session created no task, slice, worktree, implementation record, workflow, run, code file or implementation commit.
