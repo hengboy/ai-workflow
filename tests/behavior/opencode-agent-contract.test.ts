@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { renderHost } from '../../src/install/render.js';
 import { packagePath } from '../../src/utils/schema.js';
+import type { Profile } from '../../src/profile/index.js';
 
 // OpenCode V2 replaces the V1 `tools`/`permission`/`hidden` agent frontmatter. Role agents must be
 // `mode: subagent` so the primary orchestrator can dispatch them through the `subagent` tool;
@@ -109,6 +110,31 @@ describe('opencode v1 role agent frontmatter', () => {
     expect(headOf('file-explorer')).toContain('  grep: allow');
     expect(headOf('researcher')).toContain('  webfetch: allow');
     expect(headOf('researcher')).toContain('  websearch: allow');
+  });
+});
+
+describe('opencode model variant rendering', () => {
+  it('renders every role model and reasoning effort as a native variant for v1 and v2', async () => {
+    const roles = Object.keys(expectedActions);
+    const agents: Profile['agents'] = {};
+    for (const role of roles) {
+      agents[role] = { opencode: { model: `gateway/${role}-model`, reasoning_effort: 'high' } };
+    }
+    const profile: Profile = { version: '1.0.0', agents };
+
+    for (const opencodeVersion of ['v1', 'v2'] as const) {
+      const files = await renderHost('opencode', profile, { opencodeVersion });
+      expect(files, opencodeVersion).toHaveLength(roles.length);
+      for (const role of roles) {
+        const file = files.find((candidate) => candidate.relativePath === `${role}.md`);
+        expect(file, `${opencodeVersion}/${role} output`).toBeDefined();
+        if (!file) throw new Error(`Missing rendered agent for ${role}`);
+        const head = frontmatter(file.contents);
+        expect(head, `${opencodeVersion}/${role}`).toContain(`model: "gateway/${role}-model"`);
+        expect(head, `${opencodeVersion}/${role}`).toContain('variant: "high"');
+        expect(head, `${opencodeVersion}/${role}`).not.toContain('reasoningEffort');
+      }
+    }
   });
 });
 

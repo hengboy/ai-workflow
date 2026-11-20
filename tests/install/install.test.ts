@@ -62,7 +62,8 @@ agents:
     expect(claude).toContain('effort: "max"');
     const opencode = await readFile(join(home, '.config/opencode/agents/backend.md'), 'utf8');
     expect(opencode).toContain('model: "openai/gpt-5.6-terra"');
-    expect(opencode).toContain('reasoningEffort: "medium"');
+    expect(opencode).toContain('variant: "medium"');
+    expect(opencode).not.toContain('reasoningEffort');
   });
   it('rejects a missing profile without changing the active profile or installed agents', async () => {
     const home = await temporary('ai-workflow-profile-missing-');

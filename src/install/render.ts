@@ -73,7 +73,7 @@ function agentFrontmatterFor(host: Host, source: string, settings: { model: stri
   const configuration = settings
     ? host === 'claude'
       ? `model: ${quoted(settings.model)}\neffort: ${quoted(settings.reasoning_effort)}\n`
-      : `model: ${quoted(settings.model)}\nreasoningEffort: ${quoted(settings.reasoning_effort)}\n`
+      : `model: ${quoted(settings.model)}\nvariant: ${quoted(settings.reasoning_effort)}\n`
     : '';
   return rendered.replace(/^---\n/, `---\n${configuration}`);
 }
