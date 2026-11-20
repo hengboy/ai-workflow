@@ -1102,3 +1102,130 @@ describe('opencode v2 plugin definition boundary', () => {
     }
   }, 90_000);
 });
+
+// --- OpenCode 2.x native payload shapes at the plugin boundary ----------------------
+//
+// OpenCode 2.x names the read argument `path` and the shell tool `shell`. An installed
+// plugin that recognizes only `filePath`/`file_path` never records the contract digest, so
+// its read gate refuses every tool forever, including the read it demands. A proceeding
+// result whose `updated` set is non-empty must let the session read the contract, continue
+// read-only work and dispatch the Git Operator maintenance commit.
+
+interface InstalledPluginHooks {
+  before: (input: { sessionID: string; tool: string; input: Record<string, unknown> }) => Promise<void>;
+  after: (input: { sessionID: string; tool: string; input: Record<string, unknown> }) => Promise<void>;
+}
+
+/** The installed v1 factory plugin behind the same two hook names. */
+async function loadV1Hooks(home: string, sdk: PluginSdk, contextDirectory: string): Promise<InstalledPluginHooks> {
+  const plugin = await loadInstalledPlugin(home, sdk, contextDirectory);
+  return {
+    before: (input) => plugin['tool.execute.before']({ sessionID: input.sessionID, tool: input.tool }, { args: input.input }),
+    after: (input) => plugin['tool.execute.after']({ sessionID: input.sessionID, tool: input.tool, args: input.input }),
+  };
+}
+
+/** The installed v2 definition plugin behind the same two hook names. */
+async function loadV2Hooks(home: string, contextDirectory: string, sessions: Map<string, OpenCodeV2SessionState>): Promise<InstalledPluginHooks> {
+  const registrations = new Map<string, Function>();
+  const ctx = {
+    app: { name: 'test', version: '2.3.2', channel: 'test' },
+    location: { directory: contextDirectory, project: { id: 'test', directory: contextDirectory, canonical: contextDirectory } },
+    options: {},
+    session: {
+      get: async ({ sessionID }: { sessionID: string }) => {
+        const state = sessions.get(sessionID);
+        return state ? { id: sessionID, location: { directory: state.directory }, ...(state.parentID ? { parentID: state.parentID } : {}) } : null;
+      },
+      hook: async (name: string, callback: Function) => { registrations.set(`session.${name}`, callback); return { dispose: async () => {} }; },
+    },
+    tool: {
+      hook: async (name: string, callback: Function) => { registrations.set(`tool.${name}`, callback); return { dispose: async () => {} }; },
+    },
+    event: { subscribe: async function* () {} },
+  };
+  const module = await import(pathToFileURL(join(home, opencodePluginRelative)).href) as {
+    default?: { setup?: (context: unknown) => Promise<(() => void) | undefined> };
+  };
+  expect(typeof module.default?.setup, 'the installed v2 plugin must carry a setup function').toBe('function');
+  await module.default!.setup!(ctx);
+  const before = registrations.get('tool.execute.before')!;
+  const after = registrations.get('tool.execute.after')!;
+  return {
+    before: (input) => before({ sessionID: input.sessionID, tool: input.tool, input: input.input }),
+    after: (input) => after({ sessionID: input.sessionID, tool: input.tool, input: input.input, status: 'completed' }),
+  };
+}
+
+describe.each([
+  ['v1', async (home: string, sdk: PluginSdk, contextDirectory: string, _sessions: Map<string, OpenCodeV2SessionState>) => loadV1Hooks(home, sdk, contextDirectory)],
+  ['v2', async (home: string, _sdk: PluginSdk, contextDirectory: string, sessions: Map<string, OpenCodeV2SessionState>) => loadV2Hooks(home, contextDirectory, sessions)],
+] as const)('opencode %s plugin with OpenCode 2.x payload shapes', (version, loadHooks) => {
+  it('proceeds through a pending contract update after a V2 contract read and still denies a real conflict', async () => {
+    const home = await temporary(`ai-workflow-plugin-v2shape-${version}-home-`);
+    const contextDirectory = await temporary(`ai-workflow-plugin-v2shape-${version}-context-`);
+    const fixtureLogDirectory = await temporary(`ai-workflow-plugin-v2shape-${version}-log-`);
+    const rootA = await adoptedProject();
+    const rootB = await adoptedProject({ '.ai-workflow/AGENTS.md': legacyAgents });
+    roots.push(home, contextDirectory, fixtureLogDirectory, rootA, rootB);
+
+    const git = await gitFixture(baseSourceFiles);
+    const log = join(fixtureLogDirectory, 'heads.log');
+    await install(['opencode'], { home, opencodeVersion: version });
+    const sdk = pluginSdk({ S: { directory: rootA } });
+    const sessions = new Map<string, OpenCodeV2SessionState>([['S', { directory: rootA }]]);
+    const hooks = await loadHooks(home, sdk, contextDirectory, sessions);
+    const contractA = join(rootA, '.ai-workflow/AGENTS.md');
+    const contractB = join(rootB, '.ai-workflow/AGENTS.md');
+    const contextBefore = await snapshotTree(contextDirectory);
+
+    await withProcessEnvironment({
+      HOME: home,
+      TMPDIR: fixtureLogDirectory,
+      ...processShimEnv(git),
+      AI_WORKFLOW_FIXTURE_HEAD: A,
+      AI_WORKFLOW_FIXTURE_LOG: log,
+    }, async () => {
+      // The reported state: a proceeding result that updated the managed contract.
+      const primed = await primeBuilt(rootA, A);
+      expect(primed.decision).toBe('allow');
+      expect(primed.report?.proceed).toBe(true);
+      expect(primed.report?.updated, 'the reported pending update must be present').toContain('.ai-workflow/AGENTS.md');
+      await expectContractReference(primed, rootA);
+
+      // Reading the demanded contract with the OpenCode 2.x `path` argument is permitted and
+      // registers the digest, so the read gate becomes satisfiable instead of deadlocking.
+      await hooks.before({ sessionID: 'S', tool: 'read', input: { path: contractA } });
+      await hooks.after({ sessionID: 'S', tool: 'read', input: { path: contractA } });
+
+      // Read-only work and subagent dispatch proceed, so Git Operator can land the scoped
+      // maintenance commit of the reported managed paths.
+      for (const [tool, input] of [
+        ['read', { path: join(rootA, 'MEMORY.md') }],
+        ['grep', { pattern: 'contract', path: rootA }],
+        ['glob', { pattern: '.ai-workflow/**', path: rootA }],
+        ['shell', { command: 'ls', workdir: rootA }],
+        ['subagent', { agent: 'git-operator', description: 'maintenance commit', prompt: 'Commit the reported managed contract update.' }],
+      ] as const) {
+        await expect(hooks.before({ sessionID: 'S', tool, input }), `${version}: ${tool} must proceed`).resolves.toBeUndefined();
+      }
+
+      // A real conflict is still a hard blocker for ordinary work and subagent dispatch.
+      const primedB = await primeBuilt(rootB, A);
+      expect(primedB.decision, 'a conflicted contract stays a real blocker').toBe('deny');
+      expect(primedB.report?.status).toBe('conflict');
+      sdk.sessions.set('T', { directory: rootB });
+      sessions.set('T', { directory: rootB });
+      await expect(hooks.before({ sessionID: 'T', tool: 'read', input: { path: join(rootB, 'MEMORY.md') } }),
+        `${version}: a conflicted root still refuses ordinary work`).rejects.toThrow(/conflict/);
+      await expect(hooks.before({ sessionID: 'T', tool: 'subagent', input: { agent: 'git-operator', description: 'dispatch', prompt: 'x' } }),
+        `${version}: a conflicted root still refuses subagent dispatch`).rejects.toThrow(/conflict/);
+      expect(await readFile(contractB, 'utf8'), 'the conflict stays a real stored blocker').toContain('ai-workflow:section');
+
+      expect(await observedHeads(log), 'the plugin must answer from the primed caches only').toEqual([A, A]);
+    });
+
+    expect(changedPaths(contextBefore, await snapshotTree(contextDirectory)), 'the plugin must not write its context directory').toEqual([]);
+  }, 90_000);
+});
+

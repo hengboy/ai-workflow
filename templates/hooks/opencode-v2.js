@@ -109,8 +109,10 @@ export default {
     }
 
     function contractTarget(sessionID, args) {
-      if (typeof args.filePath !== 'string') return undefined;
-      const path = resolve(directories.get(sessionID), args.filePath);
+      // OpenCode 2.x names the read argument `path`; older hosts use `filePath`.
+      const argument = args.path ?? args.filePath;
+      if (typeof argument !== 'string') return undefined;
+      const path = resolve(directories.get(sessionID), argument);
       if (basename(path) !== 'AGENTS.md' || basename(dirname(path)) !== '.ai-workflow') return undefined;
       return { root: dirname(dirname(path)), path };
     }

@@ -663,6 +663,8 @@ describe('project sync gate actor and authority exemptions (AC-003)', () => {
     for (const [toolName, command] of [
       ['Bash', `ai-workflow sync-hook --host opencode --phase --project ${root}`],
       ['bash', `ai-workflow sync ${root}`],
+      ['shell', `ai-workflow sync-hook --host opencode --phase --project ${root}`],
+      ['shell', `ai-workflow sync ${root}`],
     ] as const) {
       const actor = await invoke(toolName, { command });
       expect(actor.decision, `actor: ${command}`).toBe('allow');
@@ -672,9 +674,10 @@ describe('project sync gate actor and authority exemptions (AC-003)', () => {
       expect(stillDenied.report?.status).toBe('conflict');
     }
 
-    // The required authority read of the exact project contract is permitted for both native
-    // casings/keys, even while the cached conflict keeps ordinary tools denied.
-    for (const [toolName, key] of [['read', 'filePath'], ['Read', 'file_path']] as const) {
+    // The required authority read of the exact project contract is permitted for every native
+    // casings/key, including the OpenCode 2.x `path` shape, even while the cached conflict
+    // keeps ordinary tools denied.
+    for (const [toolName, key] of [['read', 'filePath'], ['Read', 'file_path'], ['read', 'path']] as const) {
       const authorityRead = await invoke(toolName, { [key]: contractPath });
       expect(authorityRead.decision, `authority read: ${toolName}`).toBe('allow');
       expectNoFreshness(authorityRead);
@@ -689,6 +692,10 @@ describe('project sync gate actor and authority exemptions (AC-003)', () => {
     expect(lookalikeCommand.decision).toBe('deny');
     const nearMissFile = await invoke('read', { filePath: `${contractPath}.bak` });
     expect(nearMissFile.decision).toBe('deny');
+    const nearMissV2Path = await invoke('read', { path: `${contractPath}.bak` });
+    expect(nearMissV2Path.decision, 'a V2 near-miss path is not the exact contract').toBe('deny');
+    const unrelatedV2Path = await invoke('read', { path: join(root, 'MEMORY.md') });
+    expect(unrelatedV2Path.decision, 'a V2 read of another file is not the exact contract').toBe('deny');
     const unrelatedFile = await invoke('read', { filePath: join(root, 'MEMORY.md') });
     expect(unrelatedFile.decision).toBe('deny');
 

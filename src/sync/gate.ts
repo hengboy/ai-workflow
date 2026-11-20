@@ -61,12 +61,18 @@ function operationDirectory(input: ProjectGateInput): string {
   const cwd = resolve(input.cwd);
   if (input.event === 'PhaseEntry' || input.toolInput === null || typeof input.toolInput !== 'object' || Array.isArray(input.toolInput)) return cwd;
   const args = input.toolInput as Record<string, unknown>;
-  if ((input.toolName === 'Bash' || input.toolName === 'bash') && typeof args.workdir === 'string' && args.workdir !== '') return resolve(cwd, args.workdir);
+  if ((input.toolName === 'Bash' || input.toolName === 'bash' || input.toolName === 'shell') && typeof args.workdir === 'string' && args.workdir !== '') return resolve(cwd, args.workdir);
   if (input.toolName === 'Read' || input.toolName === 'read') {
-    const path = args.filePath ?? args.file_path;
+    const path = args.path ?? args.filePath ?? args.file_path;
     if (typeof path === 'string' && path !== '') return dirname(resolve(cwd, path));
   }
   return cwd;
+}
+
+/** The read tool's path argument: OpenCode 2.x names it `path`, older hosts `filePath`/`file_path`. */
+function readToolPath(args: Record<string, unknown>): string | undefined {
+  const path = args.path ?? args.filePath ?? args.file_path;
+  return typeof path === 'string' && path !== '' ? path : undefined;
 }
 
 function toolExemption(input: ProjectGateInput, projectRoot: string): ProjectGateResult['exemption'] {
@@ -74,10 +80,10 @@ function toolExemption(input: ProjectGateInput, projectRoot: string): ProjectGat
   if (input.toolInput === null || typeof input.toolInput !== 'object' || Array.isArray(input.toolInput)) return undefined;
   const args = input.toolInput as Record<string, unknown>;
   if (input.toolName === 'Read' || input.toolName === 'read') {
-    const path = args.filePath ?? args.file_path;
-    if (typeof path === 'string' && resolve(input.cwd, path) === join(projectRoot, '.ai-workflow/AGENTS.md')) return 'authority_read';
+    const path = readToolPath(args);
+    if (path !== undefined && resolve(input.cwd, path) === join(projectRoot, '.ai-workflow/AGENTS.md')) return 'authority_read';
   }
-  if ((input.toolName === 'Bash' || input.toolName === 'bash') && typeof args.command === 'string') {
+  if ((input.toolName === 'Bash' || input.toolName === 'bash' || input.toolName === 'shell') && typeof args.command === 'string') {
     const projectArguments = [doubleQuoted(projectRoot), `'${projectRoot.replace(/'/g, "'\\''")}'`];
     if (!/[\s"'\\`$;&|<>(){}*?]/.test(projectRoot) && !projectRoot.includes('[') && !projectRoot.includes(']')) projectArguments.push(projectRoot);
     const nativeExecutable = `${doubleQuoted(process.execPath)} ${doubleQuoted(packagePath('dist', 'cli.js'))}`;
