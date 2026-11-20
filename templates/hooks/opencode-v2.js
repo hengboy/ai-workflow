@@ -64,8 +64,11 @@ export default {
 
     async function lookup(id) {
       const session = await ctx.session.get({ sessionID: id });
-      if (!session || typeof session.directory !== 'string' || !session.directory) throw new Error(`Cannot resolve the actual OpenCode session directory: ${id}`);
-      return session;
+      // V2 carries the directory under `location`; the normalized result keeps every downstream
+      // `session.directory` read and the parent walk on one shape.
+      const directory = session?.location?.directory;
+      if (typeof directory !== 'string' || !directory) throw new Error(`Cannot resolve the actual OpenCode session directory: ${id}`);
+      return { id, parentID: session.parentID, directory };
     }
 
     async function synchronize(sessionID, event, toolName, toolInput) {
@@ -176,7 +179,7 @@ export default {
           authorityDigests.delete(event.data.sessionID);
           starts.delete(event.data.sessionID);
           notices.delete(event.data.sessionID);
-        } else if (event.type === 'session.error') {
+        } else if (event.type === 'session.execution.failed') {
           void recordSession('session.error', event.data.sessionID).catch(() => {});
         }
       }

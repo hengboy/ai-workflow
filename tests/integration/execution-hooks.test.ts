@@ -327,6 +327,9 @@ describe('OpenCode plugin execution-record wiring', () => {
     for (const type of ['session.created', 'session.deleted', 'session.error']) {
       expect(source, `${relativePath}: records ${type}`).toContain(type);
     }
+    if (relativePath === 'templates/hooks/opencode-v2.js') {
+      expect(source, `${relativePath}: records session.execution.failed`).toContain('session.execution.failed');
+    }
     const spawnLine = source.split('\n').find((line) => /spawn\(/.test(line) && /record/.test(line));
     expect(spawnLine, `${relativePath}: record transport spawns the CLI`).toBeDefined();
     expect(spawnLine, `${relativePath}: record spawn is fire-and-forget`).not.toMatch(/\bawait\b/);
