@@ -946,7 +946,7 @@ describe('opencode v2 plugin definition boundary', () => {
       session: {
         get: async ({ sessionID }: { sessionID: string }) => {
           const state = sessions.get(sessionID);
-          return state ? { id: sessionID, directory: state.directory, ...(state.parentID ? { parentID: state.parentID } : {}) } : null;
+          return state ? { id: sessionID, location: { directory: state.directory }, ...(state.parentID ? { parentID: state.parentID } : {}) } : null;
         },
         hook: async (name: string, callback: Function) => { registrations.set(`session.${name}`, callback); return { dispose: async () => {} }; },
       },
