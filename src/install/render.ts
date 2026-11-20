@@ -50,7 +50,8 @@ function opencodeV1PermissionRules(tools: string): string {
 function frontmatterFor(host: Host, source: string, opencodeVersion: OpencodeVersion): string {
   if (host === 'codex') return source;
   if (host === 'claude') return source.replace(/^tools: \[(.*)]$/m, 'allowed-tools: [$1]');
-  return source.replace(/^tools: \[(.*)]$/m, (_match, tools: string) => opencodeVersion === 'v1' ? opencodeV1PermissionRules(tools) : opencodePermissionRules(tools));
+  // OpenCode derives the agent id from the file name and no longer accepts the V1 `name` field.
+  return source.replace(/^name: .*\n/m, '').replace(/^tools: \[(.*)]$/m, (_match, tools: string) => opencodeVersion === 'v1' ? opencodeV1PermissionRules(tools) : opencodePermissionRules(tools));
 }
 
 function quoted(value: string): string { return JSON.stringify(value); }
