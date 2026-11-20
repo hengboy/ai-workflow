@@ -138,6 +138,45 @@ describe('opencode model variant rendering', () => {
   });
 });
 
+describe('host agent name frontmatter', () => {
+  // OpenCode derives the agent ID from the file name and ignores a V1 `name` field, logging
+  // `ignored unsupported agent fields ... fields=["name"]`. The installer must omit `name`
+  // from OpenCode frontmatter while keeping `description` and each native host's name field.
+  it('omits name from OpenCode v1 and v2 frontmatter while keeping description and native host names', async () => {
+    const profile: Profile = {
+      version: '1.0.0',
+      agents: {
+        backend: {
+          codex: { model: 'gpt-5.6', reasoning_effort: 'high' },
+          claude: { model: 'opus', reasoning_effort: 'max' }
+        }
+      }
+    };
+
+    for (const opencodeVersion of ['v1', 'v2'] as const) {
+      const files = await renderHost('opencode', profile, { opencodeVersion });
+      expect(files, opencodeVersion).toHaveLength(Object.keys(expectedActions).length);
+      for (const file of files) {
+        const head = frontmatter(file.contents);
+        expect(head, `${opencodeVersion}/${file.relativePath}`).not.toMatch(/^name:/m);
+        expect(head, `${opencodeVersion}/${file.relativePath}`).toMatch(/^description:/m);
+      }
+    }
+
+    const codex = await renderHost('codex', profile);
+    const codexBackend = codex.find((candidate) => candidate.relativePath === 'backend.toml');
+    expect(codexBackend, 'codex backend output').toBeDefined();
+    if (!codexBackend) throw new Error('Missing rendered codex backend');
+    expect(codexBackend.contents).toContain('name = "backend"');
+
+    const claude = await renderHost('claude', profile);
+    const claudeBackend = claude.find((candidate) => candidate.relativePath === 'backend.md');
+    expect(claudeBackend, 'claude backend output').toBeDefined();
+    if (!claudeBackend) throw new Error('Missing rendered claude backend');
+    expect(claudeBackend.contents).toMatch(/^name: backend$/m);
+  });
+});
+
 describe('role template packet handling (REQ-004)', () => {
   it('requires exact absolute paths and an explicit per-command workdir for every role', async () => {
     const root = packagePath('templates', 'agents');
