@@ -12,7 +12,7 @@ import { temporary } from '../helpers.js';
  * public deliverables a host actually consumes:
  *
  *   - the owned global entry block (`<!-- ai-workflow:begin -->` … `<!-- ai-workflow:end -->`)
- *     in `.config/opencode/AGENTS.md`, `.claude/CLAUDE.md`, `.codex/AGENTS.md`;
+ *     in `.config/opencode/AGENTS.md`, `.claude/CLAUDE.md`, `.codex/AGENTS.md`, `.gemini/AGENTS.md`;
  *   - the shared skills under `.agents/skills/<name>/SKILL.md` (+ `agents/openai.yaml`).
  *
  * Required semantics asserted here (ordering/decision contracts, not exact constants):
