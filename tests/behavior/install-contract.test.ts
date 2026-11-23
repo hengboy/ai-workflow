@@ -198,17 +198,20 @@ describe('user-level contract installation', () => {
 describe('host-accepting CLI surfaces', () => {
   it('AC-001 every host-accepting command accepts antigravity without an Invalid host rejection', async () => {
     const home = await temporary();
-    const surfaces: Array<{ name: string; args: string[]; input?: string }> = [
-      { name: 'install', args: ['install', '--host', 'antigravity', '--home', home] },
-      { name: 'uninstall', args: ['uninstall', '--host', 'antigravity', '--home', home] },
+    const surfaces: Array<{ name: string; args: string[]; input?: string; expectCode0?: boolean }> = [
+      { name: 'install', args: ['install', '--host', 'antigravity', '--home', home], expectCode0: true },
+      { name: 'uninstall', args: ['uninstall', '--host', 'antigravity', '--home', home], expectCode0: true },
       { name: 'sync-hook', args: ['sync-hook', '--host', 'antigravity'],
-        input: JSON.stringify({ hookEventName: 'SessionStart', conversationId: 'test', cwd: home }) },
+        input: JSON.stringify({ hookEventName: 'SessionStart', conversationId: 'test', cwd: home }), expectCode0: true },
       { name: 'doctor', args: ['doctor', '--host', 'antigravity', '--home', home, '--json'] },
       { name: 'host smoke', args: ['host', 'smoke', '--host', 'antigravity', '--home', home] },
     ];
     for (const surface of surfaces) {
       const result = await runCli(surface.args, surface.input);
       expect(result.output, `${surface.name} must not reject antigravity`).not.toContain('Invalid host: antigravity');
+      if (surface.expectCode0) {
+        expect(result.code, `${surface.name} must exit 0`).toBe(0);
+      }
     }
   });
 

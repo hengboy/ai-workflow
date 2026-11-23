@@ -3,6 +3,7 @@ import { readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { install, uninstall } from '../../src/install/index.js';
 import { renderHost } from '../../src/install/render.js';
+import type { Profile } from '../../src/profile/index.js';
 import { packagePath } from '../../src/utils/schema.js';
 import { temporary } from '../helpers.js';
 
@@ -81,6 +82,32 @@ describe('Antigravity role agent rendering', () => {
       for (const forbidden of ['invoke_subagent', 'define_subagent', 'manage_subagents']) {
         expect(file.contents, `${file.relativePath} contains ${forbidden}`).not.toContain(forbidden);
       }
+    }
+  });
+
+  it('omits the model key from rendered agents when the tier is inherit', async () => {
+    const profile: Profile = {
+      version: '1.0.0',
+      agents: { backend: { antigravity: { model: 'inherit' } } }
+    };
+    const files = await renderHost('antigravity', profile);
+    const backend = files.find((candidate) => candidate.relativePath === 'backend.md');
+    if (!backend) throw new Error('Missing rendered antigravity backend');
+    const { head } = splitFrontmatter(backend.contents);
+    expect(head, 'inherit tier must omit the model key').not.toMatch(/^model:/m);
+  });
+
+  it('renders explicit Antigravity model tiers in the frontmatter', async () => {
+    for (const tier of ['pro', 'flash_lite'] as const) {
+      const profile: Profile = {
+        version: '1.0.0',
+        agents: { backend: { antigravity: { model: tier } } }
+      };
+      const files = await renderHost('antigravity', profile);
+      const backend = files.find((candidate) => candidate.relativePath === 'backend.md');
+      if (!backend) throw new Error('Missing rendered antigravity backend');
+      const { head } = splitFrontmatter(backend.contents);
+      expect(head, `${tier} tier`).toMatch(new RegExp(`^model: "${tier}"$`, 'm'));
     }
   });
 });

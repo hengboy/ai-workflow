@@ -165,7 +165,6 @@ async function installSkillsManifest(home: string, manifest: InstallManifest, sk
   // A same-path entry we did not record, or one edited since, stays user-owned and is never adopted.
   if (owned.some((candidate) => !prior || !isDeepStrictEqual(candidate, prior.entry))) {
     skipped.push(relativePath);
-    if (Object.keys(records).length) manifest.skills_manifests = records; else delete manifest.skills_manifests;
     return;
   }
   const refreshed = owned.length ? entries.flatMap((candidate) => hasSkillsPath(candidate, entry.path) ? [entry] : [candidate]) : [...entries, entry];

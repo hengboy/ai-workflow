@@ -92,7 +92,7 @@ function antigravityAgent(source: string, model: string | undefined): string {
     `name: ${name}`,
     `description: ${description}`,
     `tools: [${tools.join(', ')}]`,
-    ...(model === undefined ? [] : [`model: ${quoted(model)}`]),
+    ...(model === undefined || model === 'inherit' ? [] : [`model: ${quoted(model)}`]),
     'subagent: true',
     'mainAgent: false'
   ];

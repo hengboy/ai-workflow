@@ -117,6 +117,11 @@ function manifestShapeError(parsed: unknown): string | undefined {
       if (!isRecord(record) || typeof record.path !== 'string' || !isRecord(record.entry) || typeof record.created !== 'boolean') {
         return `must record skills_manifests.${host} with path, an entry object and created`;
       }
+      const entry = record.entry;
+      if (typeof entry.path !== 'string' || entry.path.length === 0) return `must record skills_manifests.${host} (${record.path}) entry with a non-empty path`;
+      if (!Array.isArray(entry.include_only) || !entry.include_only.every((item) => typeof item === 'string')) {
+        return `must record skills_manifests.${host} (${record.path}) entry with an include_only array of strings`;
+      }
     }
   }
   if (parsed.sync_hooks !== undefined) {
