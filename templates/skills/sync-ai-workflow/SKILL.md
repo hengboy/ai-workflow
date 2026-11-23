@@ -57,12 +57,13 @@ Only `synchronized` with `verified: true` means the artifacts are current; warni
 
 ## Native gate protocol
 
-The `ai-workflow sync-hook` entry has two output shapes:
+The `ai-workflow sync-hook` entry has three output shapes:
 
 | Form | Output to follow |
 | --- | --- |
 | `--phase` on every host; OpenCode stdin gate | Raw gate JSON: top-level `decision` (`allow`, `deny`, `skip`), `project`, `context`, optional `authority_ref`, and `SyncReport` nested under `report` (absent for `skip` or an actor exemption). Read both `decision` and the nested `report` when present. |
 | Claude Code and Codex stdin gates | Host-native `systemMessage`; `hookSpecificOutput` with `hookEventName`, `additionalContext`, plus `permissionDecision`/`permissionDecisionReason` on a `PreToolUse` deny. A `UserPromptSubmit` block has top-level `decision: block` with `reason`. These gates never expose raw `allow`/`deny`/`skip`. |
+| Antigravity stdin gate | Consumes camelCase `hookEventName` (`SessionStart`, `PreInvocation`, `PreToolUse`), `conversationId`, `cwd` and optional `invocationNum` or `toolCall`. `allow` injects `injectSteps.systemMessage` on `SessionStart` and on `PreInvocation` only when `invocationNum` is omitted or `0`, and `{}` above that; `deny` returns `injectSteps.errorMessage` with `terminationBehavior: "terminate"` on `PreInvocation` and `{"decision":"deny","reason":...}` on `PreToolUse`; every permitted or skipped `PreToolUse` writes zero bytes rather than `{}` or `{"decision":"allow"}`, because `{}` reads as a denial and `{"decision":"allow"}` bypasses user permission prompts. This gate never exposes raw `allow`/`deny`/`skip`. |
 
 `authority_ref` is a path-and-digest notice with the absolute contract path, its `sha256:` digest and byte count; it is not a complete contract injection and not the contract body, so the gate does not replay the full contract and every role explicitly reads the contract before ordinary work.
 
@@ -72,5 +73,6 @@ Never run `sync-hook --host <host>` by hand without the host payload on stdin. E
 
 - Codex hooks require human review and trust; there is no trust bypass.
 - OpenCode needs a restart to load its plugin; an unloaded plugin is not active.
+- Antigravity reads one owned top-level `"ai-workflow-sync"` key in `~/.gemini/config/hooks.json`, holding `SessionStart`, `PreInvocation` and `PreToolUse`; the installer writes no `enabled` value, so `enabled: false` stays user-controlled and is reported `disabled` without being rewritten, and an unowned or hand-modified key is preserved and named instead of refreshed.
 - A disabled or untrusted hook, or a duplicate host-scoped skill, is not an active automatic updater and must be named rather than silently approved.
 - A host crash or timeout that fails open is an enforcement limitation, not a successful block.

@@ -240,7 +240,7 @@ export async function uninstallSynchronization(home: string, host: Host, records
       skipped.push(relativePath);
       return;
     }
-    delete config[record.key];
+    Reflect.deleteProperty(config, record.key);
     if (record.created && Object.keys(config).length === 0) await rm(path, { force: true });
     else await writeNamedConfig(path, config);
     Reflect.deleteProperty(records, host);
