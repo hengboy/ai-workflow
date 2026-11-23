@@ -1229,3 +1229,224 @@ describe.each([
   }, 90_000);
 });
 
+// --- Antigravity native sync-hook CLI protocol (AC-007) -----------------------------
+//
+// Antigravity's host entry invokes `ai-workflow sync-hook --host antigravity` with a native
+// camelCase JSON payload on stdin: hookEventName (SessionStart | PreInvocation | PreToolUse),
+// a required non-empty conversationId and cwd, optional invocationNum and optional toolCall.
+
+interface AntigravityOutput {
+  injectSteps?: Array<{
+    systemMessage?: { systemMessage?: string };
+    errorMessage?: { userMessage?: string };
+  }>;
+  terminationBehavior?: string;
+  decision?: string;
+  reason?: string;
+}
+
+interface AntigravityReplayState {
+  context: string;
+  decision: 'allow' | 'deny';
+  log: string;
+  expectedHeads: string[];
+}
+
+const SESSION_START_BLOCKING_NOTE = 'SessionStart supplies context only; the next project PreInvocation or PreToolUse will deny work while this blocking result remains current.';
+
+function antigravityPayload(
+  hookEventName: 'SessionStart' | 'PreInvocation' | 'PreToolUse',
+  cwd: string,
+  extra: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return { hookEventName, conversationId: 'antigravity-conversation-1', cwd, ...extra };
+}
+
+function parseAntigravityStdout(stdout: string): AntigravityOutput {
+  return JSON.parse(stdout) as AntigravityOutput;
+}
+
+async function primeAntigravity(project: string, env: NodeJS.ProcessEnv): Promise<HookGateResult> {
+  const phase = await runHook(['sync-hook', '--host', 'antigravity', '--phase', '--project', project], undefined, env);
+  expect(phase.code, phase.stderr).toBe(0);
+  return JSON.parse(phase.stdout) as HookGateResult;
+}
+
+/** Assert one native stdin replay produces exactly the Antigravity stdout for its state. */
+async function expectAntigravityReplay(
+  state: AntigravityReplayState,
+  payload: Record<string, unknown>,
+  env: NodeJS.ProcessEnv,
+): Promise<void> {
+  const result = await runHook(['sync-hook', '--host', 'antigravity'], payload, env);
+  expect(result.code, result.stderr).toBe(0);
+  const event = payload.hookEventName;
+
+  if (event === 'PreToolUse') {
+    if (state.decision === 'allow') {
+      // A PreToolUse allow must emit 0 bytes: never `{}` and never `{"decision":"allow"}`.
+      expect(result.stdout.length, 'allow PreToolUse must emit 0 bytes').toBe(0);
+    } else {
+      expect(parseAntigravityStdout(result.stdout)).toEqual({ decision: 'deny', reason: state.context });
+    }
+    expect(await observedHeads(state.log), 'PreToolUse must issue zero source requests').toEqual(state.expectedHeads);
+    return;
+  }
+
+  const output = parseAntigravityStdout(result.stdout);
+  if (state.decision === 'allow') {
+    if (event === 'SessionStart' || payload.invocationNum === undefined || payload.invocationNum === 0) {
+      expect(output).toEqual({ injectSteps: [{ systemMessage: { systemMessage: state.context } }] });
+    } else {
+      expect(output, 'invocationNum > 0 injects no steps').toEqual({});
+    }
+  } else if (event === 'SessionStart') {
+    expect(output).toEqual({
+      injectSteps: [{ systemMessage: { systemMessage: `${state.context}\n${SESSION_START_BLOCKING_NOTE}` } }],
+    });
+  } else {
+    expect(output).toEqual({
+      injectSteps: [{ errorMessage: { userMessage: state.context } }],
+      terminationBehavior: 'terminate',
+    });
+  }
+  expect(await observedHeads(state.log), `${event} must issue zero source requests`).toEqual(state.expectedHeads);
+}
+
+describe('antigravity sync-hook native protocol (AC-007)', () => {
+  it('AC-007: antigravity --phase --project prints the raw ProjectGateResult JSON with decision, project, context and optional report/authority_ref', async () => {
+    const project = await adoptedProject();
+    const git = await gitFixture(baseSourceFiles);
+    const fixture = await hookFixture();
+    const env = subprocessEnv({ ...fixture, head: A, log: fixture.log }, git);
+
+    const phase = await runHook(['sync-hook', '--host', 'antigravity', '--phase', '--project', project], undefined, env);
+    expect(phase.code, phase.stderr).toBe(0);
+    const raw = JSON.parse(phase.stdout) as HookGateResult & { authority?: unknown };
+    expect(raw.decision, 'a synchronized phase entry allows').toBe('allow');
+    expect(raw.project).toBe(project);
+    expect(typeof raw.context, 'the raw result carries a context string').toBe('string');
+    expect(raw.context.length).toBeGreaterThan(0);
+    expect(raw.report, 'a phase entry exposes the synchronization report').toBeDefined();
+    expect(raw.report?.status).toBe('synchronized');
+    await expectContractReference(raw, project);
+    expect('authority' in raw, 'the raw result must not embed the contract body').toBe(false);
+    expect(await observedHeads(fixture.log), 'only the phase entry queries the source').toEqual([A]);
+  });
+
+  it('AC-007: antigravity stdin replays a synchronized allow with exact native stdout and zero source requests', async () => {
+    const project = await adoptedProject();
+    const git = await gitFixture(baseSourceFiles);
+    const fixture = await hookFixture();
+    const env = subprocessEnv({ ...fixture, head: A, log: fixture.log }, git);
+    const primed = await primeAntigravity(project, env);
+    expect(primed.decision).toBe('allow');
+    const state: AntigravityReplayState = { context: primed.context, decision: 'allow', log: fixture.log, expectedHeads: [A] };
+
+    await expectAntigravityReplay(state, antigravityPayload('SessionStart', project), env);
+    await expectAntigravityReplay(state, antigravityPayload('PreInvocation', project), env);
+    await expectAntigravityReplay(state, antigravityPayload('PreInvocation', project, { invocationNum: 0 }), env);
+    await expectAntigravityReplay(state, antigravityPayload('PreInvocation', project, { invocationNum: 1 }), env);
+    await expectAntigravityReplay(state, antigravityPayload('PreToolUse', project, { toolCall: { id: 'c1', name: 'read_file', args: { Path: join(project, 'MEMORY.md') } } }), env);
+    expect(await observedHeads(fixture.log), 'native replay never queries the source').toEqual([A]);
+  });
+
+  it('AC-007: antigravity stdin replays a warning continuation with the same allow stdout and zero source requests', async () => {
+    const project = await adoptedProject();
+    const git = await gitFixture(baseSourceFiles, 'rate limited');
+    const fixture = await hookFixture();
+    const env = subprocessEnv({ ...fixture, head: A, log: fixture.log }, git);
+    const primed = await primeAntigravity(project, env);
+    expect(primed.decision).toBe('allow');
+    expect(primed.report?.status).toBe('unverified');
+    const state: AntigravityReplayState = { context: primed.context, decision: 'allow', log: fixture.log, expectedHeads: [A] };
+
+    await expectAntigravityReplay(state, antigravityPayload('SessionStart', project), env);
+    await expectAntigravityReplay(state, antigravityPayload('PreInvocation', project, { invocationNum: 0 }), env);
+    await expectAntigravityReplay(state, antigravityPayload('PreInvocation', project, { invocationNum: 1 }), env);
+    await expectAntigravityReplay(state, antigravityPayload('PreToolUse', project, { toolCall: { name: 'run_command', args: { CommandLine: 'ls' } } }), env);
+    expect(await observedHeads(fixture.log), 'native replay never queries the source').toEqual([A]);
+  });
+
+  it('AC-007: antigravity stdin without a stored check emits the no-check allow stdout and zero source requests', async () => {
+    const project = await adoptedProject();
+    const git = await gitFixture(baseSourceFiles);
+    const fixture = await hookFixture();
+    const env = subprocessEnv({ ...fixture, head: A, log: fixture.log }, git);
+
+    const sessionStart = await runHook(['sync-hook', '--host', 'antigravity'], antigravityPayload('SessionStart', project), env);
+    expect(sessionStart.code, sessionStart.stderr).toBe(0);
+    const output = parseAntigravityStdout(sessionStart.stdout);
+    expect(output.injectSteps).toHaveLength(1);
+    const context = output.injectSteps![0]!.systemMessage!.systemMessage!;
+    expect(context).toMatch(/no[\s\S]{0,80}(check|synchroni)/i);
+    const state: AntigravityReplayState = { context, decision: 'allow', log: fixture.log, expectedHeads: [] };
+
+    await expectAntigravityReplay(state, antigravityPayload('PreInvocation', project), env);
+    await expectAntigravityReplay(state, antigravityPayload('PreToolUse', project, { toolCall: { name: 'run_command', args: {} } }), env);
+    expect(await observedHeads(fixture.log), 'no-check stdin must not query the source').toEqual([]);
+  });
+
+  it('AC-007: antigravity stdin replays a stored conflict deny with the exact native denial shapes and SessionStart blocking note', async () => {
+    const project = await adoptedProject({ '.ai-workflow/AGENTS.md': legacyAgents });
+    const git = await gitFixture(baseSourceFiles);
+    const fixture = await hookFixture();
+    const env = subprocessEnv({ ...fixture, head: A, log: fixture.log }, git);
+    const primed = await primeAntigravity(project, env);
+    expect(primed.decision).toBe('deny');
+    expect(primed.report?.status).toBe('conflict');
+    const state: AntigravityReplayState = { context: primed.context, decision: 'deny', log: fixture.log, expectedHeads: [A] };
+
+    await expectAntigravityReplay(state, antigravityPayload('SessionStart', project), env);
+    await expectAntigravityReplay(state, antigravityPayload('PreInvocation', project), env);
+    await expectAntigravityReplay(state, antigravityPayload('PreInvocation', project, { invocationNum: 0 }), env);
+    await expectAntigravityReplay(state, antigravityPayload('PreInvocation', project, { invocationNum: 1 }), env);
+    await expectAntigravityReplay(state, antigravityPayload('PreToolUse', project, { toolCall: { id: 'c2', name: 'run_command', args: { CommandLine: `ls ${project}` } } }), env);
+    expect(await observedHeads(fixture.log), 'native replay never queries the source').toEqual([A]);
+  });
+
+  it('AC-007: antigravity stdin on an unadopted directory emits exact skip stdout with zero bytes for PreToolUse', async () => {
+    const unadopted = await temporary('ai-workflow-antigravity-unadopted-');
+    roots.push(unadopted);
+    const git = await gitFixture(baseSourceFiles);
+    const fixture = await hookFixture();
+    const env = subprocessEnv({ ...fixture, head: A, log: fixture.log }, git);
+
+    const sessionStart = await runHook(['sync-hook', '--host', 'antigravity'], antigravityPayload('SessionStart', unadopted), env);
+    expect(sessionStart.code, sessionStart.stderr).toBe(0);
+    expect(parseAntigravityStdout(sessionStart.stdout)).toEqual({});
+
+    const preInvocation = await runHook(['sync-hook', '--host', 'antigravity'], antigravityPayload('PreInvocation', unadopted, { invocationNum: 1 }), env);
+    expect(preInvocation.code, preInvocation.stderr).toBe(0);
+    expect(parseAntigravityStdout(preInvocation.stdout)).toEqual({});
+
+    const preToolUse = await runHook(['sync-hook', '--host', 'antigravity'], antigravityPayload('PreToolUse', unadopted, { toolCall: { name: 'run_command', args: {} } }), env);
+    expect(preToolUse.code, preToolUse.stderr).toBe(0);
+    expect(preToolUse.stdout.length, 'skip PreToolUse must emit 0 bytes').toBe(0);
+
+    expect(await observedHeads(fixture.log), 'skip must issue zero source requests').toEqual([]);
+  });
+
+  it('AC-007: antigravity stdin rejects malformed payloads with a nonzero exit without allowing', async () => {
+    const project = await adoptedProject();
+    const git = await gitFixture(baseSourceFiles);
+    const fixture = await hookFixture();
+    const env = subprocessEnv({ ...fixture, head: A, log: fixture.log }, git);
+    await primeAntigravity(project, env);
+
+    const malformed: Array<{ name: string; payload: Record<string, unknown> }> = [
+      { name: 'missing cwd', payload: { hookEventName: 'SessionStart', conversationId: 'c' } },
+      { name: 'empty cwd', payload: { hookEventName: 'SessionStart', conversationId: 'c', cwd: '' } },
+      { name: 'missing conversationId', payload: { hookEventName: 'SessionStart', cwd: project } },
+      { name: 'empty conversationId', payload: { hookEventName: 'SessionStart', conversationId: '', cwd: project } },
+      { name: 'unsupported hookEventName', payload: { hookEventName: 'UserPromptSubmit', conversationId: 'c', cwd: project } },
+    ];
+    for (const { name, payload } of malformed) {
+      const result = await runHook(['sync-hook', '--host', 'antigravity'], payload, env);
+      expect(result.code, `${name}: malformed stdin must exit nonzero`).not.toBe(0);
+      expect(result.stdout, `${name}: malformed stdin must never allow`).not.toMatch(/injectSteps|systemMessage|additionalContext|"decision":"allow"/);
+    }
+    expect(await observedHeads(fixture.log), 'malformed stdin must not query the source').toEqual([A]);
+  });
+});
+

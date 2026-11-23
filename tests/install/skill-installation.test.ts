@@ -37,6 +37,18 @@ async function filesUnder(root: string): Promise<string[]> {
   return files;
 }
 
+// All entries (including symlinks), so a skill copy or link under a host directory is visible.
+async function allEntries(root: string): Promise<Array<{ path: string; symlink: boolean }>> {
+  if (!(await exists(root))) return [];
+  const result: Array<{ path: string; symlink: boolean }> = [];
+  for (const entry of await readdir(root, { withFileTypes: true })) {
+    const path = join(root, entry.name);
+    result.push({ path, symlink: entry.isSymbolicLink() });
+    if (entry.isDirectory()) result.push(...await allEntries(path));
+  }
+  return result;
+}
+
 // Snapshot of every managed file plus the install manifest, excluding the user-owned configuration.
 async function managedTree(home: string): Promise<Map<string, string>> {
   const paths = await filesUnder(join(home, skillsRelative));
@@ -140,5 +152,24 @@ describe('installed skills and agents', () => {
       'switch-profile',
       'sync-ai-workflow',
     ]);
+  });
+
+  it('AC-003 antigravity single-sources skills from .agents/skills with no copy or symlink under .gemini', async () => {
+    const home = await temporary('ai-workflow-antigravity-skills-');
+    await install(['antigravity'], { home });
+
+    expect((await readdir(join(home, skillsRelative))).sort()).toEqual([
+      'coding',
+      'git-message',
+      'plan-to-tasks',
+      'planning',
+      'setup-ai-workflow',
+      'switch-profile',
+      'sync-ai-workflow',
+    ]);
+
+    const geminiEntries = await allEntries(join(home, '.gemini'));
+    expect(geminiEntries.some((entry) => entry.symlink), 'no symlink under .gemini').toBe(false);
+    expect(geminiEntries.some((entry) => /(^|\/)SKILL\.md$/.test(entry.path)), 'no SKILL.md under .gemini').toBe(false);
   });
 });

@@ -11,17 +11,17 @@ import { changedPaths, fakeHosts, snapshotTree, temporary, type FakeHostBehavior
 /**
  * CLI contract:
  *
- *   ai-workflow host smoke --host codex|claude|opencode|all [--home <path>] [--live] [--keep]
+ *   ai-workflow host smoke --host codex|claude|opencode|antigravity|all [--home <path>] [--live] [--keep]
  *
  * Prints JSON `{ matrix: [...], retained?: { home, fixture } }` with one matrix entry per
  * processed host and `status` PASS | UNVERIFIED | BLOCKED. A completed matrix exits 0 even
  * when entries are UNVERIFIED or BLOCKED. A real-HOME refusal, a non-empty `--home` and a
  * fixture/setup failure exit 1. `--keep` retains the temporary HOME and the external fixture
  * and reports both absolute paths. The test uses fake host executables only; no real
- * codex/claude/opencode, network, remote or real HOME is touched.
+ * codex/claude/opencode/agy, network, remote or real HOME is touched.
  */
 interface SmokeEntry {
-  host: 'codex' | 'claude' | 'opencode';
+  host: 'codex' | 'claude' | 'opencode' | 'antigravity';
   version: string;
   static_checks: unknown[];
   live: { attempted: boolean; exit_code?: number; marker_found?: boolean; elapsed_ms?: number };
@@ -89,7 +89,7 @@ describe('host smoke CLI', () => {
 
     expect(result.code, result.stderr).toBe(0);
     const report = parse(result);
-    expect(report.matrix.map((entry) => entry.host).sort()).toEqual(['claude', 'codex', 'opencode']);
+    expect(report.matrix.map((entry) => entry.host).sort()).toEqual(['antigravity', 'claude', 'codex', 'opencode']);
     for (const entry of report.matrix) {
       expect(entry.status, entry.reason).toBe('PASS');
       expect(entry.live.attempted).toBe(true);
@@ -99,7 +99,7 @@ describe('host smoke CLI', () => {
     }
     expect(report.retained).toBeUndefined();
     const names = (await hosts.calls()).map((call) => call.name);
-    expect(names).toEqual(expect.arrayContaining(['codex', 'claude', 'opencode']));
+    expect(names).toEqual(expect.arrayContaining(['agy', 'codex', 'claude', 'opencode']));
   });
 
   it('reports not_attempted and never PASS without --live', async () => {
@@ -113,7 +113,7 @@ describe('host smoke CLI', () => {
 
     expect(result.code, result.stderr).toBe(0);
     const report = parse(result);
-    expect(report.matrix).toHaveLength(3);
+    expect(report.matrix).toHaveLength(4);
     for (const entry of report.matrix) {
       nonPass(entry);
       expect(entry.live.attempted).toBe(false);
@@ -246,5 +246,49 @@ describe('host smoke CLI', () => {
     expect(parse(result).retained).toBeUndefined();
     expect(await exists(home)).toBe(false);
     expect(await readdir(home).catch(() => [])).toEqual([]);
+  });
+
+  it('runs an isolated agy dispatch for --host antigravity and reports PASS', async () => {
+    const hosts = await fake({ agy: { version: '3.1.4', mode: 'ok' } });
+    const tmpRoot = await temp('ai-workflow-smoke-cli-tmp-');
+
+    const result = await runCli(['host', 'smoke', '--host', 'antigravity', '--live'], {
+      PATH: hosts.path,
+      TMPDIR: tmpRoot,
+    });
+
+    expect(result.code, result.stderr).toBe(0);
+    const report = parse(result);
+    expect(report.matrix).toHaveLength(1);
+    const entry = report.matrix[0];
+    expect(entry).toBeDefined();
+    if (!entry) throw new Error('missing matrix entry');
+    expect(entry.host).toBe('antigravity');
+    expect(entry.version).toContain('3.1.4');
+    expect(entry.status, entry.reason).toBe('PASS');
+    expect(entry.live.attempted).toBe(true);
+    expect(entry.live.marker_found).toBe(true);
+    expect((await hosts.calls()).map((call) => call.name)).toContain('agy');
+  });
+
+  it('reports not_attempted for --host antigravity without --live', async () => {
+    const hosts = await fake();
+    const tmpRoot = await temp('ai-workflow-smoke-cli-tmp-');
+
+    const result = await runCli(['host', 'smoke', '--host', 'antigravity'], {
+      PATH: hosts.path,
+      TMPDIR: tmpRoot,
+    });
+
+    expect(result.code, result.stderr).toBe(0);
+    const report = parse(result);
+    expect(report.matrix).toHaveLength(1);
+    const entry = report.matrix[0];
+    expect(entry).toBeDefined();
+    if (!entry) throw new Error('missing matrix entry');
+    expect(entry.status).toBe('UNVERIFIED');
+    expect(entry.reason).toMatch(/not[ _]attempted/i);
+    expect(entry.live.attempted).toBe(false);
+    expect(await hosts.calls()).toEqual([]);
   });
 });

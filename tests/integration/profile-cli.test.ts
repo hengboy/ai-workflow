@@ -68,4 +68,39 @@ describe('profile CLI', () => {
     expect(config.version).toBe(1);
     expect(config.active_profile).toBe('team');
   });
+
+  it('AC-009 activates a profile for antigravity with a model tier and an ignored-effort warning', async () => {
+    const home = await temporary('ai-workflow-profile-cli-antigravity-');
+    const profileDirectory = join(home, '.config/ai-workflow/profiles');
+    await mkdir(profileDirectory, { recursive: true });
+    await writeFile(join(profileDirectory, 'grid.yaml'), [
+      'version: 1.0.0',
+      'agents:',
+      '  backend:',
+      '    antigravity: { model: pro, reasoning_effort: high }',
+      '',
+    ].join('\n'));
+    await exec('pnpm', ['exec', 'tsx', 'src/cli.ts', 'install', '--host', 'antigravity', '--home', home]);
+
+    const { stdout } = await exec('pnpm', ['exec', 'tsx', 'src/cli.ts', 'profile', 'activate', 'grid', '--home', home]);
+
+    const report = JSON.parse(stdout) as {
+      installations: Array<{
+        host: string;
+        agents_directory: string;
+        agents: Array<{ name: string; path: string; model?: string; reasoning_effort?: string }>;
+      }>;
+      warnings?: string[];
+    };
+    const antigravity = report.installations.find((item) => item.host === 'antigravity');
+    expect(antigravity).toMatchObject({ agents_directory: join(home, '.gemini/config/agents') });
+    const backend = antigravity?.agents.find((agent) => agent.name === 'backend');
+    expect(backend?.model).toBe('pro');
+    expect(backend?.reasoning_effort).toBeUndefined();
+    expect(report.warnings?.some((warning) => /antigravity/i.test(warning) && /reasoning_effort/i.test(warning))).toBe(true);
+
+    const agent = await readFile(join(home, '.gemini/config/agents/backend.md'), 'utf8');
+    expect(agent).toContain('model: "pro"');
+    expect(agent).not.toMatch(/^(?:reasoning_effort|effort|variant):/m);
+  });
 });

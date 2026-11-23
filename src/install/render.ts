@@ -31,6 +31,20 @@ const opencodeV1Actions: Record<string, string[]> = {
 
 const opencodeV1KeyOrder = ['read', 'edit', 'glob', 'grep', 'bash', 'webfetch', 'websearch'];
 
+// Antigravity native tools covering the template tool vocabulary. `shell` and `search` share the
+// command and task tools, and no dispatch tool appears because only the primary orchestrator dispatches.
+const antigravityActions: Record<string, string[]> = {
+  read: ['read_file'],
+  edit: ['edit_file', 'write_file'],
+  shell: ['run_command', 'manage_task'],
+  web: ['search_web'],
+  search: ['run_command', 'manage_task']
+};
+
+function antigravityTools(tools: unknown[]): string[] {
+  return [...new Set(tools.map((tool) => String(tool)).flatMap((tool) => antigravityActions[tool] ?? []))];
+}
+
 function opencodePermissionRules(tools: string): string {
   const rules = tools.split(',').map((tool) => tool.trim()).filter(Boolean).flatMap((tool) => opencodeActions[tool] ?? [tool])
     .map((action) => `  - action: ${action}\n    resource: "*"\n    effect: allow`);
@@ -66,6 +80,23 @@ function codexAgent(source: string, settings: { model: string; reasoning_effort:
     `developer_instructions = ${quoted(document.body.trim())}`,
     ''
   ].join('\n');
+}
+
+// Antigravity derives the agent id from the file name, so frontmatter declares only dispatch
+// flags, mapped tools and an optional model tier; a tier-inherit profile omits the model key.
+function antigravityAgent(source: string, model: string | undefined): string {
+  const document = parseMarkdown(source);
+  const name = textAttribute(document.attributes.name); const description = textAttribute(document.attributes.description);
+  const tools = Array.isArray(document.attributes.tools) ? antigravityTools(document.attributes.tools) : [];
+  const head = [
+    `name: ${name}`,
+    `description: ${description}`,
+    `tools: [${tools.join(', ')}]`,
+    ...(model === undefined ? [] : [`model: ${quoted(model)}`]),
+    'subagent: true',
+    'mainAgent: false'
+  ];
+  return `---\n${head.join('\n')}\n---\n${document.body}`;
 }
 
 function agentFrontmatterFor(host: Host, source: string, settings: { model: string; reasoning_effort: string } | undefined, opencodeVersion: OpencodeVersion): string {
@@ -107,7 +138,10 @@ export async function renderHost(host: Host, profile?: Profile, options?: Render
   for (const path of await markdownFiles(agentRoot)) {
     const name = basename(path, '.md'); const extension = host === 'codex' ? '.toml' : '.md';
     const source = await readFile(path, 'utf8');
-    const rendered = agentFrontmatterFor(host, source, profile?.agents[name]?.[host], opencodeVersion);
+    const entry = profile?.agents[name];
+    const rendered = host === 'antigravity'
+      ? antigravityAgent(source, entry?.antigravity?.model)
+      : agentFrontmatterFor(host, source, entry?.[host], opencodeVersion);
     agents.push({ relativePath: `${name}${extension}`, contents: rendered });
   }
   return agents;

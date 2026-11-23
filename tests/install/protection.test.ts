@@ -3,7 +3,8 @@ import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { install, uninstall, activateProfile, getActiveProfile } from '../../src/install/index.js';
 import { exists } from '../../src/utils/fs.js';
-import { temporary } from '../helpers.js';
+import { temporary, snapshotTree, changedPaths } from '../helpers.js';
+import type { Host } from '../../src/workflow/types.js';
 
 const fault = vi.hoisted(() => ({ suffix: '', after: false }));
 vi.mock('../../src/utils/fs.js', async (load) => {
@@ -98,5 +99,42 @@ describe('installation ownership and rollback', () => {
     expect(await exists(join(root, '.codex/agents/backend.toml'))).toBe(false);
     expect(await exists(join(root, '.claude/agents/backend.md'))).toBe(false);
     expect(await exists(join(root, '.config/opencode/agents/backend.md'))).toBe(false);
+  });
+});
+
+describe('Antigravity atomic rollback on native config publication failure', () => {
+  const antigravity = 'antigravity' as Host;
+  const skillsBytes = `${JSON.stringify({ entries: [{ path: '/user/skills' }], inherits: ['/user/base'] }, null, 2)}\n`;
+  const agentsBytes = '# User global contract prose\n\nIndependent bytes.\n';
+  const hooksBytes = `${JSON.stringify({ _otty: { scale: 1 } }, null, 2)}\n`;
+
+  async function seedAntigravityState(root: string): Promise<void> {
+    await mkdir(join(root, '.gemini/config'), { recursive: true });
+    await writeFile(join(root, '.gemini/config/skills.json'), skillsBytes);
+    await writeFile(join(root, '.gemini/AGENTS.md'), agentsBytes);
+    await writeFile(join(root, '.gemini/config/hooks.json'), hooksBytes);
+  }
+
+  it.each([
+    ['.gemini/config/skills.json', false],
+    ['.gemini/config/skills.json', true],
+    ['.gemini/config/hooks.json', false],
+    ['.gemini/config/hooks.json', true],
+  ])('AC-004 restores every pre-existing file byte-for-byte and leaves no new files when %s publication fails (after write: %s)', async (suffix, after) => {
+    const root = await home();
+    await seedAntigravityState(root);
+    const before = await snapshotTree(root);
+
+    fault.suffix = suffix;
+    fault.after = after;
+    await expect(install([antigravity], { home: root })).rejects.toThrow('injected publication failure');
+
+    expect(changedPaths(before, await snapshotTree(root))).toEqual([]);
+    expect(await readFile(join(root, '.gemini/config/skills.json'), 'utf8')).toBe(skillsBytes);
+    expect(await readFile(join(root, '.gemini/AGENTS.md'), 'utf8')).toBe(agentsBytes);
+    expect(await readFile(join(root, '.gemini/config/hooks.json'), 'utf8')).toBe(hooksBytes);
+    expect(await exists(join(root, '.config/ai-workflow/install-manifest.json'))).toBe(false);
+    expect(await exists(join(root, '.agents/skills'))).toBe(false);
+    expect(await exists(join(root, '.gemini/config/agents'))).toBe(false);
   });
 });

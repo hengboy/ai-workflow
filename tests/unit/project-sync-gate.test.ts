@@ -1179,3 +1179,70 @@ describe('project sync gate phase-entry execution notice (REQ-010 / AC-017)', ()
     expect(result.execution!.warnings.some((warning) => warning.includes(RECOVERY_PLAN_ID)), 'the warning names the corrupt plan').toBe(true);
   });
 });
+
+// Antigravity names the read tool `read_file` with a `Path` argument and the shell tool
+// `run_command` with a `CommandLine` argument. Its stored conflict deny must stay in force
+// while only the exact contract read and sync actor commands are exempted.
+describe('project sync gate Antigravity tool exemptions (AC-008)', () => {
+  it('AC-008: grants authority_read and sync_actor exemptions under a stored antigravity conflict without clearing the deny', async () => {
+    const root = await temporary('ai-workflow-gate-antigravity-exempt-');
+    const runtimeDirectory = await temporary('ai-workflow-gate-antigravity-exempt-runtime-');
+    roots.push(root, runtimeDirectory);
+    await writeAdoptedTarget(root, COMMIT, { '.ai-workflow/AGENTS.md': LEGACY_MARKER_AGENTS });
+    const fake = fakeGit({ commit: COMMIT, files: sourceFiles(COMMIT) });
+    const options = { runGit: fake.runGit, runtimeDirectory };
+    const invoke = (toolName: string, toolInput: unknown): Promise<ProjectGateResult> =>
+      runProjectGate(
+        { host: 'antigravity', event: 'PreToolUse', sessionId: 'antigravity-exempt-session', cwd: root, toolName, toolInput },
+        options,
+      );
+
+    const contractPath = join(root, '.ai-workflow/AGENTS.md');
+    const before = await snapshotTree(root);
+
+    // A phase entry stores the true conflict and denies ordinary tools for the antigravity host.
+    const primed = await runProjectGate(
+      { host: 'antigravity', event: 'PhaseEntry', sessionId: 'antigravity-exempt-session', cwd: root },
+      options,
+    );
+    expect(primed.decision).toBe('deny');
+    expect(primed.report?.status).toBe('conflict');
+    const gitAfterPrime = fake.invocationCount();
+    const cloneAfterPrime = fake.cloneCount();
+    const runtimeAfterPrime = await snapshotTree(runtimeDirectory);
+
+    // The exact contract read is an authority_read exemption.
+    const authorityRead = await invoke('read_file', { Path: contractPath });
+    expect(authorityRead.decision, 'the exact contract read must be exempted').toBe('allow');
+    expect(authorityRead.exemption, 'the contract read carries the authority_read exemption').toBe('authority_read');
+
+    // Both exact sync actor commands are sync_actor exemptions.
+    for (const command of [
+      `ai-workflow sync ${root}`,
+      `ai-workflow sync-hook --host antigravity --phase --project ${root}`,
+    ]) {
+      const actor = await invoke('run_command', { CommandLine: command });
+      expect(actor.decision, `actor: ${command}`).toBe('allow');
+      expect(actor.exemption, `actor exemption: ${command}`).toBe('sync_actor');
+    }
+
+    // Exemptions never clear the cached conflict: an ordinary command and an unrelated read stay denied.
+    const ordinaryCommand = await invoke('run_command', { CommandLine: `ls ${root}` });
+    expect(ordinaryCommand.decision, 'an ordinary run_command must stay denied').toBe('deny');
+    expect(ordinaryCommand.exemption, 'an ordinary run_command has no exemption').toBeUndefined();
+    const unrelatedRead = await invoke('read_file', { Path: join(root, 'MEMORY.md') });
+    expect(unrelatedRead.decision, 'an unrelated read_file must stay denied').toBe('deny');
+
+    // Lookalikes stay denied under the stored conflict.
+    const echoLookalike = await invoke('run_command', { CommandLine: `echo ai-workflow sync ${root}` });
+    expect(echoLookalike.decision, 'an echo lookalike is not the sync actor').toBe('deny');
+    const backupLookalike = await invoke('read_file', { Path: `${contractPath}.bak` });
+    expect(backupLookalike.decision, 'an AGENTS.md.bak read is not the exact contract').toBe('deny');
+
+    // Exemptions and replays issue no source request, do not rewrite the stored deny and do not touch the project.
+    expect(fake.cloneCount(), 'exemptions must not clone the source').toBe(cloneAfterPrime);
+    expect(fake.invocationCount(), 'exemptions must issue zero git invocations').toBe(gitAfterPrime);
+    expect(changedPaths(runtimeAfterPrime, await snapshotTree(runtimeDirectory)), 'the stored deny must stay unchanged').toEqual([]);
+    expect(changedPaths(before, await snapshotTree(root)), 'permitting a tool must not write the project').toEqual([]);
+  });
+});

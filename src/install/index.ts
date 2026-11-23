@@ -1,6 +1,7 @@
 import { homedir } from 'node:os';
 import { basename, dirname, extname, join, relative, resolve } from 'node:path';
 import { mkdir, readFile, rm, rmdir, stat, writeFile } from 'node:fs/promises';
+import { isDeepStrictEqual } from 'node:util';
 import { atomicWrite, exists, readJson, writeJson } from '../utils/fs.js';
 import { sha256 } from '../utils/hash.js';
 import { packagePath } from '../utils/schema.js';
@@ -21,7 +22,8 @@ import type { Host } from '../workflow/types.js';
 
 interface ManifestFile { path: string; digest: string; kind: 'file' | 'directory' }
 export interface ContractRecord { path: string; digest: string; created: boolean }
-interface InstallManifest { version: string; installed_at: string; skills?: ManifestFile[]; hosts: Partial<Record<Host, ManifestFile[]>>; contracts?: Partial<Record<Host, ContractRecord>>; sync_hooks?: SynchronizationRecords; synchronization?: SynchronizationDeployment[]; skipped?: string[] }
+export interface SkillsManifestRecord { path: string; entry: Record<string, unknown>; created: boolean }
+interface InstallManifest { version: string; installed_at: string; skills?: ManifestFile[]; hosts: Partial<Record<Host, ManifestFile[]>>; contracts?: Partial<Record<Host, ContractRecord>>; skills_manifests?: Partial<Record<Host, SkillsManifestRecord>>; sync_hooks?: SynchronizationRecords; synchronization?: SynchronizationDeployment[]; skipped?: string[] }
 export interface AgentInstallation {
   name: string;
   path: string;
@@ -44,9 +46,10 @@ const navigationJsonRelative = navigationJsonTarget;
 const navigationMarkdownRelative = navigationMarkdownTarget;
 const marketplaceRelative = '.agents/plugins/marketplace.json';
 const skillsRelative = '.agents/skills';
+const skillsManifestRelative = '.gemini/config/skills.json';
 const contractBegin = '<!-- ai-workflow:begin -->';
 const contractEnd = '<!-- ai-workflow:end -->';
-const globalInstructionRelative: Record<Host, string> = { opencode: '.config/opencode/AGENTS.md', claude: '.claude/CLAUDE.md', codex: '.codex/AGENTS.md' };
+const globalInstructionRelative: Record<Host, string> = { opencode: '.config/opencode/AGENTS.md', claude: '.claude/CLAUDE.md', codex: '.codex/AGENTS.md', antigravity: '.gemini/AGENTS.md' };
 async function templateFile(source: string): Promise<string> {
   return readFile(new URL(`../../${source}`, import.meta.url), 'utf8');
 }
@@ -57,6 +60,7 @@ function hasLevelOneTitle(contents: string): boolean { return /^#\s+\S/m.test(co
 function agentsRoot(home: string, host: Host): string {
   if (host === 'codex') return join(home, '.codex/agents');
   if (host === 'claude') return join(home, '.claude/agents');
+  if (host === 'antigravity') return join(home, '.gemini/config/agents');
   return join(home, '.config/opencode/agents');
 }
 function skillsRoot(home: string): string { return join(home, skillsRelative); }
@@ -120,6 +124,12 @@ async function removeStaleOwnedFiles(home: string, previous: ManifestFile[], cur
 
 function globalInstructionPath(home: string, host: Host): string { return join(home, globalInstructionRelative[host]); }
 
+// Antigravity owns a named entry in its own hook configuration and a shared skills manifest,
+// so both files are snapshotted for rollback alongside its global contract path.
+function deploymentPaths(home: string, host: Host): string[] {
+  return [globalInstructionPath(home, host), join(home, synchronizationPath(host)), ...(host === 'antigravity' ? [join(home, skillsManifestRelative)] : [])];
+}
+
 function countOccurrences(haystack: string, needle: string): number {
   let count = 0; let index = haystack.indexOf(needle);
   while (index !== -1) { count += 1; index = haystack.indexOf(needle, index + needle.length); }
@@ -135,6 +145,56 @@ function locateContractBlock(contents: string): ContractBlock | undefined {
 }
 function hasAnyContractMarker(contents: string): boolean { return contents.includes(contractBegin) || contents.includes(contractEnd); }
 function contractBlockText(template: string): string { return `${contractBegin}\n${template}${contractEnd}`; }
+
+async function installSkillsManifest(home: string, manifest: InstallManifest, skipped: string[], includeOnly: string[]): Promise<void> {
+  const path = join(home, skillsManifestRelative); const relativePath = relative(home, path);
+  const existed = await exists(path);
+  let config: Record<string, unknown> = {};
+  if (existed) {
+    const value: unknown = await readJson<unknown>(path);
+    if (value === null || typeof value !== 'object' || Array.isArray(value)) throw new Error(`Shared skills manifest must be an object: ${path}`);
+    config = value as Record<string, unknown>;
+  }
+  if (config.entries !== undefined && !Array.isArray(config.entries)) throw new Error(`Invalid shared skills entries: ${path}`);
+  const entries = (config.entries as unknown[] | undefined) ?? [];
+  const entry = { path: join(home, skillsRelative), include_only: includeOnly };
+  const records = manifest.skills_manifests ?? {};
+  const prior = records.antigravity;
+  const owned = entries.filter((candidate) => hasSkillsPath(candidate, entry.path));
+  // A same-path entry we did not record, or one edited since, stays user-owned and is never adopted.
+  if (owned.some((candidate) => !prior || !isDeepStrictEqual(candidate, prior.entry))) {
+    skipped.push(relativePath);
+    if (Object.keys(records).length) manifest.skills_manifests = records; else delete manifest.skills_manifests;
+    return;
+  }
+  const refreshed = owned.length ? entries.flatMap((candidate) => hasSkillsPath(candidate, entry.path) ? [entry] : [candidate]) : [...entries, entry];
+  if (!isDeepStrictEqual(refreshed, entries)) await atomicWrite(path, `${JSON.stringify({ ...config, entries: refreshed }, null, 2)}\n`);
+  records.antigravity = { path: relativePath, entry, created: prior?.created ?? !existed };
+  manifest.skills_manifests = records;
+}
+
+function hasSkillsPath(entry: unknown, path: string): boolean {
+  return entry !== null && typeof entry === 'object' && !Array.isArray(entry) && (entry as Record<string, unknown>).path === path;
+}
+
+async function uninstallSkillsManifest(home: string, manifest: InstallManifest, skipped: string[]): Promise<void> {
+  const records = manifest.skills_manifests; const record = records?.antigravity;
+  if (!records || !record) return;
+  const path = resolve(home, record.path);
+  if (!path.startsWith(`${home}/`)) throw new Error(`Unsafe manifest path: ${record.path}`);
+  if (!(await exists(path))) { Reflect.deleteProperty(records, 'antigravity'); return; }
+  const value: unknown = await readJson<unknown>(path);
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) throw new Error(`Shared skills manifest must be an object: ${path}`);
+  const config = value as Record<string, unknown>;
+  const entries = Array.isArray(config.entries) ? config.entries as unknown[] : [];
+  const retained = entries.filter((candidate) => !isDeepStrictEqual(candidate, record.entry));
+  if (retained.length === entries.length) { skipped.push(record.path); return; }
+  const remaining = { ...config, entries: retained };
+  // Only a file this installation created and left with nothing but the owned entry is removed.
+  if (record.created && Object.keys(remaining).length === 1 && retained.length === 0) await rm(path, { force: true });
+  else await atomicWrite(path, `${JSON.stringify(remaining, null, 2)}\n`);
+  Reflect.deleteProperty(records, 'antigravity');
+}
 
 async function installContracts(home: string, hosts: Host[], manifest: InstallManifest, skipped: string[]): Promise<void> {
   const template = await readFile(packagePath('templates', 'contract', 'AGENTS.md'), 'utf8');
@@ -199,6 +259,7 @@ async function installUnsafe(hosts: Host[], options: { home?: string; version?: 
     manifest.hosts[host] = owned;
   }
   await installContracts(home, hosts, manifest, skipped);
+  if (hosts.includes('antigravity')) await installSkillsManifest(home, manifest, skipped, skills.map((file) => file.relativePath.split('/')[0] ?? '').filter((name, index, list) => name !== '' && list.indexOf(name) === index).sort());
   const synchronization = await installSynchronization(home, hosts, manifest.sync_hooks ?? {}, preserveSyncSkill ? [`Existing shared synchronization skill is preserved: ${sharedSyncSkill}; resolve it explicitly before installing the shared safe skill.`] : [], opencodeVersion);
   manifest.sync_hooks = synchronization.records;
   manifest.synchronization = synchronization.reports;
@@ -211,7 +272,7 @@ export async function install(hosts: Host[], options: { home?: string; version?:
   const home = resolve(options.home ?? homedir());
   const snapshots = new Map<string, Buffer | undefined>();
   const newDirectories = new Set<string>();
-  for (const path of [join(home, manifestRelative), settingsConfigPath(home), ...hosts.flatMap((host) => [globalInstructionPath(home, host), join(home, synchronizationPath(host))])]) await snapshotInstallationPath(path, snapshots, newDirectories);
+  for (const path of [join(home, manifestRelative), settingsConfigPath(home), ...hosts.flatMap((host) => deploymentPaths(home, host))]) await snapshotInstallationPath(path, snapshots, newDirectories);
   try { return await installUnsafe(hosts, options, snapshots, newDirectories); } catch (error) {
     for (const [path, contents] of [...snapshots].reverse()) await restoreIfChanged(path, contents);
     for (const directory of [...newDirectories].sort((left, right) => right.length - left.length)) await removeEmptyDirectory(directory);
@@ -246,7 +307,7 @@ export async function activateProfile(name: string, options: { home?: string; ve
   // Validate the existing configuration before any mutation so an illegal active_profile aborts pre-write.
   await loadSettings(home);
    const manifest = await readManifest(home);
-   const hosts = ['codex', 'claude', 'opencode'] as Host[];
+   const hosts = ['codex', 'claude', 'opencode', 'antigravity'] as Host[];
    const reportedHosts = hosts.filter((host) => (manifest.hosts[host] ?? []).length > 0);
   for (const host of hosts) for (const file of manifest.hosts[host] ?? []) {
     const path = resolve(home, file.path);
@@ -288,6 +349,7 @@ export async function uninstall(hosts: Host[], options: { home?: string } = {}):
   const skipped: string[] = [];
   for (const host of hosts) {
     if (manifest.sync_hooks) await uninstallSynchronization(home, host, manifest.sync_hooks, skipped);
+    if (host === 'antigravity') await uninstallSkillsManifest(home, manifest, skipped);
     for (const file of manifest.hosts[host] ?? []) {
       const path = resolve(home, file.path); if (!path.startsWith(`${home}/`)) throw new Error(`Unsafe manifest path: ${file.path}`);
       if (file.path === marketplaceRelative) continue;
@@ -301,6 +363,7 @@ export async function uninstall(hosts: Host[], options: { home?: string } = {}):
     if (retained.length) manifest.hosts[host] = retained;
   }
   if (manifest.contracts && Object.keys(manifest.contracts).length === 0) delete manifest.contracts;
+  if (manifest.skills_manifests && Object.keys(manifest.skills_manifests).length === 0) delete manifest.skills_manifests;
   if (manifest.sync_hooks && Object.keys(manifest.sync_hooks).length === 0) delete manifest.sync_hooks;
   if (manifest.synchronization) {
     manifest.synchronization = manifest.synchronization.filter((entry) => !hosts.includes(entry.host));

@@ -288,7 +288,7 @@ describe('runHostSmoke', () => {
 
     const report = await runHostSmoke({ host: 'all', live: false, realHome, tmpRoot });
 
-    expect(report.matrix.map((entry: Entry) => entry.host).sort()).toEqual(['claude', 'codex', 'opencode']);
+    expect(report.matrix.map((entry: Entry) => entry.host).sort()).toEqual(['antigravity', 'claude', 'codex', 'opencode']);
     for (const entry of report.matrix) {
       nonPass(entry);
       expect(typeof entry.version).toBe('string');
@@ -306,5 +306,107 @@ describe('runHostSmoke', () => {
     const error = await rejection(runHostSmoke({ host: 'codex', realHome, tmpRoot: unusable }));
 
     expect(error).toBeInstanceOf(Error);
+  });
+
+  it('invokes agy --version and an isolated agy plan dispatch for antigravity', async () => {
+    const hosts = await fake({ agy: { version: '3.1.4', mode: 'ok' } });
+    const tmpRoot = await temp('ai-workflow-smoke-tmp-');
+    const realHome = await temp('ai-workflow-smoke-real-home-');
+
+    const report = await runHostSmoke({ host: 'antigravity', live: true, keep: true, realHome, tmpRoot });
+    const entry = only(report);
+
+    expect(entry.host).toBe('antigravity');
+    expect(entry.version, 'the observed version proves agy --version ran').toContain('3.1.4');
+    expect(entry.status, entry.reason).toBe('PASS');
+    expect(entry.live.attempted).toBe(true);
+    expect(entry.live.marker_found).toBe(true);
+    const dispatch = (await hosts.calls()).find((call) => call.name === 'agy' && call.args.includes('-p'));
+    expect(dispatch, 'an agy plan dispatch must be logged').toBeDefined();
+    expect(dispatch!.args).toContain('--mode');
+    expect(dispatch!.args).toContain('plan');
+    expect(dispatch!.args.some((arg) => /SMOKE_MARKER|Read the file/i.test(arg))).toBe(true);
+    expect(dispatch!.args).not.toContain('--version');
+    expect(dispatch!.cwd).toBe(report.retained?.fixture);
+    expect(dispatch!.HOME).toBe(report.retained?.home);
+  });
+
+  it('reports UNVERIFIED with not_attempted for antigravity without live', async () => {
+    await fake({ agy: { mode: 'ok' } });
+    const tmpRoot = await temp('ai-workflow-smoke-tmp-');
+    const realHome = await temp('ai-workflow-smoke-real-home-');
+
+    const entry = only(await runHostSmoke({ host: 'antigravity', live: false, realHome, tmpRoot }));
+
+    expect(entry.status).toBe('UNVERIFIED');
+    expect(entry.reason).toMatch(/not[ _]attempted/i);
+    expect(entry.live.attempted).toBe(false);
+    expect(entry.live.exit_code).toBeUndefined();
+    expect(entry.live.marker_found).not.toBe(true);
+  });
+
+  it('never reports PASS for antigravity when agy exits 0 without the marker', async () => {
+    await fake({ agy: { mode: 'nomarker' } });
+    const tmpRoot = await temp('ai-workflow-smoke-tmp-');
+    const realHome = await temp('ai-workflow-smoke-real-home-');
+
+    const entry = only(await runHostSmoke({ host: 'antigravity', live: true, realHome, tmpRoot }));
+
+    expect(entry.status).toBe('UNVERIFIED');
+    expect(entry.status).not.toBe('PASS');
+    expect(entry.live.exit_code).toBe(0);
+    expect(entry.live.marker_found).toBe(false);
+  });
+
+  it('reports a nonzero agy exit for antigravity without PASS', async () => {
+    await fake({ agy: { mode: 'fail', exitCode: 7, stderr: 'authentication required' } });
+    const tmpRoot = await temp('ai-workflow-smoke-tmp-');
+    const realHome = await temp('ai-workflow-smoke-real-home-');
+
+    const entry = only(await runHostSmoke({ host: 'antigravity', live: true, realHome, tmpRoot }));
+
+    nonPass(entry);
+    expect(entry.status).not.toBe('PASS');
+    expect(entry.live.exit_code).toBe(7);
+    expect(entry.reason).toMatch(/authentication/i);
+  });
+
+  it('reports a missing agy executable for antigravity without PASS', async () => {
+    const hosts = await fakeHosts();
+    roots.push(hosts.bin);
+    vi.stubEnv('PATH', hosts.minimalPath);
+    const tmpRoot = await temp('ai-workflow-smoke-tmp-');
+    const realHome = await temp('ai-workflow-smoke-real-home-');
+
+    const entry = only(await runHostSmoke({ host: 'antigravity', live: true, realHome, tmpRoot }));
+
+    nonPass(entry);
+    expect(entry.status).not.toBe('PASS');
+    expect(entry.reason).toMatch(/agy|not found|ENOENT|executable|unavailable|missing/i);
+  });
+
+  it('bounds a hanging agy dispatch for antigravity without PASS', async () => {
+    await fake({ agy: { mode: 'timeout' } });
+    const tmpRoot = await temp('ai-workflow-smoke-tmp-');
+    const realHome = await temp('ai-workflow-smoke-real-home-');
+
+    const entry = only(await runHostSmoke({ host: 'antigravity', live: true, timeoutMs: 200, realHome, tmpRoot }));
+
+    nonPass(entry);
+    expect(entry.status).not.toBe('PASS');
+    expect(entry.reason).toMatch(/timeout|timed out|killed|did not finish|deadline|exceed/i);
+  });
+
+  it('fails an antigravity live entry when agy mutates the fixture', async () => {
+    await fake({ agy: { mode: 'mutate' } });
+    const tmpRoot = await temp('ai-workflow-smoke-tmp-');
+    const realHome = await temp('ai-workflow-smoke-real-home-');
+
+    const entry = only(await runHostSmoke({ host: 'antigravity', live: true, realHome, tmpRoot }));
+
+    nonPass(entry);
+    expect(entry.status).not.toBe('PASS');
+    expect(entry.live.exit_code).toBe(0);
+    expect(entry.reason).toContain('mutation.txt');
   });
 });

@@ -20,18 +20,21 @@ interface HookGroup { hooks: Array<{ type: 'command'; command: string }> }
 interface HookRegistration { event: HookEvent; index: number; group: HookGroup }
 export type SynchronizationOwnership =
   | { kind: 'configuration'; path: string; entries: HookRegistration[] }
-  | { kind: 'plugin'; path: string; digest: string };
+  | { kind: 'plugin'; path: string; digest: string }
+  | { kind: 'named_hook'; path: string; key: string; spec: unknown; created: boolean };
 export type SynchronizationRecords = Partial<Record<Host, SynchronizationOwnership>>;
 
 const nativePaths: Record<Host, string> = {
   claude: '.claude/settings.json',
   codex: '.codex/hooks.json',
   opencode: '.config/opencode/plugins/ai-workflow-sync.js',
+  antigravity: '.gemini/config/hooks.json',
 };
 const shadowSkills: Record<Host, string[]> = {
   claude: ['.claude/skills/sync-ai-workflow/SKILL.md'],
   codex: ['.codex/skills/sync-ai-workflow/SKILL.md'],
   opencode: ['.config/opencode/skills/sync-ai-workflow/SKILL.md', '.config/opencode/skill/sync-ai-workflow/SKILL.md', '.claude/skills/sync-ai-workflow/SKILL.md'],
+  antigravity: ['.gemini/config/skills/sync-ai-workflow/SKILL.md', '.gemini/skills/sync-ai-workflow/SKILL.md', '.gemini/antigravity-cli/skills/sync-ai-workflow/SKILL.md'],
 };
 
 function withoutHostRecord(records: SynchronizationRecords, host: Host): SynchronizationRecords {
@@ -79,6 +82,35 @@ async function codexHooksDisabled(home: string): Promise<boolean> {
   return false;
 }
 
+const namedHookKey = 'ai-workflow-sync';
+
+// Publication goes through the shared atomic write so a rename fault is either recovered by
+// installation rollback or observed as a failure, like every other owned artifact.
+async function writeNamedConfig(path: string, value: unknown): Promise<void> {
+  await atomicWrite(path, `${JSON.stringify(value, null, 2)}\n`);
+}
+
+// The named hook mirrors the native events with one owned command per event; `enabled`
+// stays absent so Antigravity applies its own default instead of a value we cannot verify.
+function namedHookSpec(host: Host): Record<string, unknown> {
+  const command = hookCommand(host);
+  return {
+    SessionStart: [{ type: 'command', command }],
+    PreInvocation: [{ type: 'command', command }],
+    PreToolUse: [{ matcher: '*', hooks: [{ type: 'command', command }] }],
+  };
+}
+
+async function namedHookConfig(path: string): Promise<Record<string, unknown>> {
+  if (!(await exists(path))) return {};
+  const value: unknown = JSON.parse(await readFile(path, 'utf8'));
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) throw new Error(`Named hook configuration must be an object: ${path}`);
+  const config = value as Record<string, unknown>;
+  const named = config[namedHookKey];
+  if (named !== undefined && (named === null || typeof named !== 'object' || Array.isArray(named))) throw new Error(`Invalid named hook configuration: ${path}:${namedHookKey}`);
+  return config;
+}
+
 export async function installSynchronization(
   home: string,
   hosts: Host[],
@@ -103,6 +135,28 @@ export async function installSynchronization(
       warnings.push(`Existing host-scoped synchronization skill is preserved: ${skill}; resolve it if it shadows the shared safe skill.`);
     }
     let status: SynchronizationDeployment['status'] = host === 'claude' ? 'installed' : host === 'codex' ? 'trust_required' : 'restart_required';
+    if (host === 'antigravity') {
+      const existing = await exists(path);
+      const config = await namedHookConfig(path);
+      const disk = config[namedHookKey];
+      const spec = namedHookSpec(host);
+      const owned = prior?.kind === 'named_hook' && prior.path === relativePath && prior.key === namedHookKey ? prior : undefined;
+      if (disk !== undefined && typeof disk === 'object' && !Array.isArray(disk) && (disk as Record<string, unknown>).enabled === false) {
+        status = 'disabled';
+        warnings.push(`The named hook is disabled in ${relativePath}; the disabling configuration was not changed.`);
+      } else if (disk !== undefined && !(owned && isDeepStrictEqual(disk, owned.spec))) {
+        status = 'needs_attention';
+        warnings.push(`Unowned or modified named hook is preserved and was not refreshed: ${relativePath}:${namedHookKey}`);
+        skipped.push(relativePath);
+      } else {
+        status = 'installed';
+        warnings.push('Hooks are installed, but loading in an active Antigravity session has not been verified.');
+        if (!isDeepStrictEqual(disk, spec)) await writeNamedConfig(path, { ...config, [namedHookKey]: spec });
+        records[host] = { kind: 'named_hook', path: relativePath, key: namedHookKey, spec, created: owned ? owned.created : !existing };
+      }
+      reports.push({ host, status, active: false, warnings });
+      continue;
+    }
     if (host === 'opencode') {
       warnings.push('Quit and restart OpenCode to load the installed plugin; installation does not prove it is active.');
       const disk = await exists(path) ? await readFile(path) : undefined;
@@ -179,6 +233,19 @@ export async function uninstallSynchronization(home: string, host: Host, records
   if (record.path !== relativePath) throw new Error(`Unexpected native synchronization ownership path: ${record.path}`);
   const path = join(home, relativePath);
   if (!(await exists(path))) { Reflect.deleteProperty(records, host); return; }
+  if (record.kind === 'named_hook') {
+    const config = await namedHookConfig(path);
+    const disk = config[record.key];
+    if (!isDeepStrictEqual(disk, record.spec)) {
+      skipped.push(relativePath);
+      return;
+    }
+    delete config[record.key];
+    if (record.created && Object.keys(config).length === 0) await rm(path, { force: true });
+    else await writeNamedConfig(path, config);
+    Reflect.deleteProperty(records, host);
+    return;
+  }
   if (record.kind === 'plugin') {
     if (sha256(await readFile(path)) !== record.digest) { skipped.push(relativePath); return; }
     await rm(path);

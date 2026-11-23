@@ -6,7 +6,7 @@ import { promisify } from 'node:util';
 import { initializeProject, install } from '../../src/install/index.js';
 import type { SyncReport } from '../../src/sync/index.js';
 import type { Host } from '../../src/workflow/types.js';
-import { changedPaths, frozenPlan, snapshotTree, temporary } from '../helpers.js';
+import { changedPaths, fakeHosts, frozenPlan, snapshotTree, temporary } from '../helpers.js';
 
 /**
  * CLI boundary for `ai-workflow doctor`:
@@ -25,13 +25,14 @@ const cli = ['exec', 'tsx', 'src/cli.ts'] as const;
 
 type CliResult = { code: number; stdout: string; stderr: string };
 
-async function runCli(args: string[], options: { tempDirectory?: string } = {}): Promise<CliResult> {
+async function runCli(args: string[], options: { tempDirectory?: string; path?: string } = {}): Promise<CliResult> {
   try {
     const { stdout, stderr } = await exec('pnpm', [...cli, ...args], {
       maxBuffer: 10 * 1024 * 1024,
       env: {
         ...process.env,
         ...(options.tempDirectory === undefined ? {} : { TMPDIR: options.tempDirectory }),
+        ...(options.path === undefined ? {} : { PATH: options.path }),
       },
     });
     return { code: 0, stdout, stderr };
@@ -308,5 +309,24 @@ describe('doctor CLI', () => {
     expect(planned.checks.some((check) => /plan/i.test(`${check.id} ${check.detail}`))).toBe(true);
     expect(after.code).toBe(0);
     expect(after.stdout).toBe(before.stdout);
+  });
+
+  it('exits for --host antigravity without a fail from its readiness check', async () => {
+    const project = await healthyProject();
+    const home = await installedHome(['antigravity' as Host]);
+    const tempDirectory = await isolatedTmp();
+    await writeStoredCheck(tempDirectory, project, 'antigravity' as Host);
+    const hosts = await fakeHosts({ agy: { version: '2.5.1' } });
+    temporaries.push(hosts.bin);
+
+    const result = await runCli(['doctor', '--project', project, '--home', home, '--host', 'antigravity', '--json'], { tempDirectory, path: hosts.path });
+
+    expect(result.code === 0 || result.code === 2, result.stderr).toBe(true);
+    const report = parseReport(result);
+    const readiness = report.checks.find((item) => item.id === 'host.readiness.antigravity');
+    expect(readiness, 'an agy readiness check must be reported').toBeDefined();
+    expect(readiness!.status).toBe('warn');
+    expect(report.checks.some((item) => item.id === 'host.readiness.antigravity' && item.status === 'fail')).toBe(false);
+    expect(report.checks.some((item) => item.status === 'fail')).toBe(false);
   });
 });

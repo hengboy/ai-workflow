@@ -405,4 +405,79 @@ describe('read-only doctor aggregate', () => {
     expect(withWorkspace.checks.every((check) => check.status === 'pass')).toBe(true);
     expect(withWorkspace.checks.some((check) => /workspace/i.test(`${check.id} ${check.detail}`))).toBe(true);
   });
+
+  it('accepts antigravity, discovers it from the install manifest and checks its stored gate and readiness', async () => {
+    const { project, home, runtime } = await healthyFixture(['antigravity' as Host]);
+    const bin = await temporary('ai-workflow-doctor-agy-bin-');
+    temporaries.push(bin);
+    const fakeAgy = join(bin, 'agy');
+    await writeFile(fakeAgy, '#!/bin/sh\necho 2.5.1\n');
+    await chmod(fakeAgy, 0o755);
+    vi.stubEnv('PATH', `${bin}:${process.env.PATH ?? ''}`);
+
+    const report = await runDoctor({ project, home, host: 'antigravity' as Host, runtimeDirectory: runtime });
+    const ids = report.checks.map((item) => item.id);
+
+    expect(ids).toContain('sync.stored.antigravity');
+    expect(ids).toContain('host.readiness.antigravity');
+    expect(report.checks.find((item) => item.id === 'sync.stored.antigravity')!.status).toBe('pass');
+    expect(report.checks.some((item) => /antigravity/i.test(`${item.id} ${item.detail}`))).toBe(true);
+  });
+
+  it('warns for host.readiness.antigravity with the observed version and no authentication or trust claim', async () => {
+    const { project, home, runtime } = await healthyFixture(['antigravity' as Host]);
+    const bin = await temporary('ai-workflow-doctor-agy-version-bin-');
+    temporaries.push(bin);
+    const fakeAgy = join(bin, 'agy');
+    await writeFile(fakeAgy, '#!/bin/sh\necho 2.5.1\n');
+    await chmod(fakeAgy, 0o755);
+    vi.stubEnv('PATH', `${bin}:${process.env.PATH ?? ''}`);
+
+    const report = await runDoctor({ project, home, host: 'antigravity' as Host, runtimeDirectory: runtime });
+    const check = report.checks.find((item) => item.id === 'host.readiness.antigravity');
+
+    expect(check, 'an agy-host readiness check must be reported').toBeDefined();
+    expect(check!.status).toBe('warn');
+    expect(check!.detail).toContain('2.5.1');
+    expect(check!.detail).toMatch(/auth|trust/i);
+    expect(report.valid, 'an agy warning must not fail doctor').toBe(true);
+    expect(report.checks.some((item) => item.status === 'fail')).toBe(false);
+  });
+
+  it('warns for host.readiness.antigravity with a recovery command when agy is unavailable', async () => {
+    const { project, home, runtime } = await healthyFixture(['antigravity' as Host]);
+    const emptyBin = await temporary('ai-workflow-doctor-agy-empty-bin-');
+    temporaries.push(emptyBin);
+    vi.stubEnv('PATH', emptyBin);
+
+    const report = await runDoctor({ project, home, host: 'antigravity' as Host, runtimeDirectory: runtime });
+    const check = report.checks.find((item) => item.id === 'host.readiness.antigravity');
+
+    expect(check, 'a missing agy executable must be a warning').toBeDefined();
+    expect(check!.status).toBe('warn');
+    expect(check!.detail).toMatch(/unavailable|not found|ENOENT|error/i);
+    expectRecovery(check!);
+    expect(report.valid, 'a missing agy must not fail doctor').toBe(true);
+    expect(report.checks.some((item) => item.status === 'fail')).toBe(false);
+  });
+
+  it('warns for host.readiness.antigravity with a recovery command when agy --version fails', async () => {
+    const { project, home, runtime } = await healthyFixture(['antigravity' as Host]);
+    const bin = await temporary('ai-workflow-doctor-agy-fail-bin-');
+    temporaries.push(bin);
+    const fakeAgy = join(bin, 'agy');
+    await writeFile(fakeAgy, '#!/bin/sh\necho "agy not authenticated" >&2\nexit 3\n');
+    await chmod(fakeAgy, 0o755);
+    vi.stubEnv('PATH', `${bin}:${process.env.PATH ?? ''}`);
+
+    const report = await runDoctor({ project, home, host: 'antigravity' as Host, runtimeDirectory: runtime });
+    const check = report.checks.find((item) => item.id === 'host.readiness.antigravity');
+
+    expect(check, 'a failing agy --version must be a warning').toBeDefined();
+    expect(check!.status).toBe('warn');
+    expect(check!.detail).toMatch(/not authenticated|unavailable|error|3/i);
+    expectRecovery(check!);
+    expect(report.valid, 'a failing agy must not fail doctor').toBe(true);
+    expect(report.checks.some((item) => item.status === 'fail')).toBe(false);
+  });
 });

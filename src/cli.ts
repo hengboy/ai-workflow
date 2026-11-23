@@ -42,7 +42,7 @@ import {
   taskExecutionCommand,
 } from './execution/commands.js';
 
-const hosts = ['codex', 'claude', 'opencode'] as const;
+const hosts = ['codex', 'claude', 'opencode', 'antigravity'] as const;
 function hostList(value: string): Host[] { if (value === 'all') return [...hosts]; if (!hosts.includes(value as Host)) throw new Error(`Invalid host: ${value}`); return [value as Host]; }
 function smokeHost(value: string): HostSmokeHost { if (value === 'all') return 'all'; if (!hosts.includes(value as Host)) throw new Error(`Invalid host: ${value}`); return value as Host; }
 async function jsonFile<T>(path: string): Promise<T> { return JSON.parse(await readFile(resolve(path), 'utf8')) as T; }
@@ -134,7 +134,7 @@ program.command('sync-hook').requiredOption('--host <host>').option('--phase', '
 });
 program.command('doctor')
   .option('--project <root>', 'project root directory path; use . or an absolute path', process.cwd())
-  .option('--host <host>', 'limit host checks to one host')
+  .option('--host <host>', 'limit host checks to one host: codex, claude, opencode, antigravity')
   .option('--plan <directory>', 'plan directory to validate')
   .option('--home <path>', 'installation root; defaults to the current user home')
   .option('--json', 'print the complete report structure')
@@ -159,7 +159,7 @@ program.command('doctor')
   });
 const host = program.command('host');
 host.command('smoke')
-  .requiredOption('--host <host>', 'host to exercise: codex, claude, opencode or all')
+  .requiredOption('--host <host>', 'host to exercise: codex, claude, opencode, antigravity or all')
   .option('--home <path>', 'absent or empty installation HOME instead of a temporary one')
   .option('--live', 'attempt one non-interactive read-only host dispatch')
   .option('--keep', 'retain the temporary HOME and the external fixture')

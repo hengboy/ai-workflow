@@ -24,7 +24,17 @@
       "properties": {
         "codex": { "$ref": "#/definitions/model" },
         "claude": { "$ref": "#/definitions/model" },
-        "opencode": { "$ref": "#/definitions/model" }
+        "opencode": { "$ref": "#/definitions/model" },
+        "antigravity": { "$ref": "#/definitions/antigravity_model" }
+      }
+    },
+    "antigravity_model": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["model"],
+      "properties": {
+        "model": { "enum": ["inherit", "flash_lite", "flash", "pro"] },
+        "reasoning_effort": { "enum": ["low", "medium", "high", "xhigh", "max", "ultra"] }
       }
     },
     "model": {
