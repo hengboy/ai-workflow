@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { mkdir, readdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, realpath, rm, writeFile } from 'node:fs/promises';
 import { isAbsolute, join, relative } from 'node:path';
 import { runHostSmoke } from '../../src/host/smoke.js';
 import { exists } from '../../src/utils/fs.js';
@@ -327,7 +327,7 @@ describe('runHostSmoke', () => {
     expect(dispatch!.args).toContain('plan');
     expect(dispatch!.args.some((arg) => /SMOKE_MARKER|Read the file/i.test(arg))).toBe(true);
     expect(dispatch!.args).not.toContain('--version');
-    expect(dispatch!.cwd).toBe(report.retained?.fixture);
+    expect(await realpath(dispatch!.cwd)).toBe(await realpath(report.retained!.fixture!));
     expect(dispatch!.HOME).toBe(report.retained?.home);
   });
 

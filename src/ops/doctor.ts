@@ -27,7 +27,8 @@ export interface DoctorReport {
   checks: InstallationCheck[];
 }
 
-const hosts: Host[] = ['codex', 'claude', 'opencode'];
+const hosts: Host[] = ['codex', 'claude', 'opencode', 'antigravity'];
+const executables: Partial<Record<Host, string>> = { antigravity: 'agy' };
 const manifestRelative = '.config/ai-workflow/install-manifest.json';
 const execFileAsync = promisify(execFile);
 
@@ -57,14 +58,16 @@ async function recordedHosts(home: string): Promise<Host[]> {
   }
 }
 
+// The probe never proves authentication or trust, so a reachable executable still reports a warning.
 async function hostReadiness(host: Host, home: string): Promise<InstallationCheck> {
+  const executable = executables[host] ?? host;
   const recovery = `ai-workflow install --host ${host} --home "${home}"`;
   try {
-    const { stdout } = await execFileAsync(host, ['--version'], { timeout: 5000 });
+    const { stdout } = await execFileAsync(executable, ['--version'], { timeout: 5000 });
     const version = stdout.trim().split(/\r?\n/)[0] ?? '';
-    return check(`host.readiness.${host}`, 'warn', `Host ${host} executable reported ${version || 'no version'}; authentication and trust are not verified.`, recovery);
+    return check(`host.readiness.${host}`, 'warn', `Host ${host} executable ${executable} reported ${version || 'no version'}; authentication and trust are not verified.`, recovery);
   } catch (error) {
-    return check(`host.readiness.${host}`, 'warn', `Host ${host} executable or authentication is unavailable; trust is not verified: ${errorMessage(error)}`, recovery);
+    return check(`host.readiness.${host}`, 'warn', `Host ${host} executable ${executable} or authentication is unavailable; trust is not verified: ${errorMessage(error)}`, recovery);
   }
 }
 
