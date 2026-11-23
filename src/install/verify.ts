@@ -21,19 +21,22 @@ export interface InstallationReport {
 
 interface ManifestFile { path: string; digest: string; kind: 'file' | 'directory' }
 interface ContractRecord { path: string; digest: string; created: boolean }
+interface SkillsManifestRecord { path: string; entry: Record<string, unknown>; created: boolean }
 interface HookGroup { hooks: Array<{ type: 'command'; command: string }> }
 interface HookRegistration { event: string; index: number; group: HookGroup }
 type SynchronizationOwnership =
   | { kind: 'configuration'; path: string; entries: HookRegistration[] }
-  | { kind: 'plugin'; path: string; digest: string };
+  | { kind: 'plugin'; path: string; digest: string }
+  | { kind: 'named_hook'; path: string; key: string; spec: unknown; created: boolean };
 interface InstallManifest {
   skills?: ManifestFile[];
   hosts: Partial<Record<Host, ManifestFile[]>>;
   contracts?: Partial<Record<Host, ContractRecord>>;
+  skills_manifests?: Partial<Record<Host, SkillsManifestRecord>>;
   sync_hooks?: Partial<Record<Host, SynchronizationOwnership>>;
 }
 
-const hosts: Host[] = ['codex', 'claude', 'opencode'];
+const hosts: Host[] = ['codex', 'claude', 'opencode', 'antigravity'];
 const manifestRelative = '.config/ai-workflow/install-manifest.json';
 const sharedSkillsRelative = '.agents/skills';
 const contractBegin = '<!-- ai-workflow:begin -->';
@@ -42,6 +45,7 @@ const hostSkillsLinks: Partial<Record<Host, string>> = {
   claude: '.claude/skills',
   codex: '.codex/skills',
   opencode: '.config/opencode/skills',
+  antigravity: '.gemini/config/skills',
 };
 
 function check(id: string, status: InstallationCheckStatus, detail: string, recovery?: string): InstallationCheck {
@@ -107,6 +111,19 @@ function manifestShapeError(parsed: unknown): string | undefined {
       if (!isRecord(contract) || typeof contract.path !== 'string' || typeof contract.digest !== 'string') return `must record contract ${host} with path and digest`;
     }
   }
+  if (parsed.skills_manifests !== undefined) {
+    if (!isRecord(parsed.skills_manifests)) return 'must record "skills_manifests" as an object';
+    for (const [host, record] of Object.entries(parsed.skills_manifests)) {
+      if (!isRecord(record) || typeof record.path !== 'string' || !isRecord(record.entry) || typeof record.created !== 'boolean') {
+        return `must record skills_manifests.${host} with path, an entry object and created`;
+      }
+      const entry = record.entry;
+      if (typeof entry.path !== 'string' || entry.path.length === 0) return `must record skills_manifests.${host} (${record.path}) entry with a non-empty path`;
+      if (!Array.isArray(entry.include_only) || !entry.include_only.every((item) => typeof item === 'string')) {
+        return `must record skills_manifests.${host} (${record.path}) entry with an include_only array of strings`;
+      }
+    }
+  }
   if (parsed.sync_hooks !== undefined) {
     if (!isRecord(parsed.sync_hooks)) return 'must record "sync_hooks" as an object';
     for (const [host, record] of Object.entries(parsed.sync_hooks)) {
@@ -125,6 +142,10 @@ function manifestShapeError(parsed: unknown): string | undefined {
             }
           }
         }
+      } else if (record.kind === 'named_hook') {
+        if (typeof record.key !== 'string' || record.key.length === 0) return `must record sync_hooks.${host} (${record.path}) with a hook key`;
+        if (!isRecord(record.spec)) return `must record sync_hooks.${host} (${record.path}) with a named hook spec object`;
+        if (typeof record.created !== 'boolean') return `must record sync_hooks.${host} (${record.path}) with created`;
       } else {
         return `must record sync_hooks.${host} (${record.path}) with a supported kind`;
       }
@@ -251,6 +272,17 @@ async function verifySynchronization(
     checks.push(check(id, 'fail', `Owned hook configuration is unreadable: ${record.path} (${path}): ${error instanceof Error ? error.message : String(error)}`, recovery));
     return;
   }
+  if (record.kind === 'named_hook') {
+    const disk = config[record.key];
+    if (isRecord(disk) && disk.enabled === false) {
+      checks.push(check(id, 'warn', `Named hook "${record.key}" is disabled by user configuration in ${record.path} (${path}); the disabling configuration was not changed.`, recovery));
+    } else {
+      checks.push(isDeepStrictEqual(disk, record.spec)
+        ? check(id, 'pass', `Named hook "${record.key}" registration matches its recorded spec: ${record.path} (${path}).`)
+        : check(id, 'fail', `Named hook "${record.key}" registration is missing or changed in ${record.path} (${path}).`, recovery));
+    }
+    return;
+  }
   const disabled = host === 'claude'
     ? config.disableAllHooks === true
     : host === 'codex' && (await codexHooksDisabled(home)).disabled;
@@ -270,6 +302,43 @@ async function verifySynchronization(
       checks.push(check(entryId, 'fail', `Hook registration ${entry.event} is missing or changed in ${record.path} (${path}).`, recovery));
     }
   }
+}
+
+async function verifySkillsManifest(
+  home: string,
+  host: Host,
+  record: SkillsManifestRecord,
+  checks: InstallationCheck[],
+  recovery: string,
+): Promise<void> {
+  const id = `install.skills-manifest.${host}`;
+  const path = resolve(home, record.path);
+  const entriesPath = typeof record.entry.path === 'string' ? record.entry.path : '';
+  const includeOnly = Array.isArray(record.entry.include_only) ? record.entry.include_only.join(', ') : '';
+  let entries: unknown[];
+  try {
+    const parsed: unknown = JSON.parse(await readFile(path, 'utf8'));
+    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('must be a JSON object');
+    const candidate = (parsed as { entries?: unknown }).entries;
+    if (!Array.isArray(candidate)) throw new Error('must record an "entries" array');
+    entries = candidate;
+  } catch (error) {
+    checks.push(check(id, 'fail', `Owned skills manifest is unreadable: ${record.path} (${path}): ${error instanceof Error ? error.message : String(error)}`, recovery));
+    return;
+  }
+  if (!entries.some((candidate) => isDeepStrictEqual(candidate, record.entry))) {
+    checks.push(check(id, 'fail', `Owned skills entry for ${entriesPath} with include_only [${includeOnly}] is missing or changed in ${record.path} (${path}).`, recovery));
+    return;
+  }
+  let directory = false;
+  try {
+    directory = (await stat(resolve(home, entriesPath))).isDirectory();
+  } catch {
+    directory = false;
+  }
+  checks.push(directory
+    ? check(id, 'pass', `Owned skills entry is present with include_only [${includeOnly}]: ${record.path} (${path}) points at ${entriesPath}.`)
+    : check(id, 'fail', `Owned skills entry path is missing: ${entriesPath}; recorded in ${record.path} (${path}).`, recovery));
 }
 
 async function verifySkillsLink(home: string, host: Host, checks: InstallationCheck[]): Promise<void> {
@@ -323,19 +392,25 @@ export async function verifyInstallation(home: string, targetHosts?: Host[]): Pr
 
   for (const file of manifest.skills ?? []) await verifyFile(root, file, checks, recovery);
 
-  const recorded = hosts.filter((host) => (manifest.hosts[host]?.length ?? 0) > 0 || manifest.sync_hooks?.[host] !== undefined || manifest.contracts?.[host] !== undefined);
+  const recorded = hosts.filter((host) =>
+    (manifest.hosts[host]?.length ?? 0) > 0
+    || manifest.sync_hooks?.[host] !== undefined
+    || manifest.contracts?.[host] !== undefined
+    || manifest.skills_manifests?.[host] !== undefined);
   const selected = targetHosts ?? recorded;
   for (const host of selected) {
     const files = manifest.hosts[host] ?? [];
     const contract = manifest.contracts?.[host];
+    const skillsManifest = manifest.skills_manifests?.[host];
     const synchronization = manifest.sync_hooks?.[host];
-    if (files.length === 0 && contract === undefined && synchronization === undefined) {
+    if (files.length === 0 && contract === undefined && skillsManifest === undefined && synchronization === undefined) {
       checks.push(check(`install.host.${host}`, 'fail', `Host ${host} is not installed under ${root}.`, `ai-workflow install --host ${host} --home "${root}"`));
       continue;
     }
     for (const file of files) await verifyFile(root, file, checks, recovery);
     if (contract === undefined) checks.push(check(`install.contract.${host}`, 'fail', `Managed contract ownership is missing for ${host} under ${root}.`, recovery));
     else await verifyContract(root, host, contract, checks, recovery);
+    if (skillsManifest !== undefined) await verifySkillsManifest(root, host, skillsManifest, checks, recovery);
     await verifySynchronization(root, host, synchronization, checks, recovery);
     await verifySkillsLink(root, host, checks);
   }

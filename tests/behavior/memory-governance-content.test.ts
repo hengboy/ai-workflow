@@ -303,6 +303,31 @@ describe('Root MEMORY is current-state only and records the latest standards (RE
     );
   });
 
+  it('records the Antigravity host frontmatter mapping', async () => {
+    const memory = flatten(await readFile(packagePath('MEMORY.md'), 'utf8'));
+
+    expect(
+      memory,
+      `${PLAN} REQ-006/AC-006: MEMORY records the Antigravity agent directory`,
+    ).toContain('.gemini/config/agents/');
+    expect(
+      memory,
+      `${PLAN} REQ-006/AC-006: MEMORY records the agy executable`,
+    ).toContain('`agy` executable');
+    expect(
+      memory,
+      `${PLAN} REQ-006/AC-006: MEMORY records the closed Antigravity model tier enum`,
+    ).toContain("defines Antigravity's `model` as the closed tier enum `inherit|flash_lite|flash|pro`");
+    expect(
+      memory,
+      `${PLAN} REQ-006/AC-006: MEMORY records that an inherit tier omits the model key`,
+    ).toContain('`inherit` omits the key from the rendered agent');
+    expect(
+      memory,
+      `${PLAN} REQ-006/AC-006: MEMORY records that reasoning_effort is never rendered`,
+    ).toContain('`reasoning_effort` is schema-accepted but never rendered');
+  });
+
   it('matches none of the banned history phrases', async () => {
     const memory = flatten(await readFile(packagePath('MEMORY.md'), 'utf8'));
     const banned = /was removed|were removed|are removed|no longer|previously|retired/i;

@@ -497,7 +497,7 @@ export interface FakeHostBehavior {
   exitCode?: number;
 }
 
-export type FakeHostName = 'codex' | 'claude' | 'opencode';
+export type FakeHostName = 'codex' | 'claude' | 'opencode' | 'agy';
 export type FakeHostBehaviors = Partial<Record<FakeHostName, FakeHostBehavior>>;
 
 /** One observed live invocation of a fake host executable. */
@@ -508,7 +508,7 @@ export interface FakeHostCall {
   HOME?: string;
 }
 
-/** A temporary bin directory holding fake `codex`, `claude` and `opencode` executables. */
+/** A temporary bin directory holding fake `codex`, `claude`, `opencode` and `agy` executables. */
 export interface FakeHosts {
   bin: string;
   log: string;
@@ -565,12 +565,12 @@ if (config.mode === 'timeout') {
 }
 `;
 
-/** Create fake host executables; call `configure` to change per-host behavior between runs. */
+/** Create fake host executables (including `agy`); call `configure` to change per-host behavior between runs. */
 export async function fakeHosts(behaviors: FakeHostBehaviors = {}): Promise<FakeHosts> {
   const bin = await temporary('ai-workflow-fake-hosts-');
   const empty = join(bin, 'empty');
   await mkdir(empty, { recursive: true });
-  for (const name of ['codex', 'claude', 'opencode'] as const) {
+  for (const name of ['codex', 'claude', 'opencode', 'agy'] as const) {
     const executable = join(bin, name);
     await writeFile(executable, FAKE_HOST_SOURCE);
     await chmod(executable, 0o755);

@@ -12,7 +12,7 @@ import { temporary } from '../helpers.js';
  * public deliverables a host actually consumes:
  *
  *   - the owned global entry block (`<!-- ai-workflow:begin -->` … `<!-- ai-workflow:end -->`)
- *     in `.config/opencode/AGENTS.md`, `.claude/CLAUDE.md`, `.codex/AGENTS.md`;
+ *     in `.config/opencode/AGENTS.md`, `.claude/CLAUDE.md`, `.codex/AGENTS.md`, `.gemini/AGENTS.md`;
  *   - the shared skills under `.agents/skills/<name>/SKILL.md` (+ `agents/openai.yaml`).
  *
  * Required semantics asserted here (ordering/decision contracts, not exact constants):
@@ -33,7 +33,7 @@ import { temporary } from '../helpers.js';
 const BEGIN = '<!-- ai-workflow:begin -->';
 const END = '<!-- ai-workflow:end -->';
 
-const hostEntries = ['.config/opencode/AGENTS.md', '.claude/CLAUDE.md', '.codex/AGENTS.md'] as const;
+const hostEntries = ['.config/opencode/AGENTS.md', '.claude/CLAUDE.md', '.codex/AGENTS.md', '.gemini/AGENTS.md'] as const;
 const sharedSkill = (name: string): string => `.agents/skills/${name}/SKILL.md`;
 
 function ownedBlock(file: string): string {
@@ -47,7 +47,7 @@ function ownedBlock(file: string): string {
 describe('project synchronization shipped instructions', () => {
   it('AC-006/AC-013: delivers the preflight-first native entry, the safe shared sync skill and the single-start phase entry', async () => {
     const home = await temporary('ai-workflow-sync-content-');
-    await install(['opencode', 'claude', 'codex'], { home, opencodeVersion: 'v1' });
+    await install(['opencode', 'claude', 'codex', 'antigravity'], { home, opencodeVersion: 'v1' });
 
     // 1. Installed global owned entry: native preflight BEFORE reading the project contract, and
     //    the single-start cadence where native events only return the stored result.
@@ -202,6 +202,37 @@ describe('project synchronization shipped instructions', () => {
         /(?:invoke|run|sync(?:hroniz\w*)?)[^.;\n]{0,80}per[- ](?:step|phase)|per[- ](?:step|phase)[^.;\n]{0,80}(?:invoke|run|sync)/i,
       );
     }
+  });
+
+  it('AC-006/AC-013: publishes the Antigravity native gate protocol across the sync skill and the contracts', async () => {
+    const skillRaw = await readFile(packagePath('templates', 'skills', 'sync-ai-workflow', 'SKILL.md'), 'utf8');
+    const protocol = sectionContent(skillRaw, '## Native gate protocol', ['\n## ']);
+    expect(protocol, 'the sync skill publishes a Native gate protocol section').not.toBe('');
+    expect(protocol, 'the sync skill names the Antigravity native gate').toContain('Antigravity stdin gate');
+    for (const field of ['hookEventName', 'conversationId', 'invocationNum', 'toolCall']) {
+      expect(protocol, `the Antigravity protocol row names the camelCase field ${field}`).toContain(field);
+    }
+    expect(protocol, 'the sync skill gives Antigravity a distinct protocol row').toMatch(
+      /^\|\s*Antigravity stdin gate\s*\|/m,
+    );
+
+    for (const path of ['templates/contract/AGENTS.md', 'templates/project/AGENTS.md', '.ai-workflow/AGENTS.md'] as const) {
+      const text = flattenContent(await readFile(packagePath(path), 'utf8'));
+      expect(text, `${path} names the Antigravity native gate`).toContain('Antigravity');
+      for (const field of ['hookEventName', 'conversationId', 'invocationNum', 'toolCall']) {
+        expect(text, `${path} names the camelCase field ${field}`).toContain(field);
+      }
+    }
+  });
+
+  it('AC-013: documents the Antigravity shadow-skill paths as preserved, never copied', async () => {
+    const memory = flattenContent(await readFile(packagePath('MEMORY.md'), 'utf8'));
+    for (const path of ['.gemini/config/skills/', '.gemini/skills/', '.gemini/antigravity-cli/skills/']) {
+      expect(memory, `MEMORY documents the Antigravity shadow path ${path}`).toContain(path);
+    }
+    expect(memory, 'MEMORY states the shadow paths are preserved with a warning').toContain(
+      'which are preserved with a warning naming the exact path',
+    );
   });
 });
 

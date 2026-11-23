@@ -5,7 +5,7 @@ import { resolve } from 'node:path';
 import type { Host } from './workflow/types.js';
 import { activateProfile, install, uninstall, initializeProject, upgradeProject } from './install/index.js';
 import { synchronizeProject } from './sync/index.js';
-import { runProjectGate } from './sync/gate.js';
+import { runProjectGate, type ProjectGateResult } from './sync/gate.js';
 import { createNavigationCandidate, rebuildNavigation, refreshContext, refreshNavigationMarkdown, validateContext, verifyNavigation } from './context/validate.js';
 import { locateContext } from './context/locate.js';
 import { discoverFallback, type FallbackPacket } from './context/fallback.js';
@@ -42,7 +42,7 @@ import {
   taskExecutionCommand,
 } from './execution/commands.js';
 
-const hosts = ['codex', 'claude', 'opencode'] as const;
+const hosts = ['codex', 'claude', 'opencode', 'antigravity'] as const;
 function hostList(value: string): Host[] { if (value === 'all') return [...hosts]; if (!hosts.includes(value as Host)) throw new Error(`Invalid host: ${value}`); return [value as Host]; }
 function smokeHost(value: string): HostSmokeHost { if (value === 'all') return 'all'; if (!hosts.includes(value as Host)) throw new Error(`Invalid host: ${value}`); return value as Host; }
 async function jsonFile<T>(path: string): Promise<T> { return JSON.parse(await readFile(resolve(path), 'utf8')) as T; }
@@ -79,6 +79,53 @@ async function readStdin(): Promise<string> {
   return contents;
 }
 
+/** Antigravity names its events and session in camelCase and carries the tool call as an object. */
+interface AntigravityHookInput {
+  hookEventName: 'SessionStart' | 'PreInvocation' | 'PreToolUse';
+  conversationId: string;
+  cwd: string;
+  invocationNum?: number;
+  toolCall?: { id?: string; name?: string; args?: unknown };
+}
+
+const antigravityEvents = ['SessionStart', 'PreInvocation', 'PreToolUse'] as const;
+
+async function antigravityHookInput(): Promise<AntigravityHookInput> {
+  const input: unknown = JSON.parse(await readStdin());
+  if (input === null || typeof input !== 'object' || Array.isArray(input)) throw new Error('Antigravity hook input must be a JSON object');
+  const data = input as Record<string, unknown>;
+  if (typeof data.cwd !== 'string' || data.cwd === '' || typeof data.conversationId !== 'string' || data.conversationId === ''
+    || typeof data.hookEventName !== 'string' || !antigravityEvents.includes(data.hookEventName as typeof antigravityEvents[number])
+    || (data.invocationNum !== undefined && typeof data.invocationNum !== 'number')) throw new Error('Antigravity hook input has invalid event, cwd or conversation fields');
+  if (data.toolCall !== undefined) {
+    if (data.toolCall === null || typeof data.toolCall !== 'object' || Array.isArray(data.toolCall)) throw new Error('Antigravity hook input has an invalid toolCall');
+    const toolCall = data.toolCall as Record<string, unknown>;
+    if ((toolCall.id !== undefined && typeof toolCall.id !== 'string') || (toolCall.name !== undefined && typeof toolCall.name !== 'string')) throw new Error('Antigravity hook input has an invalid toolCall');
+  }
+  return data as unknown as AntigravityHookInput;
+}
+
+/** Antigravity's native stdout; `undefined` means the hook must write no bytes at all. */
+function antigravityOutput(input: AntigravityHookInput, result: ProjectGateResult): Record<string, unknown> | undefined {
+  const { hookEventName } = input;
+  const context = result.context;
+  if (result.decision === 'skip') return hookEventName === 'PreToolUse' ? undefined : {};
+  if (result.decision === 'allow') {
+    if (hookEventName === 'PreToolUse') return undefined;
+    if (hookEventName === 'PreInvocation' && input.invocationNum !== undefined && input.invocationNum > 0) return {};
+    return { injectSteps: [{ systemMessage: { systemMessage: context } }] };
+  }
+  if (hookEventName === 'PreToolUse') return { decision: 'deny', reason: context };
+  if (hookEventName === 'PreInvocation') return { injectSteps: [{ errorMessage: { userMessage: context } }], terminationBehavior: 'terminate' };
+  return {
+    injectSteps: [{
+      systemMessage: {
+        systemMessage: `${context}\nSessionStart supplies context only; the next project PreInvocation or PreToolUse will deny work while this blocking result remains current.`,
+      },
+    }],
+  };
+}
+
 const program = new Command().name('ai-workflow').description('Native-host planning and task workflow').version('0.2.0');
 function opencodeVersionOption(value: string): 'v1' | 'v2' | 'auto' { if (value === 'v1' || value === 'v2' || value === 'auto') return value; throw new Error(`Invalid opencode version: ${value}`); }
 program.command('install').requiredOption('--host <host>').option('--home <path>').option('--opencode-version <version>', 'opencode agent format: v1, v2 or auto (default auto)', 'auto').action(async ({ host, home, opencodeVersion }: { host: string; home?: string; opencodeVersion: string }) => print(await install(hostList(host), { ...(home ? { home } : {}), opencodeVersion: opencodeVersionOption(opencodeVersion) })));
@@ -104,6 +151,21 @@ program.command('sync-hook').requiredOption('--host <host>').option('--phase', '
     return;
   }
   if (project !== undefined) throw new Error('--project is only supported with --phase');
+  if (host === 'antigravity') {
+    const input = await antigravityHookInput();
+    const result = await runProjectGate({
+      host: 'antigravity',
+      event: input.hookEventName,
+      sessionId: input.conversationId,
+      cwd: input.cwd,
+      ...(input.toolCall?.name === undefined ? {} : { toolName: input.toolCall.name }),
+      ...(input.toolCall?.args === undefined ? {} : { toolInput: input.toolCall.args }),
+    });
+    const output = antigravityOutput(input, result);
+    if (output !== undefined) process.stdout.write(JSON.stringify(output));
+    process.exitCode = 0;
+    return;
+  }
   const input = await nativeHookInput();
   const result = await runProjectGate({
     host: host as Host,
@@ -134,7 +196,7 @@ program.command('sync-hook').requiredOption('--host <host>').option('--phase', '
 });
 program.command('doctor')
   .option('--project <root>', 'project root directory path; use . or an absolute path', process.cwd())
-  .option('--host <host>', 'limit host checks to one host')
+  .option('--host <host>', 'limit host checks to one host: codex, claude, opencode, antigravity')
   .option('--plan <directory>', 'plan directory to validate')
   .option('--home <path>', 'installation root; defaults to the current user home')
   .option('--json', 'print the complete report structure')
@@ -159,7 +221,7 @@ program.command('doctor')
   });
 const host = program.command('host');
 host.command('smoke')
-  .requiredOption('--host <host>', 'host to exercise: codex, claude, opencode or all')
+  .requiredOption('--host <host>', 'host to exercise: codex, claude, opencode, antigravity or all')
   .option('--home <path>', 'absent or empty installation HOME instead of a temporary one')
   .option('--live', 'attempt one non-interactive read-only host dispatch')
   .option('--keep', 'retain the temporary HOME and the external fixture')

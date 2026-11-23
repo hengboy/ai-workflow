@@ -7,9 +7,10 @@ import { sha256 } from '../utils/hash.js';
 import { packagePath } from '../utils/schema.js';
 import { findUnfinishedRuns, type UnfinishedRunNotice } from '../execution/recovery.js';
 import { synchronizeProject, type SyncReport, type SynchronizeProjectOptions } from './index.js';
+import type { Host } from '../workflow/types.js';
 
 export interface ProjectGateInput {
-  host: 'opencode' | 'claude' | 'codex';
+  host: Host;
   event: string;
   sessionId: string;
   cwd: string;
@@ -66,6 +67,8 @@ function operationDirectory(input: ProjectGateInput): string {
     const path = args.path ?? args.filePath ?? args.file_path;
     if (typeof path === 'string' && path !== '') return dirname(resolve(cwd, path));
   }
+  // Antigravity names the read argument `Path`.
+  if (input.toolName === 'read_file' && typeof args.Path === 'string' && args.Path !== '') return dirname(resolve(cwd, args.Path));
   return cwd;
 }
 
@@ -73,6 +76,20 @@ function operationDirectory(input: ProjectGateInput): string {
 function readToolPath(args: Record<string, unknown>): string | undefined {
   const path = args.path ?? args.filePath ?? args.file_path;
   return typeof path === 'string' && path !== '' ? path : undefined;
+}
+
+/** A synchronization actor command runs the sync or phase hook itself, never ordinary project work. */
+function syncActorCommand(command: string, host: Host, projectRoot: string): boolean {
+  const projectArguments = [doubleQuoted(projectRoot), `'${projectRoot.replace(/'/g, "'\\''")}'`];
+  if (!/[\s"'\\`$;&|<>(){}*?]/.test(projectRoot) && !projectRoot.includes('[') && !projectRoot.includes(']')) projectArguments.push(projectRoot);
+  const nativeExecutable = `${doubleQuoted(process.execPath)} ${doubleQuoted(packagePath('dist', 'cli.js'))}`;
+  const executables = ['ai-workflow', nativeExecutable];
+  const trimmed = command.trim();
+  if (trimmed === `${nativeExecutable} sync-hook --host ${host}`) return true;
+  for (const executable of executables) for (const project of projectArguments) {
+    if (trimmed === `${executable} sync ${project}` || trimmed === `${executable} sync-hook --host ${host} --phase --project ${project}`) return true;
+  }
+  return false;
 }
 
 function toolExemption(input: ProjectGateInput, projectRoot: string): ProjectGateResult['exemption'] {
@@ -83,17 +100,11 @@ function toolExemption(input: ProjectGateInput, projectRoot: string): ProjectGat
     const path = readToolPath(args);
     if (path !== undefined && resolve(input.cwd, path) === join(projectRoot, '.ai-workflow/AGENTS.md')) return 'authority_read';
   }
-  if ((input.toolName === 'Bash' || input.toolName === 'bash' || input.toolName === 'shell') && typeof args.command === 'string') {
-    const projectArguments = [doubleQuoted(projectRoot), `'${projectRoot.replace(/'/g, "'\\''")}'`];
-    if (!/[\s"'\\`$;&|<>(){}*?]/.test(projectRoot) && !projectRoot.includes('[') && !projectRoot.includes(']')) projectArguments.push(projectRoot);
-    const nativeExecutable = `${doubleQuoted(process.execPath)} ${doubleQuoted(packagePath('dist', 'cli.js'))}`;
-    const executables = ['ai-workflow', nativeExecutable];
-    const command = args.command.trim();
-    if (command === `${nativeExecutable} sync-hook --host ${input.host}`) return 'sync_actor';
-    for (const executable of executables) for (const project of projectArguments) {
-      if (command === `${executable} sync ${project}` || command === `${executable} sync-hook --host ${input.host} --phase --project ${project}`) return 'sync_actor';
-    }
-  }
+  if (input.toolName === 'read_file' && typeof args.Path === 'string' && resolve(input.cwd, args.Path) === join(projectRoot, '.ai-workflow/AGENTS.md')) return 'authority_read';
+  const command = (input.toolName === 'Bash' || input.toolName === 'bash' || input.toolName === 'shell') && typeof args.command === 'string'
+    ? args.command
+    : input.toolName === 'run_command' && typeof args.CommandLine === 'string' ? args.CommandLine : undefined;
+  if (command !== undefined && syncActorCommand(command, input.host, projectRoot)) return 'sync_actor';
   return undefined;
 }
 

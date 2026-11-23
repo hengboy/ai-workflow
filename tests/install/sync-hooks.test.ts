@@ -531,3 +531,304 @@ describe('opencode v2 plugin definition installation', () => {
     expect(typeof v1.AiWorkflowSyncPlugin, 'the V1 plugin keeps its named AiWorkflowSyncPlugin function').toBe('function');
   });
 });
+
+// --- Antigravity: shared skills manifest, contract block and named sync hook ----------
+const antigravity = 'antigravity' as Host;
+const agSkillsRelative = '.gemini/config/skills.json';
+const agHooksRelative = '.gemini/config/hooks.json';
+const agAgentsRelative = '.gemini/AGENTS.md';
+const agManifestRelative = '.config/ai-workflow/install-manifest.json';
+const contractBegin = '<!-- ai-workflow:begin -->';
+const contractEnd = '<!-- ai-workflow:end -->';
+const managedIncludeOnly = ['coding', 'git-message', 'plan-to-tasks', 'planning', 'setup-ai-workflow', 'switch-profile', 'sync-ai-workflow'];
+
+interface SkillEntry { path?: string; include_only?: string[]; [key: string]: unknown }
+interface SkillsFile { entries: SkillEntry[]; inherits?: unknown; [key: string]: unknown }
+interface HooksFile { _otty?: unknown; 'ai-workflow-sync'?: Record<string, unknown>; [key: string]: unknown }
+interface SkillsOwnership { path: string; entry: SkillEntry; created: boolean }
+interface AgManifest {
+  skills_manifests?: Partial<Record<string, SkillsOwnership>>;
+  sync_hooks?: Partial<Record<string, unknown>>;
+  synchronization?: SynchronizationReport[];
+  skipped?: string[];
+  [key: string]: unknown;
+}
+
+function syncEntry(report: InstallResult, host: Host): SynchronizationReport | undefined {
+  return (report.synchronization ?? []).find((entry) => entry.host === host);
+}
+async function agManifest(home: string): Promise<AgManifest> {
+  return readJsonFile<AgManifest>(join(home, agManifestRelative));
+}
+
+describe('Antigravity shared skills.json manifest lifecycle', () => {
+  it('AC-003 installs one absolute owned entry additively, is idempotent and uninstalls only that entry', async () => {
+    const home = await homeWithSpace();
+    const userSkills: SkillsFile = {
+      version: 2,
+      entries: [{ path: '/user/custom/skills', include_only: ['alpha'] }],
+      inherits: ['/user/base'],
+      note: 'keep me',
+    };
+    await writeAt(home, agSkillsRelative, `${JSON.stringify(userSkills, null, 2)}\n`);
+
+    await install([antigravity], { home });
+    const first = await readJsonFile<SkillsFile>(join(home, agSkillsRelative));
+    const owned = first.entries.filter((entry) => entry.path === join(home, '.agents/skills'));
+    expect(owned).toHaveLength(1);
+    expect(owned[0]!.include_only).toEqual(managedIncludeOnly);
+    expect(first.entries.some((entry) => typeof entry.path === 'string' && entry.path.startsWith('~'))).toBe(false);
+    expect(first.version).toBe(2);
+    expect(first.inherits).toEqual(['/user/base']);
+    expect(first.note).toBe('keep me');
+    expect(first.entries).toEqual(expect.arrayContaining([{ path: '/user/custom/skills', include_only: ['alpha'] }]));
+    expect(await exists(join(home, '.gemini/config/skills'))).toBe(false);
+    expect(await exists(join(home, '.gemini/skills'))).toBe(false);
+    expect(await exists(join(home, '.gemini/antigravity-cli/skills'))).toBe(false);
+    const record = (await agManifest(home)).skills_manifests?.antigravity;
+    expect(record).toEqual(expect.objectContaining({ created: false }));
+    expect(record?.entry.include_only).toEqual(managedIncludeOnly);
+
+    await install([antigravity], { home });
+    const second = await readJsonFile<SkillsFile>(join(home, agSkillsRelative));
+    expect(second.entries.filter((entry) => entry.path === join(home, '.agents/skills'))).toHaveLength(1);
+
+    const removed = await uninstall([antigravity], { home }) as unknown as AgManifest;
+    const after = await readJsonFile<SkillsFile>(join(home, agSkillsRelative));
+    expect(after.entries.some((entry) => entry.path === join(home, '.agents/skills'))).toBe(false);
+    expect(after.version).toBe(2);
+    expect(after.inherits).toEqual(['/user/base']);
+    expect(after.note).toBe('keep me');
+    expect(after.entries).toEqual([{ path: '/user/custom/skills', include_only: ['alpha'] }]);
+    expect(removed.skipped ?? []).not.toContain(agSkillsRelative);
+    expect((await agManifest(home)).skills_manifests?.antigravity).toBeUndefined();
+  });
+
+  it('AC-003 deletes a created skills.json when removing the owned entry leaves only empty entries', async () => {
+    const home = await homeWithSpace();
+    expect(await exists(join(home, agSkillsRelative))).toBe(false);
+    await install([antigravity], { home });
+    const created = await readJsonFile<SkillsFile>(join(home, agSkillsRelative));
+    expect(created.entries.filter((entry) => entry.path === join(home, '.agents/skills'))).toHaveLength(1);
+    expect(Object.keys(created).sort()).toEqual(['entries']);
+    expect((await agManifest(home)).skills_manifests?.antigravity?.created).toBe(true);
+
+    await uninstall([antigravity], { home });
+    expect(await exists(join(home, agSkillsRelative))).toBe(false);
+    expect((await agManifest(home)).skills_manifests?.antigravity).toBeUndefined();
+  });
+
+  it('AC-003 preserves an unowned absolute-path entry without claiming ownership', async () => {
+    const home = await homeWithSpace();
+    const skills: SkillsFile = { entries: [{ path: join(home, '.agents/skills'), include_only: ['only-user-skill'] }], inherits: [] };
+    const before = `${JSON.stringify(skills, null, 2)}\n`;
+    await writeAt(home, agSkillsRelative, before);
+
+    const installed = await install([antigravity], { home }) as InstallResult;
+    expect(installed.skipped ?? []).toContain(agSkillsRelative);
+    expect(await readFile(join(home, agSkillsRelative), 'utf8')).toBe(before);
+    expect((await agManifest(home)).skills_manifests?.antigravity).toBeUndefined();
+
+    const removed = await uninstall([antigravity], { home }) as unknown as AgManifest;
+    expect(await readFile(join(home, agSkillsRelative), 'utf8')).toBe(before);
+    expect(removed.skipped ?? []).not.toContain(agSkillsRelative);
+    expect((await agManifest(home)).skills_manifests?.antigravity).toBeUndefined();
+  });
+
+  it('AC-003 preserves a hand-modified owned entry on reinstall and uninstall', async () => {
+    const home = await homeWithSpace();
+    await install([antigravity], { home });
+    const skills = await readJsonFile<SkillsFile>(join(home, agSkillsRelative));
+    skills.entries = [{ path: join(home, '.agents/skills'), include_only: ['user-tweaked'] }];
+    const modified = `${JSON.stringify(skills, null, 2)}\n`;
+    await writeFile(join(home, agSkillsRelative), modified);
+
+    const reinstalled = await install([antigravity], { home }) as InstallResult;
+    expect(reinstalled.skipped ?? []).toContain(agSkillsRelative);
+    expect(await readFile(join(home, agSkillsRelative), 'utf8')).toBe(modified);
+    expect((await agManifest(home)).skills_manifests?.antigravity).toBeDefined();
+
+    const removed = await uninstall([antigravity], { home }) as unknown as AgManifest;
+    expect(await readFile(join(home, agSkillsRelative), 'utf8')).toBe(modified);
+    expect(removed.skipped ?? []).toContain(agSkillsRelative);
+    expect((await agManifest(home)).skills_manifests?.antigravity).toBeDefined();
+  });
+});
+
+describe('Antigravity contract block and named synchronization hook', () => {
+  it('AC-005 manages one contract block and one named hook additively, then removes only owned changes', async () => {
+    const home = await homeWithSpace();
+    const userProse = '# User global instructions\n\nIndependent prose.\n';
+    await writeAt(home, agAgentsRelative, userProse);
+    await writeAt(home, '.gemini/GEMINI.md', 'user gemini bytes\n');
+    await writeAt(home, agHooksRelative, `${JSON.stringify({ _otty: { scale: 1 }, custom: 'keep' }, null, 2)}\n`);
+    const geminiBefore = await readFile(join(home, '.gemini/GEMINI.md'), 'utf8');
+
+    for (let pass = 0; pass < 2; pass += 1) {
+      const report = await install([antigravity], { home }) as InstallResult;
+      const entry = syncEntry(report, antigravity);
+      expect(entry, 'antigravity synchronization report').toBeDefined();
+      expect(entry!.status).toBe('installed');
+      expect(entry!.active).toBe(false);
+      expect(entry!.warnings.some((w) => /session/i.test(w) && /verified/i.test(w))).toBe(true);
+
+      const agents = await readFile(join(home, agAgentsRelative), 'utf8');
+      expect(agents.split(contractBegin)).toHaveLength(2);
+      expect(agents.split(contractEnd)).toHaveLength(2);
+      expect(agents.startsWith(userProse)).toBe(true);
+
+      const hooks = await readJsonFile<HooksFile>(join(home, agHooksRelative));
+      expect(hooks._otty).toEqual({ scale: 1 });
+      expect(hooks.custom).toBe('keep');
+      const named = hooks['ai-workflow-sync'];
+      expect(named).toBeDefined();
+      expect(named).not.toHaveProperty('enabled');
+      expect(Object.keys(named!).sort()).toEqual(['PreInvocation', 'PreToolUse', 'SessionStart']);
+      for (const event of ['SessionStart', 'PreInvocation'] as const) {
+        const group = named![event] as Array<Record<string, unknown>>;
+        expect(Array.isArray(group)).toBe(true);
+        expect(group).toHaveLength(1);
+        expect(group[0]!.type).toBe('command');
+        expect(typeof group[0]!.command).toBe('string');
+        expect((group[0]!.command as string).endsWith('sync-hook --host antigravity')).toBe(true);
+        expect(group[0]!).not.toHaveProperty('matcher');
+        expect(group[0]!).not.toHaveProperty('hooks');
+      }
+      const preToolUse = named!.PreToolUse as Array<Record<string, unknown>>;
+      expect(preToolUse).toHaveLength(1);
+      expect(preToolUse[0]!.matcher).toBe('*');
+      const nested = preToolUse[0]!.hooks as Array<Record<string, unknown>>;
+      expect(nested).toHaveLength(1);
+      expect(nested[0]!.type).toBe('command');
+      expect((nested[0]!.command as string).endsWith('sync-hook --host antigravity')).toBe(true);
+      expect(await readFile(join(home, '.gemini/GEMINI.md'), 'utf8')).toBe(geminiBefore);
+    }
+
+    await uninstall([antigravity], { home });
+    expect(await readFile(join(home, agAgentsRelative), 'utf8')).toBe(`${userProse}\n`);
+    expect(await readFile(join(home, '.gemini/GEMINI.md'), 'utf8')).toBe(geminiBefore);
+    const afterHooks = await readJsonFile<HooksFile>(join(home, agHooksRelative));
+    expect(afterHooks['ai-workflow-sync']).toBeUndefined();
+    expect(afterHooks._otty).toEqual({ scale: 1 });
+    expect(afterHooks.custom).toBe('keep');
+    expect((await agManifest(home)).sync_hooks?.antigravity).toBeUndefined();
+  });
+
+  it('AC-005 creates hooks.json on install and deletes it when the owned key removal leaves it empty', async () => {
+    const home = await homeWithSpace();
+    expect(await exists(join(home, agHooksRelative))).toBe(false);
+    await install([antigravity], { home });
+    expect(Object.keys(await readJsonFile<HooksFile>(join(home, agHooksRelative)))).toEqual(['ai-workflow-sync']);
+    expect((await agManifest(home)).sync_hooks?.antigravity).toBeDefined();
+
+    await uninstall([antigravity], { home });
+    expect(await exists(join(home, agHooksRelative))).toBe(false);
+    expect((await agManifest(home)).sync_hooks?.antigravity).toBeUndefined();
+  });
+
+  it('AC-006 reports a pre-existing disabled unowned hook without touching it or claiming ownership', async () => {
+    const home = await homeWithSpace();
+    const before = `${JSON.stringify({ 'ai-workflow-sync': { enabled: false, note: 'user disabled' }, _otty: true }, null, 2)}\n`;
+    await writeAt(home, agHooksRelative, before);
+
+    const installed = await install([antigravity], { home }) as InstallResult;
+    expect(syncEntry(installed, antigravity)?.status).toBe('disabled');
+    expect(syncEntry(installed, antigravity)?.active).toBe(false);
+    expect(await readFile(join(home, agHooksRelative), 'utf8')).toBe(before);
+    expect(installed.skipped ?? []).not.toContain(agHooksRelative);
+    expect((await agManifest(home)).sync_hooks?.antigravity).toBeUndefined();
+
+    const removed = await uninstall([antigravity], { home }) as unknown as AgManifest;
+    expect(await readFile(join(home, agHooksRelative), 'utf8')).toBe(before);
+    expect(removed.skipped ?? []).not.toContain(agHooksRelative);
+    expect((await agManifest(home)).sync_hooks?.antigravity).toBeUndefined();
+  });
+
+  it('AC-006 keeps ownership but reports disabled when the user disables an owned hook', async () => {
+    const home = await homeWithSpace();
+    await install([antigravity], { home });
+    const hooks = await readJsonFile<HooksFile>(join(home, agHooksRelative));
+    hooks['ai-workflow-sync'] = { ...(hooks['ai-workflow-sync'] ?? {}), enabled: false };
+    const modified = `${JSON.stringify(hooks, null, 2)}\n`;
+    await writeFile(join(home, agHooksRelative), modified);
+
+    const installed = await install([antigravity], { home }) as InstallResult;
+    expect(syncEntry(installed, antigravity)?.status).toBe('disabled');
+    expect(syncEntry(installed, antigravity)?.active).toBe(false);
+    expect(await readFile(join(home, agHooksRelative), 'utf8')).toBe(modified);
+    expect(installed.skipped ?? []).not.toContain(agHooksRelative);
+    expect((await agManifest(home)).sync_hooks?.antigravity).toBeDefined();
+
+    const removed = await uninstall([antigravity], { home }) as unknown as AgManifest;
+    expect(await readFile(join(home, agHooksRelative), 'utf8')).toBe(modified);
+    expect(removed.skipped ?? []).toContain(agHooksRelative);
+    expect((await agManifest(home)).sync_hooks?.antigravity).toBeDefined();
+  });
+
+  it('AC-006 preserves an unowned enabled hook as needs_attention without claiming ownership', async () => {
+    const home = await homeWithSpace();
+    const before = `${JSON.stringify({ 'ai-workflow-sync': { enabled: true, SessionStart: [{ type: 'command', command: 'echo user-owned' }] }, _otty: 1 }, null, 2)}\n`;
+    await writeAt(home, agHooksRelative, before);
+
+    const installed = await install([antigravity], { home }) as InstallResult;
+    expect(syncEntry(installed, antigravity)?.status).toBe('needs_attention');
+    expect(syncEntry(installed, antigravity)?.active).toBe(false);
+    expect(await readFile(join(home, agHooksRelative), 'utf8')).toBe(before);
+    expect(installed.skipped ?? []).toContain(agHooksRelative);
+    expect((await agManifest(home)).sync_hooks?.antigravity).toBeUndefined();
+
+    const removed = await uninstall([antigravity], { home }) as unknown as AgManifest;
+    expect(await readFile(join(home, agHooksRelative), 'utf8')).toBe(before);
+    expect(removed.skipped ?? []).not.toContain(agHooksRelative);
+    expect((await agManifest(home)).sync_hooks?.antigravity).toBeUndefined();
+  });
+
+  it('AC-006 preserves a hand-modified owned hook as needs_attention and retains ownership', async () => {
+    const home = await homeWithSpace();
+    await install([antigravity], { home });
+    const hooks = await readJsonFile<HooksFile>(join(home, agHooksRelative));
+    const named = hooks['ai-workflow-sync']!;
+    named.SessionStart = [{ type: 'command', command: 'echo hand-modified' }];
+    named.enabled = true;
+    const modified = `${JSON.stringify(hooks, null, 2)}\n`;
+    await writeFile(join(home, agHooksRelative), modified);
+
+    const installed = await install([antigravity], { home }) as InstallResult;
+    expect(syncEntry(installed, antigravity)?.status).toBe('needs_attention');
+    expect(syncEntry(installed, antigravity)?.active).toBe(false);
+    expect(await readFile(join(home, agHooksRelative), 'utf8')).toBe(modified);
+    expect(installed.skipped ?? []).toContain(agHooksRelative);
+    expect((await agManifest(home)).sync_hooks?.antigravity).toBeDefined();
+
+    const removed = await uninstall([antigravity], { home }) as unknown as AgManifest;
+    expect(await readFile(join(home, agHooksRelative), 'utf8')).toBe(modified);
+    expect(removed.skipped ?? []).toContain(agHooksRelative);
+    expect((await agManifest(home)).sync_hooks?.antigravity).toBeDefined();
+  });
+
+  it('AC-006 warns for regular-file shadow skills but not a symlink to the shared skill', async () => {
+    const home = await homeWithSpace();
+    const shadows = [
+      '.gemini/config/skills/sync-ai-workflow/SKILL.md',
+      '.gemini/skills/sync-ai-workflow/SKILL.md',
+      '.gemini/antigravity-cli/skills/sync-ai-workflow/SKILL.md',
+    ];
+    for (const path of shadows) await writeAt(home, path, `# shadow ${path}\n`);
+
+    const installed = await install([antigravity], { home }) as InstallResult;
+    const warnings = syncEntry(installed, antigravity)?.warnings ?? [];
+    for (const path of shadows) {
+      expect(warnings.some((w) => w.includes(path)), `warning names ${path}`).toBe(true);
+      expect(await readFile(join(home, path), 'utf8')).toBe(`# shadow ${path}\n`);
+    }
+
+    const symlinkHome = await homeWithSpace();
+    await install([antigravity], { home: symlinkHome });
+    const link = join(symlinkHome, shadows[0]!);
+    await mkdir(dirname(link), { recursive: true });
+    await symlink(join(symlinkHome, '.agents/skills/sync-ai-workflow/SKILL.md'), link);
+    const linked = await install([antigravity], { home: symlinkHome }) as InstallResult;
+    const linkedWarnings = syncEntry(linked, antigravity)?.warnings ?? [];
+    expect(linkedWarnings.some((w) => w.includes(shadows[0]!))).toBe(false);
+  });
+});

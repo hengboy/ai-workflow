@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { readFile, readdir } from 'node:fs/promises';
+import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { install } from '../../src/install/index.js';
+import { exists } from '../../src/utils/fs.js';
 import { packagePath } from '../../src/utils/schema.js';
 import { temporary } from '../helpers.js';
 
@@ -11,6 +12,7 @@ const globalFiles = {
   opencode: '.config/opencode/AGENTS.md',
   claude: '.claude/CLAUDE.md',
   codex: '.codex/AGENTS.md',
+  antigravity: '.gemini/AGENTS.md',
 } as const;
 
 const REQUIRED_ROLES = [
@@ -48,7 +50,7 @@ describe('global agent guidance', () => {
     const home = await temporary('ai-workflow-global-guidance-');
     const contents = await contract();
 
-    await install(['opencode', 'claude', 'codex'], { home });
+    await install(['opencode', 'claude', 'codex', 'antigravity'], { home });
 
     for (const host of Object.keys(globalFiles) as Array<keyof typeof globalFiles>) {
       const file = await read(home, globalFiles[host]);
@@ -95,5 +97,53 @@ describe('global agent guidance', () => {
     expect(contents).toContain('may search only authorized roots');
     expect(contents).toContain('never edits files or guesses paths');
     expect(contents).toContain('using public sources and citations');
+  });
+
+  it('AC-005 installs the single-source contract block into .gemini/AGENTS.md', async () => {
+    const home = await temporary('ai-workflow-antigravity-guidance-');
+    const contents = await contract();
+
+    await install(['antigravity'], { home });
+
+    const file = await read(home, '.gemini/AGENTS.md');
+    expect(file.split(BEGIN)).toHaveLength(2);
+    expect(file.split(END)).toHaveLength(2);
+    expect(blockBody(file)).toBe(contents);
+  });
+
+  it('AC-005 preserves existing user prose outside the .gemini/AGENTS.md contract block', async () => {
+    const home = await temporary('ai-workflow-antigravity-prose-');
+    const original = 'user header\n\nproject-specific guidance\n';
+    await mkdir(join(home, '.gemini'), { recursive: true });
+    await writeFile(join(home, '.gemini/AGENTS.md'), original);
+
+    await install(['antigravity'], { home });
+
+    const file = await read(home, '.gemini/AGENTS.md');
+    expect(file.startsWith(original)).toBe(true);
+    expect(blockBody(file)).toBe(await contract());
+  });
+
+  it('AC-005 keeps exactly one contract block in .gemini/AGENTS.md after two installs', async () => {
+    const home = await temporary('ai-workflow-antigravity-once-');
+
+    await install(['antigravity'], { home });
+    await install(['antigravity'], { home });
+
+    const file = await read(home, '.gemini/AGENTS.md');
+    expect(file.split(BEGIN)).toHaveLength(2);
+    expect(file.split(END)).toHaveLength(2);
+  });
+
+  it('AC-005 never creates or modifies .gemini/GEMINI.md', async () => {
+    const fresh = await temporary('ai-workflow-antigravity-gemini-fresh-');
+    await install(['antigravity'], { home: fresh });
+    expect(await exists(join(fresh, '.gemini/GEMINI.md'))).toBe(false);
+
+    const existing = await temporary('ai-workflow-antigravity-gemini-existing-');
+    await mkdir(join(existing, '.gemini'), { recursive: true });
+    await writeFile(join(existing, '.gemini/GEMINI.md'), 'user-owned guidance\n');
+    await install(['antigravity'], { home: existing });
+    expect(await read(existing, '.gemini/GEMINI.md')).toBe('user-owned guidance\n');
   });
 });

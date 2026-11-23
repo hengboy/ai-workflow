@@ -91,6 +91,7 @@
         "templates/skills/setup-ai-workflow/SKILL.md"
       ],
       "tests": [
+        "tests/behavior/antigravity-agent-contract.test.ts",
         "tests/behavior/coding-v2-content.test.ts",
         "tests/behavior/implementation-record.test.ts",
         "tests/behavior/planning-content.test.ts",
@@ -141,6 +142,7 @@
         "templates/skills/plan-to-tasks/references/task.md",
         "templates/skills/planning/SKILL.md",
         "templates/skills/setup-ai-workflow/SKILL.md",
+        "tests/behavior/antigravity-agent-contract.test.ts",
         "tests/behavior/coding-v2-content.test.ts",
         "tests/behavior/implementation-record.test.ts",
         "tests/behavior/planning-content.test.ts",
@@ -694,6 +696,12 @@
         },
         {
           "file": "src/generated/profile.schema.d.ts",
+          "name": "AntigravityModel",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/generated/profile.schema.d.ts",
           "name": "Model",
           "kind": "interface",
           "visibility": "public"
@@ -816,6 +824,12 @@
           "file": "src/install/index.ts",
           "name": "ProjectUpgradeReport",
           "kind": "type",
+          "visibility": "public"
+        },
+        {
+          "file": "src/install/index.ts",
+          "name": "SkillsManifestRecord",
+          "kind": "interface",
           "visibility": "public"
         },
         {
@@ -2370,11 +2384,6 @@
         {
           "kind": "imports",
           "from": "src/install/index.ts#install",
-          "to": "src/install/hooks.ts#synchronizationPath"
-        },
-        {
-          "kind": "imports",
-          "from": "src/install/index.ts#install",
           "to": "src/install/opencode-version.ts#OpencodeVersionOption"
         },
         {
@@ -2726,6 +2735,11 @@
           "kind": "imports",
           "from": "src/settings/index.ts#writeActiveProfile",
           "to": "src/utils/fs.ts#atomicWrite"
+        },
+        {
+          "kind": "imports",
+          "from": "src/sync/gate.ts#ProjectGateInput",
+          "to": "src/workflow/types.ts#Host"
         },
         {
           "kind": "imports",
@@ -3577,6 +3591,7 @@
       ],
       "related_files": [],
       "tests": [
+        "tests/behavior/antigravity-agent-contract.test.ts",
         "tests/behavior/change-routing.test.ts",
         "tests/behavior/coding-v2-content.test.ts",
         "tests/behavior/gates.test.ts",
@@ -3657,6 +3672,7 @@
       "owner_role": "shared",
       "responsibility": "Discovered typescript module at tests",
       "read_scope": [
+        "tests/behavior/antigravity-agent-contract.test.ts",
         "tests/behavior/change-routing.test.ts",
         "tests/behavior/coding-v2-content.test.ts",
         "tests/behavior/gates.test.ts",
@@ -3830,6 +3846,8 @@
         ".ai-workflow/notes/implemented/bug-fix/2026-10-12-system-proxy-template-source.md",
         ".ai-workflow/notes/implemented/feature/2026-10-08-project-template-sync.md",
         ".ai-workflow/notes/implemented/feature/2026-10-09-sync-once-at-skill-start.md",
+        ".ai-workflow/notes/implemented/feature/2026-11-22-antigravity-host-support.md",
+        ".ai-workflow/notes/implemented/feature/2026-11-22-antigravity-host-support.zh.md",
         ".ai-workflow/notes/implemented/process/2026-09-16-project-contract-and-agent-notes.md",
         ".ai-workflow/notes/implemented/process/2026-11-02-workflow-semantics-context.md",
         ".ai-workflow/notes/implemented/process/2026-11-02-workflow-semantics-context.zh.md",
@@ -3857,6 +3875,7 @@
         "templates/skills/sync-ai-workflow/agents/openai.yaml"
       ],
       "tests": [
+        "tests/behavior/antigravity-agent-contract.test.ts",
         "tests/integration/project-sync-cli.test.ts",
         "tests/integration/project-upgrade.test.ts",
         "tests/unit/project-template-sync.test.ts",
@@ -3871,13 +3890,15 @@
       "depends_on": [],
       "relations": [],
       "owner_role": "shared",
-      "responsibility": "Delivered file-level project template synchronization: exactly five markerless generated files replaced as complete files with root MEMORY init-only and local, plus the preserved single-skill-start gate that runs one automatic synchronization per actual root, stores a version 2 unit outside the project, serves native events with zero source requests and allows with a no-check context when absent, exposes the compact authority_ref holding the absolute contract path, its sha256 digest and byte count instead of the contract body, and gates ordinary tools on a one-shot decision-plus-context notice plus a completed digest-matching contract read, together with the unchanged manual command, raw gate JSON, host-native shapes and additive host entries, and requires the proceeding planning, coding or plan-to-tasks session to delegate one scoped local Git Operator maintenance commit of exactly the reported managed paths before ordinary work while `skip`, an empty change set and a non-proceeding result produce no commit and a blocked commit stops the phase; setup recovery routes ordinary init versus upgrade by actual adoption state without treating directory presence or the preflight as authorization",
+      "responsibility": "Delivered file-level project template synchronization: exactly five markerless generated files replaced as complete files with root MEMORY init-only and local, plus the preserved single-skill-start gate that runs one automatic synchronization per actual root, stores a version 2 unit outside the project, serves native events with zero source requests and allows with a no-check context when absent, exposes the compact authority_ref holding the absolute contract path, its sha256 digest and byte count instead of the contract body, and gates ordinary tools on a one-shot decision-plus-context notice plus a completed digest-matching contract read, together with the unchanged manual command, raw gate JSON, host-native shapes and additive host entries including Antigravity's named `~/.gemini/config/hooks.json` key and `~/.gemini/config/skills.json` manifest entry, and requires the proceeding planning, coding or plan-to-tasks session to delegate one scoped local Git Operator maintenance commit of exactly the reported managed paths before ordinary work while `skip`, an empty change set and a non-proceeding result produce no commit and a blocked commit stops the phase; setup recovery routes ordinary init versus upgrade by actual adoption state without treating directory presence or the preflight as authorization",
       "read_scope": [
         ".ai-workflow/AGENTS.md",
         ".ai-workflow/notes/implemented/architecture/2026-09-14-user-level-agent-contract.md",
         ".ai-workflow/notes/implemented/bug-fix/2026-10-12-system-proxy-template-source.md",
         ".ai-workflow/notes/implemented/feature/2026-10-08-project-template-sync.md",
         ".ai-workflow/notes/implemented/feature/2026-10-09-sync-once-at-skill-start.md",
+        ".ai-workflow/notes/implemented/feature/2026-11-22-antigravity-host-support.md",
+        ".ai-workflow/notes/implemented/feature/2026-11-22-antigravity-host-support.zh.md",
         ".ai-workflow/notes/implemented/process/2026-09-16-project-contract-and-agent-notes.md",
         ".ai-workflow/notes/implemented/process/2026-11-02-workflow-semantics-context.md",
         ".ai-workflow/notes/implemented/process/2026-11-02-workflow-semantics-context.zh.md",
@@ -3908,6 +3929,7 @@
         "templates/skills/setup-ai-workflow/SKILL.md",
         "templates/skills/sync-ai-workflow/SKILL.md",
         "templates/skills/sync-ai-workflow/agents/openai.yaml",
+        "tests/behavior/antigravity-agent-contract.test.ts",
         "tests/behavior/project-sync-content.test.ts",
         "tests/install/sync-hooks.test.ts",
         "tests/integration/project-sync-cli.test.ts",
@@ -4226,7 +4248,7 @@
         }
       ],
       "owner_role": "shared",
-      "responsibility": "Delivered parent workspace coding orchestration: exact .gitmodules-matched child-plan activation, one primary session with an approved plan-to-tasks preparation that returns control, one run-owned worktree per active repository, the original parent phases with delivery barriers, the filesystem-only workspace checkpoint single-record protocol, per-repository delivery review versus a separate finalization review, recorded-target non-fast-forward delivery with preserve-both conflict resolution, bounded recovery and unchanged ordinary/root-only routes, with the three-host native smoke an outstanding reported gap; the root workspace session is a non-handoff primary-parent route that continues the parent dispatch after root-owned tasks, `next_repository` is advisory, and the primary parent session auto-dispatches child repositories without a next-session prompt",
+      "responsibility": "Delivered parent workspace coding orchestration: exact .gitmodules-matched child-plan activation, one primary session with an approved plan-to-tasks preparation that returns control, one run-owned worktree per active repository, the original parent phases with delivery barriers, the filesystem-only workspace checkpoint single-record protocol, per-repository delivery review versus a separate finalization review, recorded-target non-fast-forward delivery with preserve-both conflict resolution, bounded recovery and unchanged ordinary/root-only routes, with the four-host native smoke an outstanding reported gap; the root workspace session is a non-handoff primary-parent route that continues the parent dispatch after root-owned tasks, `next_repository` is advisory, and the primary parent session auto-dispatches child repositories without a next-session prompt",
       "read_scope": [
         ".ai-workflow/AGENTS.md",
         ".ai-workflow/notes/implemented/architecture/2026-09-30-submodule-workspace.md",
@@ -4923,7 +4945,7 @@
       "aliases": [
         "operator tooling",
         "read-only operator commands",
-        "three-host smoke"
+        "four-host smoke"
       ],
       "module_root": "root",
       "entries": [
@@ -5559,7 +5581,7 @@
         }
       ],
       "owner_role": "shared",
-      "responsibility": "Read-only operator tooling: `ai-workflow doctor` aggregates adoption, synchronization, navigation, notes, plan or workspace and installation or host health, `ai-workflow review packet` and `ai-workflow plan dispatch` assemble supplied Spec or Standards and current-phase dispatch packets, `ai-workflow plan report` reports plan lifecycle and execution, and `ai-workflow host smoke` records an isolated three-host PASS, UNVERIFIED or BLOCKED matrix. All five are inspection and reporting aids, not workflow gates: they write no file, perform no Git mutation or schedule recomputation, decide no axis, verdict, finding, phase or scope, and change no role, review budget or mandatory context.",
+      "responsibility": "Read-only operator tooling: `ai-workflow doctor` aggregates adoption, synchronization, navigation, notes, plan or workspace and installation or host health, `ai-workflow review packet` and `ai-workflow plan dispatch` assemble supplied Spec or Standards and current-phase dispatch packets, `ai-workflow plan report` reports plan lifecycle and execution, and `ai-workflow host smoke` records an isolated four-host PASS, UNVERIFIED or BLOCKED matrix, resolving Antigravity through its `agy` executable. All five are inspection and reporting aids, not workflow gates: they write no file, perform no Git mutation or schedule recomputation, decide no axis, verdict, finding, phase or scope, and change no role, review budget or mandatory context.",
       "read_scope": [
         ".ai-workflow/AGENTS.md",
         "MEMORY.md",

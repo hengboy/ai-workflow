@@ -7,6 +7,19 @@ import { temporary } from '../helpers.js';
 
 const BEGIN = '<!-- ai-workflow:begin -->';
 const END = '<!-- ai-workflow:end -->';
+const antigravityRoles = [
+  'backend', 'documentation-maintainer', 'file-explorer', 'frontend', 'git-operator',
+  'researcher', 'spec-review', 'standards-review', 'test',
+];
+interface AntigravityManifest {
+  hosts: Record<string, Array<{ path: string; digest: string; kind: string }>>;
+  contracts?: Record<string, { path: string; digest: string; created: boolean }>;
+  skills_manifests?: Record<string, unknown>;
+  sync_hooks?: Record<string, { kind: string; path: string; key: string }>;
+}
+async function readManifest(home: string): Promise<AntigravityManifest> {
+  return JSON.parse(await readFile(join(home, '.config/ai-workflow/install-manifest.json'), 'utf8')) as AntigravityManifest;
+}
 
 function configPath(home: string): string {
   return join(home, '.config/ai-workflow/config.yaml');
@@ -405,5 +418,76 @@ agents:
     expect(await exists(path)).toBe(true);
     expect(after).not.toContain(BEGIN);
     expect(after.trim()).toBe('');
+  });
+
+  it('AC-001 installing antigravity creates its full native layout and records owned manifest entries', async () => {
+    const home = await temporary('ai-workflow-antigravity-install-');
+
+    await install(['antigravity'], { home });
+
+    expect(await exists(join(home, '.agents/skills/planning/SKILL.md'))).toBe(true);
+    for (const role of antigravityRoles) {
+      expect(await exists(join(home, `.gemini/config/agents/${role}.md`))).toBe(true);
+    }
+    expect(await exists(join(home, '.gemini/AGENTS.md'))).toBe(true);
+    expect(await exists(join(home, '.gemini/config/skills.json'))).toBe(true);
+    expect(await exists(join(home, '.gemini/config/hooks.json'))).toBe(true);
+
+    const manifest = await readManifest(home);
+    const entries = manifest.hosts.antigravity ?? [];
+    expect(entries).toHaveLength(9);
+    expect(entries.every((file) => file.path.startsWith('.gemini/config/agents/'))).toBe(true);
+    expect(manifest.contracts?.antigravity?.path).toBe('.gemini/AGENTS.md');
+    expect(manifest.skills_manifests?.antigravity).toBeDefined();
+    expect(manifest.sync_hooks?.antigravity).toMatchObject({
+      kind: 'named_hook', path: '.gemini/config/hooks.json', key: 'ai-workflow-sync'
+    });
+  });
+
+  it('AC-001 installing all hosts records codex, claude, opencode and antigravity', async () => {
+    const home = await temporary('ai-workflow-all-four-hosts-');
+
+    await install(['codex', 'claude', 'opencode', 'antigravity'], { home });
+
+    const manifest = await readManifest(home);
+    expect(Object.keys(manifest.hosts).sort()).toEqual(['antigravity', 'claude', 'codex', 'opencode']);
+  });
+
+  it('AC-001 uninstalling antigravity removes its agents, contract block and owned manifest entries', async () => {
+    const home = await temporary('ai-workflow-antigravity-uninstall-');
+    await install(['antigravity'], { home });
+    expect(await exists(join(home, '.gemini/config/agents/backend.md'))).toBe(true);
+
+    await uninstall(['antigravity'], { home });
+
+    for (const role of antigravityRoles) {
+      expect(await exists(join(home, `.gemini/config/agents/${role}.md`))).toBe(false);
+    }
+    const guidance = await exists(join(home, '.gemini/AGENTS.md'))
+      ? await readFile(join(home, '.gemini/AGENTS.md'), 'utf8') : '';
+    expect(guidance).not.toContain(BEGIN);
+    expect(await exists(join(home, '.agents/skills/planning/SKILL.md'))).toBe(false);
+    const manifest = await readManifest(home);
+    expect(manifest.hosts.antigravity).toBeUndefined();
+    expect(manifest.contracts?.antigravity).toBeUndefined();
+    expect(manifest.sync_hooks?.antigravity).toBeUndefined();
+    expect(manifest.skills_manifests?.antigravity).toBeUndefined();
+  });
+
+  it('AC-001 uninstalling all hosts removes every host agent and the shared skills', async () => {
+    const home = await temporary('ai-workflow-uninstall-all-four-');
+    await install(['codex', 'claude', 'opencode', 'antigravity'], { home });
+
+    await uninstall(['codex', 'claude', 'opencode', 'antigravity'], { home });
+
+    for (const agent of [
+      '.codex/agents/backend.toml', '.claude/agents/backend.md',
+      '.config/opencode/agents/backend.md', '.gemini/config/agents/backend.md'
+    ]) {
+      expect(await exists(join(home, agent))).toBe(false);
+    }
+    expect(await exists(join(home, '.agents/skills/planning/SKILL.md'))).toBe(false);
+    const manifest = await readManifest(home);
+    expect(Object.keys(manifest.hosts)).toEqual([]);
   });
 });

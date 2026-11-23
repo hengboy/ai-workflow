@@ -54,8 +54,11 @@ export interface HostSmokeReport {
   retained?: { home: string; fixture: string };
 }
 
+// Antigravity's CLI executable is `agy`; every other host's executable is its host name.
+const executables: Partial<Record<Host, string>> = { antigravity: 'agy' };
+
 function hostList(value: HostSmokeHost): Host[] {
-  return value === 'all' ? ['codex', 'claude', 'opencode'] : [value];
+  return value === 'all' ? ['antigravity', 'claude', 'codex', 'opencode'] : [value];
 }
 
 function inside(parent: string, child: string): boolean {
@@ -193,7 +196,7 @@ async function prepareFixture(fixture: string, marker: string): Promise<void> {
 }
 
 async function readVersion(host: Host, cwd: string, env: NodeJS.ProcessEnv): Promise<string> {
-  const result = await runProcess(host, ['--version'], cwd, env, versionTimeoutMs);
+  const result = await runProcess(executables[host] ?? host, ['--version'], cwd, env, versionTimeoutMs);
   const version = result.stdout.trim();
   if (version !== '') return version;
   return result.error === undefined ? 'unknown' : 'unavailable';
@@ -212,7 +215,9 @@ async function runLive(host: Host, fixture: string, home: string, marker: string
     ? { command: 'codex', args: ['exec', '--skip-git-repo-check', '-C', fixture, '--sandbox', 'read-only', prompt] }
     : host === 'claude'
       ? { command: 'claude', args: ['-p', prompt] }
-      : { command: 'opencode', args: ['run', '--dir', fixture, prompt] };
+      : host === 'antigravity'
+        ? { command: 'agy', args: ['-p', prompt, '--mode', 'plan'] }
+        : { command: 'opencode', args: ['run', '--dir', fixture, prompt] };
   const started = Date.now();
   const result = await runProcess(invocation.command, invocation.args, fixture, { ...process.env, HOME: home }, timeoutMs);
   const elapsed = Date.now() - started;

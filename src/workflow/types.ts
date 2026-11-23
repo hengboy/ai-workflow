@@ -1,4 +1,4 @@
-export type Host = 'codex' | 'claude' | 'opencode';
+export type Host = 'codex' | 'claude' | 'opencode' | 'antigravity';
 export interface WorkspaceRepo { name: string; path: string; depends_on: string[] }
 export interface WorkspaceFinalizationReadScope { repo: string; paths: string[] }
 export interface WorkspaceFinalization {

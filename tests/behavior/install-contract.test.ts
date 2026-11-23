@@ -1,10 +1,25 @@
 import { describe, expect, it } from 'vitest';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { install } from '../../src/install/index.js';
 import { sha256 } from '../../src/utils/hash.js';
 import { packagePath } from '../../src/utils/schema.js';
 import { temporary } from '../helpers.js';
+
+const exec = promisify(execFile);
+async function runCli(args: string[], input?: string): Promise<{ code: number; output: string }> {
+  try {
+    const child = exec('pnpm', ['exec', 'tsx', 'src/cli.ts', ...args], { encoding: 'utf8' });
+    if (input !== undefined) child.child.stdin?.end(input);
+    const { stdout, stderr } = await child;
+    return { code: 0, output: `${stdout}\n${stderr}` };
+  } catch (error) {
+    const failure = error as { code?: number; stdout?: string; stderr?: string };
+    return { code: failure.code ?? -1, output: `${failure.stdout ?? ''}\n${failure.stderr ?? ''}` };
+  }
+}
 
 const BEGIN = '<!-- ai-workflow:begin -->';
 const END = '<!-- ai-workflow:end -->';
@@ -17,7 +32,11 @@ const globalFiles = {
 type ContractHost = keyof typeof globalFiles;
 
 interface ContractRecord { path: string; digest: string; created: boolean }
-interface DiskManifest { contracts?: Partial<Record<ContractHost, ContractRecord>> }
+type InstalledHost = ContractHost | 'antigravity';
+interface DiskManifest {
+  hosts?: Partial<Record<InstalledHost, unknown[]>>;
+  contracts?: Partial<Record<ContractHost, ContractRecord>>;
+}
 
 async function template(): Promise<string> {
   return readFile(packagePath('templates', 'contract', 'AGENTS.md'), 'utf8');
@@ -173,5 +192,35 @@ describe('user-level contract installation', () => {
     expect(result.skipped ?? []).toContain(globalFiles.opencode);
     expect(await read(home, globalFiles.opencode)).toBe(original);
     expect((await manifest(home)).contracts?.opencode).toBeUndefined();
+  });
+});
+
+describe('host-accepting CLI surfaces', () => {
+  it('AC-001 every host-accepting command accepts antigravity without an Invalid host rejection', async () => {
+    const home = await temporary();
+    const surfaces: Array<{ name: string; args: string[]; input?: string; expectCode0?: boolean }> = [
+      { name: 'install', args: ['install', '--host', 'antigravity', '--home', home], expectCode0: true },
+      { name: 'uninstall', args: ['uninstall', '--host', 'antigravity', '--home', home], expectCode0: true },
+      { name: 'sync-hook', args: ['sync-hook', '--host', 'antigravity'],
+        input: JSON.stringify({ hookEventName: 'SessionStart', conversationId: 'test', cwd: home }), expectCode0: true },
+      { name: 'doctor', args: ['doctor', '--host', 'antigravity', '--home', home, '--json'] },
+      { name: 'host smoke', args: ['host', 'smoke', '--host', 'antigravity', '--home', home] },
+    ];
+    for (const surface of surfaces) {
+      const result = await runCli(surface.args, surface.input);
+      expect(result.output, `${surface.name} must not reject antigravity`).not.toContain('Invalid host: antigravity');
+      if (surface.expectCode0) {
+        expect(result.code, `${surface.name} must exit 0`).toBe(0);
+      }
+    }
+  });
+
+  it('AC-001 --host all installs the four supported hosts', async () => {
+    const home = await temporary();
+
+    const result = await runCli(['install', '--host', 'all', '--home', home]);
+
+    expect(result.output).not.toContain('Invalid host:');
+    expect(Object.keys((await manifest(home)).hosts ?? {}).sort()).toEqual(['antigravity', 'claude', 'codex', 'opencode']);
   });
 });
