@@ -39,6 +39,7 @@ export interface ProfileActivationReport {
   active_profile: string;
   hosts: Host[];
   installations: HostInstallation[];
+  warnings?: string[];
 }
 const manifestRelative = '.config/ai-workflow/install-manifest.json';
 const settingsRelative = '.config/ai-workflow/config.yaml';
@@ -295,11 +296,23 @@ function profileInstallations(home: string, hosts: Host[], manifest: InstallMani
       return [{
         name: agentName,
         path,
-        ...(settings ? { model: settings.model, reasoning_effort: settings.reasoning_effort } : {})
+        // Antigravity agent frontmatter carries only a model tier; effort is never rendered there.
+        ...(settings ? { model: settings.model, ...(host === 'antigravity' ? {} : { reasoning_effort: settings.reasoning_effort }) } : {})
       }];
     });
     return { host, agents_directory: agentsDirectory, agents };
   });
+}
+
+// Antigravity agent frontmatter carries a model tier only, so a profile effort setting cannot take effect.
+function ignoredEffortWarnings(profile: Profile): string[] {
+  const ignored = Object.entries(profile.agents)
+    .filter(([, agent]) => agent.antigravity?.reasoning_effort !== undefined)
+    .map(([agentName]) => agentName)
+    .sort();
+  return ignored.length
+    ? [`Antigravity ignores per-agent reasoning_effort; the effort setting for ${ignored.join(', ')} was not applied.`]
+    : [];
 }
 
 export async function activateProfile(name: string, options: { home?: string; version?: string; opencodeVersion?: OpencodeVersionOption } = {}): Promise<ProfileActivationReport> {
@@ -319,7 +332,8 @@ export async function activateProfile(name: string, options: { home?: string; ve
   try {
     const installed = hosts.length ? await install(hosts, { home, version: options.version ?? manifest.version, profile, ...(options.opencodeVersion ? { opencodeVersion: options.opencodeVersion } : {}) }) : manifest;
     await writeActiveProfile(home, name);
-     return { active_profile: name, hosts: reportedHosts, installations: profileInstallations(home, reportedHosts, installed, profile) };
+     const warnings = ignoredEffortWarnings(profile);
+     return { active_profile: name, hosts: reportedHosts, installations: profileInstallations(home, reportedHosts, installed, profile), ...(warnings.length ? { warnings } : {}) };
   } catch (error) {
     for (const snapshot of snapshots) await atomicWrite(snapshot.path, snapshot.contents);
     await restoreIfChanged(configPath, configBefore);
