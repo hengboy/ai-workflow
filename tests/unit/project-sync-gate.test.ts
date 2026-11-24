@@ -1256,6 +1256,65 @@ describe('project sync gate Antigravity workspace containment', () => {
 
     expect(fake.invocationCount(), 'the workspace guard issues no source request').toBe(invocationsAfterPrime);
   });
+
+  it('denies any Antigravity operation outside mounted workspaces even without pending managed-file commits', async () => {
+    const root = await temporary('ai-workflow-gate-antigravity-any-workspace-');
+    const runtimeDirectory = await temporary('ai-workflow-gate-antigravity-any-workspace-runtime-');
+    roots.push(root, runtimeDirectory);
+    await writeAdoptedTarget(root, COMMIT);
+    const otherWorkspace = await temporary('ai-workflow-gate-antigravity-other-workspace-');
+    roots.push(otherWorkspace);
+    const fake = fakeGit({ commit: COMMIT, files: sourceFiles(COMMIT) });
+    const options = { runGit: fake.runGit, runtimeDirectory };
+
+    const deniedRead = await runProjectGate(
+      {
+        host: 'antigravity',
+        event: 'PreToolUse',
+        sessionId: 'antigravity-cross-workspace',
+        cwd: otherWorkspace,
+        workspacePaths: [otherWorkspace],
+        toolName: 'read_file',
+        toolInput: { Path: join(root, '.ai-workflow/AGENTS.md') },
+      },
+      options,
+    );
+    expect(deniedRead.decision).toBe('deny');
+    expect(deniedRead.exemption).toBeUndefined();
+    expect(deniedRead.context).toContain('outside the Antigravity workspace');
+    expect(deniedRead.context).toContain(`/add-dir ${root}`);
+
+    const rootSubdir = join(root, 'workspace');
+    await mkdir(rootSubdir, { recursive: true });
+    const syncActor = await runProjectGate(
+      {
+        host: 'antigravity',
+        event: 'PreToolUse',
+        sessionId: 'antigravity-cross-workspace',
+        cwd: rootSubdir,
+        workspacePaths: [rootSubdir],
+        toolName: 'run_command',
+        toolInput: { CommandLine: `ai-workflow sync-hook --host antigravity --phase --project ${root}` },
+      },
+      options,
+    );
+    expect(syncActor.decision).toBe('allow');
+    expect(syncActor.exemption).toBe('sync_actor');
+
+    const allowedOnceMounted = await runProjectGate(
+      {
+        host: 'antigravity',
+        event: 'PreToolUse',
+        sessionId: 'antigravity-cross-workspace',
+        cwd: otherWorkspace,
+        workspacePaths: [otherWorkspace, root],
+        toolName: 'read_file',
+        toolInput: { Path: join(root, '.ai-workflow/AGENTS.md') },
+      },
+      options,
+    );
+    expect(allowedOnceMounted.decision).toBe('allow');
+  });
 });
 
 describe('project sync gate Antigravity tool exemptions (AC-008)', () => {

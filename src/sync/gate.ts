@@ -68,18 +68,21 @@ function workspaceContains(parent: string, child: string): boolean {
 
 /**
  * Antigravity subagents cannot answer an out-of-workspace approval prompt within their
- * fixed window. A pending managed-file maintenance commit for a root outside every mounted
- * workspace would therefore time out instead of committing, so the gate rejects the phase
- * immediately with the exact recovery instead of letting the Git Operator wait.
+ * fixed window. Any adopted project root outside every mounted workspace would therefore
+ * time out instead of reading, editing or running commands, so the gate rejects the
+ * operation immediately with the exact `/add-dir` recovery.
  */
-function antigravityWorkspaceDenial(input: ProjectGateInput, projectRoot: string, result: ProjectGateResult): string | undefined {
+function antigravityWorkspaceDenial(input: ProjectGateInput, projectRoot: string, result?: ProjectGateResult): string | undefined {
   if (input.host !== 'antigravity' || input.event === 'PhaseEntry') return undefined;
   if (!Array.isArray(input.workspacePaths) || input.workspacePaths.length === 0) return undefined;
-  if (result.decision !== 'allow' || result.report === undefined) return undefined;
-  const changed = [...result.report.created, ...result.report.updated];
-  if (changed.length === 0) return undefined;
   if (input.workspacePaths.some((workspace) => workspaceContains(workspace, projectRoot))) return undefined;
-  return `The actual project root ${projectRoot} is outside the Antigravity workspace ${input.workspacePaths.join(', ')}. The synchronization preflight updated ${changed.join(', ')} there, and the required maintenance commit cannot read or run Git outside the workspace without an approval that times out. Open ${projectRoot} as the workspace or add it with /add-dir ${projectRoot}, then resend the request; alternatively, commit exactly those paths yourself. No commit was attempted.`;
+  if (result?.decision === 'allow' && result.report !== undefined) {
+    const changed = [...result.report.created, ...result.report.updated];
+    if (changed.length > 0) {
+      return `The actual project root ${projectRoot} is outside the Antigravity workspace ${input.workspacePaths.join(', ')}. The synchronization preflight updated ${changed.join(', ')} there, and the required maintenance commit cannot read or run Git outside the workspace without an approval that times out. Open ${projectRoot} as the workspace or add it with /add-dir ${projectRoot}, then resend the request; alternatively, commit exactly those paths yourself. No commit was attempted.`;
+    }
+  }
+  return `The actual project root ${projectRoot} is outside the Antigravity workspace ${input.workspacePaths.join(', ')}. Antigravity subagents and tools cannot read, edit or run commands outside mounted workspaces without an approval prompt that times out. Open ${projectRoot} as the workspace or add it with /add-dir ${projectRoot}, then resend the request.`;
 }
 
 function operationDirectory(input: ProjectGateInput): string {
@@ -289,10 +292,12 @@ export async function runProjectGate(input: ProjectGateInput, options: ProjectGa
     }
     const path = join(hostRuntimeDirectory, `phase-${Buffer.from(projectRoot).toString('base64url')}.json`);
     const previous = input.event === 'PhaseEntry' ? undefined : await readUnit(path);
-    if (previous?.result.project === projectRoot) {
-      const workspaceDenial = antigravityWorkspaceDenial(input, projectRoot, previous.result);
-      if (workspaceDenial !== undefined) return { decision: 'deny', project: projectRoot, context: workspaceDenial };
-    }
+    const workspaceDenial = antigravityWorkspaceDenial(
+      input,
+      projectRoot,
+      previous?.result.project === projectRoot ? previous.result : undefined,
+    );
+    if (workspaceDenial !== undefined) return { decision: 'deny', project: projectRoot, context: workspaceDenial };
     if (exemption !== undefined) {
       return {
         decision: 'allow',

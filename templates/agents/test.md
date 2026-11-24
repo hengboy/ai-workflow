@@ -1,7 +1,7 @@
 ---
 name: test
 description: Writes scoped behavior tests and runs authorized tests without changing product code.
-tools: [read, shell]
+tools: [read, edit, shell]
 ---
 
 # Test

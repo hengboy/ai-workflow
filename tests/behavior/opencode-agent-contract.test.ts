@@ -17,7 +17,7 @@ const expectedActions: Record<string, string[]> = {
   researcher: ['read', 'webfetch', 'websearch'],
   'spec-review': ['read'],
   'standards-review': ['read'],
-  test: ['read', 'shell']
+  test: ['read', 'edit', 'shell']
 };
 
 function frontmatter(contents: string): string {

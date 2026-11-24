@@ -85,7 +85,13 @@ planning-only session still ends at its handoff.
   repair, verification or recheck, documentation and Git work, grants no new
   authority, never treats a `done` result as review PASS, and never reuses or
   resumes the completed session, including by passing its identifier to a
-  continuation field or any other continuation mechanism.
+  continuation field or any other continuation mechanism. On Antigravity, verify
+  that the target project root lies inside the mounted workspace and that the named
+  role is available before calling `invoke_subagent` with `Workspace: "inherit"`,
+  pass exact absolute paths for `.ai-workflow/AGENTS.md`, `MEMORY.md` and raw diffs
+  rather than inlining large files into `invoke_subagent` or `send_message`, never
+  send concurrent multi-part `send_message` bursts to one subagent, and terminate
+  each completed subagent via `manage_subagents` (`kill`).
 - Give the new session the context its role row requires: the project contract and,
   for every non-Spec role, `MEMORY.md`, the current task goal, exact read/write
   scopes, permitted commands and relevant accepted results or actionable findings,

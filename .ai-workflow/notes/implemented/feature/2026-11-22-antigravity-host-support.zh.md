@@ -20,8 +20,9 @@ Antigravity 作为第四个受支持宿主加入 `src/workflow/types.ts` 中的 
 - 门禁豁免精确的契约 `read_file`（`Path`）与同步执行者的 `run_command`（`CommandLine`），与其他宿主已有的豁免一致。
 - `schemas/profile.schema.json` 只接受 `antigravity.model` 为封闭层级枚举 `inherit`、`flash_lite`、`flash` 与 `pro`；`inherit` 在渲染出的 agent 中省略该键。`reasoning_effort` 被 schema 接受，从不渲染，并由 `activateProfile` 报告为不阻塞的激活警告。
 - `agy` 是 Antigravity 在 `doctor` 就绪检查中的可执行文件，且始终报告 `warn`，因为只读检查既验证不了认证也验证不了信任；它同样是 `host smoke` 中的可执行文件，运行 `agy --version` 与 `agy -p <prompt> --mode plan`。
-- 声明了 shell 工具的角色还会渲染 `commandExecutionPolicy: auto`，因此常规的项目 git、构建与测试命令无需反复审批即可运行，而 Antigravity 的权限引擎仍然会拦截不可逆操作。
-- `runProjectGate` 会把带有待提交 `created` 或 `updated` 托管路径的已存 allow 结果与原生 `workspacePaths` 比较。当实际根位于所有已挂载工作区之外时，它在 Git Operator 可能等待跨工作区审批之前返回带精确 `/add-dir <root>` 恢复方式的 deny，而 Git Operator 的数据包规则也会在任何跨工作区读取或 Git 命令之前独立停止。
+- 声明了 shell 工具的角色还会渲染 `commandExecutionPolicy: auto`，因此常规的项目 git、构建与测试命令无需反复审批即可运行，而 Antigravity 的权限引擎仍然会拦截不可逆操作。`test` 角色声明 `tools: [read, edit, shell]`，使其能够直接编写限定范围的行为测试，而无需通过 shell 命令绕过缺失的文件编辑工具。
+- `runProjectGate` 会将指向已采纳根的任意 Antigravity 操作与原生 `workspacePaths` 比较。当实际根位于所有已挂载工作区之外（无论是否存在待提交的 `created`/`updated` 托管文件），它都立即返回带精确 `/add-dir <root>` 恢复方式的 deny，避免子代理或工具等待跨工作区审批超时，同时保留 `sync_actor` 豁免不致死锁。
+- `verifyInstallation` 会在受管的 `~/.gemini/config/agents/<role>.md` 旁存在重复目录形态 `<role>/agent.md`（不区分大小写）时输出非阻断警告，且不自动删除用户文件。项目契约与 skill 提示词同时明确了 Antigravity 子代理派发不变量：调用 `invoke_subagent` 前校验已挂载工作区与角色可用性，固定传入 `Workspace: "inherit"`，传递精确文件路径而非将大型契约/diff 内联塞入 `invoke_subagent` 或 `send_message`，禁止向同一子代理并发发送多分片 `send_message`，并在完工后通过 `manage_subagents` 终止子代理。
 
 ## Alternatives considered
 

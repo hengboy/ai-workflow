@@ -18,7 +18,7 @@ const expectedTools: Record<string, string[]> = {
   researcher: ['read_file', 'search_web'],
   'spec-review': ['read_file'],
   'standards-review': ['read_file'],
-  test: ['read_file', 'run_command', 'manage_task']
+  test: ['read_file', 'edit_file', 'write_file', 'run_command', 'manage_task']
 };
 const roles = Object.keys(expectedTools);
 

@@ -411,4 +411,28 @@ describe('antigravity installation verification', () => {
     const withDirectory = await verifyInstallation(home, antigravityHosts);
     expect(withDirectory.checks.some((item) => item.id === 'install.skills-link.antigravity')).toBe(false);
   });
+
+  it('warns when duplicate directory-form agents shadow managed flat Antigravity agents without deleting them', async () => {
+    const home = await installedHome(antigravityHosts);
+    const uppercasePath = join(home, '.gemini/config/agents/spec-review/AGENT.md');
+    const lowercasePath = join(home, '.gemini/config/agents/test/agent.md');
+    await mkdir(join(home, '.gemini/config/agents/spec-review'), { recursive: true });
+    await mkdir(join(home, '.gemini/config/agents/test'), { recursive: true });
+    await writeFile(uppercasePath, '# duplicate uppercase\n');
+    await writeFile(lowercasePath, '# duplicate lowercase\n');
+
+    const report = await verifyInstallation(home, antigravityHosts);
+    expect(report.valid, 'shadow-agent warnings stay non-fatal').toBe(true);
+
+    const specWarn = report.checks.find((item) => item.id === 'install.shadow-agent.antigravity.spec-review');
+    const testWarn = report.checks.find((item) => item.id === 'install.shadow-agent.antigravity.test');
+    expect(specWarn?.status).toBe('warn');
+    expect(specWarn?.detail).toContain('.gemini/config/agents/spec-review/AGENT.md');
+    expectRecovery(specWarn!);
+    expect(testWarn?.status).toBe('warn');
+    expect(testWarn?.detail).toContain('.gemini/config/agents/test/agent.md');
+    expectRecovery(testWarn!);
+    expect(await readFile(uppercasePath, 'utf8')).toBe('# duplicate uppercase\n');
+    expect(await readFile(lowercasePath, 'utf8')).toBe('# duplicate lowercase\n');
+  });
 });

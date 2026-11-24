@@ -1,4 +1,4 @@
-import { lstat, readFile, realpath, stat } from 'node:fs/promises';
+import { lstat, readdir, readFile, realpath, stat } from 'node:fs/promises';
 import { isAbsolute, dirname, join, relative, resolve } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import { sha256 } from '../utils/hash.js';
@@ -373,10 +373,37 @@ async function verifySkillsLink(home: string, host: Host, checks: InstallationCh
     : check(`install.skills-link.${host}`, 'fail', `Host-scoped skills link ${linkRelative} (${path}) resolves to ${resolved}; expected ${sharedSkillsRelative} (${expected}).`, recovery));
 }
 
+async function verifyAntigravityShadowAgents(home: string, files: ManifestFile[], checks: InstallationCheck[]): Promise<void> {
+  const prefix = '.gemini/config/agents/';
+  for (const file of files) {
+    if (!file.path.startsWith(prefix) || !file.path.endsWith('.md')) continue;
+    const role = file.path.slice(prefix.length, -'.md'.length);
+    if (role.length === 0 || role.includes('/')) continue;
+    const shadowDir = join(home, prefix, role);
+    let entries: string[];
+    try {
+      entries = await readdir(shadowDir);
+    } catch {
+      continue;
+    }
+    const match = entries.find((entry) => entry.toLowerCase() === 'agent.md');
+    if (match === undefined) continue;
+    const shadowRelative = `${prefix}${role}/${match}`;
+    const shadowPath = join(shadowDir, match);
+    checks.push(check(
+      `install.shadow-agent.antigravity.${role}`,
+      'warn',
+      `Duplicate directory-form Antigravity agent ${shadowRelative} (${shadowPath}) shadows managed ${file.path}; Antigravity discovers both forms and may load a stale copy.`,
+      `Remove the duplicate directory "${shadowDir}" after confirming it holds no custom instructions.`,
+    ));
+  }
+}
+
 /**
  * Verify installation integrity without repairing anything: recorded file digests, contract
- * blocks, plugin and hook ownership, disabled hook configuration and host-scoped shared-skill
- * link identity. The check ids are stable and each fault names the exact path, identity or SHA.
+ * blocks, plugin and hook ownership, disabled hook configuration, duplicate Antigravity
+ * directory agents and host-scoped shared-skill link identity. The check ids are stable and
+ * each fault names the exact path, identity or SHA.
  */
 export async function verifyInstallation(home: string, targetHosts?: Host[]): Promise<InstallationReport> {
   const root = resolve(home);
@@ -413,6 +440,7 @@ export async function verifyInstallation(home: string, targetHosts?: Host[]): Pr
     if (skillsManifest !== undefined) await verifySkillsManifest(root, host, skillsManifest, checks, recovery);
     await verifySynchronization(root, host, synchronization, checks, recovery);
     await verifySkillsLink(root, host, checks);
+    if (host === 'antigravity') await verifyAntigravityShadowAgents(root, files, checks);
   }
 
   return { home: root, valid: !checks.some((entry) => entry.status === 'fail'), checks };
