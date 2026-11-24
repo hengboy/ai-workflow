@@ -85,6 +85,7 @@ interface AntigravityHookInput {
   conversationId: string;
   cwd: string;
   invocationNum?: number;
+  workspacePaths?: string[];
   toolCall?: { id?: string; name?: string; args?: unknown };
 }
 
@@ -96,7 +97,8 @@ async function antigravityHookInput(): Promise<AntigravityHookInput> {
   const data = input as Record<string, unknown>;
   if (typeof data.cwd !== 'string' || data.cwd === '' || typeof data.conversationId !== 'string' || data.conversationId === ''
     || typeof data.hookEventName !== 'string' || !antigravityEvents.includes(data.hookEventName as typeof antigravityEvents[number])
-    || (data.invocationNum !== undefined && typeof data.invocationNum !== 'number')) throw new Error('Antigravity hook input has invalid event, cwd or conversation fields');
+    || (data.invocationNum !== undefined && typeof data.invocationNum !== 'number')
+    || (data.workspacePaths !== undefined && (!Array.isArray(data.workspacePaths) || !data.workspacePaths.every((path) => typeof path === 'string' && path !== '')))) throw new Error('Antigravity hook input has invalid event, cwd or conversation fields');
   if (data.toolCall !== undefined) {
     if (data.toolCall === null || typeof data.toolCall !== 'object' || Array.isArray(data.toolCall)) throw new Error('Antigravity hook input has an invalid toolCall');
     const toolCall = data.toolCall as Record<string, unknown>;
@@ -158,6 +160,7 @@ program.command('sync-hook').requiredOption('--host <host>').option('--phase', '
       event: input.hookEventName,
       sessionId: input.conversationId,
       cwd: input.cwd,
+      ...(input.workspacePaths === undefined ? {} : { workspacePaths: input.workspacePaths }),
       ...(input.toolCall?.name === undefined ? {} : { toolName: input.toolCall.name }),
       ...(input.toolCall?.args === undefined ? {} : { toolInput: input.toolCall.args }),
     });

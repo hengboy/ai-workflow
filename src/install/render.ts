@@ -84,6 +84,8 @@ function codexAgent(source: string, settings: { model: string; reasoning_effort:
 
 // Antigravity derives the agent id from the file name, so frontmatter declares only dispatch
 // flags, mapped tools and an optional model tier; a tier-inherit profile omits the model key.
+// Shell-capable roles use `auto` so routine project commands run without redundant approval
+// while Antigravity still gates irreversible actions.
 function antigravityAgent(source: string, model: string | undefined): string {
   const document = parseMarkdown(source);
   const name = textAttribute(document.attributes.name); const description = textAttribute(document.attributes.description);
@@ -94,7 +96,8 @@ function antigravityAgent(source: string, model: string | undefined): string {
     `tools: [${tools.join(', ')}]`,
     ...(model === undefined || model === 'inherit' ? [] : [`model: ${quoted(model)}`]),
     'subagent: true',
-    'mainAgent: false'
+    'mainAgent: false',
+    ...(tools.includes('run_command') || tools.includes('manage_task') ? ['commandExecutionPolicy: auto'] : [])
   ];
   return `---\n${head.join('\n')}\n---\n${document.body}`;
 }

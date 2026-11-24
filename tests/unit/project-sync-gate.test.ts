@@ -1183,6 +1183,81 @@ describe('project sync gate phase-entry execution notice (REQ-010 / AC-017)', ()
 // Antigravity names the read tool `read_file` with a `Path` argument and the shell tool
 // `run_command` with a `CommandLine` argument. Its stored conflict deny must stay in force
 // while only the exact contract read and sync actor commands are exempted.
+describe('project sync gate Antigravity workspace containment', () => {
+  it('denies a pending managed-file maintenance commit outside every mounted workspace and names the /add-dir recovery', async () => {
+    const root = await temporary('ai-workflow-gate-antigravity-workspace-');
+    const runtimeDirectory = await temporary('ai-workflow-gate-antigravity-workspace-runtime-');
+    roots.push(root, runtimeDirectory);
+    await writeAdoptedTarget(root, COMMIT);
+    const workspace = join(root, 'workspace');
+    await mkdir(workspace, { recursive: true });
+    const fake = fakeGit({ commit: COMMIT, files: sourceFiles(COMMIT) });
+    const options = { runGit: fake.runGit, runtimeDirectory };
+
+    const primed = await runProjectGate(
+      { host: 'antigravity', event: 'PhaseEntry', sessionId: 'antigravity-workspace-session', cwd: root },
+      options,
+    );
+    expect(primed.decision).toBe('allow');
+    expect(primed.report?.updated).toContain('.ai-workflow/AGENTS.md');
+    const invocationsAfterPrime = fake.invocationCount();
+
+    const preInvocation = await runProjectGate(
+      { host: 'antigravity', event: 'PreInvocation', sessionId: 'antigravity-workspace-session', cwd: workspace, workspacePaths: [workspace] },
+      options,
+    );
+    expect(preInvocation.decision, 'a pending maintenance commit outside the workspace must deny').toBe('deny');
+    expect(preInvocation.context).toContain('outside the Antigravity workspace');
+    expect(preInvocation.context).toContain(`/add-dir ${root}`);
+    expect(preInvocation.report, 'the workspace denial is not a synchronization report').toBeUndefined();
+
+    // The synchronization actor itself must still be allowed so the next phase entry can
+    // refresh the stored result instead of deadlocking behind the workspace guard.
+    const syncActor = await runProjectGate(
+      {
+        host: 'antigravity',
+        event: 'PreToolUse',
+        sessionId: 'antigravity-workspace-session',
+        cwd: workspace,
+        workspacePaths: [workspace],
+        toolName: 'run_command',
+        toolInput: { CommandLine: `ai-workflow sync-hook --host antigravity --phase --project ${root}` },
+      },
+      options,
+    );
+    expect(syncActor.decision, 'the exact sync actor must remain allowed').toBe('allow');
+    expect(syncActor.exemption).toBe('sync_actor');
+
+    // The exact contract read is normally an authority_read exemption; the workspace mismatch
+    // must deny it instead of letting the host wait for an approval that times out.
+    const contractRead = await runProjectGate(
+      {
+        host: 'antigravity',
+        event: 'PreToolUse',
+        sessionId: 'antigravity-workspace-session',
+        cwd: workspace,
+        workspacePaths: [workspace],
+        toolName: 'read_file',
+        toolInput: { Path: join(root, '.ai-workflow/AGENTS.md') },
+      },
+      options,
+    );
+    expect(contractRead.decision).toBe('deny');
+    expect(contractRead.exemption).toBeUndefined();
+    expect(contractRead.context).toContain(`/add-dir ${root}`);
+
+    // Mounting the actual root is the documented recovery; the stored result replays unchanged.
+    const mountedRoot = await runProjectGate(
+      { host: 'antigravity', event: 'PreInvocation', sessionId: 'antigravity-workspace-session', cwd: workspace, workspacePaths: [root] },
+      options,
+    );
+    expect(mountedRoot.decision).toBe('allow');
+    expect(mountedRoot.report?.updated).toContain('.ai-workflow/AGENTS.md');
+
+    expect(fake.invocationCount(), 'the workspace guard issues no source request').toBe(invocationsAfterPrime);
+  });
+});
+
 describe('project sync gate Antigravity tool exemptions (AC-008)', () => {
   it('AC-008: grants authority_read and sync_actor exemptions under a stored antigravity conflict without clearing the deny', async () => {
     const root = await temporary('ai-workflow-gate-antigravity-exempt-');

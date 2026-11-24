@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 # ai-workflow notes pairing --project <project-root> --write .ai-workflow/notes/implemented/feature/2026-11-22-antigravity-host-support.md
-2026-11-22-antigravity-host-support.md: cc765607709243a51d612423d44a3e836100bb5e
-2026-11-22-antigravity-host-support.zh.md: 450f1b35d6b04174e49866d0c796aff9c52f3e51
+2026-11-22-antigravity-host-support.md: a0496c7651554e08f92a7fcb4f192ccba7b6e3b1
+2026-11-22-antigravity-host-support.zh.md: 61676d147305ec55bd7761f60a4283bb4166af9b

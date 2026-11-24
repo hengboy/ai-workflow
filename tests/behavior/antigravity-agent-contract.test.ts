@@ -52,10 +52,15 @@ describe('Antigravity role agent rendering', () => {
 
       expect(head, `${role} name`).toMatch(new RegExp(`^name:\\s*['"]?${role}['"]?\\s*$`, 'm'));
       expect(head, `${role} description`).toMatch(/^description: \S/m);
-      expect(toolsOf(head), `${role} tools`).toEqual(expectedTools[role]);
+      const declaredTools = expectedTools[role]!;
+      expect(toolsOf(head), `${role} tools`).toEqual(declaredTools);
       expect(head, `${role} subagent flag`).toMatch(/^subagent: true$/m);
       expect(head, `${role} mainAgent flag`).toMatch(/^mainAgent: false$/m);
       expect(head, `${role} model omission`).not.toMatch(/^model:/m);
+      // Shell-capable roles auto-run routine project commands; read-only roles carry no policy.
+      const shellCapable = declaredTools.some((tool) => tool === 'run_command' || tool === 'manage_task');
+      if (shellCapable) expect(head, `${role} command execution policy`).toMatch(/^commandExecutionPolicy: auto$/m);
+      else expect(head, `${role} command execution policy`).not.toMatch(/^commandExecutionPolicy:/m);
 
       const template = await readFile(join(templateRoot, `${role}.md`), 'utf8');
       expect(body, `${role} body`).toBe(splitFrontmatter(template).body);

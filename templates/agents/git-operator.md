@@ -122,6 +122,7 @@ Verify supplied resume evidence, current ref, commit existence, parentage and wo
 ## Packet handling
 
 - Every packet path is an exact absolute path; never resolve a relative path against an inherited parent cwd.
+- Confirm the packet's repository or worktree lies inside the host session's active workspace before any read or Git command. A target outside it is an infrastructure mismatch, not a new permission: return `blocked` with the exact target and workspace paths and request opening the target as the workspace or adding it with the host's directory-add action (Antigravity: `/add-dir <target>`); never wait on a non-workspace approval or retry a timed-out prompt.
 - Every command uses an explicit per-command workdir rooted at the packet's authorized repository or worktree.
 - Inside a child repository, explicitly read that repository's own `.ai-workflow/AGENTS.md` and `MEMORY.md` before acting; the parent's contract does not substitute for the child's. Load `.ai-workflow/index/navigation.json` or its `.ai-workflow/index/navigation.md` catalog only for a needed bounded entry or an authorized lookup, never as an eager bundle.
 - The declared leaf tools are unchanged, and this role never dispatches a nested sub-agent (no nested dispatch).

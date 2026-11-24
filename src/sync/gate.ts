@@ -16,6 +16,8 @@ export interface ProjectGateInput {
   cwd: string;
   toolName?: string;
   toolInput?: unknown;
+  /** Host-mounted workspace roots, when the native payload exposes them. */
+  workspacePaths?: string[];
 }
 
 export interface ProjectGateOptions extends Pick<SynchronizeProjectOptions, 'runGit'> {
@@ -57,6 +59,28 @@ const authorityPaths = new Set([
 ]);
 
 function doubleQuoted(path: string): string { return `"${path.replace(/["\\$`]/g, '\\$&')}"`; }
+
+/** True when `child` is `parent` itself or lies below it after lexical resolution. */
+function workspaceContains(parent: string, child: string): boolean {
+  const location = relative(resolve(parent), resolve(child));
+  return location === '' || (!isAbsolute(location) && location !== '..' && !location.startsWith(`..${sep}`));
+}
+
+/**
+ * Antigravity subagents cannot answer an out-of-workspace approval prompt within their
+ * fixed window. A pending managed-file maintenance commit for a root outside every mounted
+ * workspace would therefore time out instead of committing, so the gate rejects the phase
+ * immediately with the exact recovery instead of letting the Git Operator wait.
+ */
+function antigravityWorkspaceDenial(input: ProjectGateInput, projectRoot: string, result: ProjectGateResult): string | undefined {
+  if (input.host !== 'antigravity' || input.event === 'PhaseEntry') return undefined;
+  if (!Array.isArray(input.workspacePaths) || input.workspacePaths.length === 0) return undefined;
+  if (result.decision !== 'allow' || result.report === undefined) return undefined;
+  const changed = [...result.report.created, ...result.report.updated];
+  if (changed.length === 0) return undefined;
+  if (input.workspacePaths.some((workspace) => workspaceContains(workspace, projectRoot))) return undefined;
+  return `The actual project root ${projectRoot} is outside the Antigravity workspace ${input.workspacePaths.join(', ')}. The synchronization preflight updated ${changed.join(', ')} there, and the required maintenance commit cannot read or run Git outside the workspace without an approval that times out. Open ${projectRoot} as the workspace or add it with /add-dir ${projectRoot}, then resend the request; alternatively, commit exactly those paths yourself. No commit was attempted.`;
+}
 
 function operationDirectory(input: ProjectGateInput): string {
   const cwd = resolve(input.cwd);
@@ -248,7 +272,27 @@ export async function runProjectGate(input: ProjectGateInput, options: ProjectGa
     if (!resolved.adopted) {
       return { decision: 'skip', project: projectRoot, context: `ai-workflow sync skipped: no adoption found for ${projectRoot}; no freshness claim is made.` };
     }
+    const runtimeDirectory = resolve(options.runtimeDirectory ?? join(tmpdir(), 'ai-workflow', 'project-gate'));
+    const hostRuntimeDirectory = join(runtimeDirectory, input.host);
+    const runtimeLocation = relative(projectRoot, hostRuntimeDirectory);
+    if (runtimeLocation === '' || (!isAbsolute(runtimeLocation) && runtimeLocation !== '..' && !runtimeLocation.startsWith(`..${sep}`))) {
+      throw new Error('The gate runtime directory must be outside the adopted project');
+    }
     const exemption = toolExemption(input, projectRoot);
+    if (exemption === 'sync_actor') {
+      return {
+        decision: 'allow',
+        project: projectRoot,
+        exemption,
+        context: `ai-workflow preflight exemption: ${exemption} for ${projectRoot}. Only this synchronization actor or contract read is permitted; no synchronization or freshness verification was performed. The ordinary project decision remains unchanged.`,
+      };
+    }
+    const path = join(hostRuntimeDirectory, `phase-${Buffer.from(projectRoot).toString('base64url')}.json`);
+    const previous = input.event === 'PhaseEntry' ? undefined : await readUnit(path);
+    if (previous?.result.project === projectRoot) {
+      const workspaceDenial = antigravityWorkspaceDenial(input, projectRoot, previous.result);
+      if (workspaceDenial !== undefined) return { decision: 'deny', project: projectRoot, context: workspaceDenial };
+    }
     if (exemption !== undefined) {
       return {
         decision: 'allow',
@@ -257,15 +301,7 @@ export async function runProjectGate(input: ProjectGateInput, options: ProjectGa
         context: `ai-workflow preflight exemption: ${exemption} for ${projectRoot}. Only this synchronization actor or contract read is permitted; no synchronization or freshness verification was performed. The ordinary project decision remains unchanged.`,
       };
     }
-    const runtimeDirectory = resolve(options.runtimeDirectory ?? join(tmpdir(), 'ai-workflow', 'project-gate'));
-    const hostRuntimeDirectory = join(runtimeDirectory, input.host);
-    const runtimeLocation = relative(projectRoot, hostRuntimeDirectory);
-    if (runtimeLocation === '' || (!isAbsolute(runtimeLocation) && runtimeLocation !== '..' && !runtimeLocation.startsWith(`..${sep}`))) {
-      throw new Error('The gate runtime directory must be outside the adopted project');
-    }
-    const path = join(hostRuntimeDirectory, `phase-${Buffer.from(projectRoot).toString('base64url')}.json`);
     if (input.event !== 'PhaseEntry') {
-      const previous = await readUnit(path);
       if (previous?.result.project === projectRoot) return previous.result;
       return {
         decision: 'allow',

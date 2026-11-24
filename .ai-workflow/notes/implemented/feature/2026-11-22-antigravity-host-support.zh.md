@@ -20,6 +20,8 @@ Antigravity 作为第四个受支持宿主加入 `src/workflow/types.ts` 中的 
 - 门禁豁免精确的契约 `read_file`（`Path`）与同步执行者的 `run_command`（`CommandLine`），与其他宿主已有的豁免一致。
 - `schemas/profile.schema.json` 只接受 `antigravity.model` 为封闭层级枚举 `inherit`、`flash_lite`、`flash` 与 `pro`；`inherit` 在渲染出的 agent 中省略该键。`reasoning_effort` 被 schema 接受，从不渲染，并由 `activateProfile` 报告为不阻塞的激活警告。
 - `agy` 是 Antigravity 在 `doctor` 就绪检查中的可执行文件，且始终报告 `warn`，因为只读检查既验证不了认证也验证不了信任；它同样是 `host smoke` 中的可执行文件，运行 `agy --version` 与 `agy -p <prompt> --mode plan`。
+- 声明了 shell 工具的角色还会渲染 `commandExecutionPolicy: auto`，因此常规的项目 git、构建与测试命令无需反复审批即可运行，而 Antigravity 的权限引擎仍然会拦截不可逆操作。
+- `runProjectGate` 会把带有待提交 `created` 或 `updated` 托管路径的已存 allow 结果与原生 `workspacePaths` 比较。当实际根位于所有已挂载工作区之外时，它在 Git Operator 可能等待跨工作区审批之前返回带精确 `/add-dir <root>` 恢复方式的 deny，而 Git Operator 的数据包规则也会在任何跨工作区读取或 Git 命令之前独立停止。
 
 ## Alternatives considered
 
@@ -29,10 +31,13 @@ Antigravity 作为第四个受支持宿主加入 `src/workflow/types.ts` 中的 
 - 在受管 hook 中写入 `enabled: true`。否决，因为该值无法被验证，会误报激活状态并可能覆盖用户刻意的禁用。
 - 对被放行的 `PreToolUse` 返回 `{}` 或 `{"decision":"allow"}`。否决，因为 `agy` 把 `{}` 视为拒绝，而 `{"decision":"allow"}` 会自动批准，从而绕过用户权限提示；空 stdout 能在不覆盖权限的前提下通过。
 - 在 profile 中接受具体 Antigravity 模型 ID。否决，因为不受支持的 ID 在加载 agent 时静默失败，而封闭层级枚举在任何写入之前就拒绝它。
+- 由安装器自动批准 Antigravity 的所有工具或设置 `allowNonWorkspaceAccess`。否决，因为那会移除宿主对无关工作的权限边界；这里只授予角色范围的 `auto` 策略，跨工作区访问仍然是用户决定。
+- 把维护提交推迟到 coding 阶段。否决，因为 `created` 与 `updated` 只描述某个 phase entry 本次写入的文件；后续 phase entry 看到文件已经是最新状态，便不会报告待提交路径，脏的托管文件可能在没有已记录提交的情况下进入 worktree。
 
 ## Consequences
 
 - 安装、卸载、验证、`doctor` 与 `host smoke` 都接受 `antigravity`，且 `--host all` 覆盖全部四个宿主；因为 `skills_manifests` 与 `named_hook` 同步记录是附加且可选的，manifest 保持向后兼容。
 - Antigravity 的加载在真实会话运行之前被报告为已安装但未验证；被禁用、无归属或被手工修改的 hook 或 manifest 条目会被点名，而不是被静默批准。
+- 当待提交的托管文件目标根位于已挂载工作区之外时，phase 现在会立即以精确的 `/add-dir` 恢复方式失败，而不是在 60 秒后超时；挂载该根之后，已存的 phase 结果与角色范围的 `auto` 策略会让同一会话无需反复审批即可重试提交。
 - 本宿主复用的三个用户级加载、同步与共享 skill 机制分别描述于[用户级 agent 契约记录](../architecture/2026-09-14-user-level-agent-contract.md)、[项目模板同步记录](2026-10-08-project-template-sync.md)、[单次启动节奏记录](2026-10-09-sync-once-at-skill-start.md)与[评审证据与共享 skill 记录](../process/2026-11-05-review-evidence-and-shared-skills.md)；每条记录都保持活跃，因为它们各自的理由、替代方案与覆盖限制仍然原样适用。
 - `tests/behavior/antigravity-agent-contract.test.ts` 守护渲染、工具映射与安装边界，而 `tests/install/sync-hooks.test.ts`、`tests/integration/project-sync-hooks.test.ts` 与 `tests/integration/global-agent-guidance.test.ts` 覆盖 hook 归属、原生协议与契约块。四宿主的原生父会话链路仍然是显式上报的缺口，而不是被声明的通过结论。

@@ -1368,6 +1368,42 @@ describe('antigravity sync-hook native protocol (AC-007)', () => {
     expect(await observedHeads(fixture.log), 'native replay never queries the source').toEqual([A]);
   });
 
+  it('AC-007: antigravity workspacePaths deny a pending maintenance commit outside the mounted workspace with the /add-dir recovery', async () => {
+    const project = await adoptedProject();
+    const workspace = join(project, 'workspace');
+    await mkdir(workspace, { recursive: true });
+    const git = await gitFixture(baseSourceFiles);
+    const fixture = await hookFixture();
+    const env = subprocessEnv({ ...fixture, head: A, log: fixture.log }, git);
+    const primed = await primeAntigravity(project, env);
+    expect(primed.decision).toBe('allow');
+    expect(primed.report?.updated).toContain('.ai-workflow/AGENTS.md');
+
+    const preInvocation = await runHook(
+      ['sync-hook', '--host', 'antigravity'],
+      antigravityPayload('PreInvocation', workspace, { workspacePaths: [workspace] }),
+      env,
+    );
+    expect(preInvocation.code, preInvocation.stderr).toBe(0);
+    const turn = parseAntigravityStdout(preInvocation.stdout);
+    expect(turn.terminationBehavior).toBe('terminate');
+    expect(turn.injectSteps?.[0]?.errorMessage?.userMessage).toContain(`/add-dir ${project}`);
+
+    const tool = await runHook(
+      ['sync-hook', '--host', 'antigravity'],
+      antigravityPayload('PreToolUse', workspace, {
+        workspacePaths: [workspace],
+        toolCall: { name: 'read_file', args: { Path: join(project, '.ai-workflow/AGENTS.md') } },
+      }),
+      env,
+    );
+    expect(tool.code, tool.stderr).toBe(0);
+    const deny = parseAntigravityStdout(tool.stdout);
+    expect(deny.decision).toBe('deny');
+    expect(deny.reason).toContain(`/add-dir ${project}`);
+    expect(await observedHeads(fixture.log), 'the workspace guard never queries the source').toEqual([A]);
+  });
+
   it('AC-007: antigravity stdin without a stored check emits the no-check allow stdout and zero source requests', async () => {
     const project = await adoptedProject();
     const git = await gitFixture(baseSourceFiles);

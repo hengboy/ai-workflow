@@ -90,6 +90,9 @@ describe('installed agent output contracts', () => {
       expect(file.contents, `${file.relativePath} subagent flag`).toMatch(/^subagent: true$/m);
       expect(file.contents, `${file.relativePath} mainAgent flag`).toMatch(/^mainAgent: false$/m);
       expect(file.contents, `${file.relativePath} model omission`).not.toMatch(/^model:/m);
+      const shellCapable = /^tools: \[.*\brun_command\b.*\]$/m.test(file.contents);
+      if (shellCapable) expect(file.contents, `${file.relativePath} command execution policy`).toMatch(/^commandExecutionPolicy: auto$/m);
+      else expect(file.contents, `${file.relativePath} command execution policy`).not.toMatch(/^commandExecutionPolicy:/m);
       expect(file.contents, `${file.relativePath} nested dispatch`).not.toMatch(/invoke_subagent|define_subagent|manage_subagents/);
     }
   });
