@@ -41,6 +41,7 @@ const EXPECTED_EVENT_TYPES = [
   'agent.invoked',
   'agent.completed',
   'validation.completed',
+  'review.started',
   'review.completed',
   'repair.completed',
   'delivery.completed',
@@ -306,6 +307,11 @@ describe('execution schema contracts', () => {
 
     const event = await compileSchema(EVENT_SCHEMA);
     expectValid(event.validate, { ...EVENT_FIXTURE, timestamp: PLUS8 }, 'event +08:00');
+    expectValid(
+      event.validate,
+      { ...EVENT_FIXTURE, type: 'review.started', timestamp: PLUS8 },
+      'review.started event +08:00',
+    );
     expectInvalidAt(event.validate, { ...EVENT_FIXTURE, timestamp: PLUS9 }, '/timestamp');
 
     const checkpoint = await compileSchema(CHECKPOINT_SCHEMA);
@@ -345,6 +351,7 @@ describe('execution schema contracts', () => {
 
     expectSameSet(types.RUN_STATUSES as string[], EXPECTED_RUN_STATUSES);
     expectSameSet(types.EXECUTION_EVENT_TYPES as string[], EXPECTED_EVENT_TYPES);
+    expect(types.EXECUTION_EVENT_TYPES).toContain('review.started');
     expectSameSet(types.FAILURE_CATEGORIES as string[], EXPECTED_FAILURE_CATEGORIES);
     expectSameSet(types.TASK_STATUSES as string[], EXPECTED_TASK_STATUSES);
 
@@ -364,5 +371,12 @@ describe('execution schema contracts', () => {
       typeEnum.filter((value) => value.startsWith('failure.')).map((value) => value.slice('failure.'.length)),
       types.FAILURE_CATEGORIES as string[],
     );
+  });
+
+  it('declares review.started in the generated event type union', async () => {
+    const definitionsPath = fileURLToPath(new URL('../../src/generated/execution-event.schema.d.ts', import.meta.url));
+    const definitions = await readFile(definitionsPath, 'utf8');
+    expect(definitions).toContain('"review.started"');
+    expect(definitions).toContain('"validation.completed"');
   });
 });

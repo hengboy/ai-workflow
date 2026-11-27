@@ -32,6 +32,7 @@ import {
   cancelExecutionCommand,
   completeExecutionCommand,
   eventsExecutionCommand,
+  eventExecutionCommand,
   failureExecutionCommand,
   historyExecutionCommand,
   pauseExecutionCommand,
@@ -462,6 +463,21 @@ execution.command('task')
       task,
       ...(commit === undefined ? {} : { commit }),
       ...(head === undefined ? {} : { head }),
+    });
+    print(outcome.body);
+    process.exitCode = outcome.exitCode;
+  });
+execution.command('event')
+  .argument('<type>', 'allowlisted boundary event type')
+  .requiredOption('--plan <directory>')
+  .option('--result <value>', 'trimmed result recorded as the event payload result')
+  .option('--boundary <name>', 'trimmed boundary name recorded as the event payload boundary')
+  .action(async (type: string, { plan, result, boundary }: { plan: string; result?: string; boundary?: string }) => {
+    const outcome = await eventExecutionCommand({
+      plan,
+      type,
+      ...(result === undefined ? {} : { result }),
+      ...(boundary === undefined ? {} : { boundary }),
     });
     print(outcome.body);
     process.exitCode = outcome.exitCode;

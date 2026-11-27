@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { spawn } from 'node:child_process';
-import { readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { hostname } from 'node:os';
 import { join } from 'node:path';
 import { parse as parseYaml } from 'yaml';
@@ -599,5 +599,280 @@ describe('execution start and completion boundary regressions', () => {
     const status = parseJson(statusResult);
     expect(status.runs[0].lock.state).toBe('stale');
     expect(shown.lock.state).toBe(status.runs[0].lock.state);
+  }, TIMEOUT);
+});
+describe('execution event', () => {
+  const EVENT_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\+08:00$/;
+
+  async function successCase(type: string, flags: string[] = []) {
+    const fixture = await startSplit();
+    const recordPath = join(fixture.planDirectory, 'implementation.yaml');
+    const recordBefore = await readFile(recordPath, 'utf8');
+    const before = await snapshotTree(fixture.planDirectory);
+    const result = await execution('event', type, '--plan', fixture.planDirectory, ...flags);
+    expect(result.code, outputOf(result)).toBe(0);
+    const body = parseJson(result);
+    expect(body.valid).toBe(true);
+    expect(body.plan_id).toBe(PLAN_ID);
+    expect(typeof body.run_id).toBe('string');
+    expect(body.run_id.length).toBeGreaterThan(0);
+    expect(body.type).toBe(type);
+    expect(typeof body.event_id).toBe('string');
+    expect(body.event_id.length).toBeGreaterThan(0);
+    expect(Array.isArray(body.warnings)).toBe(true);
+    expect(body.warnings).toEqual([]);
+    return { ...fixture, recordPath, recordBefore, before, body };
+  }
+
+  const successCases = [
+    { type: 'review.started', flags: [], payload: undefined },
+    { type: 'review.started', flags: ['--boundary', 'delivery'], payload: { boundary: 'delivery' } },
+    { type: 'review.completed', flags: ['--result', 'PASS', '--boundary', 'delivery'], payload: { result: 'PASS', boundary: 'delivery' } },
+    { type: 'repair.completed', flags: ['--result', 'applied', '--boundary', 'delivery'], payload: { result: 'applied', boundary: 'delivery' } },
+    { type: 'validation.completed', flags: ['--result', 'failed', '--boundary', 'integration'], payload: { result: 'failed', boundary: 'integration' } },
+  ] as const;
+
+  for (const { type, flags, payload } of successCases) {
+    it(`records ${type} ${flags.join(' ')} as one UTC+08:00 event and leaves implementation.yaml unchanged`, async () => {
+      const fixture = await successCase(type, [...flags]);
+      const events = await readEvents(fixture.planDirectory);
+      const event = events.at(-1);
+      expect(event).toBeDefined();
+      if (event === undefined) throw new Error('no event was appended');
+      expect(event.type).toBe(type);
+      expect(event.event_id).toBe(fixture.body.event_id);
+      expect(event.timestamp).toMatch(EVENT_TIMESTAMP);
+      if (payload === undefined) {
+        expect(Object.hasOwn(event, 'payload')).toBe(false);
+      } else {
+        expect(event.payload).toEqual(payload);
+        expect(Object.keys(event.payload ?? {})).toEqual(Object.keys(payload));
+      }
+      assertNoSensitiveEventKeys(events);
+
+      const changed = changedPaths(fixture.before, await snapshotTree(fixture.planDirectory));
+      expect(changed).toContain('execution/events.jsonl');
+      expect(changed.some((path) => path.startsWith('execution/checkpoints/'))).toBe(true);
+      expect(changed).not.toContain('implementation.yaml');
+      expect(await readFile(fixture.recordPath, 'utf8')).toBe(fixture.recordBefore);
+    }, TIMEOUT);
+  }
+
+  it('trims result and boundary values before storing them', async () => {
+    const { planDirectory } = await startSplit();
+    const result = await execution('event', 'review.completed', '--plan', planDirectory, '--result', '  PASS  ', '--boundary', '  delivery  ');
+    expect(result.code, outputOf(result)).toBe(0);
+    expect((await readEvents(planDirectory)).at(-1)?.payload).toEqual({ result: 'PASS', boundary: 'delivery' });
+  }, TIMEOUT);
+
+  const refusals = [
+    { label: 'an unlisted type', args: ['task.started', '--result', 'x'] },
+    { label: 'validation.completed without --result', args: ['validation.completed'] },
+    { label: 'validation.completed with an empty --result', args: ['validation.completed', '--result', ''] },
+    { label: 'validation.completed with a whitespace --result', args: ['validation.completed', '--result', '   '] },
+    { label: 'review.completed with a whitespace --result', args: ['review.completed', '--result', '   '] },
+    { label: 'review.started with an empty --boundary', args: ['review.started', '--boundary', ''] },
+    { label: 'review.started with a whitespace --boundary', args: ['review.started', '--boundary', '   '] },
+  ] as const;
+
+  for (const { label, args } of refusals) {
+    it(`refuses ${label} with exit 1 and zero disk writes`, async () => {
+      const { planDirectory } = await startSplit();
+      const recordPath = join(planDirectory, 'implementation.yaml');
+      const recordBefore = await readFile(recordPath, 'utf8');
+      const eventsBefore = await readEvents(planDirectory);
+      const before = await snapshotTree(planDirectory);
+
+      expectRefusal(await execution('event', ...args, '--plan', planDirectory));
+
+      expect(changedPaths(before, await snapshotTree(planDirectory))).toEqual([]);
+      expect(await readEvents(planDirectory)).toEqual(eventsBefore);
+      expect(await readFile(recordPath, 'utf8')).toBe(recordBefore);
+    }, TIMEOUT);
+  }
+
+  it('refuses on PAUSED and COMPLETED runs with zero disk writes', async () => {
+    for (const transition of ['pause', 'complete'] as const) {
+      const { planDirectory } = await startSplit();
+      if (transition === 'pause') {
+        expect((await execution('pause', '--plan', planDirectory)).code).toBe(0);
+      } else {
+        expect((await execution('complete', '--plan', planDirectory, '--commit', SHA_ONE)).code).toBe(0);
+      }
+      const recordPath = join(planDirectory, 'implementation.yaml');
+      const recordBefore = await readFile(recordPath, 'utf8');
+      const eventsBefore = await readEvents(planDirectory);
+      const before = await snapshotTree(planDirectory);
+
+      expectRefusal(await execution('event', 'review.started', '--plan', planDirectory));
+
+      expect(changedPaths(before, await snapshotTree(planDirectory))).toEqual([]);
+      expect(await readEvents(planDirectory)).toEqual(eventsBefore);
+      expect(await readFile(recordPath, 'utf8')).toBe(recordBefore);
+    }
+  }, TIMEOUT);
+
+  it('refuses when the execution lock is held by another live process', async () => {
+    const { planDirectory } = await startSplit();
+    const lockPath = join(planDirectory, 'execution', 'lock.json');
+    const lock = JSON.parse(await readFile(lockPath, 'utf8')) as Json;
+    await writeFile(lockPath, `${JSON.stringify({ ...lock, owner_id: 'another-writer', host: hostname(), pid: process.pid }, null, 2)}\n`);
+    const before = await snapshotTree(planDirectory);
+
+    expectRefusal(await execution('event', 'review.started', '--plan', planDirectory));
+
+    expect(changedPaths(before, await snapshotTree(planDirectory))).toEqual([]);
+  }, TIMEOUT);
+
+  it('rejects an unknown CLI option with nonzero exit and zero disk writes', async () => {
+    const { planDirectory } = await startSplit();
+    const baseline = await execution('event', 'review.started', '--plan', planDirectory);
+    expect(baseline.code, outputOf(baseline)).toBe(0);
+    const before = await snapshotTree(planDirectory);
+
+    const unknown = await execution('event', 'review.started', '--plan', planDirectory, '--bogus', 'value');
+
+    expect(unknown.code, outputOf(unknown)).not.toBe(0);
+    expect(outputOf(unknown), outputOf(unknown)).toContain('--bogus');
+    expect(changedPaths(before, await snapshotTree(planDirectory))).toEqual([]);
+  }, TIMEOUT);
+
+  it('warns with event_id null on a storage write failure and leaves implementation.yaml byte-identical', async () => {
+    const { planDirectory } = await startSplit();
+    const recordPath = join(planDirectory, 'implementation.yaml');
+    const recordBefore = await readFile(recordPath, 'utf8');
+    const eventsPath = join(planDirectory, 'execution', 'events.jsonl');
+    await rm(eventsPath);
+    await mkdir(eventsPath);
+    const before = await snapshotTree(planDirectory);
+
+    const result = await execution('event', 'review.completed', '--plan', planDirectory, '--result', 'PASS');
+
+    expect(result.code, outputOf(result)).toBe(0);
+    const body = parseJson(result);
+    expect(body.valid).toBe(true);
+    expect(body.plan_id).toBe(PLAN_ID);
+    expect(body.type).toBe('review.completed');
+    expect(body.event_id).toBeNull();
+    expect(Array.isArray(body.warnings)).toBe(true);
+    expect(body.warnings.length).toBeGreaterThan(0);
+    expect(await readdir(eventsPath)).toEqual([]);
+    const changed = changedPaths(before, await snapshotTree(planDirectory));
+    expect(changed).not.toContain('implementation.yaml');
+    expect(await readFile(recordPath, 'utf8')).toBe(recordBefore);
+  }, TIMEOUT);
+});
+
+describe('execution efficiency analytics fields (CLI)', () => {
+  const T0 = Date.parse('2026-11-27T00:00:00.000Z');
+  const at = (seconds: number): string => new Date(T0 + seconds * 1000).toISOString();
+  type Json = Record<string, any>;
+
+  function baseRun(planId: string, overrides: Json = {}): Json {
+    return {
+      run_id: 'run-analytics',
+      plan_id: planId,
+      plan_digest: `sha256:${'a'.repeat(64)}`,
+      status: 'COMPLETED',
+      plan_created_at: at(0),
+      created_at: at(0),
+      updated_at: at(400),
+      failure_count: 0,
+      started_at: at(0),
+      completed_at: at(400),
+      ...overrides,
+    };
+  }
+
+  function boundaryEvent(index: number, planId: string, type: string, seconds: number, payload?: Json): Json {
+    return {
+      event_id: `event-${index}`,
+      run_id: 'run-analytics',
+      plan_id: planId,
+      type,
+      timestamp: at(seconds),
+      ...(payload === undefined ? {} : { payload }),
+    };
+  }
+
+  async function storeFixture(planDirectory: string, run: Json, events: Json[]): Promise<void> {
+    const directory = join(planDirectory, 'execution');
+    await mkdir(directory, { recursive: true });
+    await writeFile(join(directory, 'run.json'), `${JSON.stringify(run, null, 2)}\n`);
+    await writeFile(
+      join(directory, 'events.jsonl'),
+      events.length === 0 ? '' : `${events.map((event) => JSON.stringify(event)).join('\n')}\n`,
+    );
+  }
+
+  it('AC-008: reports accurate five fields via --plan and --project with zero writes and byte-identical repeats', async () => {
+    const root = await temporary('ai-workflow-exec-analytics-cli-');
+    const planDirectory = await workspacePlanFixture(root, splitSpec(PLAN_ID));
+    await storeFixture(
+      planDirectory,
+      baseRun(PLAN_ID, {
+        tasks: {
+          [TASK_A]: { status: 'completed', started_at: at(0), completed_at: at(30) },
+          [TASK_B]: { status: 'completed', started_at: at(100), completed_at: at(145) },
+        },
+        agent: { invocation_id: 'inv-1', host: 'test-host', session_id: 'session-1', cost: 12 },
+      }),
+      [
+        boundaryEvent(1, PLAN_ID, 'review.started', 200),
+        boundaryEvent(2, PLAN_ID, 'review.completed', 210),
+        boundaryEvent(3, PLAN_ID, 'repair.completed', 215),
+        boundaryEvent(4, PLAN_ID, 'review.started', 300),
+        boundaryEvent(5, PLAN_ID, 'review.completed', 330),
+        boundaryEvent(6, PLAN_ID, 'validation.completed', 340, { result: 'failed' }),
+        boundaryEvent(7, PLAN_ID, 'validation.completed', 350, { result: 'passed' }),
+      ],
+    );
+
+    const before = await snapshotTree(root);
+    const planFirst = await execution('analytics', '--plan', planDirectory);
+    expect(planFirst.code, outputOf(planFirst)).toBe(0);
+    const metric = parseJson(planFirst).runs[0];
+    expect(metric.phase_wall_clock).toEqual([
+      { phase: 1, duration_seconds: 30 },
+      { phase: 2, duration_seconds: 45 },
+    ]);
+    expect(metric.review_duration_seconds).toBe(40);
+    expect(metric.repair_rounds).toBe(1);
+    expect(metric.integration_failure_rate).toBe(0.5);
+    expect(metric.cost_per_accepted_task).toBe(6);
+
+    const planSecond = await execution('analytics', '--plan', planDirectory);
+    expect(planSecond.code, outputOf(planSecond)).toBe(0);
+    expect(planSecond.stdout, '--plan repeats byte-identically').toBe(planFirst.stdout);
+
+    const projectFirst = await execution('analytics', '--project', root);
+    expect(projectFirst.code, outputOf(projectFirst)).toBe(0);
+    const projectBody = parseJson(projectFirst);
+    expect(projectBody.scope).toBe('project');
+    expect(projectBody.runs).toHaveLength(1);
+    expect(projectBody.runs[0]).toEqual(metric);
+    const projectSecond = await execution('analytics', '--project', root);
+    expect(projectSecond.code, outputOf(projectSecond)).toBe(0);
+    expect(projectSecond.stdout, '--project repeats byte-identically').toBe(projectFirst.stdout);
+
+    expect(changedPaths(before, await snapshotTree(root)), 'analytics writes no path').toEqual([]);
+  }, TIMEOUT);
+
+  it('AC-009: reports N/A and zero for a legacy unsplit run with no boundary events', async () => {
+    const root = await temporary('ai-workflow-exec-analytics-legacy-');
+    const planDirectory = await frozenPlan(root, false);
+    const started = await execution('start', '--plan', planDirectory);
+    expect(started.code, outputOf(started)).toBe(0);
+    const completed = await execution('complete', '--plan', planDirectory, '--commit', SHA_ONE);
+    expect(completed.code, outputOf(completed)).toBe(0);
+
+    const result = await execution('analytics', '--plan', planDirectory);
+    expect(result.code, outputOf(result)).toBe(0);
+    const metric = parseJson(result).runs[0];
+    expect(metric.phase_wall_clock).toBe('N/A');
+    expect(metric.review_duration_seconds).toBe('N/A');
+    expect(metric.repair_rounds).toBe(0);
+    expect(metric.integration_failure_rate).toBe('N/A');
+    expect(metric.cost_per_accepted_task).toBe('N/A');
   }, TIMEOUT);
 });
