@@ -98,6 +98,10 @@ Before requesting confirmation, assemble the complete goals, non-goals, REQ/AC i
 - Order steps by dependency and priority so upstream, higher-priority outcomes land first and the critical path stays short.
 - Never over-decompose: every step adds a delegation, a verification and a commit, so merge work that shares one outcome, one responsible role and one validation command into one step.
 
+## Downstream verification step
+
+Parallel implementation steps that share a cross-task integration boundary require a downstream `test` verification step in the same plan, because no single implementation step can prove that shared boundary alone. That step must declare exact integration-test write paths in its frozen write inventory, and it must prove the shared boundary instead of restating unit behavior. A parallel set without a cross-task integration boundary defines no verification step and never invents one. The verification step's inventory lists only exact integration-test paths and the fixtures those tests require; it never includes product source because that step changes no product behavior.
+
 ## Write-scope completeness
 
 Before the confirmation preview, build one complete write inventory for every step from exact repository evidence. A step's write scope enumerates every exact repository path the step creates, modifies, deletes or renames; a directory, wildcard, glob, unresolved placeholder or vague "related files" entry is not a write scope and is never allowed.

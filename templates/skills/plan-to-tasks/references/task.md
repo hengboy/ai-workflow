@@ -47,6 +47,10 @@ Replace every placeholder with usable values for all applicable fields:
 
 `write_scope` is the exact subset of the frozen plan's write inventory for this task's covered outcomes, and together the tasks cover that inventory completely. No path absent from the frozen plan is added to the task, and an exact plan path is never widened to a directory. At execution, the coding skill may authorize a recorded in-run amendment for a supporting exact path; a material path stops before the edit with a bounded support request and requires a bounded user decision or planning repair. Never add the path to the task and never regenerate the plan.
 
+## Downstream verification tasks
+
+A downstream `surface: test` integration verification task declares `depends_on` naming the upstream parallel implementation tasks it verifies, so phase derivation places it in a strictly later phase. Its `write_scope` comes only from frozen plan test paths and never includes product code. Its `test_commands` run the integration suite that proves the cross-task integration boundary, and its Test evidence names the command and the boundary it covers.
+
 ## Objective
 
 State one coherent, independently testable outcome that can be delivered in one commit. Keep it cohesive: do not open a task for a per-file or mechanical edit, and merge work that shares one outcome, surface and validation command.

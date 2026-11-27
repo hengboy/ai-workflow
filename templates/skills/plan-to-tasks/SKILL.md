@@ -56,6 +56,14 @@ Before drafting, read [the task template](references/task.md) for the full field
 - Ask File Explorer for exact paths when an entry, call chain or dependency is unknown.
 - A task landing a lasting decision whose rationale code, tests and existing documentation cannot adequately explain includes its note update, lifecycle transition, the disposition of every identified related active record in the same change and the `ai-workflow notes validate` check; local, mechanical, UI, copy and formatting changes without such lasting rationale are exempt.
 
+## Downstream verification tasks
+
+When parallel implementation tasks share a cross-task integration boundary, the split adds a downstream `surface: test` integration verification task. Its `depends_on` names the upstream parallel implementation tasks, so phase derivation places it in a strictly later phase than every task it verifies.
+
+Its `write_scope` comes only from frozen plan test paths and never includes product code, because a verification task changes no product behavior. Its `test_commands` run the integration suite that proves the cross-task integration boundary and record the command evidence. An independent parallel group without that boundary defines no verification task and never gains a nominal one.
+
+Single worktree, serial commits and the final dual-axis review stay unchanged, and the verification task adds no new role and no additional review trigger.
+
 ## Plan-derived write scopes
 
 Each task's `write_scope` comes only from the frozen plan's write inventory for the outcomes it covers. The union of task write scopes must equal the union of the covered plan steps' declared write paths: every plan write path is assigned to a task, and no task adds a path the plan does not declare. A plan path that is a directory, wildcard, glob or unresolved placeholder is a frozen-plan defect.
