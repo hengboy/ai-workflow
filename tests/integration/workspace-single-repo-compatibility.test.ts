@@ -104,6 +104,8 @@ async function ordinaryValidateOutput(directory: string): Promise<string> {
       phase_count: 1,
       parallel_width: 1,
       critical_path_length: 1,
+      critical_path_ratio: 1,
+      estimated_parallel_speedup: 1,
       estimated_commit_count: 2,
       estimated_delegation_count: 5,
     },
@@ -184,6 +186,8 @@ describe('single-repository compatibility', () => {
       phase_count: 1,
       parallel_width: 1,
       critical_path_length: 1,
+      critical_path_ratio: 1,
+      estimated_parallel_speedup: 1,
       estimated_commit_count: 2,
       estimated_delegation_count: 5,
     });

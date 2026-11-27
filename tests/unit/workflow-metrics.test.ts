@@ -6,6 +6,8 @@ import type { TaskDocument, TaskPhase } from '../../src/workflow/types.js';
  * The stable plan-metrics contract exercised here:
  * - `task_count` and `critical_path_length` come from the task documents and their `depends_on` graph.
  * - `phase_count` and `parallel_width` come from the frozen schedule phases, where width is the largest phase.
+ * - `critical_path_ratio` is `critical_path_length / task_count` rounded to 4 decimals, `0` without tasks.
+ * - `estimated_parallel_speedup` is `task_count / critical_path_length` rounded to 4 decimals, `0` without a critical path.
  * - `estimated_commit_count` is `task_count + 1` and `estimated_delegation_count` is
  *   `2 * task_count + 3`; a plan without tasks reports zero for both estimates.
  */
@@ -14,6 +16,8 @@ interface PlanMetrics {
   phase_count: number;
   parallel_width: number;
   critical_path_length: number;
+  critical_path_ratio: number;
+  estimated_parallel_speedup: number;
   estimated_commit_count: number;
   estimated_delegation_count: number;
 }
@@ -45,6 +49,8 @@ describe('computePlanMetrics', () => {
       phase_count: 0,
       parallel_width: 0,
       critical_path_length: 0,
+      critical_path_ratio: 0,
+      estimated_parallel_speedup: 0,
       estimated_commit_count: 0,
       estimated_delegation_count: 0,
     });
@@ -66,6 +72,8 @@ describe('computePlanMetrics', () => {
       phase_count: 3,
       parallel_width: 2,
       critical_path_length: 3,
+      critical_path_ratio: 0.75,
+      estimated_parallel_speedup: 1.3333,
       estimated_commit_count: 5,
       estimated_delegation_count: 11,
     });
@@ -84,6 +92,8 @@ describe('computePlanMetrics', () => {
       phase_count: 2,
       parallel_width: 3,
       critical_path_length: 2,
+      critical_path_ratio: 0.5,
+      estimated_parallel_speedup: 2,
       estimated_commit_count: 5,
       estimated_delegation_count: 11,
     });

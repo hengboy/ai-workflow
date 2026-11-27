@@ -17,6 +17,8 @@ import { changedPaths, renderExecutionOrderYaml, snapshotTree, temporary, writeP
  * - `task-missing-test-command` -> tasks/<task>.md
  * - `task-write-scope-too-wide` -> tasks/<task>.md
  * - `task-over-split` -> plan.md
+ * - `plan-schedule-serial` -> plan.md
+ * - `parallel-tasks-without-integration-verify` -> plan.md
  */
 interface LintWarning {
   code: string;
@@ -36,6 +38,8 @@ interface TaskFixture {
   acceptanceCriteria: string[];
   writeScope: string[];
   testCommands?: string[];
+  surface?: string;
+  dependsOn?: string[];
 }
 
 interface FixtureOptions {
@@ -48,6 +52,10 @@ interface FixtureOptions {
   counterexamples?: string[] | undefined;
   verification?: string[][] | undefined;
   tasks?: TaskFixture[];
+  /** `undefined` renders one phase with all tasks; `null` writes no execution-order.yaml. */
+  phases?: string[][] | null;
+  /** Raw YAML written verbatim in place of a rendered schedule. */
+  rawSchedule?: string;
 }
 
 interface WrittenFixture {
@@ -126,8 +134,8 @@ async function writeFixture(root: string, options: FixtureOptions = {}): Promise
         id: task.id,
         requirements: task.requirements,
         acceptance_criteria: task.acceptanceCriteria,
-        depends_on: [],
-        surface: 'backend',
+        depends_on: task.dependsOn ?? [],
+        surface: task.surface ?? 'backend',
         read_scope: ['MEMORY.md'],
         write_scope: task.writeScope,
       };
@@ -135,7 +143,12 @@ async function writeFixture(root: string, options: FixtureOptions = {}): Promise
       await writePlanTriplet(join(directory, 'tasks'), `${task.id}.md`, '# Task', '# Task', (body) => renderMarkdown(taskAttributes, body));
       taskPaths[task.id] = join(directory, 'tasks', `${task.id}.md`);
     }
-    await writeFile(join(directory, 'tasks', 'execution-order.yaml'), renderExecutionOrderYaml(planId, [options.tasks.map((task) => task.id)]));
+    const phases = options.phases === undefined ? [options.tasks.map((task) => task.id)] : options.phases;
+    if (options.rawSchedule !== undefined) {
+      await writeFile(join(directory, 'tasks', 'execution-order.yaml'), options.rawSchedule);
+    } else if (phases !== null) {
+      await writeFile(join(directory, 'tasks', 'execution-order.yaml'), renderExecutionOrderYaml(planId, phases));
+    }
   }
   return { directory, specPath: join(directory, 'spec.md'), planPath: join(directory, 'plan.md'), taskPaths };
 }
@@ -257,5 +270,160 @@ describe('lintPlan', () => {
     expect(failure).toBeInstanceOf(Error);
     expect(failure?.message).toContain(directory);
     expect(failure?.message).toMatch(/spec\.md|plan\.md|frozen plan/i);
+  });
+});
+
+
+describe('lintPlan advisory schedule warnings', () => {
+  function warningsOf(result: LintResult, code: string): LintWarning[] {
+    return result.warnings.filter((warning) => warning.code === code);
+  }
+
+  function linearTasks(): TaskFixture[] {
+    return [
+      { id: 'task-001-first', dependsOn: [] },
+      { id: 'task-002-second', dependsOn: ['task-001-first'] },
+      { id: 'task-003-third', dependsOn: ['task-002-second'] },
+    ].map((task) => ({
+      id: task.id,
+      dependsOn: task.dependsOn,
+      requirements: ['REQ-001'],
+      acceptanceCriteria: ['AC-001'],
+      writeScope: [`src/${task.id}.ts`],
+      testCommands: ['pnpm test'],
+    }));
+  }
+
+  function phaseTasks(): { tasks: TaskFixture[]; phases: string[][] } {
+    const backend = ['task-001-backend-a', 'task-002-backend-b'];
+    const frontend = ['task-003-frontend-a', 'task-004-frontend-b'];
+    const tasks = [...backend, ...frontend].map((id) => ({
+      id,
+      requirements: ['REQ-001'],
+      acceptanceCriteria: ['AC-001'],
+      writeScope: [`src/${id}.ts`],
+      testCommands: ['pnpm test'],
+      surface: backend.includes(id) ? 'backend' : 'frontend',
+    }));
+    return { tasks, phases: [backend, frontend] };
+  }
+
+  function verifyTask(id: string, dependsOn: string[]): TaskFixture {
+    return {
+      id,
+      dependsOn,
+      requirements: ['REQ-001'],
+      acceptanceCriteria: ['AC-001'],
+      writeScope: [`tests/${id}.test.ts`],
+      testCommands: ['pnpm test'],
+      surface: 'test',
+    };
+  }
+
+  async function lintSchedule(options: FixtureOptions): Promise<{ result: LintResult; fixture: WrittenFixture; before: Map<string, string>; after: Map<string, string> }> {
+    const root = await temporary('ai-workflow-lint-schedule-');
+    const fixture = await writeFixture(root, cleanOptions(options));
+    const before = await snapshotTree(root);
+    const result = (await lintPlan(fixture.directory)) as LintResult;
+    return { result, fixture, before, after: await snapshotTree(root) };
+  }
+
+  it('AC-003 emits exactly one plan-schedule-serial for three linear tasks and writes no file', async () => {
+    const tasks = linearTasks();
+    const { result, fixture, before, after } = await lintSchedule({ tasks, phases: tasks.map((task) => [task.id]) });
+
+    expect(result.valid).toBe(true);
+    const warnings = warningsOf(result, 'plan-schedule-serial');
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toEqual(expect.objectContaining({ path: fixture.planPath }));
+    expect(changedPaths(before, after)).toEqual([]);
+  });
+
+  it('AC-004 emits one deduplicated warning naming both uncovered parallel implementation phases', async () => {
+    const { tasks, phases } = phaseTasks();
+    const { result, fixture, before, after } = await lintSchedule({ tasks, phases });
+
+    expect(result.valid).toBe(true);
+    const warnings = warningsOf(result, 'parallel-tasks-without-integration-verify');
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toEqual(expect.objectContaining({ path: fixture.planPath }));
+    expect(warnings[0]?.message).toMatch(/\b1\b/);
+    expect(warnings[0]?.message).toMatch(/\b2\b/);
+    expect(changedPaths(before, after)).toEqual([]);
+  });
+
+  it('AC-004 does not accept one test task depending on one task from each parallel phase', async () => {
+    const { tasks, phases } = phaseTasks();
+    const cross = verifyTask('task-005-cross', ['task-001-backend-a', 'task-003-frontend-a']);
+    const { result } = await lintSchedule({ tasks: [...tasks, cross], phases: [...phases, [cross.id]] });
+
+    const warnings = warningsOf(result, 'parallel-tasks-without-integration-verify');
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]?.message).toMatch(/\b1\b/);
+    expect(warnings[0]?.message).toMatch(/\b2\b/);
+  });
+
+  it('AC-004 emits no warning when later test tasks cover each parallel implementation phase', async () => {
+    const { tasks, phases } = phaseTasks();
+    const backendVerify = verifyTask('task-005-verify-backend', ['task-001-backend-a', 'task-002-backend-b']);
+    const frontendVerify = verifyTask('task-006-verify-frontend', ['task-003-frontend-a', 'task-004-frontend-b']);
+    const { result } = await lintSchedule({ tasks: [...tasks, backendVerify, frontendVerify], phases: [...phases, [backendVerify.id], [frontendVerify.id]] });
+
+    expect(warningsOf(result, 'parallel-tasks-without-integration-verify')).toHaveLength(0);
+  });
+
+  it('AC-005 falls back to depends_on grouping when execution-order.yaml is missing', async () => {
+    const tasks = linearTasks();
+    const { result, before, after } = await lintSchedule({ tasks, phases: null });
+
+    expect(result.valid).toBe(true);
+    expect(warningsOf(result, 'plan-schedule-serial')).toHaveLength(1);
+    expect(changedPaths(before, after)).toEqual([]);
+  });
+
+  it('AC-005 falls back to depends_on grouping when execution-order.yaml is malformed', async () => {
+    const tasks = linearTasks();
+    const { result, before, after } = await lintSchedule({ tasks, rawSchedule: 'phases: [unterminated\n' });
+
+    expect(result.valid).toBe(true);
+    expect(warningsOf(result, 'plan-schedule-serial')).toHaveLength(1);
+    expect(changedPaths(before, after)).toEqual([]);
+  });
+
+  it('AC-005 skips schedule warnings without throwing on a depends_on cycle', async () => {
+    const tasks = linearTasks();
+    tasks[0] = { ...tasks[0] as TaskFixture, dependsOn: ['task-003-third'] };
+    const { result, before, after } = await lintSchedule({ tasks, phases: null });
+
+    expect(result.valid).toBe(true);
+    expect(warningsOf(result, 'plan-schedule-serial')).toHaveLength(0);
+    expect(warningsOf(result, 'parallel-tasks-without-integration-verify')).toHaveLength(0);
+    expect(changedPaths(before, after)).toEqual([]);
+  });
+
+  it('AC-005 ignores dangling dependency IDs while grouping by depends_on', async () => {
+    const tasks = linearTasks();
+    tasks[1] = { ...tasks[1] as TaskFixture, dependsOn: ['task-001-first', 'task-099-missing'] };
+    const { result } = await lintSchedule({ tasks, phases: null });
+
+    expect(result.valid).toBe(true);
+    expect(warningsOf(result, 'plan-schedule-serial')).toHaveLength(1);
+  });
+
+  it('does not emit plan-schedule-serial for a two-task linear plan', async () => {
+    const tasks = linearTasks().slice(0, 2);
+    const { result } = await lintSchedule({ tasks, phases: tasks.map((task) => [task.id]) });
+
+    expect(warningsOf(result, 'plan-schedule-serial')).toHaveLength(0);
+  });
+
+  it('does not emit a verification warning for parallel documentation and research tasks', async () => {
+    const tasks: TaskFixture[] = [
+      { id: 'task-001-doc', requirements: ['REQ-001'], acceptanceCriteria: ['AC-001'], writeScope: ['docs/one.md'], testCommands: ['pnpm test'], surface: 'documentation' },
+      { id: 'task-002-research', requirements: ['REQ-001'], acceptanceCriteria: ['AC-001'], writeScope: ['docs/two.md'], testCommands: ['pnpm test'], surface: 'research' },
+    ];
+    const { result } = await lintSchedule({ tasks, phases: [tasks.map((task) => task.id)] });
+
+    expect(warningsOf(result, 'parallel-tasks-without-integration-verify')).toHaveLength(0);
   });
 });

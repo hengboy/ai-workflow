@@ -30,6 +30,9 @@ export interface PlanReport {
   task_count: number;
   phase_count: number;
   critical_path_length: number;
+  parallel_width: number;
+  critical_path_ratio: number;
+  estimated_parallel_speedup: number;
   review_rounds: number | typeof UNKNOWN;
   commit_count: number | null;
   commit_count_reason: string | null;
@@ -188,6 +191,9 @@ export async function planReport(planDirectoryInput: string): Promise<PlanReport
     task_count: metrics.task_count,
     phase_count: metrics.phase_count,
     critical_path_length: metrics.critical_path_length,
+    parallel_width: metrics.parallel_width,
+    critical_path_ratio: metrics.critical_path_ratio,
+    estimated_parallel_speedup: metrics.estimated_parallel_speedup,
     review_rounds: await reviewRounds(planDirectory),
     commit_count: commitTotal,
     commit_count_reason: commitReason,

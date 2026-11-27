@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { renderFrozenMarkdown } from '../../src/workflow/digest.js';
 import { renderMarkdown } from '../../src/utils/frontmatter.js';
-import { renderExecutionOrderYaml, temporary, writePlanTriplet } from '../helpers.js';
+import { changedPaths, renderExecutionOrderYaml, snapshotTree, temporary, writePlanTriplet } from '../helpers.js';
 
 // CLI boundary: `plan validate` must load `tasks/execution-order.yaml` whenever the
 // plan directory holds task documents. Observable = exit code + stdout JSON.
@@ -192,10 +192,39 @@ describe('plan validate execution order', () => {
       phase_count: 2,
       parallel_width: 1,
       critical_path_length: 2,
+      critical_path_ratio: 1,
+      estimated_parallel_speedup: 1,
       estimated_commit_count: 3,
       estimated_delegation_count: 7,
     });
     expect(Object.keys(parsed).sort()).toEqual(['digests', 'execution_order', 'metrics', 'plan_id', 'valid']);
+  });
+
+  it('reports the additive efficiency metrics on a four-task split plan and writes no file', async () => {
+    const root = await temporary('ai-workflow-order-split-metrics-');
+    const directory = await buildPlan(root, {
+      tasks: [
+        { id: 'task-001-a' },
+        { id: 'task-002-b', dependsOn: ['task-001-a'] },
+        { id: 'task-003-c', dependsOn: ['task-001-a'] },
+        { id: 'task-004-d', dependsOn: ['task-002-b', 'task-003-c'] },
+      ],
+      schedule: renderExecutionOrderYaml(PLAN_ID, [['task-001-a'], ['task-002-b', 'task-003-c'], ['task-004-d']]),
+    });
+    const before = await snapshotTree(root);
+
+    const result = await runCli(['plan', 'validate', '--plan', directory]);
+
+    expect(result.code, result.stderr).toBe(0);
+    const parsed = JSON.parse(result.stdout) as { valid: boolean; metrics: Record<string, number> };
+    expect(parsed.valid).toBe(true);
+    expect(parsed.metrics.task_count).toBe(4);
+    expect(parsed.metrics.phase_count).toBe(3);
+    expect(parsed.metrics.parallel_width).toBe(2);
+    expect(parsed.metrics.critical_path_length).toBe(3);
+    expect(parsed.metrics.critical_path_ratio).toBe(0.75);
+    expect(parsed.metrics.estimated_parallel_speedup).toBe(1.3333);
+    expect(changedPaths(before, await snapshotTree(root))).toEqual([]);
   });
 
   it('fails when the schedule file is missing and names the artifact', async () => {
@@ -292,6 +321,8 @@ describe('plan validate execution order', () => {
       phase_count: 0,
       parallel_width: 0,
       critical_path_length: 0,
+      critical_path_ratio: 0,
+      estimated_parallel_speedup: 0,
       estimated_commit_count: 0,
       estimated_delegation_count: 0,
     });

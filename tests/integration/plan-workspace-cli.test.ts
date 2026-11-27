@@ -88,6 +88,8 @@ describe('plan validate for workspace plans', () => {
       phase_count: 3,
       parallel_width: 1,
       critical_path_length: 1,
+      critical_path_ratio: 0.3333,
+      estimated_parallel_speedup: 3,
       estimated_commit_count: 4,
       estimated_delegation_count: 9,
     });
@@ -218,6 +220,8 @@ describe('plan validate for workspace plans', () => {
         phase_count: 1,
         parallel_width: 1,
         critical_path_length: 1,
+        critical_path_ratio: 1,
+        estimated_parallel_speedup: 1,
         estimated_commit_count: 2,
         estimated_delegation_count: 5,
       },
