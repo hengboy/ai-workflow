@@ -833,6 +833,109 @@ export async function recordWorkspaceCheckpoint(input: WorkspaceTelemetryInput):
   }
 }
 
+const BOUNDARY_EVENT_TYPE_VALUES = [
+  'review.started',
+  'review.completed',
+  'repair.completed',
+  'validation.completed',
+] as const;
+
+/** Immutable event types the boundary recorder accepts. */
+export type BoundaryEventType = (typeof BOUNDARY_EVENT_TYPE_VALUES)[number];
+/** Allowlisted boundary event types; no other type may be recorded through this path. */
+export const BOUNDARY_EVENT_TYPES: BoundaryEventType[] = Object.freeze([...BOUNDARY_EVENT_TYPE_VALUES]) as BoundaryEventType[];
+
+/** Input accepted by the boundary event recorder. */
+export interface RecordBoundaryEventInput {
+  planDirectory: string;
+  type: string;
+  result?: string;
+  boundary?: string;
+  config?: ExecutionConfig;
+}
+
+/** Outcome of recording one boundary event: an append result or a refusal. */
+export type RecordBoundaryEventResult =
+  | {
+      valid: true;
+      plan_id: string;
+      run_id: string;
+      type: BoundaryEventType;
+      event_id: string | null;
+      warnings: string[];
+    }
+  | { valid: false; error: string };
+
+/** Trim one optional event value, keeping it absent when the caller omitted it. */
+function trimOptional(value: string | undefined): string | undefined {
+  return value === undefined ? undefined : value.trim();
+}
+
+/**
+ * Record one allowlisted boundary event on a running run. Invalid types, blank values, non-running
+ * runs and an unavailable lock are refused before any write; a telemetry storage failure after those
+ * checks becomes a warning with no retry, so the authoritative record never changes here.
+ */
+export async function recordBoundaryEvent(input: RecordBoundaryEventInput): Promise<RecordBoundaryEventResult> {
+  if (!BOUNDARY_EVENT_TYPES.includes(input.type as BoundaryEventType)) {
+    return { valid: false, error: `Unsupported boundary event type: ${input.type}` };
+  }
+  const type = input.type as BoundaryEventType;
+  const result = trimOptional(input.result);
+  const boundary = trimOptional(input.boundary);
+  if (result !== undefined && result.length === 0) {
+    return { valid: false, error: `The ${type} event result must not be blank` };
+  }
+  if (boundary !== undefined && boundary.length === 0) {
+    return { valid: false, error: `The ${type} event boundary must not be blank` };
+  }
+  if (type === 'validation.completed' && result === undefined) {
+    return { valid: false, error: 'A validation.completed event requires a result' };
+  }
+
+  const config = input.config ?? DEFAULT_EXECUTION_CONFIG;
+  const paths = executionPaths(input.planDirectory);
+  const warnings: string[] = [];
+  let run: ExecutionRun;
+  try {
+    run = await readRun(paths);
+  } catch (error) {
+    return { valid: false, error: `Unable to read the execution run: ${errorMessage(error)}` };
+  }
+  if (run.status !== 'RUNNING') {
+    return { valid: false, error: `Cannot record a ${type} event for a ${run.status} run` };
+  }
+
+  let acquisition: Awaited<ReturnType<typeof acquireLock>>;
+  try {
+    acquisition = await acquireLock(paths, { command: `execution event ${type}` });
+  } catch (error) {
+    return { valid: false, error: `Unable to acquire the execution lock: ${errorMessage(error)}` };
+  }
+  if (!acquisition.acquired) {
+    return { valid: false, error: `Execution lock unavailable: ${acquisition.reason}` };
+  }
+
+  try {
+    const payload: Record<string, unknown> = {};
+    if (result !== undefined) payload.result = result;
+    if (boundary !== undefined) payload.boundary = boundary;
+    const eventId = await appendEventSafe(
+      paths,
+      run,
+      type,
+      config,
+      warnings,
+      Object.keys(payload).length === 0 ? {} : { payload },
+    );
+    if (eventId === undefined) warnings.push(`The ${type} event was not stored`);
+    await persistCheckpoint(paths, run, config, warnings, eventId);
+    return { valid: true, plan_id: run.plan_id, run_id: run.run_id, type, event_id: eventId ?? null, warnings };
+  } finally {
+    await dropLock(paths, warnings);
+  }
+}
+
 /** Input accepted by failure recording, which keeps retryable runs alive. */
 export interface RecordFailureInput {
   planDirectory: string;

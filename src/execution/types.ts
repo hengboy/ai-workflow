@@ -29,6 +29,7 @@ const EXECUTION_EVENT_TYPE_VALUES = [
   'agent.invoked',
   'agent.completed',
   'validation.completed',
+  'review.started',
   'review.completed',
   'repair.completed',
   'delivery.completed',

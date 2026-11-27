@@ -1,5 +1,5 @@
 import { readExecutionConfig } from './config.js';
-import { cancelRun, completeRun, failRun, pauseRun, recordFailure, recordTask, startRun } from './manager.js';
+import { cancelRun, completeRun, failRun, pauseRun, recordBoundaryEvent, recordFailure, recordTask, startRun } from './manager.js';
 import { resumeRun } from './recovery.js';
 import {
   executionAnalytics,
@@ -228,6 +228,28 @@ export async function failureExecutionCommand(input: FailureExecutionInput): Pro
   } catch (error) {
     return refusal(error);
   }
+}
+
+export interface EventExecutionInput {
+  plan: string;
+  type: string;
+  result?: string;
+  boundary?: string;
+}
+
+/**
+ * Record one allowlisted boundary event for a running run. A refusal reports exit 1 with no write,
+ * while a telemetry storage failure stays exit 0 with an `event_id` of null and a warning.
+ */
+export async function eventExecutionCommand(input: EventExecutionInput): Promise<ExecutionCommandOutcome> {
+  const result = await recordBoundaryEvent({
+    planDirectory: input.plan,
+    type: input.type,
+    ...(input.result === undefined ? {} : { result: input.result }),
+    ...(input.boundary === undefined ? {} : { boundary: input.boundary }),
+    config: readExecutionConfig(),
+  });
+  return { body: { ...result }, exitCode: result.valid ? 0 : 1 };
 }
 
 export interface ResumeExecutionInput {

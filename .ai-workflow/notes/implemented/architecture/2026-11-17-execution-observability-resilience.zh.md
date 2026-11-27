@@ -10,8 +10,9 @@ Status: implemented
 
 ## Decision
 
-- 叠加层由程序拥有。`src/execution/` 拥有存储、生命周期、恢复、报告与命令面，每次写入都发生在工作流 CLI 内的既有边界上：对某个计划切片使用 `ai-workflow execution start`、`execution task`、`execution complete`、`execution pause`、`execution cancel`、`execution failure` 与 `execution resume`，由 `ai-workflow workspace checkpoint` 镜像已应用的检查点事件，以及由内部 `execution record --host opencode` 传输承载宿主会话证据。任何代理都不得手写运行、事件、检查点或锁文件。
+- 叠加层由程序拥有。`src/execution/` 拥有存储、生命周期、恢复、报告与命令面，每次写入都发生在工作流 CLI 内的既有边界上：对某个计划切片使用 `ai-workflow execution start`、`execution task`、`execution complete`、`execution pause`、`execution cancel`、`execution failure`、`execution resume` 与白名单 `execution event` 边界记录器，由 `ai-workflow workspace checkpoint` 镜像已应用的检查点事件，以及由内部 `execution record --host opencode` 传输承载宿主会话证据。任何代理都不得手写运行、事件、检查点或锁文件。
 - 每次运行在冻结计划的 `execution/` 目录下保留 `run.json`、仅追加的 `events.jsonl` 事件流、保留的 `checkpoints/` 与 `lock.json`。事件仅本地且仅所有者可读写，检查点保留有界历史，默认为十份，所有文件都位于被忽略的 `.ai-workflow/plans/` 边界内，因此不引入受跟踪工件、schema 迁移或采用项目的变更。
+- 边界证据使用一条白名单记录器而非通用事件写入器：`execution event` 只接受 `review.started`、`review.completed`、`repair.completed` 与 `validation.completed`，修剪并校验可选的 `result` 与 `boundary` 值，不存储其他载荷键，并在任何写入前拒绝无效类型、空白值、缺少必需结果、非运行状态或不可用的锁。上述检查之后的存储失败仍只是一条带 `event_id: null` 的警告，因此 `implementation.yaml` 绝不会被触碰。
 - `implementation.yaml` 仍是状态、UTC+08:00 时间戳与最终提交的唯一权威工作流记录。`execution start` 写入 in-progress 记录，`execution complete` 以相同格式、幂等性与中断运行语义写入 completed 记录，而叠加层只是观察：它绝不替换记录，绝不改写矛盾的记录，且任何检查点、交付、工作区状态或验收门禁都不读取它。
 - 一次运行覆盖一个仓库计划切片，工作区计划为根拥有任务与定稿保留独立的根运行。运行只留在各自仓库与锁内，因此不存在合并的合成工作区运行、跨仓库状态合并或共享锁。
 - 恢复把检测与行动分开。发现过程只读，报告每个未完成运行及其锁状态，阶段门禁在每次阶段进入时打印该提示一次。继续未完成的运行需要显式的 `ai-workflow execution resume`，它会拒绝活跃或他主机锁、计划摘要不匹配、矛盾的权威记录或完全损坏的存储，优先采用最后一个有效检查点，且绝不重放已完成任务或模型请求。
@@ -29,7 +30,7 @@ Status: implemented
 
 ## Consequences
 
-- 操作者读取一个本地叠加层即可得知当前运行状态、进行中的任务与阶段、已记录的验证、评审与交付证据、失败类别与恢复决定，而权威记录仍然回答计划是否开始或结束以及何时开始结束。
+- 操作者读取一个本地叠加层即可得知当前运行状态、进行中的任务与阶段、已记录的验证、评审与交付证据、失败类别与恢复决定，而权威记录仍然回答计划是否开始或结束以及何时开始结束。分析字段补充各阶段墙钟时长、累计评审时长、修复轮次、集成失败率与每个已接受任务的成本，全部只读地派生自已存储的证据。
 - 遥测写入失败打印警告，绝不阻塞检查点、交付或状态门禁，绝不自行重试，也绝不重新提交，因此降级存储表现为可见上下文，而不是被改变的权威字节或退出码。
 - 交付、工作区就绪与验收门禁保留其原有证据要求，因此叠加层的值只是说明性的，任何运行状态都不授权记录、检查点、交付或验收决定的转换。
 - 本记录部分取代[实施记录](../process/2026-09-22-plan-implementation-record.md)：该记录保留其格式、时间戳、两个状态与唯一权威，通过独立的 execution 命令组回答其早先的“不新增 CLI 子命令”备选方案，并在此获得叠加层事实。
@@ -37,3 +38,4 @@ Status: implemented
 - 本记录部分取代[工作流语义记录](../process/2026-11-02-workflow-semantics-context.md)：该记录保留每个早先的状态域及其理由，并新增执行状态域，包含运行状态、事件与检查点证据以及降级遥测。
 - 没有任何 active 记录被全部取代：[子模块工作区记录](./2026-09-30-submodule-workspace.md)、[工作区执行一致性记录](../bug-fix/2026-10-08-workspace-execution-consistency.md)与[实施记录时间戳记录](../process/2026-09-23-implementation-record-utc-offset.md)保留其边界、单记录与时区决定，且其当前执行事实指向本记录。
 - 已安装的宿主技能、代理提示词与重建后的 CLI 只有在下一次宿主安装或 profile 激活后才携带该行为，因此采用项目在该 rollout 之后的下一次真实实施中才会观察到叠加层。
+- 边界记录器与五项运行时效率分析扩展本叠加层而不替换它，其决定理由记录于[Swarm 原则记录](../process/2026-11-27-swarm-principles-observability-and-verification-tasks.md)。

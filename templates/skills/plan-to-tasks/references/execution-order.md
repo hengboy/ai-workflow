@@ -24,6 +24,12 @@ phases:
 
 Coding keeps Git commits serial: after a phase is verified, each task's write scope is committed through Git Operator one commit at a time.
 
+## Downstream verification tasks
+
+A downstream `surface: test` integration verification task names the upstream parallel implementation tasks in `depends_on`, so derivation places it in a strictly later phase than every task it verifies. Its `write_scope` holds only frozen plan test paths, and a task that verifies a shared boundary edits no product code. Its `test_commands` prove the cross-task integration boundary rather than one task's internal behavior.
+
+The verification task is scheduled like every other task: its own phase comes only from its derived depth, and it adds no extra phase, no review trigger and no gate. Single worktree and serial task commits stay unchanged.
+
 ## Finalization coverage
 
 The schedule stays `task-only`: root finalization coverage is not a task phase, so `finalization` criteria never appear in `phases` and never add phases or parallel tasks. Reserved root-entry tasks are scheduled normally; finalization-only coverage stays outside the task DAG.

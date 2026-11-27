@@ -1,6 +1,8 @@
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { hostname } from 'node:os';
 import { basename, join, resolve } from 'node:path';
+import { parse } from 'yaml';
+import { parseMarkdown } from '../utils/frontmatter.js';
 import { executionPaths, isPlanDirectory, type ExecutionPaths } from './paths.js';
 import type { CheckpointReadResult, EventReadResult } from './store.js';
 import { isProcessAlive, readEvents, readLatestCheckpoint, readLock, readRun } from './store.js';
@@ -143,6 +145,12 @@ export interface ExecutionHistoryResult {
   warnings: string[];
 }
 
+/** Wall-clock duration of one scheduled phase; `N/A` when its tasks are not all completed. */
+export interface PhaseWallClock {
+  phase: number;
+  duration_seconds: number | typeof UNAVAILABLE;
+}
+
 /** Metrics derived exclusively from stored run and event data. */
 export interface AnalyticsMetric {
   plan_id: string;
@@ -156,6 +164,11 @@ export interface AnalyticsMetric {
   recovery_success_rate: number | typeof UNAVAILABLE;
   token_usage: number | typeof UNAVAILABLE;
   model_cost: number | typeof UNAVAILABLE;
+  phase_wall_clock: PhaseWallClock[] | typeof UNAVAILABLE;
+  review_duration_seconds: number | typeof UNAVAILABLE;
+  repair_rounds: number;
+  integration_failure_rate: number | typeof UNAVAILABLE;
+  cost_per_accepted_task: number | typeof UNAVAILABLE;
   validation_result: string;
   review_result: string;
   warnings: string[];
@@ -513,7 +526,151 @@ function sumPayloadNumber(events: ExecutionEvent[], field: string): number | und
   return total;
 }
 
-function buildMetric(run: ExecutionRun, events: ExecutionEvent[], warnings: string[]): AnalyticsMetric {
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+/** Phase task ids from a readable, shape-valid `tasks/execution-order.yaml`; `undefined` otherwise. */
+async function readPhaseSchedule(planDirectory: string): Promise<string[][] | undefined> {
+  let source: string;
+  try {
+    source = await readFile(join(planDirectory, 'tasks', 'execution-order.yaml'), 'utf8');
+  } catch {
+    return undefined;
+  }
+  let parsed: unknown;
+  try {
+    parsed = parse(source);
+  } catch {
+    return undefined;
+  }
+  if (!isRecord(parsed) || !Array.isArray(parsed['phases']) || parsed['phases'].length === 0) return undefined;
+  const phases: string[][] = [];
+  for (const rawPhase of parsed['phases']) {
+    if (!isRecord(rawPhase) || !Array.isArray(rawPhase['parallel']) || rawPhase['parallel'].length === 0) return undefined;
+    const ids: string[] = [];
+    for (const id of rawPhase['parallel']) {
+      if (typeof id !== 'string' || id.length === 0) return undefined;
+      ids.push(id);
+    }
+    phases.push(ids);
+  }
+  return phases;
+}
+
+/** Repository declared by each frozen task document, keyed by task id; unreadable documents are skipped. */
+async function readTaskRepositories(planDirectory: string): Promise<Map<string, string>> {
+  const repositories = new Map<string, string>();
+  let names: string[];
+  try {
+    names = await readdir(join(planDirectory, 'tasks'));
+  } catch {
+    return repositories;
+  }
+  for (const name of names.filter((item) => item.endsWith('.md') && !item.endsWith('.zh.md')).sort()) {
+    try {
+      const document = parseMarkdown(await readFile(join(planDirectory, 'tasks', name), 'utf8'));
+      const id = document.attributes['id'];
+      const repo = document.attributes['repo'];
+      if (typeof id === 'string' && typeof repo === 'string' && repo.length > 0) repositories.set(id, repo);
+    } catch {
+      // An unreadable task document contributes no repository declaration.
+    }
+  }
+  return repositories;
+}
+
+function phaseWallClock(
+  phaseSchedule: string[][] | undefined,
+  taskRepositories: Map<string, string>,
+  run: ExecutionRun,
+): PhaseWallClock[] | typeof UNAVAILABLE {
+  const tasks = run.tasks;
+  if (phaseSchedule === undefined || tasks === undefined) return UNAVAILABLE;
+  if (Object.keys(tasks).length === 0) return UNAVAILABLE;
+  const entries: PhaseWallClock[] = [];
+  phaseSchedule.forEach((ids, index) => {
+    const expected = run.repository === undefined ? ids : ids.filter((id) => taskRepositories.get(id) === run.repository);
+    if (expected.length === 0) return;
+    let duration: number | typeof UNAVAILABLE = UNAVAILABLE;
+    const starts: number[] = [];
+    const completions: number[] = [];
+    let complete = true;
+    for (const id of expected) {
+      const state = tasks[id];
+      if (state === undefined || state.status !== 'completed') {
+        complete = false;
+        break;
+      }
+      const started = state.started_at === undefined ? undefined : parseTimestamp(state.started_at);
+      const completed = state.completed_at === undefined ? undefined : parseTimestamp(state.completed_at);
+      if (started === undefined || completed === undefined || completed < started) {
+        complete = false;
+        break;
+      }
+      starts.push(started);
+      completions.push(completed);
+    }
+    if (complete) duration = round((Math.max(...completions) - Math.min(...starts)) / 1000, 3);
+    entries.push({ phase: index + 1, duration_seconds: duration });
+  });
+  return entries.length === 0 ? UNAVAILABLE : entries;
+}
+
+const PASSED_VALIDATION_RESULTS = new Set(['pass', 'passed', 'ok', 'success']);
+const FAILED_VALIDATION_RESULTS = new Set(['fail', 'failed', 'error']);
+
+function reviewDurationSeconds(events: ExecutionEvent[]): number | typeof UNAVAILABLE {
+  let openStart: number | undefined;
+  let total = 0;
+  let pairs = 0;
+  for (const event of events) {
+    if (event.type === 'review.started') {
+      const started = parseTimestamp(event.timestamp);
+      if (started !== undefined) openStart = started;
+      continue;
+    }
+    if (event.type !== 'review.completed') continue;
+    const completed = parseTimestamp(event.timestamp);
+    if (completed === undefined) continue;
+    const started = openStart;
+    if (started === undefined) continue;
+    openStart = undefined;
+    if (completed < started) continue;
+    total += (completed - started) / 1000;
+    pairs += 1;
+  }
+  return pairs === 0 ? UNAVAILABLE : round(total, 3);
+}
+
+function integrationFailureRate(events: ExecutionEvent[]): number | typeof UNAVAILABLE {
+  let passed = 0;
+  let failed = 0;
+  for (const event of events) {
+    if (event.type !== 'validation.completed') continue;
+    const raw = event.payload?.['result'];
+    if (typeof raw !== 'string') continue;
+    const value = raw.trim().toLowerCase();
+    if (PASSED_VALIDATION_RESULTS.has(value)) passed += 1;
+    else if (FAILED_VALIDATION_RESULTS.has(value)) failed += 1;
+  }
+  const classified = passed + failed;
+  return classified === 0 ? UNAVAILABLE : round(failed / classified, 4);
+}
+
+function costPerAcceptedTask(modelCost: number | typeof UNAVAILABLE, tasks: ExecutionRun['tasks']): number | typeof UNAVAILABLE {
+  if (typeof modelCost !== 'number' || !Number.isFinite(modelCost)) return UNAVAILABLE;
+  const completed = tasks === undefined ? 0 : Object.values(tasks).filter((state) => state.status === 'completed').length;
+  return completed === 0 ? UNAVAILABLE : round(modelCost / completed, 6);
+}
+
+function buildMetric(
+  run: ExecutionRun,
+  events: ExecutionEvent[],
+  warnings: string[],
+  phaseSchedule: string[][] | undefined,
+  taskRepositories: Map<string, string>,
+): AnalyticsMetric {
   const tasks = taskMetrics(run.tasks);
   const agentEvents = events.filter((event) => event.type === 'agent.invoked' || event.type === 'agent.completed');
   const tokenUsage = sumPayloadNumber(agentEvents, 'tokens') ?? run.agent?.tokens ?? UNAVAILABLE;
@@ -534,6 +691,11 @@ function buildMetric(run: ExecutionRun, events: ExecutionEvent[], warnings: stri
     recovery_success_rate: interruptionCount === 0 ? UNAVAILABLE : round(resumedCount / interruptionCount, 4),
     token_usage: tokenUsage,
     model_cost: modelCost,
+    phase_wall_clock: phaseWallClock(phaseSchedule, taskRepositories, run),
+    review_duration_seconds: reviewDurationSeconds(events),
+    repair_rounds: events.filter((event) => event.type === 'repair.completed').length,
+    integration_failure_rate: integrationFailureRate(events),
+    cost_per_accepted_task: costPerAcceptedTask(modelCost, run.tasks),
     validation_result: lastPayloadString(events, 'validation.completed'),
     review_result: lastPayloadString(events, 'review.completed'),
     warnings,
@@ -571,7 +733,9 @@ export async function executionAnalytics(scope: QueryScope): Promise<ExecutionAn
       } catch (error) {
         metricWarnings.push(`Unable to read the execution events: ${errorMessage(error)}`);
       }
-      runs.push(buildMetric(run, events, metricWarnings));
+      const phaseSchedule = await readPhaseSchedule(location.planDirectory);
+      const taskRepositories = phaseSchedule === undefined ? new Map<string, string>() : await readTaskRepositories(location.planDirectory);
+      runs.push(buildMetric(run, events, metricWarnings, phaseSchedule, taskRepositories));
     } catch (error) {
       warnings.push(`Unable to read the execution run at ${location.planDirectory}: ${errorMessage(error)}`);
     }

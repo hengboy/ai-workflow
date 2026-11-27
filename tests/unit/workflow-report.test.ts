@@ -17,6 +17,8 @@ type Unknown = 'unknown';
  *
  * - `critical_path_length` is the number of tasks on the longest `depends_on` chain; a single
  *   task is 1.
+ * - `parallel_width` is the largest phase's width; `critical_path_ratio` and
+ *   `estimated_parallel_speedup` are the informational 4-decimal critical-path/task ratios.
  * - `duration_seconds` is `completed_at - started_at` in whole seconds, only when both are
  *   recorded; otherwise it is the literal `unknown`.
  * - `review_rounds` counts files directly under `reports/` whose basename starts with
@@ -45,6 +47,9 @@ interface PlanReport {
   task_count: number;
   phase_count: number;
   critical_path_length: number;
+  parallel_width: number;
+  critical_path_ratio: number;
+  estimated_parallel_speedup: number;
   review_rounds: number | Unknown;
   commit_count: number | null;
   commit_count_reason: string | null;
@@ -146,6 +151,11 @@ describe('planReport', () => {
     expect(report.task_count).toBe(0);
     expect(report.phase_count).toBe(0);
     expect(report.critical_path_length).toBe(0);
+    expect(report.parallel_width).toBe(0);
+    expect(report.critical_path_ratio).toBe(0);
+    expect(report.estimated_parallel_speedup).toBe(0);
+    expect(Number.isFinite(report.critical_path_ratio)).toBe(true);
+    expect(Number.isFinite(report.estimated_parallel_speedup)).toBe(true);
     expect(report.started_at).toBe('unknown');
     expect(report.completed_at).toBe('unknown');
     expect(report.commit_count).toBeNull();
@@ -430,6 +440,9 @@ describe('planReport', () => {
     expect(report.task_count).toBe(4);
     expect(report.phase_count).toBe(3);
     expect(report.critical_path_length).toBe(3);
+    expect(report.parallel_width).toBe(2);
+    expect(report.critical_path_ratio).toBe(0.75);
+    expect(report.estimated_parallel_speedup).toBe(1.3333);
     expect(report.review_rounds).toBe(2);
     expect(report.status).toBe('unknown');
     expect(report.commit_count).toBeNull();

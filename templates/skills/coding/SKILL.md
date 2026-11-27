@@ -455,6 +455,12 @@ execution commands and `ai-workflow workspace checkpoint` own every overlay writ
 After each ordinary split task commit, Git Operator records the completed task with
 `ai-workflow execution task <taskId> --plan <plan-directory> --commit <sha>` and
 reports a recording failure instead of retrying or re-committing it.
+Boundary events such as a review start, a review completion, a repair round or a
+validation result are recorded only through
+`ai-workflow execution event <type> --plan <plan-directory> [--result <value>] [--boundary <name>]`,
+and the program-owned telemetry boundary applies the same never-retry rule to that
+write. That boundary keeps `implementation.yaml` authoritative and changes no review
+or delivery gate.
 Classify each exception through `ai-workflow execution failure --plan <plan-directory>
 --category <category>`, and require an explicit `ai-workflow execution resume
 --plan <plan-directory>` after an interruption. The overlay makes no model call, no

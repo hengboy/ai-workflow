@@ -531,3 +531,41 @@ describe('execution status degraded projection', () => {
     expect(normal?.degraded).toBe(false);
   }, TIMEOUT);
 });
+
+describe('execution efficiency analytics fields (end-to-end)', () => {
+  it('derives all five fields from a real event lifecycle with zero query writes', async () => {
+    const root = await temporary('ai-workflow-e2e-efficiency-');
+    const planId = '20261127-e2e-efficiency';
+    const planDirectory = await workspacePlanFixture(root, splitSpec(planId));
+    await expectOk(await execution('start', '--plan', planDirectory));
+    await expectOk(await execution('task', TASK_A, '--plan', planDirectory, '--commit', SHA_A));
+    await expectOk(await execution('task', TASK_B, '--plan', planDirectory, '--commit', SHA_B));
+    await expectOk(await execution('event', 'validation.completed', '--plan', planDirectory, '--result', 'failed'));
+    await expectOk(await execution('event', 'validation.completed', '--plan', planDirectory, '--result', 'passed'));
+    await expectOk(await execution('event', 'review.started', '--plan', planDirectory));
+    await expectOk(await execution('event', 'review.completed', '--plan', planDirectory, '--result', 'PASS'));
+    await expectOk(await execution('event', 'repair.completed', '--plan', planDirectory, '--result', 'applied'));
+    await expectOk(await execution('complete', '--plan', planDirectory, '--commit', SHA_C));
+
+    const before = await snapshotTree(root);
+    const first = await execution('analytics', '--plan', planDirectory);
+    const metric = (await expectOk(first)).runs[0];
+    expect(metric.phase_wall_clock).toEqual([
+      { phase: 1, duration_seconds: expect.any(Number) },
+      { phase: 2, duration_seconds: expect.any(Number) },
+    ]);
+    expect(typeof metric.review_duration_seconds).toBe('number');
+    expect(metric.review_duration_seconds).toBeGreaterThanOrEqual(0);
+    expect(metric.repair_rounds).toBe(1);
+    expect(metric.integration_failure_rate).toBe(0.5);
+    expect(metric.cost_per_accepted_task).toBe('N/A');
+
+    const second = await execution('analytics', '--plan', planDirectory);
+    expect(second.code, outputOf(second)).toBe(0);
+    expect(second.stdout, 'analytics repeats byte-identically').toBe(first.stdout);
+    const project = await expectOk(await execution('analytics', '--project', root));
+    expect(project.runs).toHaveLength(1);
+    expect(project.runs[0]).toEqual(metric);
+    expect(changedPaths(before, await snapshotTree(root)), 'analytics writes no path').toEqual([]);
+  }, TIMEOUT);
+});

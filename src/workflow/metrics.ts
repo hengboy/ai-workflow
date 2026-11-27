@@ -6,8 +6,15 @@ export interface PlanMetrics {
   phase_count: number;
   parallel_width: number;
   critical_path_length: number;
+  critical_path_ratio: number;
+  estimated_parallel_speedup: number;
   estimated_commit_count: number;
   estimated_delegation_count: number;
+}
+
+/** Round to four decimals so the ratio metrics stay stable and free of floating-point noise. */
+function roundToFourDecimals(value: number): number {
+  return Math.round(value * 10000) / 10000;
 }
 
 /** Count the tasks on the longest `depends_on` chain; a single task is one and no tasks is zero. */
@@ -32,18 +39,22 @@ function criticalPathLength(tasks: TaskDocument[]): number {
 
 /**
  * Compute the informational plan cost metrics: task and phase counts, the widest schedule
- * phase, the longest dependency chain, and the estimated commits and delegations. A plan
- * without tasks estimates zero commits and zero delegations.
+ * phase, the longest dependency chain, the critical-path-to-task ratio, the estimated
+ * parallel speedup, and the estimated commits and delegations. A plan without tasks
+ * estimates zero commits and zero delegations, and a ratio without a denominator is zero.
  */
 export function computePlanMetrics(tasks: TaskDocument[], phases: TaskPhase[]): PlanMetrics {
   const taskCount = tasks.length;
   const phaseCount = phases.length;
   const parallelWidth = phases.reduce((widest, phase) => Math.max(widest, phase.parallel.length), 0);
+  const criticalPath = criticalPathLength(tasks);
   return {
     task_count: taskCount,
     phase_count: phaseCount,
     parallel_width: parallelWidth,
-    critical_path_length: criticalPathLength(tasks),
+    critical_path_length: criticalPath,
+    critical_path_ratio: taskCount === 0 ? 0 : roundToFourDecimals(criticalPath / taskCount),
+    estimated_parallel_speedup: criticalPath === 0 ? 0 : roundToFourDecimals(taskCount / criticalPath),
     estimated_commit_count: taskCount === 0 ? 0 : taskCount + 1,
     estimated_delegation_count: taskCount === 0 ? 0 : 2 * taskCount + 3,
   };

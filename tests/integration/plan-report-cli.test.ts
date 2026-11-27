@@ -44,6 +44,9 @@ interface PlanReport {
   task_count: number;
   phase_count: number;
   critical_path_length: number;
+  parallel_width: number;
+  critical_path_ratio: number;
+  estimated_parallel_speedup: number;
   review_rounds: number | 'unknown';
   commit_count: number | null;
   commit_count_reason: string | null;
@@ -154,10 +157,42 @@ describe('ai-workflow plan report', () => {
     expect(report.task_count).toBe(0);
     expect(report.phase_count).toBe(0);
     expect(report.critical_path_length).toBe(0);
+    expect(report.parallel_width).toBe(0);
+    expect(report.critical_path_ratio).toBe(0);
+    expect(report.estimated_parallel_speedup).toBe(0);
+    expect(Number.isFinite(report.critical_path_ratio)).toBe(true);
+    expect(Number.isFinite(report.estimated_parallel_speedup)).toBe(true);
     expect(report.started_at).toBe('unknown');
     expect(report.completed_at).toBe('unknown');
     expect(report.commit_count).toBeNull();
     expect(typeof report.commit_count_reason).toBe('string');
+  });
+
+  it('prints parallel efficiency metrics for a four-task split plan', async () => {
+    const root = await temporary('ai-workflow-report-cli-split-metrics-');
+    const directory = await workspacePlanFixture(root, {
+      planId: '20260930-report-split-metrics',
+      requirements: ['REQ-001', 'REQ-002', 'REQ-003', 'REQ-004'],
+      acceptanceCriteria: ['AC-001', 'AC-002', 'AC-003', 'AC-004'],
+      tasks: [
+        { id: 'task-001-a', requirements: ['REQ-001'], acceptanceCriteria: ['AC-001'], writeScope: ['src/a.ts'] },
+        { id: 'task-002-b', requirements: ['REQ-002'], acceptanceCriteria: ['AC-002'], dependsOn: ['task-001-a'], writeScope: ['src/b.ts'] },
+        { id: 'task-003-c', requirements: ['REQ-003'], acceptanceCriteria: ['AC-003'], dependsOn: ['task-001-a'], writeScope: ['src/c.ts'] },
+        { id: 'task-004-d', requirements: ['REQ-004'], acceptanceCriteria: ['AC-004'], dependsOn: ['task-002-b', 'task-003-c'], writeScope: ['src/d.ts'] },
+      ],
+      phases: [['task-001-a'], ['task-002-b', 'task-003-c'], ['task-004-d']],
+    });
+
+    const result = await runCli(['plan', 'report', '--plan', directory]);
+
+    expect(result.code, outputOf(result)).toBe(0);
+    const report = JSON.parse(result.stdout) as PlanReport;
+    expect(report.task_count).toBe(4);
+    expect(report.phase_count).toBe(3);
+    expect(report.critical_path_length).toBe(3);
+    expect(report.parallel_width).toBe(2);
+    expect(report.critical_path_ratio).toBe(0.75);
+    expect(report.estimated_parallel_speedup).toBe(1.3333);
   });
 
   it('prints an in-progress workspace plan with the execution projection', async () => {

@@ -58,6 +58,8 @@ Keep the sequence cohesive and priority-ordered: merge tightly related behavior 
 
 Each step's write scope is the complete exact file inventory for that step, not a summary. Name every created, modified, deleted or renamed path; never use a directory, wildcard, glob, unresolved placeholder or vague "related files" entry. Include behavior test, fixture and snapshot paths, existing tests whose expectations change, export barrels and registries, schemas and migrations, tracked generated sources and outputs, documentation and navigation files, `MEMORY.md`, every side of an affected note triplet, both endpoints of a rename and the path of a deletion. When more than a few paths are involved, add a `#### Step N write paths` list and reference it from the Write scope field. Append `(new)` to a created path.
 
+Parallel implementation steps that share a cross-task integration boundary require a downstream `test` verification step in the same sequence. That step must declare exact integration-test write paths in the frozen write inventory: add a `#### Step N write paths` list holding only those exact test paths and the fixtures they require, and never list product source because that step changes no product behavior. Its validation names the integration commands that prove the shared boundary.
+
 ### Step 1: Short outcome name
 
 - Responsible role: `backend`, `frontend`, `test`, or another installed native role. Do not add a `surface` field to a plan step; surface routing belongs to generated task files.

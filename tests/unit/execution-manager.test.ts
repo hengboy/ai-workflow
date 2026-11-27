@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { hostname } from 'node:os';
 import { join } from 'node:path';
 import { parseMarkdown } from '../../src/utils/frontmatter.js';
@@ -10,7 +10,8 @@ import { readEvents, readLatestCheckpoint, readLock, readRun, writeRun } from '.
 import type { ExecutionCheckpoint, ExecutionEvent, ExecutionRun } from '../../src/execution/types.js';
 import { readOrdinaryRecord, writeOrdinaryRecord } from '../../src/execution/record.js';
 import { cancelRun, completeRun, failRun, pauseRun, recordFailure, recordTask, startRun } from '../../src/execution/manager.js';
-import { frozenPlan, temporary, workspacePlanFixture, writePlanTriplet } from '../helpers.js';
+import * as executionManager from '../../src/execution/manager.js';
+import { changedPaths, frozenPlan, snapshotTree, temporary, workspacePlanFixture, writePlanTriplet } from '../helpers.js';
 import { renderFrozenMarkdown } from '../../src/workflow/digest.js';
 
 // Public boundary under test: the lenient authoritative-record reader/writer and the
@@ -519,5 +520,212 @@ describe('idempotent completion lock residue', () => {
     const repeated = await completeRun({ planDirectory, commit: sha('c') });
     expect(repeated.run.status).toBe('COMPLETED');
     expect(await readLock(paths)).toBeUndefined();
+  });
+});
+describe('boundary event recorder', () => {
+  const ALLOWED_BOUNDARY_TYPES = [
+    'review.started',
+    'review.completed',
+    'repair.completed',
+    'validation.completed',
+  ] as const;
+  const CST = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\+08:00$/;
+  const SENSITIVE_KEYS = ['prompt', 'reasoning', 'tool_call', 'tool_calls', 'toolCall', 'toolCalls'];
+
+  type Recorder = (input: Record<string, unknown>) => Promise<Record<string, any>>;
+
+  function recorder(): Recorder {
+    const fn = (executionManager as unknown as Record<string, unknown>).recordBoundaryEvent;
+    expect(typeof fn, 'recordBoundaryEvent is exported by the manager').toBe('function');
+    return fn as Recorder;
+  }
+
+  function boundaryTypes(): readonly string[] {
+    const value = (executionManager as unknown as Record<string, unknown>).BOUNDARY_EVENT_TYPES;
+    expect(Array.isArray(value), 'BOUNDARY_EVENT_TYPES is exported by the manager').toBe(true);
+    return value as readonly string[];
+  }
+
+  async function storedEvents(paths: Paths): Promise<ExecutionEvent[]> {
+    return (await readEvents(paths)).events;
+  }
+
+  function assertNoSensitive(value: unknown): void {
+    if (Array.isArray(value)) {
+      for (const item of value) assertNoSensitive(item);
+      return;
+    }
+    if (value === null || typeof value !== 'object') return;
+    for (const [key, nested] of Object.entries(value as Record<string, unknown>)) {
+      for (const forbidden of SENSITIVE_KEYS) {
+        expect(key === forbidden, `stored event contains forbidden key ${key}`).toBe(false);
+      }
+      assertNoSensitive(nested);
+    }
+  }
+
+  async function runningFixture(status: ExecutionRun['status'] = 'RUNNING') {
+    const root = await newRoot();
+    const planDirectory = await frozenPlan(root, false);
+    const paths = executionPaths(planDirectory);
+    const run = await writeExistingRun(planDirectory, { status });
+    const recordPath = join(planDirectory, 'implementation.yaml');
+    await writeOrdinaryRecord(recordPath, {
+      plan_id: run.plan_id,
+      status: 'in-progress',
+      started_at: '2026-11-27T01:00:00+08:00',
+    });
+    const recordBefore = await readFile(recordPath, 'utf8');
+    return { planDirectory, paths, run, recordPath, recordBefore };
+  }
+
+  it('exports exactly the four allowlisted boundary event types', () => {
+    const actual = boundaryTypes();
+    expect(new Set([...actual])).toEqual(new Set<string>(ALLOWED_BOUNDARY_TYPES));
+    expect(actual).toHaveLength(ALLOWED_BOUNDARY_TYPES.length);
+  });
+
+  const successCases = [
+    { type: 'review.started', flags: {}, payload: undefined },
+    { type: 'review.started', flags: { boundary: 'delivery' }, payload: { boundary: 'delivery' } },
+    { type: 'review.completed', flags: { result: 'PASS', boundary: 'delivery' }, payload: { result: 'PASS', boundary: 'delivery' } },
+    { type: 'repair.completed', flags: { result: 'applied', boundary: 'delivery' }, payload: { result: 'applied', boundary: 'delivery' } },
+    { type: 'validation.completed', flags: { result: 'failed', boundary: 'integration' }, payload: { result: 'failed', boundary: 'integration' } },
+  ] as const;
+
+  for (const { type, flags, payload } of successCases) {
+    it(`records ${type} with ${JSON.stringify(flags)} as one UTC+08:00 event and a checkpoint`, async () => {
+      const fixture = await runningFixture();
+      const treeBefore = await snapshotTree(fixture.planDirectory);
+
+      const result = await recorder()({
+        planDirectory: fixture.planDirectory,
+        type,
+        ...flags,
+        prompt: 'never-recorded',
+        reasoning: 'never-recorded',
+      });
+
+      expect(result.valid, JSON.stringify(result)).toBe(true);
+      expect(result.plan_id).toBe(fixture.run.plan_id);
+      expect(result.run_id).toBe(fixture.run.run_id);
+      expect(result.type).toBe(type);
+      expect(typeof result.event_id).toBe('string');
+      expect(result.event_id).not.toBeNull();
+      expect(result.warnings).toEqual([]);
+
+      const event = (await storedEvents(fixture.paths)).at(-1);
+      expect(event).toBeDefined();
+      if (event === undefined) throw new Error('no event was appended');
+      expect(event.type).toBe(type);
+      expect(event.event_id).toBe(result.event_id);
+      expect(event.timestamp).toMatch(CST);
+      if (payload === undefined) {
+        expect(Object.hasOwn(event, 'payload')).toBe(false);
+      } else {
+        expect(event.payload).toEqual(payload);
+        expect(Object.keys(event.payload ?? {})).toEqual(Object.keys(payload));
+      }
+      assertNoSensitive(event);
+
+      const checkpoint = await latestCheckpoint(fixture.paths);
+      expect(checkpoint.run_id).toBe(fixture.run.run_id);
+      expect(checkpoint.last_persisted_event_id).toBe(result.event_id);
+
+      const changed = changedPaths(treeBefore, await snapshotTree(fixture.planDirectory));
+      expect(changed).toContain('execution/events.jsonl');
+      expect(changed.some((path) => path.startsWith('execution/checkpoints/'))).toBe(true);
+      expect(changed).not.toContain('implementation.yaml');
+      expect(await readFile(fixture.recordPath, 'utf8')).toBe(fixture.recordBefore);
+    });
+  }
+
+  it('trims result and boundary before validation and storage', async () => {
+    const fixture = await runningFixture();
+
+    const result = await recorder()({
+      planDirectory: fixture.planDirectory,
+      type: 'review.completed',
+      result: '  PASS  ',
+      boundary: '  delivery  ',
+    });
+
+    expect(result.valid, JSON.stringify(result)).toBe(true);
+    const event = (await storedEvents(fixture.paths)).at(-1);
+    expect(event?.payload).toEqual({ result: 'PASS', boundary: 'delivery' });
+  });
+
+  const refusals = [
+    { label: 'an unlisted event type', status: 'RUNNING', input: { type: 'task.started', result: 'x' } },
+    { label: 'validation.completed with no result', status: 'RUNNING', input: { type: 'validation.completed' } },
+    { label: 'validation.completed with an empty result', status: 'RUNNING', input: { type: 'validation.completed', result: '' } },
+    { label: 'validation.completed with a whitespace result', status: 'RUNNING', input: { type: 'validation.completed', result: '   ' } },
+    { label: 'review.completed with a whitespace result', status: 'RUNNING', input: { type: 'review.completed', result: '   ' } },
+    { label: 'an empty boundary', status: 'RUNNING', input: { type: 'review.started', boundary: '' } },
+    { label: 'a whitespace-only boundary', status: 'RUNNING', input: { type: 'review.started', boundary: '   ' } },
+    { label: 'a PAUSED run', status: 'PAUSED', input: { type: 'review.started' } },
+    { label: 'a COMPLETED run', status: 'COMPLETED', input: { type: 'review.started' } },
+  ] as const;
+
+  for (const { label, status, input } of refusals) {
+    it(`refuses ${label} with { valid: false, error } and zero disk writes`, async () => {
+      const fixture = await runningFixture(status);
+      const treeBefore = await snapshotTree(fixture.planDirectory);
+
+      const result = await recorder()({ planDirectory: fixture.planDirectory, ...input });
+
+      expect(result.valid, JSON.stringify(result)).toBe(false);
+      expect(typeof result.error).toBe('string');
+      expect(result.error.length).toBeGreaterThan(0);
+      expect(changedPaths(treeBefore, await snapshotTree(fixture.planDirectory))).toEqual([]);
+      expect(await readFile(fixture.recordPath, 'utf8')).toBe(fixture.recordBefore);
+      expect(await storedEvents(fixture.paths)).toHaveLength(0);
+    });
+  }
+
+  it('refuses a live execution lock with zero disk writes', async () => {
+    const fixture = await runningFixture();
+    await writeFile(fixture.paths.lock, `${JSON.stringify({
+      owner_id: 'another-writer',
+      pid: process.pid,
+      host: hostname(),
+      acquired_at: '2026-11-27T01:00:00+08:00',
+      command: 'another command',
+    }, null, 2)}\n`);
+    const treeBefore = await snapshotTree(fixture.planDirectory);
+
+    const result = await recorder()({ planDirectory: fixture.planDirectory, type: 'review.started' });
+
+    expect(result.valid, JSON.stringify(result)).toBe(false);
+    expect(typeof result.error).toBe('string');
+    expect(changedPaths(treeBefore, await snapshotTree(fixture.planDirectory))).toEqual([]);
+    expect(await readFile(fixture.recordPath, 'utf8')).toBe(fixture.recordBefore);
+  });
+
+  it('warns with event_id null on a storage write failure and does not retry', async () => {
+    const fixture = await runningFixture();
+    await rm(fixture.paths.events, { force: true });
+    await mkdir(fixture.paths.events, { recursive: true });
+    const treeBefore = await snapshotTree(fixture.planDirectory);
+
+    const result = await recorder()({
+      planDirectory: fixture.planDirectory,
+      type: 'review.completed',
+      result: 'PASS',
+    });
+
+    expect(result.valid, JSON.stringify(result)).toBe(true);
+    expect(result.plan_id).toBe(fixture.run.plan_id);
+    expect(result.run_id).toBe(fixture.run.run_id);
+    expect(result.type).toBe('review.completed');
+    expect(result.event_id).toBeNull();
+    expect(Array.isArray(result.warnings)).toBe(true);
+    expect(result.warnings.length).toBeGreaterThan(0);
+    expect(result.warnings.some((warning: unknown) => String(warning).toLowerCase().includes('event'))).toBe(true);
+    expect(await readdir(fixture.paths.events)).toEqual([]);
+    const changed = changedPaths(treeBefore, await snapshotTree(fixture.planDirectory));
+    expect(changed).not.toContain('implementation.yaml');
+    expect(changed).not.toContain('execution/events.jsonl');
+    expect(await readFile(fixture.recordPath, 'utf8')).toBe(fixture.recordBefore);
   });
 });
