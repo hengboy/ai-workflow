@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (.ai-workflow/notes/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+# ai-workflow notes pairing --project <project-root> --write .ai-workflow/notes/implemented/process/2026-11-27-swarm-principles-observability-and-verification-tasks.md
+2026-11-27-swarm-principles-observability-and-verification-tasks.md: d8a43d4f6ac52cd0b482571545c0821d10cbf871
+2026-11-27-swarm-principles-observability-and-verification-tasks.zh.md: ed55249dcbe7d502ddb19ec332fadde38ea78672

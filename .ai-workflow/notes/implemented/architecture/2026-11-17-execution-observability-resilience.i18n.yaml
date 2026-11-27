@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 # ai-workflow notes pairing --project <project-root> --write .ai-workflow/notes/implemented/architecture/2026-11-17-execution-observability-resilience.md
-2026-11-17-execution-observability-resilience.md: 3828509211bcaaf0e35b1e75b2466660442dd31e
-2026-11-17-execution-observability-resilience.zh.md: 6f6fef05218e383ed5fd3887908068856f22d718
+2026-11-17-execution-observability-resilience.md: 08a1a4a0df4974c38369044c205534cfc36eed79
+2026-11-17-execution-observability-resilience.zh.md: 416c6fe2ba12f64d4d0654ff3a855be1b302ba69

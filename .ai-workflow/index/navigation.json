@@ -5296,6 +5296,7 @@
         "tests/integration/plan-lint-cli.test.ts",
         "tests/integration/plan-report-cli.test.ts",
         "tests/integration/review-packet-cli.test.ts",
+        "tests/integration/swarm-principles-e2e.test.ts",
         "tests/unit/host-smoke.test.ts",
         "tests/unit/install-verify.test.ts",
         "tests/unit/ops-context-budget.test.ts",
@@ -5442,12 +5443,12 @@
         {
           "kind": "imports",
           "from": "src/workflow/lint.ts#lintPlan",
-          "to": "src/workflow/parse.ts#readPlan"
+          "to": "src/workflow/metrics.ts#computePlanMetrics"
         },
         {
           "kind": "imports",
           "from": "src/workflow/lint.ts#lintPlan",
-          "to": "src/workflow/parse.ts#readTasks"
+          "to": "src/workflow/parse.ts#readPlan"
         },
         {
           "kind": "imports",
@@ -5618,6 +5619,7 @@
         "tests/integration/plan-lint-cli.test.ts",
         "tests/integration/plan-report-cli.test.ts",
         "tests/integration/review-packet-cli.test.ts",
+        "tests/integration/swarm-principles-e2e.test.ts",
         "tests/unit/host-smoke.test.ts",
         "tests/unit/install-verify.test.ts",
         "tests/unit/ops-context-budget.test.ts",
@@ -5652,6 +5654,9 @@
         ".ai-workflow/notes/implemented/process/2026-11-16-plan-write-scope-completeness.i18n.yaml",
         ".ai-workflow/notes/implemented/process/2026-11-16-plan-write-scope-completeness.md",
         ".ai-workflow/notes/implemented/process/2026-11-16-plan-write-scope-completeness.zh.md",
+        ".ai-workflow/notes/implemented/process/2026-11-27-swarm-principles-observability-and-verification-tasks.i18n.yaml",
+        ".ai-workflow/notes/implemented/process/2026-11-27-swarm-principles-observability-and-verification-tasks.md",
+        ".ai-workflow/notes/implemented/process/2026-11-27-swarm-principles-observability-and-verification-tasks.zh.md",
         "MEMORY.md",
         "README.md",
         "templates/agents/backend.md",
@@ -5659,7 +5664,8 @@
         "templates/agents/test.md"
       ],
       "tests": [
-        "tests/behavior/plan-write-scope-content.test.ts"
+        "tests/behavior/plan-write-scope-content.test.ts",
+        "tests/behavior/swarm-principles-content.test.ts"
       ],
       "depends_on": [],
       "relations": [],
@@ -5669,6 +5675,9 @@
         ".ai-workflow/notes/implemented/process/2026-11-16-plan-write-scope-completeness.i18n.yaml",
         ".ai-workflow/notes/implemented/process/2026-11-16-plan-write-scope-completeness.md",
         ".ai-workflow/notes/implemented/process/2026-11-16-plan-write-scope-completeness.zh.md",
+        ".ai-workflow/notes/implemented/process/2026-11-27-swarm-principles-observability-and-verification-tasks.i18n.yaml",
+        ".ai-workflow/notes/implemented/process/2026-11-27-swarm-principles-observability-and-verification-tasks.md",
+        ".ai-workflow/notes/implemented/process/2026-11-27-swarm-principles-observability-and-verification-tasks.zh.md",
         "MEMORY.md",
         "README.md",
         "templates/agents/backend.md",
@@ -5679,7 +5688,8 @@
         "templates/skills/plan-to-tasks/references/task.md",
         "templates/skills/planning/SKILL.md",
         "templates/skills/planning/references/plan.md",
-        "tests/behavior/plan-write-scope-content.test.ts"
+        "tests/behavior/plan-write-scope-content.test.ts",
+        "tests/behavior/swarm-principles-content.test.ts"
       ],
       "shared_entry": true
     },
@@ -5783,6 +5793,12 @@
         },
         {
           "file": "src/execution/commands.ts",
+          "name": "EventExecutionInput",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/commands.ts",
           "name": "FailureExecutionInput",
           "kind": "interface",
           "visibility": "public"
@@ -5826,6 +5842,12 @@
         {
           "file": "src/execution/commands.ts",
           "name": "completeExecutionCommand",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/commands.ts",
+          "name": "eventExecutionCommand",
           "kind": "function",
           "visibility": "public"
         },
@@ -5933,6 +5955,18 @@
         },
         {
           "file": "src/execution/manager.ts",
+          "name": "BOUNDARY_EVENT_TYPES",
+          "kind": "variable",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/manager.ts",
+          "name": "BoundaryEventType",
+          "kind": "type",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/manager.ts",
           "name": "CompleteRunInput",
           "kind": "interface",
           "visibility": "public"
@@ -5947,6 +5981,18 @@
           "file": "src/execution/manager.ts",
           "name": "FailRunInput",
           "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/manager.ts",
+          "name": "RecordBoundaryEventInput",
+          "kind": "interface",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/manager.ts",
+          "name": "RecordBoundaryEventResult",
+          "kind": "type",
           "visibility": "public"
         },
         {
@@ -6030,6 +6076,12 @@
         {
           "file": "src/execution/manager.ts",
           "name": "pauseRun",
+          "kind": "function",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/manager.ts",
+          "name": "recordBoundaryEvent",
           "kind": "function",
           "visibility": "public"
         },
@@ -6205,6 +6257,12 @@
           "file": "src/execution/report.ts",
           "name": "LockState",
           "kind": "type",
+          "visibility": "public"
+        },
+        {
+          "file": "src/execution/report.ts",
+          "name": "PhaseWallClock",
+          "kind": "interface",
           "visibility": "public"
         },
         {
@@ -6573,6 +6631,9 @@
         ".ai-workflow/notes/implemented/architecture/2026-11-17-execution-observability-resilience.i18n.yaml",
         ".ai-workflow/notes/implemented/architecture/2026-11-17-execution-observability-resilience.md",
         ".ai-workflow/notes/implemented/architecture/2026-11-17-execution-observability-resilience.zh.md",
+        ".ai-workflow/notes/implemented/process/2026-11-27-swarm-principles-observability-and-verification-tasks.i18n.yaml",
+        ".ai-workflow/notes/implemented/process/2026-11-27-swarm-principles-observability-and-verification-tasks.md",
+        ".ai-workflow/notes/implemented/process/2026-11-27-swarm-principles-observability-and-verification-tasks.zh.md",
         "MEMORY.md",
         "README.md",
         "src/cli.ts",
@@ -6592,9 +6653,11 @@
         "tests/integration/execution-hooks.test.ts",
         "tests/integration/execution-recovery-cli.test.ts",
         "tests/integration/execution-workspace.test.ts",
+        "tests/integration/swarm-principles-e2e.test.ts",
         "tests/unit/execution-failure.test.ts",
         "tests/unit/execution-manager.test.ts",
         "tests/unit/execution-recovery.test.ts",
+        "tests/unit/execution-report.test.ts",
         "tests/unit/execution-schema.test.ts",
         "tests/unit/execution-store.test.ts"
       ],
@@ -6624,6 +6687,16 @@
           "kind": "imports",
           "from": "src/execution/commands.ts#completeExecutionCommand",
           "to": "src/execution/manager.ts#completeRun"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/commands.ts#eventExecutionCommand",
+          "to": "src/execution/config.ts#readExecutionConfig"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/commands.ts#eventExecutionCommand",
+          "to": "src/execution/manager.ts#recordBoundaryEvent"
         },
         {
           "kind": "imports",
@@ -6734,6 +6807,11 @@
           "kind": "imports",
           "from": "src/execution/manager.ts#FailRunInput",
           "to": "src/execution/types.ts#FailureCategory"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/manager.ts#RecordBoundaryEventInput",
+          "to": "src/execution/config.ts#ExecutionConfig"
         },
         {
           "kind": "imports",
@@ -6909,6 +6987,31 @@
           "kind": "imports",
           "from": "src/execution/manager.ts#pauseRun",
           "to": "src/workspace/record.ts#nowCst"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/manager.ts#recordBoundaryEvent",
+          "to": "src/execution/config.ts#DEFAULT_EXECUTION_CONFIG"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/manager.ts#recordBoundaryEvent",
+          "to": "src/execution/paths.ts#executionPaths"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/manager.ts#recordBoundaryEvent",
+          "to": "src/execution/store.ts#acquireLock"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/manager.ts#recordBoundaryEvent",
+          "to": "src/execution/store.ts#readRun"
+        },
+        {
+          "kind": "imports",
+          "from": "src/execution/manager.ts#recordBoundaryEvent",
+          "to": "src/execution/types.ts#ExecutionRun"
         },
         {
           "kind": "imports",
@@ -7482,12 +7585,15 @@
         }
       ],
       "owner_role": "shared",
-      "responsibility": "Execution observability records one per-repository run with scoped events, checkpoints and analytics while `implementation.yaml` remains the only authoritative run record, and supports pause, failure and recovery without inventing authoritative state; the bounded structural cost guard keeps all telemetry local with no model call, network access or periodic scan.",
+      "responsibility": "Execution observability records one per-repository run with scoped events, checkpoints and analytics while `implementation.yaml` remains the only authoritative run record, and supports pause, failure and recovery without inventing authoritative state; one allowlisted boundary recorder adds review, repair and validation evidence, and five read-only runtime efficiency analytics extend the same overlay. The bounded structural cost guard keeps all telemetry local with no model call, network access or periodic scan.",
       "read_scope": [
         ".ai-workflow/AGENTS.md",
         ".ai-workflow/notes/implemented/architecture/2026-11-17-execution-observability-resilience.i18n.yaml",
         ".ai-workflow/notes/implemented/architecture/2026-11-17-execution-observability-resilience.md",
         ".ai-workflow/notes/implemented/architecture/2026-11-17-execution-observability-resilience.zh.md",
+        ".ai-workflow/notes/implemented/process/2026-11-27-swarm-principles-observability-and-verification-tasks.i18n.yaml",
+        ".ai-workflow/notes/implemented/process/2026-11-27-swarm-principles-observability-and-verification-tasks.md",
+        ".ai-workflow/notes/implemented/process/2026-11-27-swarm-principles-observability-and-verification-tasks.zh.md",
         "MEMORY.md",
         "README.md",
         "src/cli.ts",
@@ -7517,9 +7623,11 @@
         "tests/integration/execution-hooks.test.ts",
         "tests/integration/execution-recovery-cli.test.ts",
         "tests/integration/execution-workspace.test.ts",
+        "tests/integration/swarm-principles-e2e.test.ts",
         "tests/unit/execution-failure.test.ts",
         "tests/unit/execution-manager.test.ts",
         "tests/unit/execution-recovery.test.ts",
+        "tests/unit/execution-report.test.ts",
         "tests/unit/execution-schema.test.ts",
         "tests/unit/execution-store.test.ts"
       ],
